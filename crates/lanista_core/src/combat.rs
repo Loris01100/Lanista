@@ -7,8 +7,9 @@ use crate::design_data::SpellData;
 use crate::fighter::{Fighter, FighterId, Stats};
 use crate::log::{Event, EventKind};
 
-/// Duration of a tick, in seconds: 30 ticks per second.
-pub const DT: f64 = 1.0 / 30.0;
+pub const TICKS_PER_SECOND: u32 = 30;
+/// Duration of a tick, in seconds.
+pub const DT: f64 = 1.0 / TICKS_PER_SECOND as f64;
 /// The AIs decide every 6 ticks, 5 times per second.
 pub const TICKS_PER_DECISION: u32 = 6;
 // ponytail: same radius and speed scale for everyone, move to `data/` when classes are loaded.

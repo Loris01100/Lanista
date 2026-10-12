@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project
 
-Lanista is a gladiator-management game written in Rust (solo developer, Steam target, Windows + Linux/Steam Deck). The technical roadmap is [docs/Gladiator_Manager_Feuille_de_route_Rust.md](docs/Gladiator_Manager_Feuille_de_route_Rust.md) (in French); it is the reference for stack, architecture, phases and determinism rules. Gameplay rules (fighters, combat formulas, economy, colosseums, competitions) live in the design plan [docs/Gladiator_Manager_Plan_de_conception.md](docs/Gladiator_Manager_Plan_de_conception.md) (in French). The project is at phase 0: the crates hold only the phase 0 prototypes (macroquad + egui window in `lanista`, PyO3 `addition` in `lanista_py`, `tract` ONNX inference in `lanista_ia_onnx`); `lanista_core` is starting phase 1 (base combat types) and `reesch` is still empty.
+Lanista is a gladiator-management game written in Rust (solo developer, Steam target, Windows + Linux/Steam Deck). The technical roadmap is [docs/Gladiator_Manager_Feuille_de_route_Rust.md](docs/Gladiator_Manager_Feuille_de_route_Rust.md) (in French); it is the reference for stack, architecture, phases and determinism rules. Gameplay rules (fighters, combat formulas, economy, colosseums, competitions) live in the design plan [docs/Gladiator_Manager_Plan_de_conception.md](docs/Gladiator_Manager_Plan_de_conception.md) (in French). The project is at phase 0: the crates hold only the phase 0 prototypes (macroquad + egui window in `lanista`, PyO3 `addition` in `lanista_py`, `tract` ONNX inference in `lanista_ia_onnx`); `lanista_core` is in phase 1 (duel with spells, utility AI, fight log), `tools` holds the `simulate` and `batch` binaries, and `reesch` is still empty.
 
 ## Source of truth
 
@@ -15,6 +15,8 @@ Read the roadmap before implementing a feature. When behavior, architecture or d
 ```sh
 cargo build                          # whole workspace
 cargo run -p lanista                 # the game executable
+cargo run --release -p tools --bin simulate -- --seed 42    # one duel, log and report
+cargo run --release -p tools --bin batch -- --fights 10000  # win rate per class, average duration
 cargo test                           # all crates
 cargo test -p lanista_core <name>    # single test (substring filter)
 cargo fmt --all --check
@@ -42,12 +44,13 @@ The roadmap uses placeholder names; the actual crates are:
 | `gladiator` | `lanista` | Game binary; wires core + engine |
 | `gladiator_py` | `lanista_py` | PyO3 module for RL training (phase 0 prototype for now) |
 | `gladiator_ia_onnx` | `lanista_ia_onnx` | ONNX inference of the learned AI with `tract` (phase 0 prototype for now) |
+| `tools` | `tools` | Command-line binaries (`simulate`, `batch`; later `calibrate`, `compare`…) |
 
-Planned later: a CLI `tools` crate (`simulate`, `batch`, `calibrate`…). The workspace picks up any `crates/*` automatically.
+The workspace picks up any `crates/*` automatically.
 
 ## Architecture rules (enforced by crate dependencies)
 
-`cargo deny check` enforces the forbidden dependencies below through `[bans] deny` + `wrappers` in [deny.toml](deny.toml). A new crate that may legitimately depend on a banned crate must be added to its `wrappers`; `lanista_ia_onnx`, `lanista_py` and the planned `tools` are listed there.
+`cargo deny check` enforces the forbidden dependencies below through `[bans] deny` + `wrappers` in [deny.toml](deny.toml). A new crate that may legitimately depend on a banned crate must be added to its `wrappers`; `lanista_ia_onnx`, `lanista_py` and `tools` are listed there.
 
 - `lanista_core` must never depend on macroquad, egui, tract or pyo3 — logic is runnable headless (tools, tests, Python training).
 - `reesch` must never depend on `lanista_core`; it stays game-agnostic. Only add engine features a current game phase needs.
