@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project
 
-Lanista is a gladiator-management game written in Rust (solo developer, Steam target, Windows + Linux/Steam Deck). The technical roadmap is [docs/Gladiator_Manager_Feuille_de_route_Rust.md](docs/Gladiator_Manager_Feuille_de_route_Rust.md) (in French); it is the reference for stack, architecture, phases and determinism rules. Gameplay rules (fighters, combat formulas, economy, colosseums, competitions) live in the design plan [docs/Gladiator_Manager_Plan_de_conception.md](docs/Gladiator_Manager_Plan_de_conception.md) (in French). The project is at phase 0: all crates are still `cargo new` stubs.
+Lanista is a gladiator-management game written in Rust (solo developer, Steam target, Windows + Linux/Steam Deck). The technical roadmap is [docs/Gladiator_Manager_Feuille_de_route_Rust.md](docs/Gladiator_Manager_Feuille_de_route_Rust.md) (in French); it is the reference for stack, architecture, phases and determinism rules. Gameplay rules (fighters, combat formulas, economy, colosseums, competitions) live in the design plan [docs/Gladiator_Manager_Plan_de_conception.md](docs/Gladiator_Manager_Plan_de_conception.md) (in French). The project is at phase 0: the crates hold only the phase 0 prototypes (macroquad + egui window in `lanista`, PyO3 `addition` in `lanista_py`, `tract` ONNX inference in `lanista_ia_onnx`); `lanista_core` and `reesch` are still empty.
 
 ## Source of truth
 
@@ -23,6 +23,8 @@ cargo machete                        # unused dependencies
 cargo deny check                     # advisories, licenses, sources (deny.toml)
 ```
 
+On Linux, linking `lanista` needs the ALSA headers (`libasound2-dev`) for macroquad's audio.
+
 Python module `lanista_py` (PyO3, cdylib, no Rust tests): create `python/.venv` once (`py -m venv python/.venv`, then `pip install maturin` inside it), activate it, then `maturin develop -m crates/lanista_py/Cargo.toml` and `python -c "import lanista_py"`.
 
 CI ([.github/workflows/ci.yml](.github/workflows/ci.yml)) runs all of the above; clippy and tests run on both Windows and Linux so determinism breaks show up. Any clippy warning fails CI, and the `pedantic` group is on for the whole workspace (`[workspace.lints.clippy]` in the root `Cargo.toml`; each crate has `[lints] workspace = true`, which a new crate must add too). Fix a lint rather than silencing it, or use a local `#[expect(clippy::…, reason = "…")]`. Package metadata (edition, authors, repository, `license-file`, `publish = false`) lives in `[workspace.package]` and each crate inherits it with `<field>.workspace = true`; a new crate must do the same. `publish = false` is what lets `deny.toml` skip license checks for workspace crates. The code is proprietary (all rights reserved, see `LICENSE`).
@@ -39,12 +41,13 @@ The roadmap uses placeholder names; the actual crates are:
 | `moteur` | `reesch` | Generic engine (macroquad + egui: loop, sprites, input, audio, screens) |
 | `gladiator` | `lanista` | Game binary; wires core + engine |
 | `gladiator_py` | `lanista_py` | PyO3 module for RL training (phase 0 prototype for now) |
+| `gladiator_ia_onnx` | `lanista_ia_onnx` | ONNX inference of the learned AI with `tract` (phase 0 prototype for now) |
 
-Planned later: an ONNX inference crate and a CLI tools crate (`simuler`, `masse`, `calibrer`…). The workspace picks up any `crates/*` automatically.
+Planned later: a CLI tools crate (`simuler`, `masse`, `calibrer`…). The workspace picks up any `crates/*` automatically.
 
 ## Architecture rules (enforced by crate dependencies)
 
-`cargo deny check` enforces the forbidden dependencies below through `[bans] deny` + `wrappers` in [deny.toml](deny.toml). A new crate that may legitimately depend on a banned crate must be added to its `wrappers`; planned crate names there are `lanista_ia_onnx`, `lanista_py` and `outils`.
+`cargo deny check` enforces the forbidden dependencies below through `[bans] deny` + `wrappers` in [deny.toml](deny.toml). A new crate that may legitimately depend on a banned crate must be added to its `wrappers`; `lanista_ia_onnx`, `lanista_py` and the planned `outils` are listed there.
 
 - `lanista_core` must never depend on macroquad, egui, tract or pyo3 — logic is runnable headless (tools, tests, Python training).
 - `reesch` must never depend on `lanista_core`; it stays game-agnostic. Only add engine features a current game phase needs.
