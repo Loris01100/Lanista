@@ -212,7 +212,7 @@ opt-level = 2
 
 Objectif : le cœur du jeu, sans aucun affichage. Tout se passe dans `gladiator_core` et `outils`.
 
-- Structures `Arene`, `Combattant` (version simple : six stats, classe, ressource), `FighterId`.
+- Structures `Arene`, `Combattant` (version simple : six stats, classe, deux ressources : mana et endurance), `FighterId`. Fait : `combattant.rs` et `combat.rs` ; la classe est un `ClasseId` qui renverra aux données de `data/`.
 - Pas de temps fixe, déplacements, collisions cercle contre cercle, bords de l'arène.
 - Formule de dégâts du plan de conception (attaque × 100 / (100 + défense)).
 - 2 classes, 3 sorts chacune, avec temps de recharge et coût en ressource, décrits dans `data/` en RON.
