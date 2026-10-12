@@ -4,7 +4,11 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project
 
-Lanista is a gladiator-management game written in Rust (solo developer, Steam target, Windows + Linux/Steam Deck). The technical roadmap is [docs/Gladiator_Manager_Feuille_de_route_Rust.md](docs/Gladiator_Manager_Feuille_de_route_Rust.md) (in French); it is the reference for stack, architecture, phases and determinism rules. The project is at phase 0: all crates are still `cargo new` stubs.
+Lanista is a gladiator-management game written in Rust (solo developer, Steam target, Windows + Linux/Steam Deck). The technical roadmap is [docs/Gladiator_Manager_Feuille_de_route_Rust.md](docs/Gladiator_Manager_Feuille_de_route_Rust.md) (in French); it is the reference for stack, architecture, phases and determinism rules. Gameplay rules (fighters, combat formulas, economy, colosseums, competitions) live in the design plan of 2026-09-27, which is not yet in the repo. The project is at phase 0: all crates are still `cargo new` stubs.
+
+## Source of truth
+
+Read the roadmap before implementing a feature. When behavior, architecture or data diverge from it, update it in the same change, in French.
 
 ## Commands
 
@@ -56,8 +60,16 @@ Same seed must replay the same combat across Windows and Linux (cloud saves, rep
 - No wall-clock time (`Instant::now`); logic only knows ticks.
 - Parallelize across independent combats (rayon), never inside one.
 
-## Repo notes
+## Validation
 
+Before handing off code changes, run `cargo fmt --all --check`, `cargo clippy --workspace --all-targets -- -D warnings` and the relevant `cargo test`; run `cargo machete` and `cargo deny check` too when dependencies changed. Add dependencies with `cargo add`; roadmap versions are indicative. Prefer `try_from` over `as` for narrowing casts (pedantic flags `as`).
+
+Tests: `proptest` for invariants (HP never above max, a combat always ends), `insta` snapshots for reference combats (a seed always produces the same log). Review snapshot changes with `cargo insta review` and commit the `.snap` files; CI sets `CI=true`, so a missing or changed snapshot fails.
+
+## Git
+
+- Commit messages: lowercase type, a space before the colon, short summary: `feat : …`, `fix : …`, `chore : …`, `docs : …`, `test : …`.
+- Never tag, push or publish without an explicit request.
 - `Cargo.lock` is committed (binary project).
 - `.githooks/pre-commit` rejects unformatted code; enable once per clone with `git config core.hooksPath .githooks`.
 - Git LFS tracks `*.png`, `*.ogg`, `*.wav`, `*.aseprite`; line endings normalized to LF.
