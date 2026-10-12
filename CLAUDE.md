@@ -59,5 +59,6 @@ Same seed must replay the same combat across Windows and Linux (cloud saves, rep
 ## Repo notes
 
 - `Cargo.lock` is committed (binary project).
+- `.githooks/pre-commit` rejects unformatted code; enable once per clone with `git config core.hooksPath .githooks`.
 - Git LFS tracks `*.png`, `*.ogg`, `*.wav`, `*.aseprite`; line endings normalized to LF.
 - Git convention: `main` always working, one branch per feature, a tag per phase (`phase-0`, `phase-1`…).
