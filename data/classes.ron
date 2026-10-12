@@ -1,0 +1,68 @@
+// Prototype classes: placeholder values, to balance with mass simulations.
+// ClassId(i) is the i-th class of this list.
+// reach: meters between the fighters' edges. power: % of the damage formula.
+// cooldown: ticks, 30 per second.
+[
+    (
+        name: "Mirmillon",
+        max_mana: 0,
+        max_endurance: 100,
+        spells: [
+            (
+                name: "Coup de glaive",
+                range: Melee,
+                reach: 1.0,
+                power: 100,
+                cooldown: 30,
+                cost: Endurance(5),
+            ),
+            (
+                name: "Charge au bouclier",
+                range: Melee,
+                reach: 1.0,
+                power: 150,
+                cooldown: 150,
+                cost: Endurance(25),
+            ),
+            (
+                name: "Frappe brutale",
+                range: Melee,
+                reach: 1.0,
+                power: 250,
+                cooldown: 300,
+                cost: Endurance(40),
+            ),
+        ],
+    ),
+    (
+        name: "Augure",
+        max_mana: 100,
+        max_endurance: 50,
+        spells: [
+            (
+                name: "Coup de bâton",
+                range: Melee,
+                reach: 1.0,
+                power: 60,
+                cooldown: 30,
+                cost: Endurance(5),
+            ),
+            (
+                name: "Trait de feu",
+                range: Ranged,
+                reach: 8.0,
+                power: 100,
+                cooldown: 45,
+                cost: Mana(10),
+            ),
+            (
+                name: "Éclair",
+                range: Ranged,
+                reach: 10.0,
+                power: 180,
+                cooldown: 180,
+                cost: Mana(30),
+            ),
+        ],
+    ),
+]

@@ -1,3 +1,5 @@
+use serde::Deserialize;
+
 use crate::ai::{Action, CombatAi};
 use crate::fighter::{Fighter, Stats};
 
@@ -75,7 +77,7 @@ pub fn tick(arena: &mut Arena, ais: &mut [Box<dyn CombatAi>]) {
 
 /// Whether a hit uses melee attack against melee defense (AC against DC)
 /// or ranged attack against ranged defense (AL against DL).
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize)]
 pub enum Range {
     Melee,
     Ranged,
