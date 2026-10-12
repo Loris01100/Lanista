@@ -35,8 +35,6 @@ exceptions = [
     { crate = "target-lexicon", allow = ["Apache-2.0 WITH LLVM-exception"] },
     # egui's default fonts (Hack, Noto, Ubuntu): both licenses allow bundling in a commercial game.
     { crate = "epaint_default_fonts", allow = ["OFL-1.1", "Ubuntu-font-1.0"] },
-    # Mozilla CA certificates used by ort's build script to download ONNX Runtime; not shipped.
-    { crate = "webpki-root-certs", allow = ["CDLA-Permissive-2.0"] },
 ]
 
 [licenses.private]
@@ -56,8 +54,7 @@ deny = [
     # Rendering stays out of the logic, the AI, the Python module and the tools.
     { crate = "macroquad", wrappers = ["reesch", "lanista", "egui-macroquad"] },
     { crate = "egui", wrappers = ["reesch", "lanista", "egui-macroquad", "egui-miniquad"] },
-    # ML runtimes only in the inference crate (and the game, which ships it).
-    { crate = "ort", wrappers = ["lanista_ia_onnx", "lanista"] },
+    # ML runtime only in the inference crate (and the game, which ships it).
     { crate = "tract-onnx", wrappers = ["lanista_ia_onnx", "lanista"] },
     { crate = "pyo3", wrappers = ["lanista_py"] },
     # The engine stays generic: it never sees the game logic.

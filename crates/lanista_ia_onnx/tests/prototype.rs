@@ -1,8 +1,8 @@
-//! Both runtimes load the dummy model (written by `python/modele_factice.py`) and agree.
+//! `tract` loads the dummy model (written by `python/modele_factice.py`) and gives the expected output.
 
 use std::path::Path;
 
-use lanista_ia_onnx::{inferer_ort, inferer_tract};
+use lanista_ia_onnx::inferer;
 
 const MODELE: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/tests/factice.onnx");
 const ENTREE: [f32; 4] = [1.0, 2.0, 3.0, 4.0];
@@ -17,11 +17,6 @@ fn verifier(y: &[f32]) {
 }
 
 #[test]
-fn ort_charge_et_infere() {
-    verifier(&inferer_ort(Path::new(MODELE), &ENTREE).unwrap());
-}
-
-#[test]
-fn tract_charge_et_infere() {
-    verifier(&inferer_tract(Path::new(MODELE), &ENTREE).unwrap());
+fn charge_et_infere() {
+    verifier(&inferer(Path::new(MODELE), &ENTREE).unwrap());
 }

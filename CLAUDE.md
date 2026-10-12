@@ -46,7 +46,7 @@ Planned later: an ONNX inference crate and a CLI tools crate (`simuler`, `masse`
 
 `cargo deny check` enforces the forbidden dependencies below through `[bans] deny` + `wrappers` in [deny.toml](deny.toml). A new crate that may legitimately depend on a banned crate must be added to its `wrappers`; planned crate names there are `lanista_ia_onnx`, `lanista_py` and `outils`.
 
-- `lanista_core` must never depend on macroquad, egui, ort or pyo3 — logic is runnable headless (tools, tests, Python training).
+- `lanista_core` must never depend on macroquad, egui, tract or pyo3 — logic is runnable headless (tools, tests, Python training).
 - `reesch` must never depend on `lanista_core`; it stays game-agnostic. Only add engine features a current game phase needs.
 - Refer to entities by IDs (`FighterId(u32)`) stored in `Vec`/tables, not references.
 - A week is a function (`semaine_suivante(&mut GameState, &Decisions)`), a combat step is a function (`tick(&mut Arene, &mut [Box<dyn CombatAi>])`). UI only builds decisions and reads state.

@@ -10,7 +10,7 @@ Version du 11 octobre 2026. Ce document remplace la partie technique du plan de 
 | Interface Godot (Control) | egui, avec un thème personnalisé |
 | SubViewports | Render targets de macroquad |
 | Godot RL Agents | Module Python compilé depuis Rust avec PyO3 + Stable-Baselines3 |
-| ONNX dans Godot via C# | Crate `ort` (ONNX Runtime), `tract` en solution de secours |
+| ONNX dans Godot via C# | Crate `tract` (100 % Rust) |
 | Steamworks.NET | Crate `steamworks` |
 | Rider | VS Code + rust-analyzer |
 
@@ -30,7 +30,7 @@ Ce qui ne change pas : la règle d'or. La logique du jeu est séparée de l'affi
 | Historique volumineux | `rusqlite` | Seulement si le JSON devient trop lourd |
 | Parallélisme des simulations | `rayon` | Simulation de masse, calibration |
 | Rechargement à chaud des données | `notify` | Pratique pendant l'équilibrage |
-| Inférence ML | `ort`, ou `tract` (100 % Rust) | Derrière le trait commun d'IA |
+| Inférence ML | `tract` (100 % Rust) | Derrière le trait commun d'IA ; préféré à `ort` en phase 0 : aucune bibliothèque native à livrer |
 | Pont Python | `pyo3` + `maturin` | Le moteur de combat devient un module Python |
 | Entraînement | Python, Gymnasium, Stable-Baselines3 (PPO) | Environnement virtuel `venv` |
 | Steam | crate `steamworks` | Succès, sauvegarde cloud |
@@ -120,9 +120,9 @@ flowchart TD
 
 | Crate | Peut dépendre de | Ne doit jamais dépendre de |
 | --- | --- | --- |
-| `gladiator_core` | serde, rand, libm | macroquad, egui, ort, pyo3 |
+| `gladiator_core` | serde, rand, libm | macroquad, egui, tract, pyo3 |
 | `moteur` | macroquad, egui | `gladiator_core` (il reste générique) |
-| `gladiator_ia_onnx` | `gladiator_core`, ort ou tract | macroquad |
+| `gladiator_ia_onnx` | `gladiator_core`, tract | macroquad |
 | `gladiator` | tout | — |
 | `gladiator_py` | `gladiator_core`, pyo3 | macroquad, egui |
 | `outils` | `gladiator_core`, rayon | macroquad |
@@ -202,7 +202,7 @@ opt-level = 2
 
 - Prototype 1 : une fenêtre macroquad qui affiche un sprite Kenney et un bouton egui. Vérifier tout de suite la compatibilité des versions entre macroquad et l'intégration egui. Fait : macroquad 0.4.16 avec egui-macroquad 0.17.3 (egui 0.31.1), figés par `Cargo.lock`. egui-macroquad suit egui avec retard, donc ne pas mettre egui à jour séparément.
 - Prototype 2 : un module PyO3 minimal (`gladiator_py.addition(1, 2)`) compilé avec `maturin develop`, importé depuis Python.
-- Prototype 3 : charger un petit modèle ONNX factice avec `ort`, puis avec `tract`, sous Windows et Linux.
+- Prototype 3 : charger un petit modèle ONNX factice avec `ort`, puis avec `tract`, sous Windows et Linux. Fait : les deux fonctionnent ; `tract` est retenu (100 % Rust, lié statiquement, rien à livrer avec le jeu) et `ort` est retiré. Aucun des deux ne garantit des flottants identiques d'un processeur à l'autre (noyaux SIMD choisis à l'exécution) : en phase 7, enregistrer les décisions de l'IA dans les replays, ou écrire l'inférence du MLP à la main.
 - CI GitHub Actions : `cargo fmt --check`, `cargo clippy`, `cargo test` sous Windows et Linux.
 - Convention Git : `main` toujours fonctionnelle, commits directs sur `main` jusqu’à la publication, puis une branche par fonctionnalité, un tag par phase (`phase-0`, `phase-1`…).
 
@@ -331,7 +331,6 @@ Objectif : la crate `moteur`, générique, et un premier rendu du combat.
 - Intégration de la crate `steamworks` : succès, sauvegarde cloud. Le jeu doit aussi se lancer sans Steam.
 - Build Windows.
 - Build Linux compilé dans le conteneur Steam Runtime (version *sniper*), pour éviter les problèmes de version de glibc.
-- Si `ort` est utilisé, livrer la bibliothèque ONNX Runtime avec le jeu sur chaque plateforme, ou basculer sur `tract` pour n'avoir aucun fichier externe.
 - Test sur Steam Deck : contrôles à la manette, taille du texte, résolution 1280×800, objectif de compatibilité « Vérifié ».
 - Page du magasin, captures, branche bêta pour les tests.
 - CI optionnelle : construction des builds et envoi sur la branche bêta.
@@ -361,6 +360,6 @@ Objectif : la crate `moteur`, générique, et un premier rendu du combat.
 - [ ] Taille du monde : nombre de colisées et de clubs rivaux.
 - [ ] Liste des classes et de leurs sorts.
 - [ ] Calendrier des grands événements : confirmer l'Inter-Coliseum aux saisons impaires.
-- [ ] `ort` ou `tract` pour l'inférence : à trancher après le prototype de la phase 0.
+- [x] `ort` ou `tract` pour l'inférence : `tract`, tranché en phase 0.
 - [ ] Cadence de la logique (30 ticks par seconde proposés) et fréquence de décision de l'IA : à confirmer en phase 1.
 - [ ] Extraction du moteur dans son propre dépôt : à reconsidérer après la publication, pas avant.

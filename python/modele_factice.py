@@ -1,4 +1,4 @@
-"""Phase 0 prototype: writes a tiny ONNX model, y = relu(x @ W + b), to test ort and tract.
+"""Phase 0 prototype: writes a tiny ONNX model, y = relu(x @ W + b), to test tract.
 
 Run from the repo root inside python/.venv: python python/modele_factice.py
 """
@@ -23,7 +23,7 @@ graph = helper.make_graph(
         helper.make_tensor("B", TensorProto.FLOAT, [2], B),
     ],
 )
-# Opset 17 / IR 8: supported by both ort and tract.
+# Opset 17 / IR 8: supported by tract.
 model = helper.make_model(graph, opset_imports=[helper.make_opsetid("", 17)], ir_version=8)
 onnx.checker.check_model(model)
 onnx.save(model, "crates/lanista_ia_onnx/tests/factice.onnx")
