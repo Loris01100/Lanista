@@ -1,0 +1,40 @@
+# cargo deny check: known vulnerabilities, licenses, duplicate crates and sources.
+# Runs in CI.
+
+[graph]
+# Shipped targets: Windows and Linux (Steam Deck).
+targets = ["x86_64-pc-windows-msvc", "x86_64-unknown-linux-gnu"]
+
+[advisories]
+# A false positive goes here with its id and why it does not apply.
+ignore = []
+
+[licenses]
+# Permissive licenses compatible with distributing the game on Steam.
+allow = [
+    "0BSD",
+    "Apache-2.0",
+    "BSD-2-Clause",
+    "BSD-3-Clause",
+    "BSL-1.0",
+    "ISC",
+    "MIT",
+    "Unicode-3.0",
+    "Unlicense",
+    "Zlib",
+]
+confidence-threshold = 0.8
+
+[licenses.private]
+# The workspace crates are unpublished (publish = false) and carry no license yet.
+ignore = true
+
+[bans]
+multiple-versions = "warn"
+wildcards = "deny"
+# Path dependencies between workspace crates have no version: not a wildcard.
+allow-wildcard-paths = true
+
+[sources]
+unknown-registry = "deny"
+unknown-git = "deny"

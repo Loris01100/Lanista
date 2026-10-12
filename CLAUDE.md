@@ -13,9 +13,13 @@ cargo build                          # whole workspace
 cargo run -p lanista                 # the game executable
 cargo test                           # all crates
 cargo test -p lanista_core <name>    # single test (substring filter)
-cargo fmt --check
-cargo clippy --all-targets
+cargo fmt --all --check
+cargo clippy --workspace --all-targets -- -D warnings
+cargo machete                        # unused dependencies
+cargo deny check                     # advisories, licenses, sources (deny.toml)
 ```
+
+CI ([.github/workflows/ci.yml](.github/workflows/ci.yml)) runs all of the above; clippy and tests run on both Windows and Linux so determinism breaks show up. Any clippy warning fails CI. Workspace crates are `publish = false`, which `deny.toml` relies on to skip license checks for them.
 
 `[profile.dev.package."*"] opt-level = 2` in the root `Cargo.toml` is deliberate: simulations are too slow with unoptimized dependencies in debug.
 
