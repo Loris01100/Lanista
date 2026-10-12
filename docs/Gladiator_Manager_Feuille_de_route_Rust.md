@@ -213,7 +213,7 @@ opt-level = 2
 Objectif : le cœur du jeu, sans aucun affichage. Tout se passe dans `gladiator_core` et `outils`.
 
 - Structures `Arene`, `Combattant` (version simple : six stats, classe, deux ressources : mana et endurance), `FighterId`. Fait : `combattant.rs` et `combat.rs` ; la classe est un `ClasseId` qui renverra aux données de `data/`.
-- Pas de temps fixe, déplacements, collisions cercle contre cercle, bords de l'arène.
+- Pas de temps fixe, déplacements, collisions cercle contre cercle, bords de l'arène. Fait : `combat::tick`, 30 ticks par seconde, décision des IA tous les 6 ticks (5 par seconde), arène rectangulaire, un seul rayon et une seule échelle de vitesse (`VIT × 0,1 m/s`) pour tous en attendant `data/` ; trait `CombatAi` minimal dans `ia` (actions : attendre, se déplacer).
 - Formule de dégâts du plan de conception (attaque × 100 / (100 + défense)).
 - 2 classes, 3 sorts chacune, avec temps de recharge et coût en ressource, décrits dans `data/` en RON.
 - Trait `CombatAi` et une utility AI : chaque action reçoit un score, la meilleure est jouée.
@@ -361,5 +361,5 @@ Objectif : la crate `moteur`, générique, et un premier rendu du combat.
 - [ ] Liste des classes et de leurs sorts.
 - [ ] Calendrier des grands événements : confirmer l'Inter-Coliseum aux saisons impaires.
 - [x] `ort` ou `tract` pour l'inférence : `tract`, tranché en phase 0.
-- [ ] Cadence de la logique (30 ticks par seconde proposés) et fréquence de décision de l'IA : à confirmer en phase 1.
+- [x] Cadence de la logique et fréquence de décision de l'IA : 30 ticks par seconde, 5 décisions par seconde, retenus en phase 1 (à revoir si l'équilibrage l'exige).
 - [ ] Extraction du moteur dans son propre dépôt : à reconsidérer après la publication, pas avant.
