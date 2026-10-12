@@ -3,7 +3,8 @@ use rand_chacha::rand_core::SeedableRng;
 use serde::Deserialize;
 
 use crate::ai::{Action, CombatAi};
-use crate::fighter::{Fighter, Stats};
+use crate::design_data::SpellData;
+use crate::fighter::{Fighter, FighterId, Stats};
 
 /// Duration of a tick, in seconds: 30 ticks per second.
 pub const DT: f64 = 1.0 / 30.0;
@@ -60,6 +61,11 @@ impl Arena {
             rng: ChaCha8Rng::seed_from_u64(seed),
         }
     }
+
+    #[must_use]
+    pub fn fighter(&self, id: FighterId) -> Option<&Fighter> {
+        self.fighters.get(usize::try_from(id.0).ok()?)
+    }
 }
 
 /// Advances the fight by one tick. `ais[i]` controls `fighters[i]`.
@@ -77,9 +83,11 @@ pub fn tick(arena: &mut Arena, ais: &mut [Box<dyn CombatAi>]) {
             }
         }
     }
+    cool_down(arena);
     move_fighters(arena);
     separate(arena);
     keep_inside(arena);
+    cast_spells(arena);
     arena.tick += 1;
 }
 
@@ -103,6 +111,59 @@ pub fn damage(attacker: &Stats, defender: &Stats, range: Range) -> u32 {
     let damage = (u64::from(attack) * 100).div_ceil(100 + u64::from(defense));
     // Never above the attack, so it fits in a u32.
     u32::try_from(damage).unwrap_or(attack)
+}
+
+/// Damage of a spell: the `damage` formula scaled by its power, in percent, rounded up.
+#[must_use]
+pub fn spell_damage(attacker: &Stats, defender: &Stats, spell: &SpellData) -> u32 {
+    let base = u64::from(damage(attacker, defender, spell.range));
+    let scaled = (base * u64::from(spell.power)).div_ceil(100);
+    u32::try_from(scaled).unwrap_or(u32::MAX)
+}
+
+/// Distance between the edges of two fighters, in meters; 0 when they touch.
+#[must_use]
+pub fn edge_distance(a: &Fighter, b: &Fighter) -> f64 {
+    let offset = Vec2::new(b.position.x - a.position.x, b.position.y - a.position.y);
+    (offset.length() - 2.0 * RADIUS).max(0.0)
+}
+
+fn cool_down(arena: &mut Arena) {
+    for f in &mut arena.fighters {
+        for c in &mut f.cooldowns {
+            *c = c.saturating_sub(1);
+        }
+    }
+}
+
+/// Casts the spell each living fighter chose, if it is ready, affordable and the
+/// target is alive and in reach; a cast fighter then waits for its next decision.
+// ponytail: resolved in index order, so of two fighters killing each other on the
+// same tick, the lower index survives.
+fn cast_spells(arena: &mut Arena) {
+    for i in 0..arena.fighters.len() {
+        let caster = &arena.fighters[i];
+        let Action::Cast { spell, target } = caster.action else {
+            continue;
+        };
+        let Some(t) = usize::try_from(target.0).ok() else {
+            continue;
+        };
+        let Some(defender) = arena.fighters.get(t) else {
+            continue;
+        };
+        if !caster.is_alive() || !defender.is_alive() || caster.id == target {
+            continue;
+        }
+        if !caster.can_cast(spell) || edge_distance(caster, defender) > caster.spells[spell].reach {
+            continue;
+        }
+        let amount = spell_damage(&caster.stats, &defender.stats, &caster.spells[spell]);
+        let caster = &mut arena.fighters[i];
+        caster.spend(spell);
+        caster.action = Action::Wait;
+        arena.fighters[t].take_damage(amount);
+    }
 }
 
 fn move_fighters(arena: &mut Arena) {
@@ -161,7 +222,7 @@ mod tests {
     use rand_chacha::rand_core::Rng;
 
     use super::*;
-    use crate::fighter::{ClassId, FighterId, Stats};
+    use crate::fighter::{FighterId, Stats, test_fighter as fighter};
 
     struct Fixed(Action);
 
@@ -171,16 +232,54 @@ mod tests {
         }
     }
 
-    fn fighter(id: u32, x: f64, y: f64) -> Fighter {
-        let stats = Stats {
-            hp: 100,
-            melee_attack: 10,
-            ranged_attack: 10,
-            speed: 30,
-            melee_defense: 10,
-            ranged_defense: 10,
-        };
-        Fighter::new(FighterId(id), ClassId(0), stats, 50, 50, Vec2::new(x, y))
+    const HIT: Action = Action::Cast {
+        spell: 0,
+        target: FighterId(1),
+    };
+    /// Damage of the test spell between two test fighters: 10 × 100 / 110, rounded up.
+    const HIT_DAMAGE: u32 = 10;
+
+    /// Fighter 0 hits fighter 1, `gap` meters between their edges.
+    fn duel(gap: f64) -> Arena {
+        let fighters = vec![fighter(0, 5.0, 5.0), fighter(1, 6.0 + gap, 5.0)];
+        Arena::new(20.0, 20.0, fighters, 0)
+    }
+
+    #[test]
+    fn casts_on_a_target_in_reach() {
+        let mut arena = duel(0.5);
+        play(&mut arena, &[HIT, Action::Wait], 1);
+        assert_eq!(arena.fighters[1].hp, 100 - HIT_DAMAGE);
+        assert_eq!(arena.fighters[0].endurance.current, 40);
+        assert_eq!(arena.fighters[0].cooldowns[0], 30);
+        assert_eq!(arena.fighters[0].action, Action::Wait);
+    }
+
+    #[test]
+    fn does_not_cast_out_of_reach() {
+        let mut arena = duel(2.0);
+        play(&mut arena, &[HIT, Action::Wait], 1);
+        assert_eq!(arena.fighters[1].hp, 100);
+        assert_eq!(arena.fighters[0].endurance.current, 50);
+    }
+
+    #[test]
+    fn waits_for_the_cooldown() {
+        let mut arena = duel(0.5);
+        play(&mut arena, &[HIT, Action::Wait], 30);
+        assert_eq!(arena.fighters[1].hp, 100 - HIT_DAMAGE);
+        // Tick 30: cooldown over and a new decision.
+        play(&mut arena, &[HIT, Action::Wait], 1);
+        assert_eq!(arena.fighters[1].hp, 100 - 2 * HIT_DAMAGE);
+    }
+
+    #[test]
+    fn stops_casting_without_resource() {
+        let mut arena = duel(0.5);
+        play(&mut arena, &[HIT, Action::Wait], 600);
+        // 50 endurance, 10 per cast: 5 casts.
+        assert_eq!(arena.fighters[1].hp, 100 - 5 * HIT_DAMAGE);
+        assert_eq!(arena.fighters[0].endurance.current, 0);
     }
 
     fn play(arena: &mut Arena, actions: &[Action], ticks: u32) {
