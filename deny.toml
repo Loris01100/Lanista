@@ -35,6 +35,21 @@ wildcards = "deny"
 # Path dependencies between workspace crates have no version: not a wildcard.
 allow-wildcard-paths = true
 
+# Crate dependency rules from the roadmap. `wrappers` lists the only crates allowed
+# to depend on the banned crate directly; any other direct dependent fails the check.
+# Planned crates: lanista_ia_onnx (ONNX inference), lanista_py (PyO3), outils (CLI).
+deny = [
+    # Rendering stays out of the logic, the AI, the Python module and the tools.
+    { crate = "macroquad", wrappers = ["reesch", "lanista", "egui-macroquad"] },
+    { crate = "egui", wrappers = ["reesch", "lanista", "egui-macroquad", "egui-miniquad"] },
+    # ML runtimes only in the inference crate (and the game, which ships it).
+    { crate = "ort", wrappers = ["lanista_ia_onnx", "lanista"] },
+    { crate = "tract-onnx", wrappers = ["lanista_ia_onnx", "lanista"] },
+    { crate = "pyo3", wrappers = ["lanista_py"] },
+    # The engine stays generic: it never sees the game logic.
+    { crate = "lanista_core", wrappers = ["lanista", "lanista_ia_onnx", "lanista_py", "outils"] },
+]
+
 [sources]
 unknown-registry = "deny"
 unknown-git = "deny"

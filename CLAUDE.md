@@ -37,6 +37,8 @@ Planned later: an ONNX inference crate, a PyO3 module for RL training (`python/`
 
 ## Architecture rules (enforced by crate dependencies)
 
+`cargo deny check` enforces the forbidden dependencies below through `[bans] deny` + `wrappers` in [deny.toml](deny.toml). A new crate that may legitimately depend on a banned crate must be added to its `wrappers`; planned crate names there are `lanista_ia_onnx`, `lanista_py` and `outils`.
+
 - `lanista_core` must never depend on macroquad, egui, ort or pyo3 — logic is runnable headless (tools, tests, Python training).
 - `reesch` must never depend on `lanista_core`; it stays game-agnostic. Only add engine features a current game phase needs.
 - Refer to entities by IDs (`FighterId(u32)`) stored in `Vec`/tables, not references.
