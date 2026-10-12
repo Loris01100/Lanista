@@ -72,5 +72,5 @@ Tests: `proptest` for invariants (HP never above max, a combat always ends), `in
 - Never tag, push or publish without an explicit request.
 - `Cargo.lock` is committed (binary project).
 - `.githooks/pre-commit` rejects unformatted code; enable once per clone with `git config core.hooksPath .githooks`.
-- Git LFS tracks `*.png`, `*.ogg`, `*.wav`, `*.aseprite`; line endings normalized to LF.
+- Git LFS tracks `*.png`, `*.ogg`, `*.wav`, `*.aseprite`, `*.ttf`, `*.otf`; line endings normalized to LF.
 - Git convention: `main` always working, one branch per feature, a tag per phase (`phase-0`, `phase-1`…).
