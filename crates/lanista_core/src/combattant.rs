@@ -80,4 +80,9 @@ impl Combattant {
     pub fn est_vivant(&self) -> bool {
         self.pv > 0
     }
+
+    /// Takes `degats` hit points off, stopping at 0.
+    pub fn subir(&mut self, degats: u32) {
+        self.pv = self.pv.saturating_sub(degats);
+    }
 }

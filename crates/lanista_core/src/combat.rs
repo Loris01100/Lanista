@@ -1,4 +1,4 @@
-use crate::combattant::Combattant;
+use crate::combattant::{Combattant, Stats};
 use crate::ia::{Action, CombatAi};
 
 /// Duration of a tick, in seconds: 30 ticks per second.
@@ -71,6 +71,27 @@ pub fn tick(arene: &mut Arene, ias: &mut [Box<dyn CombatAi>]) {
     separer(arene);
     borner(arene);
     arene.tick += 1;
+}
+
+/// Whether a hit uses AC against DC or AL against DL.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Portee {
+    CorpsACorps,
+    Distance,
+}
+
+/// Damage of a hit: attack × 100 / (100 + defense), rounded up so that
+/// a nonzero attack always deals at least 1, whatever the defense.
+#[must_use]
+pub fn degats(attaquant: &Stats, defenseur: &Stats, portee: Portee) -> u32 {
+    let (attaque, defense) = match portee {
+        Portee::CorpsACorps => (attaquant.ac, defenseur.dc),
+        Portee::Distance => (attaquant.al, defenseur.dl),
+    };
+    // u64: attack × 100 overflows u32 above 42 million.
+    let degats = (u64::from(attaque) * 100).div_ceil(100 + u64::from(defense));
+    // Never above the attack, so it fits in a u32.
+    u32::try_from(degats).unwrap_or(attaque)
 }
 
 fn deplacer(arene: &mut Arene) {
@@ -185,6 +206,69 @@ mod tests {
         let (a, b) = (arene.combattants[0].position, arene.combattants[1].position);
         let distance = Vec2::new(b.x - a.x, b.y - a.y).longueur();
         assert!(distance >= 2.0 * RAYON - 1e-9, "{distance}");
+    }
+
+    fn stats(ac: u32, al: u32, dc: u32, dl: u32) -> Stats {
+        Stats {
+            pv: 100,
+            ac,
+            al,
+            vit: 30,
+            dc,
+            dl,
+        }
+    }
+
+    #[test]
+    fn la_defense_reduit_les_degats() {
+        let attaquant = stats(100, 0, 0, 0);
+        assert_eq!(
+            degats(&attaquant, &stats(0, 0, 0, 0), Portee::CorpsACorps),
+            100
+        );
+        assert_eq!(
+            degats(&attaquant, &stats(0, 0, 100, 0), Portee::CorpsACorps),
+            50
+        );
+        assert_eq!(
+            degats(&attaquant, &stats(0, 0, 300, 0), Portee::CorpsACorps),
+            25
+        );
+    }
+
+    #[test]
+    fn ac_contre_dc_et_al_contre_dl() {
+        let attaquant = stats(100, 60, 0, 0);
+        let defenseur = stats(0, 0, 100, 200);
+        assert_eq!(degats(&attaquant, &defenseur, Portee::CorpsACorps), 50);
+        assert_eq!(degats(&attaquant, &defenseur, Portee::Distance), 20);
+    }
+
+    #[test]
+    fn la_defense_n_annule_jamais_les_degats() {
+        let attaquant = stats(1, 0, 0, 0);
+        let defenseur = stats(0, 0, u32::MAX, 0);
+        assert_eq!(degats(&attaquant, &defenseur, Portee::CorpsACorps), 1);
+        assert_eq!(degats(&attaquant, &defenseur, Portee::Distance), 0);
+    }
+
+    #[test]
+    fn pas_de_debordement() {
+        let attaquant = stats(u32::MAX, 0, 0, 0);
+        assert_eq!(
+            degats(&attaquant, &stats(0, 0, 0, 0), Portee::CorpsACorps),
+            u32::MAX
+        );
+    }
+
+    #[test]
+    fn les_pv_s_arretent_a_zero() {
+        let mut c = combattant(0, 5.0, 5.0);
+        c.subir(30);
+        assert_eq!(c.pv, 70);
+        c.subir(1000);
+        assert_eq!(c.pv, 0);
+        assert!(!c.est_vivant());
     }
 
     #[test]

@@ -214,7 +214,7 @@ Objectif : le cœur du jeu, sans aucun affichage. Tout se passe dans `gladiator_
 
 - Structures `Arene`, `Combattant` (version simple : six stats, classe, deux ressources : mana et endurance), `FighterId`. Fait : `combattant.rs` et `combat.rs` ; la classe est un `ClasseId` qui renverra aux données de `data/`.
 - Pas de temps fixe, déplacements, collisions cercle contre cercle, bords de l'arène. Fait : `combat::tick`, 30 ticks par seconde, décision des IA tous les 6 ticks (5 par seconde), arène rectangulaire, un seul rayon et une seule échelle de vitesse (`VIT × 0,1 m/s`) pour tous en attendant `data/` ; trait `CombatAi` minimal dans `ia` (actions : attendre, se déplacer).
-- Formule de dégâts du plan de conception (attaque × 100 / (100 + défense)).
+- Formule de dégâts du plan de conception (attaque × 100 / (100 + défense)). Fait : `combat::degats` (AC contre DC au corps à corps, AL contre DL à distance), en entiers arrondis vers le haut pour qu'une attaque non nulle inflige toujours au moins 1 ; `Combattant::subir` retire les PV sans passer sous 0. Aucune action d'attaque dans `tick` pour l'instant : portée et cadence viendront avec les classes et les sorts.
 - 2 classes, 3 sorts chacune, avec temps de recharge et coût en ressource, décrits dans `data/` en RON.
 - Trait `CombatAi` et une utility AI : chaque action reçoit un score, la meilleure est jouée.
 - Graine par combat, `ChaCha8Rng`, règles de déterminisme appliquées dès le premier jour.
