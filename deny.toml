@@ -24,6 +24,8 @@ allow = [
     "Zlib",
 ]
 confidence-threshold = 0.8
+# Build dependency of pyo3 only. The LLVM exception adds permissions to Apache-2.0.
+exceptions = [{ crate = "target-lexicon", allow = ["Apache-2.0 WITH LLVM-exception"] }]
 
 [licenses.private]
 # The workspace crates are unpublished (publish = false) and carry no license yet.

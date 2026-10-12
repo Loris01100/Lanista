@@ -23,6 +23,8 @@ cargo machete                        # unused dependencies
 cargo deny check                     # advisories, licenses, sources (deny.toml)
 ```
 
+Python module `lanista_py` (PyO3, cdylib, no Rust tests): create `python/.venv` once (`py -m venv python/.venv`, then `pip install maturin` inside it), activate it, then `maturin develop -m crates/lanista_py/Cargo.toml` and `python -c "import lanista_py"`.
+
 CI ([.github/workflows/ci.yml](.github/workflows/ci.yml)) runs all of the above; clippy and tests run on both Windows and Linux so determinism breaks show up. Any clippy warning fails CI, and the `pedantic` group is on for the whole workspace (`[workspace.lints.clippy]` in the root `Cargo.toml`; each crate has `[lints] workspace = true`, which a new crate must add too). Fix a lint rather than silencing it, or use a local `#[expect(clippy::…, reason = "…")]`. Package metadata (edition, authors, repository, `license-file`, `publish = false`) lives in `[workspace.package]` and each crate inherits it with `<field>.workspace = true`; a new crate must do the same. `publish = false` is what lets `deny.toml` skip license checks for workspace crates. The code is proprietary (all rights reserved, see `LICENSE`).
 
 `[profile.dev.package."*"] opt-level = 2` in the root `Cargo.toml` is deliberate: simulations are too slow with unoptimized dependencies in debug.
@@ -36,8 +38,9 @@ The roadmap uses placeholder names; the actual crates are:
 | `gladiator_core` | `lanista_core` | Pure game logic (combat, AI, fighters, world, economy, save) |
 | `moteur` | `reesch` | Generic engine (macroquad + egui: loop, sprites, input, audio, screens) |
 | `gladiator` | `lanista` | Game binary; wires core + engine |
+| `gladiator_py` | `lanista_py` | PyO3 module for RL training (phase 0 prototype for now) |
 
-Planned later: an ONNX inference crate, a PyO3 module for RL training (`python/` venv), and a CLI tools crate (`simuler`, `masse`, `calibrer`…). The workspace picks up any `crates/*` automatically.
+Planned later: an ONNX inference crate and a CLI tools crate (`simuler`, `masse`, `calibrer`…). The workspace picks up any `crates/*` automatically.
 
 ## Architecture rules (enforced by crate dependencies)
 
@@ -73,4 +76,4 @@ Tests: `proptest` for invariants (HP never above max, a combat always ends), `in
 - `Cargo.lock` is committed (binary project).
 - `.githooks/pre-commit` rejects unformatted code; enable once per clone with `git config core.hooksPath .githooks`.
 - Git LFS tracks `*.png`, `*.ogg`, `*.wav`, `*.aseprite`, `*.ttf`, `*.otf`; line endings normalized to LF.
-- Git convention: `main` always working, one branch per feature, a tag per phase (`phase-0`, `phase-1`…).
+- Git convention: `main` always working, commit directly to `main` until the Steam release, then one branch per feature, a tag per phase (`phase-0`, `phase-1`…).
