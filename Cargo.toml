@@ -4,3 +4,9 @@ members = ["crates/*"]
 
 [profile.dev.package."*"]
 opt-level = 2
+
+# Every crate opts in with `[lints] workspace = true`.
+# Pedantic lints warn, so CI (-D warnings) rejects them: fix the lint, or use a local
+# #[expect(clippy::…, reason = "…")].
+[workspace.lints.clippy]
+pedantic = { level = "warn", priority = -1 }
