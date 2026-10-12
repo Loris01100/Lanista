@@ -5,6 +5,7 @@ use serde::Deserialize;
 use crate::ai::{Action, CombatAi};
 use crate::design_data::SpellData;
 use crate::fighter::{Fighter, FighterId, Stats};
+use crate::log::{Event, EventKind};
 
 /// Duration of a tick, in seconds: 30 ticks per second.
 pub const DT: f64 = 1.0 / 30.0;
@@ -47,6 +48,8 @@ pub struct Arena {
     pub seed: u64,
     /// The fight's only source of randomness, created from `seed`.
     pub rng: ChaCha8Rng,
+    /// What happened, in order.
+    pub log: Vec<Event>,
 }
 
 impl Arena {
@@ -59,7 +62,14 @@ impl Arena {
             fighters,
             seed,
             rng: ChaCha8Rng::seed_from_u64(seed),
+            log: Vec::new(),
         }
+    }
+
+    /// At most one fighter left alive.
+    #[must_use]
+    pub fn is_over(&self) -> bool {
+        self.fighters.iter().filter(|f| f.is_alive()).count() <= 1
     }
 
     #[must_use]
@@ -89,6 +99,13 @@ pub fn tick(arena: &mut Arena, ais: &mut [Box<dyn CombatAi>]) {
     keep_inside(arena);
     cast_spells(arena);
     arena.tick += 1;
+}
+
+/// Plays ticks until the fight is over or `max_ticks` ticks have passed in total.
+pub fn run(arena: &mut Arena, ais: &mut [Box<dyn CombatAi>], max_ticks: u32) {
+    while !arena.is_over() && arena.tick < max_ticks {
+        tick(arena, ais);
+    }
 }
 
 /// Whether a hit uses melee attack against melee defense (AC against DC)
@@ -162,7 +179,25 @@ fn cast_spells(arena: &mut Arena) {
         let caster = &mut arena.fighters[i];
         caster.spend(spell);
         caster.action = Action::Wait;
-        arena.fighters[t].take_damage(amount);
+        let caster = caster.id;
+        let defender = &mut arena.fighters[t];
+        let hp_before = defender.hp;
+        defender.take_damage(amount);
+        let event = |kind| Event {
+            tick: arena.tick,
+            kind,
+        };
+        let cast = event(EventKind::Cast {
+            caster,
+            target,
+            spell,
+            damage: hp_before - defender.hp,
+        });
+        let died = !defender.is_alive();
+        arena.log.push(cast);
+        if died {
+            arena.log.push(event(EventKind::Death { fighter: target }));
+        }
     }
 }
 

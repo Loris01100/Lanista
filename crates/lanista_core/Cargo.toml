@@ -15,3 +15,6 @@ serde = { version = "1.0.229", features = ["derive"] }
 
 [lints]
 workspace = true
+
+[dev-dependencies]
+insta = "1.49.0"
