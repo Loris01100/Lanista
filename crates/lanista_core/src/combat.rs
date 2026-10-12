@@ -1,3 +1,5 @@
+use rand_chacha::ChaCha8Rng;
+use rand_chacha::rand_core::SeedableRng;
 use serde::Deserialize;
 
 use crate::ai::{Action, CombatAi};
@@ -40,16 +42,22 @@ pub struct Arena {
     /// Ticks elapsed since the start of the fight.
     pub tick: u32,
     pub fighters: Vec<Fighter>,
+    /// Replaying the fight with this seed gives the same fight.
+    pub seed: u64,
+    /// The fight's only source of randomness, created from `seed`.
+    pub rng: ChaCha8Rng,
 }
 
 impl Arena {
     #[must_use]
-    pub fn new(width: f64, height: f64, fighters: Vec<Fighter>) -> Self {
+    pub fn new(width: f64, height: f64, fighters: Vec<Fighter>, seed: u64) -> Self {
         Self {
             width,
             height,
             tick: 0,
             fighters,
+            seed,
+            rng: ChaCha8Rng::seed_from_u64(seed),
         }
     }
 }
@@ -150,6 +158,8 @@ fn keep_inside(arena: &mut Arena) {
 
 #[cfg(test)]
 mod tests {
+    use rand_chacha::rand_core::Rng;
+
     use super::*;
     use crate::fighter::{ClassId, FighterId, Stats};
 
@@ -185,7 +195,7 @@ mod tests {
 
     #[test]
     fn moves_at_its_speed() {
-        let mut arena = Arena::new(20.0, 20.0, vec![fighter(0, 5.0, 5.0)]);
+        let mut arena = Arena::new(20.0, 20.0, vec![fighter(0, 5.0, 5.0)], 0);
         // The direction's length must not change the speed.
         play(&mut arena, &[Action::Move(Vec2::new(10.0, 0.0))], 30);
         // Speed 30 → 3 m/s, for one second.
@@ -196,7 +206,12 @@ mod tests {
 
     #[test]
     fn two_fighters_do_not_overlap() {
-        let mut arena = Arena::new(20.0, 20.0, vec![fighter(0, 5.0, 5.0), fighter(1, 8.0, 5.0)]);
+        let mut arena = Arena::new(
+            20.0,
+            20.0,
+            vec![fighter(0, 5.0, 5.0), fighter(1, 8.0, 5.0)],
+            0,
+        );
         let actions = [
             Action::Move(Vec2::new(1.0, 0.0)),
             Action::Move(Vec2::new(-1.0, 0.0)),
@@ -268,8 +283,41 @@ mod tests {
 
     #[test]
     fn stays_inside_the_arena() {
-        let mut arena = Arena::new(10.0, 10.0, vec![fighter(0, 5.0, 5.0)]);
+        let mut arena = Arena::new(10.0, 10.0, vec![fighter(0, 5.0, 5.0)], 0);
         play(&mut arena, &[Action::Move(Vec2::new(-1.0, 1.0))], 300);
         assert_eq!(arena.fighters[0].position, Vec2::new(RADIUS, 10.0 - RADIUS));
+    }
+
+    fn draws(arena: &mut Arena) -> [u64; 4] {
+        std::array::from_fn(|_| arena.rng.next_u64())
+    }
+
+    #[test]
+    fn same_seed_same_draws() {
+        let mut a = Arena::new(10.0, 10.0, vec![], 42);
+        let mut b = Arena::new(10.0, 10.0, vec![], 42);
+        assert_eq!(draws(&mut a), draws(&mut b));
+    }
+
+    #[test]
+    fn other_seed_other_draws() {
+        let mut a = Arena::new(10.0, 10.0, vec![], 42);
+        let mut b = Arena::new(10.0, 10.0, vec![], 43);
+        assert_ne!(draws(&mut a), draws(&mut b));
+    }
+
+    #[test]
+    fn known_draws_for_a_seed() {
+        // Fixed values: fail if a dependency update or a platform changes the sequence.
+        let mut arena = Arena::new(10.0, 10.0, vec![], 42);
+        assert_eq!(
+            draws(&mut arena),
+            [
+                12_578_764_544_318_200_737,
+                17_529_487_244_874_322_312,
+                7_886_285_670_807_131_020,
+                11_572_758_976_476_374_866,
+            ]
+        );
     }
 }
