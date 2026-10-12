@@ -1,8 +1,11 @@
 [package]
 name = "lanista_core"
 version = "0.1.0"
-edition = "2024"
-publish = false
+edition.workspace = true
+authors.workspace = true
+repository.workspace = true
+license-file.workspace = true
+publish.workspace = true
 
 [dependencies]
 
