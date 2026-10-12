@@ -49,7 +49,7 @@ allow-wildcard-paths = true
 
 # Crate dependency rules from the roadmap. `wrappers` lists the only crates allowed
 # to depend on the banned crate directly; any other direct dependent fails the check.
-# lanista_ia_onnx (ONNX inference), lanista_py (PyO3); outils (CLI) is planned.
+# lanista_ia_onnx (ONNX inference), lanista_py (PyO3); tools (CLI) is planned.
 deny = [
     # Rendering stays out of the logic, the AI, the Python module and the tools.
     { crate = "macroquad", wrappers = ["reesch", "lanista", "egui-macroquad"] },
@@ -58,7 +58,7 @@ deny = [
     { crate = "tract-onnx", wrappers = ["lanista_ia_onnx", "lanista"] },
     { crate = "pyo3", wrappers = ["lanista_py"] },
     # The engine stays generic: it never sees the game logic.
-    { crate = "lanista_core", wrappers = ["lanista", "lanista_ia_onnx", "lanista_py", "outils"] },
+    { crate = "lanista_core", wrappers = ["lanista", "lanista_ia_onnx", "lanista_py", "tools"] },
 ]
 
 [sources]

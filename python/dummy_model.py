@@ -1,6 +1,6 @@
 """Phase 0 prototype: writes a tiny ONNX model, y = relu(x @ W + b), to test tract.
 
-Run from the repo root inside python/.venv: python python/modele_factice.py
+Run from the repo root inside python/.venv: python python/dummy_model.py
 """
 
 import onnx
@@ -15,7 +15,7 @@ graph = helper.make_graph(
         helper.make_node("Add", ["xw", "B"], ["xwb"]),
         helper.make_node("Relu", ["xwb"], ["y"]),
     ],
-    "factice",
+    "dummy",
     [helper.make_tensor_value_info("x", TensorProto.FLOAT, [1, 4])],
     [helper.make_tensor_value_info("y", TensorProto.FLOAT, [1, 2])],
     [
@@ -26,4 +26,4 @@ graph = helper.make_graph(
 # Opset 17 / IR 8: supported by tract.
 model = helper.make_model(graph, opset_imports=[helper.make_opsetid("", 17)], ir_version=8)
 onnx.checker.check_model(model)
-onnx.save(model, "crates/lanista_ia_onnx/tests/factice.onnx")
+onnx.save(model, "crates/lanista_ia_onnx/tests/dummy.onnx")

@@ -43,18 +43,22 @@ The roadmap uses placeholder names; the actual crates are:
 | `gladiator_py` | `lanista_py` | PyO3 module for RL training (phase 0 prototype for now) |
 | `gladiator_ia_onnx` | `lanista_ia_onnx` | ONNX inference of the learned AI with `tract` (phase 0 prototype for now) |
 
-Planned later: a CLI tools crate (`simuler`, `masse`, `calibrer`…). The workspace picks up any `crates/*` automatically.
+Planned later: a CLI `tools` crate (`simulate`, `batch`, `calibrate`…). The workspace picks up any `crates/*` automatically.
 
 ## Architecture rules (enforced by crate dependencies)
 
-`cargo deny check` enforces the forbidden dependencies below through `[bans] deny` + `wrappers` in [deny.toml](deny.toml). A new crate that may legitimately depend on a banned crate must be added to its `wrappers`; `lanista_ia_onnx`, `lanista_py` and the planned `outils` are listed there.
+`cargo deny check` enforces the forbidden dependencies below through `[bans] deny` + `wrappers` in [deny.toml](deny.toml). A new crate that may legitimately depend on a banned crate must be added to its `wrappers`; `lanista_ia_onnx`, `lanista_py` and the planned `tools` are listed there.
 
 - `lanista_core` must never depend on macroquad, egui, tract or pyo3 — logic is runnable headless (tools, tests, Python training).
 - `reesch` must never depend on `lanista_core`; it stays game-agnostic. Only add engine features a current game phase needs.
 - Refer to entities by IDs (`FighterId(u32)`) stored in `Vec`/tables, not references.
-- A week is a function (`semaine_suivante(&mut GameState, &Decisions)`), a combat step is a function (`tick(&mut Arene, &mut [Box<dyn CombatAi>])`). UI only builds decisions and reads state.
+- A week is a function (`next_week(&mut GameState, &Decisions)`), a combat step is a function (`tick(&mut Arena, &mut [Box<dyn CombatAi>])`). UI only builds decisions and reads state.
 - Logic runs at a fixed tick rate; rendering interpolates. Speed-ups just run more ticks per frame.
 - Design data (classes, spells, arenas) lives in RON files under `data/`, not in code. Saves are versioned JSON with migrations.
+
+## Naming
+
+All code is in English: modules, types, functions, variables, constants, test names, code file names, comments. Only player-facing text and the `docs/` documents stay in French. The design plan's French stat abbreviations map to `hp` (PV), `melee_attack` (AC), `ranged_attack` (AL), `speed` (VIT), `melee_defense` (DC), `ranged_defense` (DL).
 
 ## Determinism (in `lanista_core`)
 

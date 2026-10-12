@@ -1,22 +1,22 @@
-//! `tract` loads the dummy model (written by `python/modele_factice.py`) and gives the expected output.
+//! `tract` loads the dummy model (written by `python/dummy_model.py`) and gives the expected output.
 
 use std::path::Path;
 
-use lanista_ia_onnx::inferer;
+use lanista_ia_onnx::infer;
 
-const MODELE: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/tests/factice.onnx");
-const ENTREE: [f32; 4] = [1.0, 2.0, 3.0, 4.0];
+const MODEL: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/tests/dummy.onnx");
+const INPUT: [f32; 4] = [1.0, 2.0, 3.0, 4.0];
 // relu([1, 2, 3, 4] @ W + B), computed by hand.
-const ATTENDU: [f32; 2] = [1.6, 0.0];
+const EXPECTED: [f32; 2] = [1.6, 0.0];
 
-fn verifier(y: &[f32]) {
-    assert_eq!(y.len(), ATTENDU.len());
-    for (a, b) in y.iter().zip(ATTENDU) {
-        assert!((a - b).abs() < 1e-6, "{y:?} != {ATTENDU:?}");
+fn check(y: &[f32]) {
+    assert_eq!(y.len(), EXPECTED.len());
+    for (a, b) in y.iter().zip(EXPECTED) {
+        assert!((a - b).abs() < 1e-6, "{y:?} != {EXPECTED:?}");
     }
 }
 
 #[test]
-fn charge_et_infere() {
-    verifier(&inferer(Path::new(MODELE), &ENTREE).unwrap());
+fn loads_and_infers() {
+    check(&infer(Path::new(MODEL), &INPUT).unwrap());
 }

@@ -11,7 +11,7 @@ async fn main() {
     );
     // Pixel art: no blur when scaled up.
     sprite.set_filter(FilterMode::Nearest);
-    let mut clics = 0_u32;
+    let mut clicks = 0_u32;
 
     loop {
         clear_background(DARKGRAY);
@@ -29,9 +29,9 @@ async fn main() {
         egui_macroquad::ui(|ctx| {
             egui::Window::new("Prototype").show(ctx, |ui| {
                 if ui.button("Cliquer").clicked() {
-                    clics += 1;
+                    clicks += 1;
                 }
-                ui.label(format!("Clics : {clics}"));
+                ui.label(format!("Clics : {clicks}"));
             });
         });
         egui_macroquad::draw();

@@ -93,7 +93,7 @@ gladiator-manager/
 │   ├── gladiator_ia_onnx/  # inférence ONNX derrière le trait CombatAi
 │   ├── gladiator/          # l'exécutable du jeu : écrans, rendu des combats, Steam
 │   ├── gladiator_py/       # module Python (PyO3) pour l'entraînement
-│   └── outils/             # binaires en ligne de commande
+│   └── tools/              # binaires en ligne de commande
 ├── python/                 # environnement Gymnasium, entraînement, export ONNX
 ├── data/                   # classes, sorts, arènes, noms (RON)
 ├── assets/                 # sprites, sons, polices (Git LFS)
@@ -109,7 +109,7 @@ flowchart TD
   ONNX[gladiator_ia_onnx<br/>inférence]
   JEU[gladiator<br/>exécutable]
   PY[gladiator_py<br/>module Python]
-  OUT[outils<br/>CLI]
+  OUT[tools<br/>CLI]
   ONNX --> CORE
   JEU --> CORE
   JEU --> MOTEUR
@@ -125,30 +125,31 @@ flowchart TD
 | `gladiator_ia_onnx` | `gladiator_core`, tract | macroquad |
 | `gladiator` | tout | — |
 | `gladiator_py` | `gladiator_core`, pyo3 | macroquad, egui |
-| `outils` | `gladiator_core`, rayon | macroquad |
+| `tools` | `gladiator_core`, rayon | macroquad |
 
 ### Modules de `gladiator_core`
 
 | Module | Responsabilité |
 | --- | --- |
-| `etat` | `GameState` : état global de la partie, point d'entrée de la sauvegarde |
-| `calendrier` | Semaines, saisons, grands événements, intersaison |
-| `combattant` | Stats, forme, blessures, maladies, soins, progression, âge, retraite, mort |
+| `state` | `GameState` : état global de la partie, point d'entrée de la sauvegarde |
+| `calendar` | Semaines, saisons, grands événements, intersaison |
+| `fighter` | Stats, forme, blessures, maladies, soins, progression, âge, retraite, mort |
 | `combat` | Arène, déplacements, collisions, dégâts, sorts, équipement, pas de temps fixe |
-| `ia` | Trait `CombatAi`, utility AI |
-| `modele_stat` | Résolution statistique des combats entre rivaux |
-| `rivaux` | Décisions hebdomadaires des clubs rivaux |
-| `economie`, `marche`, `personnel` | Argent, achats, ventes, libérations, personnel |
-| `classements` | Elo par colisée, titres, défis, compétitions |
-| `sauvegarde` | JSON versionné, migrations entre versions |
-| `succes` | Succès du jeu, indépendants de Steam |
-| `donnees` | Chargement des classes, sorts et arènes depuis `data/` |
+| `ai` | Trait `CombatAi`, utility AI |
+| `stat_model` | Résolution statistique des combats entre rivaux |
+| `rivals` | Décisions hebdomadaires des clubs rivaux |
+| `economy`, `market`, `staff` | Argent, achats, ventes, libérations, personnel |
+| `rankings` | Elo par colisée, titres, défis, compétitions |
+| `save` | JSON versionné, migrations entre versions |
+| `achievements` | Succès du jeu, indépendants de Steam |
+| `design_data` | Chargement des classes, sorts et arènes depuis `data/` |
 
 ### Principes Rust pour ce projet
 
+- **Le code est en anglais.** Modules, types, fonctions, variables, constantes, tests, fichiers de code et commentaires sont en anglais. Restent en français : les textes affichés au joueur et les documents de `docs/`. Les abréviations des stats du plan de conception sont traduites (PV → `hp`, AC → `melee_attack`, AL → `ranged_attack`, VIT → `speed`, DC → `melee_defense`, DL → `ranged_defense`).
 - **Des identifiants plutôt que des références.** Les combattants vivent dans des `Vec` ou des tables, et se désignent par un `FighterId(u32)`. Un combattant qui cible un adversaire stocke son identifiant, jamais une référence. C'est ce qui évite de se battre avec le borrow checker.
-- **Une semaine est une fonction.** `fn semaine_suivante(etat: &mut GameState, decisions: &Decisions)`. L'interface ne fait que construire les décisions et lire l'état.
-- **Un combat est une fonction.** `fn tick(arene: &mut Arene, ias: &mut [Box<dyn CombatAi>])`. Le même code tourne à l'écran, en arrière-plan, dans les outils et dans Python.
+- **Une semaine est une fonction.** `fn next_week(state: &mut GameState, decisions: &Decisions)`. L'interface ne fait que construire les décisions et lire l'état.
+- **Un combat est une fonction.** `fn tick(arena: &mut Arena, ais: &mut [Box<dyn CombatAi>])`. Le même code tourne à l'écran, en arrière-plan, dans les outils et dans Python.
 - **Les données de design hors du code.** Classes, sorts et arènes en fichiers RON, rechargés à chaud pendant l'équilibrage.
 
 ### Déterminisme : les pièges à éviter
@@ -210,17 +211,17 @@ opt-level = 2
 
 ### Phase 1 — Combat de base
 
-Objectif : le cœur du jeu, sans aucun affichage. Tout se passe dans `gladiator_core` et `outils`.
+Objectif : le cœur du jeu, sans aucun affichage. Tout se passe dans `gladiator_core` et `tools`.
 
-- Structures `Arene`, `Combattant` (version simple : six stats, classe, deux ressources : mana et endurance), `FighterId`. Fait : `combattant.rs` et `combat.rs` ; la classe est un `ClasseId` qui renverra aux données de `data/`.
-- Pas de temps fixe, déplacements, collisions cercle contre cercle, bords de l'arène. Fait : `combat::tick`, 30 ticks par seconde, décision des IA tous les 6 ticks (5 par seconde), arène rectangulaire, un seul rayon et une seule échelle de vitesse (`VIT × 0,1 m/s`) pour tous en attendant `data/` ; trait `CombatAi` minimal dans `ia` (actions : attendre, se déplacer).
-- Formule de dégâts du plan de conception (attaque × 100 / (100 + défense)). Fait : `combat::degats` (AC contre DC au corps à corps, AL contre DL à distance), en entiers arrondis vers le haut pour qu'une attaque non nulle inflige toujours au moins 1 ; `Combattant::subir` retire les PV sans passer sous 0. Aucune action d'attaque dans `tick` pour l'instant : portée et cadence viendront avec les classes et les sorts.
+- Structures `Arena`, `Fighter` (version simple : six stats, classe, deux ressources : mana et endurance), `FighterId`. Fait : `fighter.rs` et `combat.rs` ; la classe est un `ClassId` qui renverra aux données de `data/`.
+- Pas de temps fixe, déplacements, collisions cercle contre cercle, bords de l'arène. Fait : `combat::tick`, 30 ticks par seconde, décision des IA tous les 6 ticks (5 par seconde), arène rectangulaire, un seul rayon et une seule échelle de vitesse (`VIT × 0,1 m/s`) pour tous en attendant `data/` ; trait `CombatAi` minimal dans `ai` (actions : `Wait`, `Move`).
+- Formule de dégâts du plan de conception (attaque × 100 / (100 + défense)). Fait : `combat::damage` (AC contre DC au corps à corps, AL contre DL à distance), en entiers arrondis vers le haut pour qu'une attaque non nulle inflige toujours au moins 1 ; `Fighter::take_damage` retire les PV sans passer sous 0. Aucune action d'attaque dans `tick` pour l'instant : portée et cadence viendront avec les classes et les sorts.
 - 2 classes, 3 sorts chacune, avec temps de recharge et coût en ressource, décrits dans `data/` en RON.
 - Trait `CombatAi` et une utility AI : chaque action reçoit un score, la meilleure est jouée.
 - Graine par combat, `ChaCha8Rng`, règles de déterminisme appliquées dès le premier jour.
 - Journal d'événements du combat (qui frappe qui, dégâts, sorts) et compte rendu simple.
-- Outil `simuler --graine 42` : affiche le déroulé et le résultat dans le terminal.
-- Outil `masse --combats 10000` avec `rayon` : taux de victoire par classe, durée moyenne. C'est la parade au risque d'équilibrage, en place dès maintenant.
+- Outil `simulate --seed 42` : affiche le déroulé et le résultat dans le terminal.
+- Outil `batch --fights 10000` avec `rayon` : taux de victoire par classe, durée moyenne. C'est la parade au risque d'équilibrage, en place dès maintenant.
 - Tests : combats de référence avec `insta` (une graine donnée produit toujours le même journal), invariants avec `proptest` (les PV ne dépassent jamais le maximum, un combat se termine toujours).
 
 **Jalon :** deux combattants s'affrontent ; la même graine redonne exactement le même combat ; 10 000 duels sont simulés et les taux de victoire s'affichent.
@@ -253,13 +254,13 @@ Objectif : la crate `moteur`, générique, et un premier rendu du combat.
 - Progression sans niveaux, potentiel caché, effets de l'âge, retraite décidée par le combattant.
 - Tous ces éléments deviennent des entrées de l'utility AI : un combattant blessé ou peureux se bat différemment.
 - Représentation de la mort à l'écran : tache de sang et petite animation.
-- Outil `carriere --graine 7 --semaines 10` pour suivre un combattant en ligne de commande.
+- Outil `career --seed 7 --weeks 10` pour suivre un combattant en ligne de commande.
 
 **Jalon :** un combattant enchaîne 10 semaines avec des effets visibles (forme, blessure, guérison, progression), à l'écran comme dans l'outil.
 
 ### Phase 4 — Management
 
-- `GameState` et `semaine_suivante`.
+- `GameState` et `next_week`.
 - Calendrier : semaines, saison de 33 semaines, phases de la saison.
 - Économie : flux d'entrée et de sortie, filet de sécurité (free agents, colisée gratuit).
 - Écrans : menu général, liste des combattants, fiche combattant, résumé de combat.
@@ -277,8 +278,8 @@ Objectif : la crate `moteur`, générique, et un premier rendu du combat.
 - Clubs rivaux avec profils (prudent, agressif, marchand) et règles hebdomadaires.
 - Marché : achat, vente, free agents, rookies, fourchettes d'observation.
 - Personnel : entraîneur, médecin, recruteur, niveaux 1 à 5.
-- Modèle statistique : l'outil `calibrer` lance des milliers de combats, enregistre les résultats et ajuste une régression logistique (vainqueur), puis des tables de probabilités (blessures, morts). Les coefficients sont exportés dans `data/` et lus par `modele_stat`.
-- Outil `comparer` : vérifie que les taux de victoire, de blessure et de mort sont proches entre vrais combats et modèle statistique.
+- Modèle statistique : l'outil `calibrate` lance des milliers de combats, enregistre les résultats et ajuste une régression logistique (vainqueur), puis des tables de probabilités (blessures, morts). Les coefficients sont exportés dans `data/` et lus par `stat_model`.
+- Outil `compare` : vérifie que les taux de victoire, de blessure et de mort sont proches entre vrais combats et modèle statistique.
 - Écrans : colisées, marché, personnel.
 
 **Jalon :** plusieurs saisons s'enchaînent où les classements, les champions et les marchés évoluent sans intervention du joueur.
@@ -295,7 +296,7 @@ Objectif : la crate `moteur`, générique, et un premier rendu du combat.
 
 ### Phase 7 — IA apprenante
 
-- `gladiator_py` expose une classe `Environnement` : `reset(graine)`, `step(actions)`, observation, récompense, fin de combat. Compilée avec `maturin` en mode `abi3` pour ne pas dépendre d'une version précise de Python.
+- `gladiator_py` expose une classe `Environment` : `reset(seed)`, `step(actions)`, observation, récompense, fin de combat. Compilée avec `maturin` en mode `abi3` pour ne pas dépendre d'une version précise de Python.
 - Côté Python, une enveloppe Gymnasium autour de cet environnement, et plusieurs environnements en parallèle.
 - Observation : stats, forme, blessures, maladie, personnalité, moral, équipement, arène, ressources et sorts, puis les 4 adversaires et 4 alliés les plus proches.
 - Récompenses : dégâts infligés, victoire, légère pénalité de temps. Revoir régulièrement des combats pour détecter les comportements absurdes.
@@ -352,7 +353,7 @@ Objectif : la crate `moteur`, générique, et un premier rendu du combat.
 | Entraînement ML lent ou instable | Phase 7 qui s'éternise | Jeu complet dès la phase 6 avec l'IA scriptée |
 | Récompenses mal conçues | Comportements absurdes | Récompenses simples, revoir des combats régulièrement |
 | Performances en mêlée à 20 avec multi-vue | Ralentissements | IA à basse fréquence, mesures `criterion`, nombre de vignettes limité |
-| Écart entre modèle statistique et vrais combats | Résultats incohérents | Outil `comparer`, recalibrage après chaque changement d'équilibrage |
+| Écart entre modèle statistique et vrais combats | Résultats incohérents | Outil `compare`, recalibrage après chaque changement d'équilibrage |
 | Temps de compilation | Itérations lentes | Workspace découpé, profil dev optimisé pour les dépendances, données en RON hors du code |
 
 ## Points encore ouverts
