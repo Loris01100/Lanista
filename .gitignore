@@ -3,3 +3,8 @@ python/.venv/
 __pycache__/
 .vscode/
 *.pdb
+# Working ONNX exports from training; shipped models live under assets/ and are kept.
+*.onnx
+!assets/**/*.onnx
+# Private keys stay out of the repository.
+*.key
