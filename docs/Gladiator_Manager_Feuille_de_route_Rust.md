@@ -1,0 +1,366 @@
+# Gladiator Manager — Feuille de route technique (Rust)
+
+Version du 11 octobre 2026. Ce document remplace la partie technique du plan de conception du 27 septembre 2026 (architecture Godot, outils, feuille de route). Les règles du jeu (combattants, combat, économie, colisées, compétitions) restent décrites dans le plan de conception, qui demeure la référence pour le gameplay.
+
+## Changement de cap
+
+| Avant | Maintenant |
+| --- | --- |
+| Godot 4.7.2 .NET (C#) | Moteur maison en Rust, construit sur macroquad |
+| Interface Godot (Control) | egui, avec un thème personnalisé |
+| SubViewports | Render targets de macroquad |
+| Godot RL Agents | Module Python compilé depuis Rust avec PyO3 + Stable-Baselines3 |
+| ONNX dans Godot via C# | Crate `ort` (ONNX Runtime), `tract` en solution de secours |
+| Steamworks.NET | Crate `steamworks` |
+| Rider | VS Code + rust-analyzer |
+
+Ce qui ne change pas : la règle d'or. La logique du jeu est séparée de l'affichage, pour pouvoir simuler sans rendu, entraîner l'IA et tester. En Rust, cette règle n'est plus une discipline : c'est le compilateur qui l'impose, puisque la crate de logique ne dépend d'aucune bibliothèque graphique.
+
+## Pile technique
+
+| Besoin | Choix | Remarque |
+| --- | --- | --- |
+| Langage | Rust stable, édition la plus récente | Installé avec `rustup` |
+| Fenêtre, rendu, input, audio | macroquad | Simple, compile vite, Windows et Linux |
+| Interface | egui (intégration macroquad) | Tableaux, listes, fiches, pop-ups ; thème à travailler |
+| Hasard reproductible | `rand` + `rand_chacha` | Une graine par combat |
+| Maths déterministes | `libm` | Mêmes résultats de `sin`, `sqrt`, etc. sur toutes les plateformes |
+| Sérialisation | `serde`, `serde_json`, `ron` | JSON pour les sauvegardes, RON pour les données de design |
+| Compression des sauvegardes | `flate2` | GZip, seulement si besoin |
+| Historique volumineux | `rusqlite` | Seulement si le JSON devient trop lourd |
+| Parallélisme des simulations | `rayon` | Simulation de masse, calibration |
+| Rechargement à chaud des données | `notify` | Pratique pendant l'équilibrage |
+| Inférence ML | `ort`, ou `tract` (100 % Rust) | Derrière le trait commun d'IA |
+| Pont Python | `pyo3` + `maturin` | Le moteur de combat devient un module Python |
+| Entraînement | Python, Gymnasium, Stable-Baselines3 (PPO) | Environnement virtuel `venv` |
+| Steam | crate `steamworks` | Succès, sauvegarde cloud |
+| Tests | `cargo test`, `proptest`, `insta` | Invariants, combats de référence |
+| Mesures de performance | `criterion` | Vitesse de simulation |
+| Qualité | `rustfmt`, `clippy` | Lancés en CI |
+| Éditeur | VS Code + rust-analyzer + CodeLLDB | CodeLLDB pour le débogueur |
+| Sprites | Aseprite ou LibreSprite, Kenney.nl, OpenGameArt | Export en spritesheets PNG |
+| Versionnage | Git + Git LFS + GitHub | LFS pour les PNG, sons, fichiers Aseprite |
+
+Toutes les versions de crates sont figées par le `Cargo.lock`, versionné dans le dépôt puisque le projet produit un exécutable.
+
+## Moteur et jeu : un seul dépôt
+
+### Décision
+
+Un seul dépôt Git, organisé en **workspace Cargo** avec plusieurs crates. Le moteur et le jeu sont séparés en crates distinctes, pas en dépôts distincts.
+
+### Pourquoi pas deux dépôts avec un fork
+
+- Un fork sert à créer une copie qui diverge de l'original. Ici le jeu doit *utiliser* le moteur, pas en posséder une copie : on passerait son temps à synchroniser les deux.
+- Au début, presque chaque fonctionnalité touche les deux côtés (une nouvelle animation demande du code moteur et du code jeu). Avec deux dépôts, chaque changement devient deux commits, deux pushes et une mise à jour de version.
+- On ne sait pas encore ce qui est « générique » et ce qui est propre au jeu. Le découpage se clarifie en construisant le jeu.
+
+### Ce qu'apporte le workspace
+
+- La séparation reste stricte : `moteur` ne connaît pas `gladiator_core`, et `gladiator_core` ne connaît pas `moteur`. Toute dépendance interdite provoque une erreur de compilation.
+- Un seul `cargo build`, un seul `cargo test`, un seul historique.
+- Extraire le moteur plus tard reste simple.
+
+### Si un jour le moteur doit vivre seul
+
+Quand le moteur sera stable et réutilisé pour un autre projet :
+
+1. Extraire son historique avec `git subtree split` ou `git filter-repo` vers un nouveau dépôt.
+2. Publier des versions taguées (`v0.1.0`, `v0.2.0`…).
+3. Dans le jeu, remplacer la dépendance locale par une dépendance Git :
+
+```toml
+# Aujourd'hui (workspace)
+moteur = { path = "../moteur" }
+
+# Plus tard (dépôt séparé)
+moteur = { git = "https://github.com/<toi>/moteur", tag = "v0.2.0" }
+```
+
+Pas de fork, pas de sous-module Git : Cargo sait récupérer une dépendance depuis un dépôt et une version précise.
+
+## Architecture du workspace
+
+```
+gladiator-manager/
+├── Cargo.toml              # workspace, profils de compilation
+├── Cargo.lock
+├── crates/
+│   ├── moteur/             # générique : boucle, sprites, animations, input, audio,
+│   │                       # ressources, caméra, render targets, egui, pile d'écrans
+│   ├── gladiator_core/     # logique pure : combat, IA scriptée, combattants, monde,
+│   │                       # économie, classements, rivaux, sauvegarde
+│   ├── gladiator_ia_onnx/  # inférence ONNX derrière le trait CombatAi
+│   ├── gladiator/          # l'exécutable du jeu : écrans, rendu des combats, Steam
+│   ├── gladiator_py/       # module Python (PyO3) pour l'entraînement
+│   └── outils/             # binaires en ligne de commande
+├── python/                 # environnement Gymnasium, entraînement, export ONNX
+├── data/                   # classes, sorts, arènes, noms (RON)
+├── assets/                 # sprites, sons, polices (Git LFS)
+└── docs/                   # plan de conception, cette feuille de route
+```
+
+### Règles de dépendance
+
+```mermaid
+flowchart TD
+  CORE[gladiator_core<br/>logique pure]
+  MOTEUR[moteur<br/>rendu, input, UI]
+  ONNX[gladiator_ia_onnx<br/>inférence]
+  JEU[gladiator<br/>exécutable]
+  PY[gladiator_py<br/>module Python]
+  OUT[outils<br/>CLI]
+  ONNX --> CORE
+  JEU --> CORE
+  JEU --> MOTEUR
+  JEU --> ONNX
+  PY --> CORE
+  OUT --> CORE
+```
+
+| Crate | Peut dépendre de | Ne doit jamais dépendre de |
+| --- | --- | --- |
+| `gladiator_core` | serde, rand, libm | macroquad, egui, ort, pyo3 |
+| `moteur` | macroquad, egui | `gladiator_core` (il reste générique) |
+| `gladiator_ia_onnx` | `gladiator_core`, ort ou tract | macroquad |
+| `gladiator` | tout | — |
+| `gladiator_py` | `gladiator_core`, pyo3 | macroquad, egui |
+| `outils` | `gladiator_core`, rayon | macroquad |
+
+### Modules de `gladiator_core`
+
+| Module | Responsabilité |
+| --- | --- |
+| `etat` | `GameState` : état global de la partie, point d'entrée de la sauvegarde |
+| `calendrier` | Semaines, saisons, grands événements, intersaison |
+| `combattant` | Stats, forme, blessures, maladies, soins, progression, âge, retraite, mort |
+| `combat` | Arène, déplacements, collisions, dégâts, sorts, équipement, pas de temps fixe |
+| `ia` | Trait `CombatAi`, utility AI |
+| `modele_stat` | Résolution statistique des combats entre rivaux |
+| `rivaux` | Décisions hebdomadaires des clubs rivaux |
+| `economie`, `marche`, `personnel` | Argent, achats, ventes, libérations, personnel |
+| `classements` | Elo par colisée, titres, défis, compétitions |
+| `sauvegarde` | JSON versionné, migrations entre versions |
+| `succes` | Succès du jeu, indépendants de Steam |
+| `donnees` | Chargement des classes, sorts et arènes depuis `data/` |
+
+### Principes Rust pour ce projet
+
+- **Des identifiants plutôt que des références.** Les combattants vivent dans des `Vec` ou des tables, et se désignent par un `FighterId(u32)`. Un combattant qui cible un adversaire stocke son identifiant, jamais une référence. C'est ce qui évite de se battre avec le borrow checker.
+- **Une semaine est une fonction.** `fn semaine_suivante(etat: &mut GameState, decisions: &Decisions)`. L'interface ne fait que construire les décisions et lire l'état.
+- **Un combat est une fonction.** `fn tick(arene: &mut Arene, ias: &mut [Box<dyn CombatAi>])`. Le même code tourne à l'écran, en arrière-plan, dans les outils et dans Python.
+- **Les données de design hors du code.** Classes, sorts et arènes en fichiers RON, rechargés à chaud pendant l'équilibrage.
+
+### Déterminisme : les pièges à éviter
+
+| Piège | Pourquoi | Parade |
+| --- | --- | --- |
+| `HashMap` / `HashSet` | Ordre de parcours aléatoire à chaque lancement | `BTreeMap`, `Vec` triés, ou un hasher fixe ; une règle clippy `disallowed_types` pour l'interdire dans `gladiator_core` |
+| `f32::sin`, `sqrt`, etc. | Peuvent différer entre Windows et Linux | Passer par `libm` partout dans la logique |
+| `thread_rng()` | Hasard non reproductible | Un seul `ChaCha8Rng` par combat, créé depuis la graine |
+| Temps réel (`Instant::now`) | Dépend de la machine | La logique ne connaît que des ticks |
+| Parallélisme | Ordre d'exécution variable | Paralléliser entre combats indépendants, jamais à l'intérieur d'un combat |
+
+Ce point compte d'autant plus qu'une sauvegarde peut passer de Windows au Steam Deck par la sauvegarde cloud, et que les graines servent à revoir les combats.
+
+### Boucle de jeu
+
+La logique avance à cadence fixe (par exemple 30 ticks par seconde), l'IA décide quelques fois par seconde (par exemple 5), et l'affichage interpole entre deux ticks pour rester fluide à n'importe quelle fréquence d'écran. Les vitesses x2 et x4 exécutent simplement plus de ticks par image ; « passer au résultat » exécute tous les ticks restants sans rendu.
+
+## Feuille de route
+
+Le développement se fait en onze phases, chacune terminée par un jalon vérifiable. Par rapport au plan Godot, une phase est ajoutée (phase 2 : le socle du moteur). À la fin de la phase 6, le jeu est complet avec l'IA scriptée ; le machine learning arrive ensuite comme amélioration.
+
+| Phase | Contenu | Jalon |
+| --- | --- | --- |
+| 0. Préparation | Outils, workspace, Git, trois prototypes techniques | Une fenêtre avec un sprite et un bouton egui ; Python importe le module Rust |
+| 1. Combat de base | Moteur de combat en duel, sans affichage | La même graine redonne le même combat ; 10 000 duels simulés en ligne de commande |
+| 2. Socle du moteur | Crate `moteur` : boucle, sprites, animations, UI, écrans | Le duel de la phase 1 s'affiche en sprites animés avec contrôles de vitesse |
+| 3. Le combattant complet | Forme, blessures, maladies, personnalité, mort, progression | Un combattant enchaîne 10 semaines avec des effets visibles |
+| 4. Management | Calendrier, économie, écrans principaux, sauvegarde | Une saison entière jouable avec un seul club |
+| 5. Le monde | Colisées, Elo, rivaux, marché, personnel, modèle statistique | Plusieurs saisons où les classements vivent sans le joueur |
+| 6. Formats et spectacle | Mêlée, King of the hill, équipement refusable, vue multi-combats | Regarder 4 combats du joueur en même temps |
+| 7. IA apprenante | PyO3, Gymnasium, PPO en self-play, export et inférence ONNX | Le modèle appris bat nettement l'IA scriptée |
+| 8. Grands événements | Championnat du monde, Inter-Coliseum, succès, tutoriel | Un cycle complet de 4 saisons avec les deux événements |
+| 9. Contenu et équilibrage | Classes, sorts, arènes, simulations de masse, finitions | Taux de victoire par classe entre 45 et 55 % |
+| 10. Publication Steam | Steamworks, page du magasin, builds, test Steam Deck | Le jeu est disponible gratuitement sur Steam |
+
+### Phase 0 — Préparation
+
+Objectif : un projet qui compile, et la preuve que les briques risquées fonctionnent ensemble avant d'écrire du gameplay.
+
+- Installer `rustup`, VS Code, rust-analyzer, CodeLLDB, Git et Git LFS, Python 3 avec `venv`.
+- Si Rust est nouveau : lire les chapitres 1 à 10 du *Rust Book* (possession, emprunts, structs, enums, traits, gestion d'erreurs), puis les chapitres 13 et 15 au besoin.
+- Créer le dépôt GitHub, le workspace et les crates vides.
+- Configurer `.gitignore` (`target/`, `python/.venv/`, `*.onnx` de travail), `.gitattributes` (`* text=auto eol=lf` et les règles LFS pour `*.png`, `*.ogg`, `*.wav`, `*.aseprite`).
+- Profil de développement rapide pour les dépendances, sinon les simulations seront lentes en debug :
+
+```toml
+[profile.dev.package."*"]
+opt-level = 2
+```
+
+- Prototype 1 : une fenêtre macroquad qui affiche un sprite Kenney et un bouton egui. Vérifier tout de suite la compatibilité des versions entre macroquad et l'intégration egui.
+- Prototype 2 : un module PyO3 minimal (`gladiator_py.addition(1, 2)`) compilé avec `maturin develop`, importé depuis Python.
+- Prototype 3 : charger un petit modèle ONNX factice avec `ort`, puis avec `tract`, sous Windows et Linux.
+- CI GitHub Actions : `cargo fmt --check`, `cargo clippy`, `cargo test` sous Windows et Linux.
+- Convention Git : `main` toujours fonctionnelle, une branche par fonctionnalité, un tag par phase (`phase-0`, `phase-1`…).
+
+**Jalon :** `cargo run -p gladiator` ouvre une fenêtre avec un sprite et un bouton ; `python -c "import gladiator_py"` fonctionne ; la CI est verte.
+
+### Phase 1 — Combat de base
+
+Objectif : le cœur du jeu, sans aucun affichage. Tout se passe dans `gladiator_core` et `outils`.
+
+- Structures `Arene`, `Combattant` (version simple : six stats, classe, ressource), `FighterId`.
+- Pas de temps fixe, déplacements, collisions cercle contre cercle, bords de l'arène.
+- Formule de dégâts du plan de conception (attaque × 100 / (100 + défense)).
+- 2 classes, 3 sorts chacune, avec temps de recharge et coût en ressource, décrits dans `data/` en RON.
+- Trait `CombatAi` et une utility AI : chaque action reçoit un score, la meilleure est jouée.
+- Graine par combat, `ChaCha8Rng`, règles de déterminisme appliquées dès le premier jour.
+- Journal d'événements du combat (qui frappe qui, dégâts, sorts) et compte rendu simple.
+- Outil `simuler --graine 42` : affiche le déroulé et le résultat dans le terminal.
+- Outil `masse --combats 10000` avec `rayon` : taux de victoire par classe, durée moyenne. C'est la parade au risque d'équilibrage, en place dès maintenant.
+- Tests : combats de référence avec `insta` (une graine donnée produit toujours le même journal), invariants avec `proptest` (les PV ne dépassent jamais le maximum, un combat se termine toujours).
+
+**Jalon :** deux combattants s'affrontent ; la même graine redonne exactement le même combat ; 10 000 duels sont simulés et les taux de victoire s'affichent.
+
+### Phase 2 — Socle du moteur
+
+Objectif : la crate `moteur`, générique, et un premier rendu du combat.
+
+- Boucle de jeu à cadence fixe avec interpolation de l'affichage.
+- Gestionnaire de ressources : textures, spritesheets, sons, polices, chargés une fois et désignés par un identifiant.
+- Animations par spritesheet : découpage en frames, durée par frame, boucle ou non, événements (impact, fin d'animation).
+- Input clavier, souris et manette (Steam Deck).
+- Caméra 2D, mise à l'échelle selon la résolution, gestion du 16:10 du Steam Deck.
+- Render targets : dessiner une scène dans une texture, prérequis de la vue multi-combats.
+- Audio : effets sonores et musique, volumes séparés.
+- Intégration egui et un premier thème (couleurs, polices, tailles adaptées au Steam Deck).
+- Pile d'écrans : empiler, remplacer, revenir en arrière ; chaque écran a `update` et `draw`.
+- Dans `gladiator` : un écran de combat qui lit l'état de l'arène et l'affiche en sprites animés, avec les contrôles x1, x2, x4 et « passer au résultat ».
+
+**Jalon :** le duel de la phase 1 se regarde à l'écran en sprites animés, avec les contrôles de vitesse ; le résultat est identique à celui de l'outil en ligne de commande pour la même graine.
+
+### Phase 3 — Le combattant complet
+
+- Forme (0 à 100) et formule de risque du plan de conception.
+- Blessures avec localisation et gravité, main dominante, blessures permanentes.
+- Maladies sur trois niveaux.
+- Soins décidés par le joueur.
+- Personnalité (agressivité, prudence, goût du spectacle, détermination), seuil d'abandon, mort.
+- Moral, renommée.
+- Progression sans niveaux, potentiel caché, effets de l'âge, retraite décidée par le combattant.
+- Tous ces éléments deviennent des entrées de l'utility AI : un combattant blessé ou peureux se bat différemment.
+- Représentation de la mort à l'écran : tache de sang et petite animation.
+- Outil `carriere --graine 7 --semaines 10` pour suivre un combattant en ligne de commande.
+
+**Jalon :** un combattant enchaîne 10 semaines avec des effets visibles (forme, blessure, guérison, progression), à l'écran comme dans l'outil.
+
+### Phase 4 — Management
+
+- `GameState` et `semaine_suivante`.
+- Calendrier : semaines, saison de 33 semaines, phases de la saison.
+- Économie : flux d'entrée et de sortie, filet de sécurité (free agents, colisée gratuit).
+- Écrans : menu général, liste des combattants, fiche combattant, résumé de combat.
+- Sauvegarde : JSON avec numéro de version, fonction de migration par version, sauvegarde automatique après chaque combat regardé, sauvegarde manuelle. Emplacement par plateforme avec la crate `directories`.
+- Tests de sauvegarde : une partie sauvegardée puis rechargée donne exactement le même état ; des fichiers de sauvegarde anciens sont gardés dans les tests pour vérifier les migrations.
+
+**Jalon :** une saison entière jouable avec un seul club, sauvegarde et rechargement compris.
+
+### Phase 5 — Le monde
+
+- Colisées : type d'arène, prestige, classement, champion. Commencer avec 2 colisées.
+- Elo par colisée, top 50 affiché, adaptation à la mêlée selon l'ordre d'élimination.
+- Titres de champion et défenses obligatoires.
+- Défis proposés et reçus.
+- Clubs rivaux avec profils (prudent, agressif, marchand) et règles hebdomadaires.
+- Marché : achat, vente, free agents, rookies, fourchettes d'observation.
+- Personnel : entraîneur, médecin, recruteur, niveaux 1 à 5.
+- Modèle statistique : l'outil `calibrer` lance des milliers de combats, enregistre les résultats et ajuste une régression logistique (vainqueur), puis des tables de probabilités (blessures, morts). Les coefficients sont exportés dans `data/` et lus par `modele_stat`.
+- Outil `comparer` : vérifie que les taux de victoire, de blessure et de mort sont proches entre vrais combats et modèle statistique.
+- Écrans : colisées, marché, personnel.
+
+**Jalon :** plusieurs saisons s'enchaînent où les classements, les champions et les marchés évoluent sans intervention du joueur.
+
+### Phase 6 — Formats et spectacle
+
+- Mêlée de 3 à 20 et King of the hill, sans alliance entre combattants d'un même club.
+- Équipement refusable, malus et bonus de renommée.
+- Types d'arène : sable qui ralentit, piliers qui bloquent les tirs, arène étroite.
+- Vue multi-combats : un combat principal en grand, les autres dans des render targets en vignettes cliquables.
+- Optimisations : IA appelée quelques fois par seconde, regroupement des sprites, mesure avec `criterion` d'une mêlée à 20.
+
+**Jalon :** regarder 4 combats du joueur en même temps, dont une mêlée à 20, sans ralentissement. **Le jeu est complet avec l'IA scriptée.**
+
+### Phase 7 — IA apprenante
+
+- `gladiator_py` expose une classe `Environnement` : `reset(graine)`, `step(actions)`, observation, récompense, fin de combat. Compilée avec `maturin` en mode `abi3` pour ne pas dépendre d'une version précise de Python.
+- Côté Python, une enveloppe Gymnasium autour de cet environnement, et plusieurs environnements en parallèle.
+- Observation : stats, forme, blessures, maladie, personnalité, moral, équipement, arène, ressources et sorts, puis les 4 adversaires et 4 alliés les plus proches.
+- Récompenses : dégâts infligés, victoire, légère pénalité de temps. Revoir régulièrement des combats pour détecter les comportements absurdes.
+- Entraînement PPO avec Stable-Baselines3 en self-play, contre d'anciennes versions et contre l'utility AI. Ordre : duel, puis mêlée, puis équipe.
+- Un modèle par classe, exporté en ONNX, versionné (un modèle peu entraîné pour les recrues, le plus abouti pour les vétérans).
+- `gladiator_ia_onnx` implémente `CombatAi` : action la plus probable, pour rester déterministe.
+- Le jeu fonctionne toujours avec l'utility AI si un modèle est absent.
+
+**Jalon :** sur 10 000 duels, le modèle appris bat nettement l'IA scriptée, et un combat avec IA ONNX reste reproductible avec sa graine.
+
+### Phase 8 — Grands événements
+
+- Championnat du monde (saisons 4, 8, 12…) : poules puis élimination directe.
+- Inter-Coliseum (saisons impaires) en 5 contre 5, convocations, choix en cas de double convocation.
+- Intersaison : vieillissement, retraites, rookies, marché ouvert.
+- Succès du jeu dans `gladiator_core`, sans dépendre de Steam.
+- Tutoriel par déblocage progressif et manuel du jeu.
+
+**Jalon :** un cycle complet de 4 saisons avec les deux événements, joué du début à la fin.
+
+### Phase 9 — Contenu et équilibrage
+
+- Nouvelles classes et sorts, nouvelles arènes, monde à sa taille définitive.
+- Équilibrage par simulations de masse, avec rechargement à chaud des fichiers RON.
+- Recalibrage du modèle statistique et réentraînement des modèles ML après chaque changement important.
+- Finitions : sons, effets visuels, thème egui, lisibilité sur Steam Deck.
+
+**Jalon :** taux de victoire de chaque classe entre 45 et 55 %, et écart réduit entre modèle statistique et vrais combats.
+
+### Phase 10 — Publication Steam
+
+- Compte Steamworks, 100 $ de Steam Direct.
+- Intégration de la crate `steamworks` : succès, sauvegarde cloud. Le jeu doit aussi se lancer sans Steam.
+- Build Windows.
+- Build Linux compilé dans le conteneur Steam Runtime (version *sniper*), pour éviter les problèmes de version de glibc.
+- Si `ort` est utilisé, livrer la bibliothèque ONNX Runtime avec le jeu sur chaque plateforme, ou basculer sur `tract` pour n'avoir aucun fichier externe.
+- Test sur Steam Deck : contrôles à la manette, taille du texte, résolution 1280×800, objectif de compatibilité « Vérifié ».
+- Page du magasin, captures, branche bêta pour les tests.
+- CI optionnelle : construction des builds et envoi sur la branche bêta.
+
+**Jalon :** le jeu est disponible gratuitement sur Steam.
+
+## Risques
+
+| Risque | Conséquence | Parade |
+| --- | --- | --- |
+| Apprentissage de Rust | Phases 0 et 1 plus lentes | Phase 1 sans affichage, idéale pour apprendre ; identifiants plutôt que références |
+| Portée trop large pour un développeur seul | Projet jamais terminé | Respecter l'ordre des phases, 2 classes et 2 colisées au départ ; le moteur ne contient que ce dont le jeu a besoin |
+| Moteur qui grossit pour lui-même | Le jeu n'avance plus | Toute fonctionnalité du moteur doit servir une phase du jeu en cours |
+| Compatibilité macroquad / egui | Blocage à la mise à jour | Vérifier en phase 0, figer les versions, solution de repli avec egui sur miniquad |
+| Interface sous-estimée | Retard général | Écrans inclus explicitement dans chaque phase, thème egui commencé en phase 2 |
+| Déterminisme cassé | Graines qui ne redonnent pas le même combat | `libm`, pas de `HashMap` dans la logique, tests de combats de référence en CI sous Windows et Linux |
+| Pont PyO3 et versions de Python | Module qui ne se charge plus | Mode `abi3`, environnement virtuel figé dans `requirements.txt` |
+| Distribution d'ONNX Runtime | Jeu qui ne se lance pas sur Linux ou Steam Deck | Tester tôt, `tract` en solution de secours |
+| Entraînement ML lent ou instable | Phase 7 qui s'éternise | Jeu complet dès la phase 6 avec l'IA scriptée |
+| Récompenses mal conçues | Comportements absurdes | Récompenses simples, revoir des combats régulièrement |
+| Performances en mêlée à 20 avec multi-vue | Ralentissements | IA à basse fréquence, mesures `criterion`, nombre de vignettes limité |
+| Écart entre modèle statistique et vrais combats | Résultats incohérents | Outil `comparer`, recalibrage après chaque changement d'équilibrage |
+| Temps de compilation | Itérations lentes | Workspace découpé, profil dev optimisé pour les dépendances, données en RON hors du code |
+
+## Points encore ouverts
+
+- [ ] Taille du monde : nombre de colisées et de clubs rivaux.
+- [ ] Liste des classes et de leurs sorts.
+- [ ] Calendrier des grands événements : confirmer l'Inter-Coliseum aux saisons impaires.
+- [ ] `ort` ou `tract` pour l'inférence : à trancher après le prototype de la phase 0.
+- [ ] Cadence de la logique (30 ticks par seconde proposés) et fréquence de décision de l'IA : à confirmer en phase 1.
+- [ ] Extraction du moteur dans son propre dépôt : à reconsidérer après la publication, pas avant.
