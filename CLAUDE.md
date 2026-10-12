@@ -46,7 +46,7 @@ Planned later: an ONNX inference crate, a PyO3 module for RL training (`python/`
 
 ## Determinism (in `lanista_core`)
 
-Same seed must replay the same combat across Windows and Linux (cloud saves, replays):
+Same seed must replay the same combat across Windows and Linux (cloud saves, replays). [crates/lanista_core/clippy.toml](crates/lanista_core/clippy.toml) enforces these with `disallowed-types`/`disallowed-methods`; it applies to that crate only, and replaces any root `clippy.toml` for it.
 
 - No `HashMap`/`HashSet` — use `BTreeMap` or sorted `Vec`.
 - Float math (`sin`, `sqrt`, …) via `libm`, not `f32`/`f64` methods.
