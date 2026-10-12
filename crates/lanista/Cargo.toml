@@ -8,6 +8,8 @@ license-file.workspace = true
 publish.workspace = true
 
 [dependencies]
+egui-macroquad = "0.17.3"
+macroquad = "0.4.16"
 
 [lints]
 workspace = true

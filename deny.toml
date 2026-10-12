@@ -7,7 +7,13 @@ targets = ["x86_64-pc-windows-msvc", "x86_64-unknown-linux-gnu"]
 
 [advisories]
 # A false positive goes here with its id and why it does not apply.
-ignore = []
+ignore = [
+    # macroquad: soundness issues with no fixed version. macroquad is the roadmap's
+    # chosen engine base; revisit if a fixed release ships.
+    { id = "RUSTSEC-2025-0035", reason = "no fixed macroquad release; engine choice from the roadmap" },
+    # ttf-parser (fonts in macroquad and egui) is unmaintained; no replacement upstream yet.
+    { id = "RUSTSEC-2026-0192", reason = "transitive via macroquad and egui; no alternative yet" },
+]
 
 [licenses]
 # Permissive licenses compatible with distributing the game on Steam.
@@ -24,8 +30,12 @@ allow = [
     "Zlib",
 ]
 confidence-threshold = 0.8
-# Build dependency of pyo3 only. The LLVM exception adds permissions to Apache-2.0.
-exceptions = [{ crate = "target-lexicon", allow = ["Apache-2.0 WITH LLVM-exception"] }]
+# target-lexicon: build dependency of pyo3 only. The LLVM exception adds permissions to Apache-2.0.
+exceptions = [
+    { crate = "target-lexicon", allow = ["Apache-2.0 WITH LLVM-exception"] },
+    # egui's default fonts (Hack, Noto, Ubuntu): both licenses allow bundling in a commercial game.
+    { crate = "epaint_default_fonts", allow = ["OFL-1.1", "Ubuntu-font-1.0"] },
+]
 
 [licenses.private]
 # The workspace crates are unpublished (publish = false) and carry no license yet.
