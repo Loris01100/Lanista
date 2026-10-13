@@ -207,7 +207,7 @@ opt-level = 2
 - CI GitHub Actions : `cargo fmt --check`, `cargo clippy`, `cargo test` sous Windows et Linux.
 - Convention Git : `main` toujours fonctionnelle, commits directs sur `main` jusqu’à la publication, puis une branche par fonctionnalité, un tag par phase (`phase-0`, `phase-1`…).
 
-**Jalon :** `cargo run -p gladiator` ouvre une fenêtre avec un sprite et un bouton ; `python -c "import gladiator_py"` fonctionne ; la CI est verte.
+**Jalon :** `cargo run -p gladiator` ouvre une fenêtre avec un sprite et un bouton ; `python -c "import gladiator_py"` fonctionne ; la CI est verte. Atteint : tag `phase-0`.
 
 ### Phase 1 — Combat de base
 
@@ -224,7 +224,7 @@ Objectif : le cœur du jeu, sans aucun affichage. Tout se passe dans `gladiator_
 - Outil `batch --fights 10000` avec `rayon` : taux de victoire par classe, durée moyenne. C'est la parade au risque d'équilibrage, en place dès maintenant. Fait : binaire `batch`, graines 0 à n − 1, combats en parallèle, résultats additionnés dans l'ordre des graines, donc identiques d'un lancement à l'autre. Un duel miroir compte pour les deux combattants. Il affiche aussi les combats sans vainqueur après une minute et ceux sans survivant. Premier résultat (10 000 combats, en release en moins d'une seconde) : Augure 75 %, Mirmillon 24 %, 6,5 s en moyenne.
 - Tests : combats de référence avec `insta` (une graine donnée produit toujours le même journal), invariants avec `proptest` (les PV ne dépassent jamais le maximum, un combat se termine toujours). Fait pour `insta` : `crates/lanista_core/tests/reference_fights.rs` fige le journal et le compte rendu de deux duels entre utility AI (Mirmillon contre Augure, Mirmillon contre Mirmillon, graine 42). Les snapshots sont dans `tests/snapshots/`. Fait pour `proptest` : `crates/lanista_core/tests/invariants.rs` joue des duels entre utility AI aux classes, positions et graines tirées au hasard. Avec des stats au hasard, à chaque tick, les PV, le mana et l’endurance ne dépassent jamais leur maximum et les combattants restent dans l’arène. Avec les stats égales des outils, le combat se termine toujours avant une minute. Ce dernier point n’est pas vrai pour des stats quelconques : sans régénération, deux combattants peuvent épuiser leurs ressources sans que l’un tombe.
 
-**Jalon :** deux combattants s'affrontent ; la même graine redonne exactement le même combat ; 10 000 duels sont simulés et les taux de victoire s'affichent.
+**Jalon :** deux combattants s'affrontent ; la même graine redonne exactement le même combat ; 10 000 duels sont simulés et les taux de victoire s'affichent. Atteint : tag `phase-1`.
 
 ### Phase 2 — Socle du moteur
 
