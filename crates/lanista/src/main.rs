@@ -1,15 +1,16 @@
 //! Phase 0 prototype, now on `reesch`: a Kenney sprite and an egui button.
 
 use macroquad::prelude::*;
-use reesch::{Screen, Transition, egui};
+use reesch::{Assets, Screen, Transition, egui};
+
+const SPRITE: &str = "kenney_tiny_dungeon/tile_0096.png";
 
 struct Prototype {
-    sprite: Texture2D,
     clicks: u32,
 }
 
 impl Screen for Prototype {
-    fn update(&mut self, ui: &egui::Context) -> Transition {
+    fn update(&mut self, ui: &egui::Context, _assets: &Assets) -> Transition {
         let mut quit = false;
         egui::Window::new("Prototype").show(ui, |ui| {
             if ui.button("Cliquer").clicked() {
@@ -25,10 +26,10 @@ impl Screen for Prototype {
         }
     }
 
-    fn draw(&self) {
+    fn draw(&self, assets: &Assets) {
         clear_background(DARKGRAY);
         draw_texture_ex(
-            &self.sprite,
+            assets.texture(SPRITE),
             screen_width() / 2.0 - 64.0,
             screen_height() / 2.0 - 64.0,
             WHITE,
@@ -42,11 +43,13 @@ impl Screen for Prototype {
 
 #[macroquad::main("Lanista")]
 async fn main() {
-    let sprite = Texture2D::from_file_with_format(
-        include_bytes!("../../../assets/kenney_tiny_dungeon/tile_0096.png"),
-        None,
-    );
-    // Pixel art: no blur when scaled up.
-    sprite.set_filter(FilterMode::Nearest);
-    reesch::run(Box::new(Prototype { sprite, clicks: 0 })).await;
+    // ponytail: relative to the working directory (the workspace root with
+    // `cargo run`); resolve next to the executable when packaging for Steam.
+    set_pc_assets_folder("assets");
+    let mut assets = Assets::default();
+    assets
+        .load_texture(SPRITE)
+        .await
+        .expect("load prototype sprite");
+    reesch::run(assets, Box::new(Prototype { clicks: 0 })).await;
 }

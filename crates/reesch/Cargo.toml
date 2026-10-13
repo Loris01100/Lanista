@@ -9,7 +9,7 @@ publish.workspace = true
 
 [dependencies]
 egui-macroquad = "0.17.3"
-macroquad = "0.4.16"
+macroquad = { version = "0.4.16", features = ["audio"] }
 
 [lints]
 workspace = true
