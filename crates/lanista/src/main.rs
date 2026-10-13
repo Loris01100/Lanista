@@ -1,12 +1,18 @@
 //! Phase 0 prototype, now on `reesch`: a Kenney sprite and an egui button.
 
 use macroquad::prelude::*;
-use reesch::{Assets, Screen, Transition, egui};
+use reesch::{Assets, Bindings, Button, Screen, Transition, egui};
 
 const SPRITE: &str = "kenney_tiny_dungeon/tile_0096.png";
 
+#[derive(PartialEq)]
+enum Action {
+    Quit,
+}
+
 struct Prototype {
     clicks: u32,
+    bindings: Bindings<Action>,
 }
 
 impl Screen for Prototype {
@@ -19,6 +25,7 @@ impl Screen for Prototype {
             ui.label(format!("Clics : {}", self.clicks));
             quit = ui.button("Quitter").clicked();
         });
+        quit |= self.bindings.pressed(ui, &Action::Quit);
         if quit {
             Transition::Pop
         } else {
@@ -51,5 +58,13 @@ async fn main() {
         .load_texture(SPRITE)
         .await
         .expect("load prototype sprite");
-    reesch::run(assets, Box::new(Prototype { clicks: 0 })).await;
+    let bindings = Bindings::new(vec![(Action::Quit, Button::Key(KeyCode::Escape))]);
+    reesch::run(
+        assets,
+        Box::new(Prototype {
+            clicks: 0,
+            bindings,
+        }),
+    )
+    .await;
 }

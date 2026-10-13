@@ -4,6 +4,7 @@ pub mod animation;
 pub mod assets;
 pub mod camera;
 pub mod fixed_step;
+pub mod input;
 pub mod screen;
 
 pub use animation::{Animation, AnimationEvent, AnimationPlayer, SpriteSheet};
@@ -13,6 +14,7 @@ pub use camera::{fit_camera, fit_view};
 /// separate egui dependency.
 pub use egui_macroquad::egui;
 pub use fixed_step::FixedStep;
+pub use input::{Bindings, Button};
 pub use screen::{Screen, ScreenStack, Transition};
 
 /// Runs the game from its first screen until the last one is popped.
