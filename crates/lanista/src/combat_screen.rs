@@ -185,6 +185,23 @@ impl CombatScreen {
         !self.arena.is_over() && self.arena.tick < MAX_TICKS
     }
 
+    /// Plays the ticks due after `dt` seconds of fight time, then animates.
+    /// No macroquad call, so tests can drive it.
+    fn advance(&mut self, dt: f32) {
+        for _ in 0..self.step.advance(f64::from(dt)) {
+            if !self.running() {
+                break;
+            }
+            self.previous = positions(&self.arena);
+            combat::tick(&mut self.arena, &mut self.ais);
+        }
+        if !self.running() {
+            // Nothing moves any more: stop interpolating.
+            self.previous = positions(&self.arena);
+        }
+        self.animate(dt);
+    }
+
     fn animate(&mut self, dt: f32) {
         // A cast resolves within one tick: the log, not `action`, shows it.
         for event in &self.arena.log[self.seen_events..] {
@@ -232,21 +249,8 @@ impl Screen for CombatScreen {
             self.skip();
         }
         self.controls(ui);
-
         // Speed scales time: more or fewer ticks per frame, animations alike.
-        let dt = get_frame_time() * self.speed;
-        for _ in 0..self.step.advance(f64::from(dt)) {
-            if !self.running() {
-                break;
-            }
-            self.previous = positions(&self.arena);
-            combat::tick(&mut self.arena, &mut self.ais);
-        }
-        if !self.running() {
-            // Nothing moves any more: stop interpolating.
-            self.previous = positions(&self.arena);
-        }
-        self.animate(dt);
+        self.advance(get_frame_time() * self.speed);
         Transition::None
     }
 
@@ -311,4 +315,64 @@ fn index(id: u32) -> Option<usize> {
 )]
 fn to_f32(meters: f64) -> f32 {
     meters as f32
+}
+
+#[cfg(test)]
+mod tests {
+    use lanista_core::duel::play;
+    use lanista_core::log::{Report, log_text};
+
+    use super::*;
+
+    const SEEDS: [u64; 4] = [42, 0, 1, 7];
+
+    fn screen(seed: u64) -> CombatScreen {
+        CombatScreen::new(DesignData::load().unwrap(), seed, Bindings::new(Vec::new()))
+    }
+
+    /// What `simulate --seed <seed>` plays and prints.
+    fn simulated(seed: u64) -> Arena {
+        let mut arena = random_duel(&DesignData::load().unwrap(), seed);
+        play(&mut arena);
+        arena
+    }
+
+    fn assert_same_fight(screen: &CombatScreen, seed: u64) {
+        let expected = simulated(seed);
+        assert_eq!(log_text(&screen.arena), log_text(&expected), "seed {seed}");
+        assert_eq!(
+            Report::new(&screen.arena),
+            Report::new(&expected),
+            "seed {seed}"
+        );
+    }
+
+    /// Phase 2 milestone: frame rate and speed change how the fight is shown,
+    /// never how it goes.
+    #[test]
+    fn watched_fight_is_the_simulated_one() {
+        let frame_times = [1.0 / 60.0, 1.0 / 144.0, 0.05, 0.3];
+        for seed in SEEDS {
+            let mut screen = screen(seed);
+            let mut frame = 0;
+            while screen.running() {
+                let speed = SPEEDS[frame % SPEEDS.len()].0;
+                screen.advance(frame_times[frame % frame_times.len()] * speed);
+                frame += 1;
+            }
+            assert_same_fight(&screen, seed);
+        }
+    }
+
+    #[test]
+    fn skipping_gives_the_same_result() {
+        for seed in SEEDS {
+            let mut screen = screen(seed);
+            for _ in 0..30 {
+                screen.advance(1.0 / 60.0);
+            }
+            screen.skip();
+            assert_same_fight(&screen, seed);
+        }
+    }
 }
