@@ -237,7 +237,7 @@ Objectif : la crate `moteur`, générique, et un premier rendu du combat.
 - Caméra 2D, mise à l'échelle selon la résolution, gestion du 16:10 du Steam Deck.
 - Audio : effets sonores et musique, volumes séparés.
 - Intégration egui et un premier thème (couleurs, polices, tailles adaptées au Steam Deck).
-- Pile d'écrans : empiler, remplacer, revenir en arrière ; chaque écran a `update` et `draw`.
+- Pile d'écrans : empiler, remplacer, revenir en arrière ; chaque écran a `update` et `draw`. Fait : module `reesch::screen`. Le trait `Screen` a `update`, qui renvoie une `Transition` (`None`, `Push`, `Replace`, `Pop`), et `draw`. L'interface egui se construit dans `update`, puisque ses clics décident de la transition ; egui est dessiné par-dessus après `draw`. `ScreenStack` ne met à jour et ne dessine que l'écran du dessus ; quand le dernier écran est retiré, la pile est vide et le jeu peut quitter. Les écrans ne partagent pas encore d'état (le `GameState` viendra en phase 4).
 - Dans `gladiator` : un écran de combat qui lit l'état de l'arène et l'affiche en sprites animés, avec les contrôles x1, x2, x4 et « passer au résultat ».
 
 **Jalon :** le duel de la phase 1 se regarde à l'écran en sprites animés, avec les contrôles de vitesse ; le résultat est identique à celui de l'outil en ligne de commande pour la même graine.
