@@ -3,7 +3,7 @@
 mod combat_screen;
 mod theme;
 
-use combat_screen::{CombatScreen, FIGHTER_SHEET};
+use combat_screen::{CombatScreen, DEATH_SOUND, FIGHTER_SHEET, HIT_SOUND, MUSIC};
 use lanista_core::design_data::DesignData;
 use macroquad::prelude::*;
 use reesch::{Assets, Bindings, Button};
@@ -41,6 +41,9 @@ async fn main() {
         .load_texture(FIGHTER_SHEET)
         .await
         .expect("load the fighter spritesheet");
+    for sound in [HIT_SOUND, DEATH_SOUND, MUSIC] {
+        assets.load_sound(sound).await.expect("load a sound");
+    }
     let data = DesignData::load().expect("load the design data");
     let bindings = Bindings::new(vec![
         (Action::Quit, Button::Key(KeyCode::Escape)),

@@ -3,7 +3,7 @@
 
 use egui_macroquad::egui;
 
-use crate::Assets;
+use crate::{Assets, Audio};
 
 /// What the stack does after the top screen's `update`.
 pub enum Transition {
@@ -20,7 +20,7 @@ pub enum Transition {
 pub trait Screen {
     /// Advances the screen by one frame. Build the egui UI here, since its
     /// clicks decide the transition.
-    fn update(&mut self, ui: &egui::Context, assets: &Assets) -> Transition;
+    fn update(&mut self, ui: &egui::Context, assets: &Assets, audio: &mut Audio) -> Transition;
 
     /// Draws the screen; egui is drawn on top afterwards.
     fn draw(&self, assets: &Assets);
@@ -40,11 +40,11 @@ impl ScreenStack {
     }
 
     /// Updates the top screen and applies its transition.
-    pub fn update(&mut self, ui: &egui::Context, assets: &Assets) {
+    pub fn update(&mut self, ui: &egui::Context, assets: &Assets, audio: &mut Audio) {
         let Some(top) = self.screens.last_mut() else {
             return;
         };
-        match top.update(ui, assets) {
+        match top.update(ui, assets, audio) {
             Transition::None => {}
             Transition::Push(screen) => self.screens.push(screen),
             Transition::Replace(screen) => {
@@ -83,7 +83,12 @@ mod tests {
     struct Scripted(Vec<Transition>);
 
     impl Screen for Scripted {
-        fn update(&mut self, _ui: &egui::Context, _assets: &Assets) -> Transition {
+        fn update(
+            &mut self,
+            _ui: &egui::Context,
+            _assets: &Assets,
+            _audio: &mut Audio,
+        ) -> Transition {
             self.0.pop().unwrap_or(Transition::None)
         }
 
@@ -105,23 +110,28 @@ mod tests {
         ])));
         let ui = egui::Context::default();
         let assets = Assets::default();
+        let mut audio = Audio::default();
 
-        stack.update(&ui, &assets); // first pushes a screen
+        stack.update(&ui, &assets, &mut audio); // first pushes a screen
         assert_eq!(stack.len(), 2);
-        stack.update(&ui, &assets); // that screen replaces itself
+        stack.update(&ui, &assets, &mut audio); // that screen replaces itself
         assert_eq!(stack.len(), 2);
-        stack.update(&ui, &assets); // the replacement pops back to the first
+        stack.update(&ui, &assets, &mut audio); // the replacement pops back to the first
         assert_eq!(stack.len(), 1);
-        stack.update(&ui, &assets); // the first pops: nothing left
+        stack.update(&ui, &assets, &mut audio); // the first pops: nothing left
         assert!(stack.is_empty());
-        stack.update(&ui, &assets); // updating an empty stack does nothing
+        stack.update(&ui, &assets, &mut audio); // updating an empty stack does nothing
         assert!(stack.is_empty());
     }
 
     #[test]
     fn none_keeps_the_stack() {
         let mut stack = ScreenStack::new(idle());
-        stack.update(&egui::Context::default(), &Assets::default());
+        stack.update(
+            &egui::Context::default(),
+            &Assets::default(),
+            &mut Audio::default(),
+        );
         assert_eq!(stack.len(), 1);
     }
 }

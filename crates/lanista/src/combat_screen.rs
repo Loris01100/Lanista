@@ -8,13 +8,17 @@ use lanista_core::duel::{MAX_TICKS, random_duel, utility_ais};
 use lanista_core::log::EventKind;
 use macroquad::prelude::*;
 use reesch::{
-    Animation, AnimationPlayer, Assets, Bindings, FixedStep, Screen, SpriteSheet, Transition, egui,
-    fit_camera,
+    Animation, AnimationEvent, AnimationPlayer, Assets, Audio, Bindings, FixedStep, Screen,
+    SpriteSheet, Transition, egui, fit_camera,
 };
 
 use crate::Action;
 
 pub const FIGHTER_SHEET: &str = "placeholder/fighter.png";
+// ponytail: placeholder sounds; per-spell and per-class sounds in `data/` later.
+pub const HIT_SOUND: &str = "placeholder/hit.wav";
+pub const DEATH_SOUND: &str = "placeholder/death.wav";
+pub const MUSIC: &str = "placeholder/music.wav";
 // ponytail: one placeholder sheet for every class; per-class sheets
 // and animations in `data/` (RON) with the real sprites.
 const SHEET: SpriteSheet = SpriteSheet {
@@ -185,9 +189,9 @@ impl CombatScreen {
         !self.arena.is_over() && self.arena.tick < MAX_TICKS
     }
 
-    /// Plays the ticks due after `dt` seconds of fight time, then animates.
-    /// No macroquad call, so tests can drive it.
-    fn advance(&mut self, dt: f32) {
+    /// Plays the ticks due after `dt` seconds of fight time, then animates;
+    /// returns the sounds to play. No macroquad call, so tests can drive it.
+    fn advance(&mut self, dt: f32) -> Vec<&'static str> {
         for _ in 0..self.step.advance(f64::from(dt)) {
             if !self.running() {
                 break;
@@ -199,10 +203,12 @@ impl CombatScreen {
             // Nothing moves any more: stop interpolating.
             self.previous = positions(&self.arena);
         }
-        self.animate(dt);
+        self.animate(dt)
     }
 
-    fn animate(&mut self, dt: f32) {
+    /// Returns the sounds to play: a hit at each impact frame, a cry at each death.
+    fn animate(&mut self, dt: f32) -> Vec<&'static str> {
+        let mut sounds = Vec::new();
         // A cast resolves within one tick: the log, not `action`, shows it.
         for event in &self.arena.log[self.seen_events..] {
             if let EventKind::Cast { caster, .. } = event.kind
@@ -225,14 +231,21 @@ impl CombatScreen {
             } else {
                 Pose::Idle
             };
+            if pose == Pose::Death && look.pose != Pose::Death {
+                sounds.push(DEATH_SOUND);
+            }
             look.show(pose);
-            look.player.advance(&self.animations[pose as usize], dt);
+            let events = look.player.advance(&self.animations[pose as usize], dt);
+            if events.contains(&AnimationEvent::Marker("impact")) {
+                sounds.push(HIT_SOUND);
+            }
         }
+        sounds
     }
 }
 
 impl Screen for CombatScreen {
-    fn update(&mut self, ui: &egui::Context, _assets: &Assets) -> Transition {
+    fn update(&mut self, ui: &egui::Context, assets: &Assets, audio: &mut Audio) -> Transition {
         if self.bindings.pressed(ui, &Action::Quit) {
             return Transition::Pop;
         }
@@ -249,8 +262,12 @@ impl Screen for CombatScreen {
             self.skip();
         }
         self.controls(ui);
+        volumes(ui, audio);
+        audio.play_music(assets, MUSIC);
         // Speed scales time: more or fewer ticks per frame, animations alike.
-        self.advance(get_frame_time() * self.speed);
+        for sound in self.advance(get_frame_time() * self.speed) {
+            audio.play_effect(assets, sound);
+        }
         Transition::None
     }
 
@@ -299,6 +316,30 @@ impl Screen for CombatScreen {
         }
         set_default_camera();
     }
+}
+
+/// Music and effects volume sliders, top right.
+fn volumes(ui: &egui::Context, audio: &mut Audio) {
+    egui::Window::new("Son")
+        .resizable(false)
+        .default_open(false)
+        .anchor(egui::Align2::RIGHT_TOP, [-12.0, 12.0])
+        .show(ui, |ui| {
+            let mut music = audio.music_volume();
+            if ui
+                .add(egui::Slider::new(&mut music, 0.0..=1.0).text("Musique"))
+                .changed()
+            {
+                audio.set_music_volume(music);
+            }
+            let mut effects = audio.effects_volume();
+            if ui
+                .add(egui::Slider::new(&mut effects, 0.0..=1.0).text("Effets"))
+                .changed()
+            {
+                audio.set_effects_volume(effects);
+            }
+        });
 }
 
 fn positions(arena: &Arena) -> Vec<combat::Vec2> {
@@ -362,6 +403,34 @@ mod tests {
             }
             assert_same_fight(&screen, seed);
         }
+    }
+
+    /// One cry per death, one hit per cast whose impact frame is shown: all
+    /// the winner's casts, maybe not the loser's last one.
+    #[test]
+    fn sounds_follow_hits_and_deaths() {
+        let mut screen = screen(42);
+        let mut sounds = Vec::new();
+        // 20 s, well past the end (133 ticks), so the last animations finish.
+        for _ in 0..60 * 20 {
+            sounds.extend(screen.advance(1.0 / 60.0));
+        }
+        let count = |sound| sounds.iter().filter(|&&s| s == sound).count();
+        let casts = |winner_only: bool| {
+            screen
+                .arena
+                .log
+                .iter()
+                .filter(|e| match e.kind {
+                    EventKind::Cast { caster, .. } => {
+                        !winner_only || screen.arena.fighters[index(caster.0).unwrap()].is_alive()
+                    }
+                    EventKind::Death { .. } => false,
+                })
+                .count()
+        };
+        assert_eq!(count(DEATH_SOUND), 1);
+        assert!((casts(true)..=casts(false)).contains(&count(HIT_SOUND)));
     }
 
     #[test]

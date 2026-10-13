@@ -2,6 +2,7 @@
 
 pub mod animation;
 pub mod assets;
+pub mod audio;
 pub mod camera;
 pub mod fixed_step;
 pub mod input;
@@ -9,6 +10,7 @@ pub mod screen;
 
 pub use animation::{Animation, AnimationEvent, AnimationPlayer, SpriteSheet};
 pub use assets::Assets;
+pub use audio::Audio;
 pub use camera::{fit_camera, fit_view};
 /// The egui version egui-macroquad was built with: use this one, never a
 /// separate egui dependency.
@@ -27,6 +29,7 @@ const UI_DESIGN_HEIGHT: f32 = 800.0;
 pub async fn run(assets: Assets, setup_ui: impl FnOnce(&egui::Context), first: Box<dyn Screen>) {
     egui_macroquad::cfg(setup_ui);
     let mut stack = ScreenStack::new(first);
+    let mut audio = Audio::default();
     while !stack.is_empty() {
         // One egui pass per frame: the top screen builds its UI there.
         egui_macroquad::ui(|ui| {
@@ -34,7 +37,7 @@ pub async fn run(assets: Assets, setup_ui: impl FnOnce(&egui::Context), first: B
             if zoom > 0.0 && (ui.zoom_factor() - zoom).abs() > f32::EPSILON {
                 ui.set_zoom_factor(zoom);
             }
-            stack.update(ui, &assets);
+            stack.update(ui, &assets, &mut audio);
         });
         stack.draw(&assets);
         egui_macroquad::draw();
