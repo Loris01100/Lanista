@@ -8,8 +8,10 @@ license-file.workspace = true
 publish.workspace = true
 
 [dependencies]
+lanista_core = { version = "0.1.0", path = "../lanista_core" }
 macroquad = "0.4.16"
 reesch = { version = "0.1.0", path = "../reesch" }
+tools = { version = "0.1.0", path = "../tools" }
 
 [lints]
 workspace = true

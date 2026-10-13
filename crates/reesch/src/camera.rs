@@ -9,7 +9,11 @@ use macroquad::window::{screen_height, screen_width};
 /// and centred. Call it every frame: it follows window resizes.
 #[must_use]
 pub fn fit_camera(view: Rect) -> Camera2D {
-    Camera2D::from_display_rect(fit_view(view, vec2(screen_width(), screen_height())))
+    let mut camera =
+        Camera2D::from_display_rect(fit_view(view, vec2(screen_width(), screen_height())));
+    // `from_display_rect` gives y up on screen (textures upside down); flip it.
+    camera.zoom.y = -camera.zoom.y;
+    camera
 }
 
 /// Smallest area with the screen's aspect ratio that contains `view`, centred

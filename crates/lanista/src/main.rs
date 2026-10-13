@@ -1,53 +1,16 @@
-//! Phase 0 prototype, now on `reesch`: a Kenney sprite and an egui button.
+//! The game: for now, one duel watched on screen.
 
+mod combat_screen;
 mod theme;
 
+use combat_screen::{CombatScreen, FIGHTER_SHEET};
 use macroquad::prelude::*;
-use reesch::{Assets, Bindings, Button, Screen, Transition, egui};
+use reesch::{Assets, Bindings, Button};
 
-const SPRITE: &str = "kenney_tiny_dungeon/tile_0096.png";
-
+/// What the player can do; bound to keys in `main`.
 #[derive(PartialEq)]
 enum Action {
     Quit,
-}
-
-struct Prototype {
-    clicks: u32,
-    bindings: Bindings<Action>,
-}
-
-impl Screen for Prototype {
-    fn update(&mut self, ui: &egui::Context, _assets: &Assets) -> Transition {
-        let mut quit = false;
-        egui::Window::new("Prototype").show(ui, |ui| {
-            if ui.button("Cliquer").clicked() {
-                self.clicks += 1;
-            }
-            ui.label(format!("Clics : {}", self.clicks));
-            quit = ui.button("Quitter").clicked();
-        });
-        quit |= self.bindings.pressed(ui, &Action::Quit);
-        if quit {
-            Transition::Pop
-        } else {
-            Transition::None
-        }
-    }
-
-    fn draw(&self, assets: &Assets) {
-        clear_background(DARKGRAY);
-        draw_texture_ex(
-            assets.texture(SPRITE),
-            screen_width() / 2.0 - 64.0,
-            screen_height() / 2.0 - 64.0,
-            WHITE,
-            DrawTextureParams {
-                dest_size: Some(vec2(128.0, 128.0)),
-                ..Default::default()
-            },
-        );
-    }
 }
 
 fn window() -> Conf {
@@ -66,17 +29,18 @@ async fn main() {
     set_pc_assets_folder("assets");
     let mut assets = Assets::default();
     assets
-        .load_texture(SPRITE)
+        .load_texture(FIGHTER_SHEET)
         .await
-        .expect("load prototype sprite");
+        .expect("load the fighter spritesheet");
+    // ponytail: borrows the setup of the `simulate` tool; moves to
+    // `lanista_core` with the seed choice (phase 2, step 4).
+    let data = tools::design_data().expect("load the design data");
+    let arena = tools::random_duel(&data, 42);
     let bindings = Bindings::new(vec![(Action::Quit, Button::Key(KeyCode::Escape))]);
     reesch::run(
         assets,
         theme::apply,
-        Box::new(Prototype {
-            clicks: 0,
-            bindings,
-        }),
+        Box::new(CombatScreen::new(arena, tools::MAX_TICKS, bindings)),
     )
     .await;
 }
