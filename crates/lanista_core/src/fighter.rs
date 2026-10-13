@@ -5,6 +5,8 @@ pub mod illness;
 pub mod injury;
 pub mod morale;
 pub mod personality;
+pub mod progression;
+pub mod retirement;
 
 use rand::{Rng, RngExt};
 use serde::Deserialize;
@@ -41,6 +43,42 @@ pub struct Stats {
 }
 
 impl Stats {
+    /// The stats in declaration order: hp, melee attack, ranged attack, speed,
+    /// melee defense, ranged defense.
+    #[must_use]
+    pub fn to_array(self) -> [u32; 6] {
+        [
+            self.hp,
+            self.melee_attack,
+            self.ranged_attack,
+            self.speed,
+            self.melee_defense,
+            self.ranged_defense,
+        ]
+    }
+
+    /// The inverse of [`Stats::to_array`].
+    #[must_use]
+    pub fn from_array(
+        [
+            hp,
+            melee_attack,
+            ranged_attack,
+            speed,
+            melee_defense,
+            ranged_defense,
+        ]: [u32; 6],
+    ) -> Self {
+        Self {
+            hp,
+            melee_attack,
+            ranged_attack,
+            speed,
+            melee_defense,
+            ranged_defense,
+        }
+    }
+
     /// `f` applied to every stat.
     #[must_use]
     pub fn map(self, f: impl Fn(u32) -> u32) -> Self {

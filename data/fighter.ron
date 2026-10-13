@@ -91,4 +91,30 @@
         // A fight stopped by the time limit, for every fighter in it.
         dull_fight: 3,
     ),
+    progression: (
+        // No levels: each stat may improve after every training session and fight.
+        // Chance in percent, at ages 20 to 27 and neutral morale.
+        training_chance: 30,
+        fight_chance: 20,
+        // Points gained when a stat improves.
+        gain: (hp: 2, melee_attack: 1, ranged_attack: 1, speed: 1, melee_defense: 1, ranged_defense: 1),
+        // (last age, percent of the chance): fast to 27, plateau to 35, very low to 39, none after.
+        age_brackets: [(27, 100), (35, 40), (39, 10)],
+        // Chance bonus at morale 100, malus at 0, in percent of the chance.
+        morale_percent: 20,
+        // A generated hidden potential sits 20 to 80 % above each stat.
+        potential_headroom_percent: (20, 80),
+        // From 40, stats lose these percentages every year, speed most.
+        decline_from_age: 40,
+        decline_percent: (hp: 2, melee_attack: 2, ranged_attack: 2, speed: 5, melee_defense: 2, ranged_defense: 2),
+    ),
+    retirement: (
+        // Checked once a year; decided by the fighter only.
+        from_age: 30,
+        // Percent per year from 30 (counting it) and per permanent injury.
+        per_year: 5,
+        per_permanent_injury: 15,
+        // Determination 0 raises the chance by this percentage of it, 100 lowers it as much.
+        determination_percent: 50,
+    ),
 )
