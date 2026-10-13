@@ -230,12 +230,11 @@ Objectif : le cœur du jeu, sans aucun affichage. Tout se passe dans `gladiator_
 
 Objectif : la crate `moteur`, générique, et un premier rendu du combat.
 
-- Boucle de jeu à cadence fixe avec interpolation de l'affichage.
+- Boucle de jeu à cadence fixe avec interpolation de l'affichage. Fait : `reesch::FixedStep`. `advance(temps de l'image)` accumule le temps réel et renvoie le nombre de ticks logiques à jouer ; `alpha()` donne la fraction de tick écoulée, dans [0, 1), pour interpoler l'affichage. La cadence est passée par le jeu (`TICKS_PER_SECOND` de `lanista_core`), puisque `reesch` ne connaît pas `lanista_core`. Une image compte au plus 0,25 s : après un blocage (fenêtre déplacée, point d'arrêt), la logique ralentit au lieu d'enchaîner des centaines de ticks. Les vitesses x2 et x4 multiplieront le nombre de ticks renvoyé.
 - Gestionnaire de ressources : textures, spritesheets, sons, polices, chargés une fois et désignés par un identifiant.
 - Animations par spritesheet : découpage en frames, durée par frame, boucle ou non, événements (impact, fin d'animation).
 - Input clavier, souris et manette (Steam Deck).
 - Caméra 2D, mise à l'échelle selon la résolution, gestion du 16:10 du Steam Deck.
-- Render targets : dessiner une scène dans une texture, prérequis de la vue multi-combats.
 - Audio : effets sonores et musique, volumes séparés.
 - Intégration egui et un premier thème (couleurs, polices, tailles adaptées au Steam Deck).
 - Pile d'écrans : empiler, remplacer, revenir en arrière ; chaque écran a `update` et `draw`.
@@ -289,6 +288,7 @@ Objectif : la crate `moteur`, générique, et un premier rendu du combat.
 - Mêlée de 3 à 20 et King of the hill, sans alliance entre combattants d'un même club.
 - Équipement refusable, malus et bonus de renommée.
 - Types d'arène : sable qui ralentit, piliers qui bloquent les tirs, arène étroite.
+- Render targets dans `reesch` : dessiner une scène dans une texture (repoussé de la phase 2, dont le jalon n'en a pas besoin).
 - Vue multi-combats : un combat principal en grand, les autres dans des render targets en vignettes cliquables.
 - Optimisations : IA appelée quelques fois par seconde, regroupement des sprites, mesure avec `criterion` d'une mêlée à 20.
 

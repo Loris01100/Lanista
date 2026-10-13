@@ -1,15 +1,5 @@
-#[must_use]
-pub fn add(left: u64, right: u64) -> u64 {
-    left + right
-}
+//! Generic game engine on macroquad + egui. Knows nothing about the game.
 
-#[cfg(test)]
-mod tests {
-    use super::*;
+pub mod fixed_step;
 
-    #[test]
-    fn it_works() {
-        let result = add(2, 2);
-        assert_eq!(result, 4);
-    }
-}
+pub use fixed_step::FixedStep;
