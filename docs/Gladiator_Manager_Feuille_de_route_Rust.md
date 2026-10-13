@@ -236,7 +236,7 @@ Objectif : la crate `moteur`, générique, et un premier rendu du combat.
 - Input clavier, souris et manette (Steam Deck).
 - Caméra 2D, mise à l'échelle selon la résolution, gestion du 16:10 du Steam Deck.
 - Audio : effets sonores et musique, volumes séparés.
-- Intégration egui et un premier thème (couleurs, polices, tailles adaptées au Steam Deck).
+- Intégration egui et un premier thème (couleurs, polices, tailles adaptées au Steam Deck). Fait pour l'intégration : `reesch` dépend d'egui-macroquad et réexporte sa version d'egui (`reesch::egui`), que le jeu utilise sans dépendre d'egui lui-même. `reesch::run(premier écran)` est la boucle de jeu : une passe egui par image, où l'écran du dessus reçoit le `egui::Context` dans `update`, puis `draw` de l'écran, egui par-dessus, image suivante ; elle s'arrête quand la pile est vide. Le prototype de la phase 0 est devenu un écran de `lanista`, avec un bouton « Quitter ».
 - Pile d'écrans : empiler, remplacer, revenir en arrière ; chaque écran a `update` et `draw`. Fait : module `reesch::screen`. Le trait `Screen` a `update`, qui renvoie une `Transition` (`None`, `Push`, `Replace`, `Pop`), et `draw`. L'interface egui se construit dans `update`, puisque ses clics décident de la transition ; egui est dessiné par-dessus après `draw`. `ScreenStack` ne met à jour et ne dessine que l'écran du dessus ; quand le dernier écran est retiré, la pile est vide et le jeu peut quitter. Les écrans ne partagent pas encore d'état (le `GameState` viendra en phase 4).
 - Dans `gladiator` : un écran de combat qui lit l'état de l'arène et l'affiche en sprites animés, avec les contrôles x1, x2, x4 et « passer au résultat ».
 

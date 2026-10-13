@@ -1016,8 +1016,8 @@ dependencies = [
 name = "lanista"
 version = "0.1.0"
 dependencies = [
- "egui-macroquad",
  "macroquad",
+ "reesch",
 ]
 
 [[package]]
@@ -1893,6 +1893,10 @@ dependencies = [
 [[package]]
 name = "reesch"
 version = "0.1.0"
+dependencies = [
+ "egui-macroquad",
+ "macroquad",
+]
 
 [[package]]
 name = "regex-syntax"

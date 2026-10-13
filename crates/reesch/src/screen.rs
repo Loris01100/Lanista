@@ -1,6 +1,8 @@
 //! Screen stack: the top screen is updated and drawn; its `update` says
 //! whether to push, replace or pop.
 
+use egui_macroquad::egui;
+
 /// What the stack does after the top screen's `update`.
 pub enum Transition {
     None,
@@ -16,7 +18,7 @@ pub enum Transition {
 pub trait Screen {
     /// Advances the screen by one frame. Build the egui UI here, since its
     /// clicks decide the transition.
-    fn update(&mut self) -> Transition;
+    fn update(&mut self, ui: &egui::Context) -> Transition;
 
     /// Draws the screen; egui is drawn on top afterwards.
     fn draw(&self);
@@ -36,11 +38,11 @@ impl ScreenStack {
     }
 
     /// Updates the top screen and applies its transition.
-    pub fn update(&mut self) {
+    pub fn update(&mut self, ui: &egui::Context) {
         let Some(top) = self.screens.last_mut() else {
             return;
         };
-        match top.update() {
+        match top.update(ui) {
             Transition::None => {}
             Transition::Push(screen) => self.screens.push(screen),
             Transition::Replace(screen) => {
@@ -79,7 +81,7 @@ mod tests {
     struct Scripted(Vec<Transition>);
 
     impl Screen for Scripted {
-        fn update(&mut self) -> Transition {
+        fn update(&mut self, _ui: &egui::Context) -> Transition {
             self.0.pop().unwrap_or(Transition::None)
         }
 
@@ -99,23 +101,24 @@ mod tests {
                 Scripted(vec![Transition::Pop]),
             ))]))),
         ])));
+        let ui = egui::Context::default();
 
-        stack.update(); // first pushes a screen
+        stack.update(&ui); // first pushes a screen
         assert_eq!(stack.len(), 2);
-        stack.update(); // that screen replaces itself
+        stack.update(&ui); // that screen replaces itself
         assert_eq!(stack.len(), 2);
-        stack.update(); // the replacement pops back to the first
+        stack.update(&ui); // the replacement pops back to the first
         assert_eq!(stack.len(), 1);
-        stack.update(); // the first pops: nothing left
+        stack.update(&ui); // the first pops: nothing left
         assert!(stack.is_empty());
-        stack.update(); // updating an empty stack does nothing
+        stack.update(&ui); // updating an empty stack does nothing
         assert!(stack.is_empty());
     }
 
     #[test]
     fn none_keeps_the_stack() {
         let mut stack = ScreenStack::new(idle());
-        stack.update();
+        stack.update(&egui::Context::default());
         assert_eq!(stack.len(), 1);
     }
 }
