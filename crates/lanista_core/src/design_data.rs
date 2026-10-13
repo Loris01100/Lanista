@@ -5,6 +5,7 @@ use serde::Deserialize;
 use crate::combat::Range;
 use crate::fighter::ClassId;
 use crate::fighter::form::FormRules;
+use crate::fighter::injury::InjuryRules;
 
 /// Everything read from `data/`. `ClassId(i)` is the class at index `i` of `classes`.
 #[derive(Debug, Clone, PartialEq)]
@@ -18,6 +19,7 @@ pub struct DesignData {
 #[serde(deny_unknown_fields)]
 pub struct FighterRules {
     pub form: FormRules,
+    pub injury: InjuryRules,
 }
 
 #[derive(Debug, Clone, PartialEq, Deserialize)]

@@ -10,4 +10,34 @@
         training: 5,
         rest: 15,
     ),
+    injury: (
+        // Chance of an injury per fight at form 100, raised by the risk formula.
+        chance_per_fight: 0.15,
+        // Relative chances; the side of an arm or leg is drawn 50/50.
+        location_weights: (head: 1, body: 3, arm: 3, leg: 3),
+        severity_weights: (light: 60, medium: 25, severe: 12, permanent: 3),
+        // Lowest and highest weeks to heal without care.
+        healing_weeks: (light: (1, 2), medium: (3, 5), severe: (6, 8)),
+        // Temporary maluses, as a percentage of `temporary` (written for a medium injury).
+        severity_percent: (light: 50, medium: 100, severe: 200),
+        // Percentage of each stat lost, by location; missing stats are 0.
+        // Head: the plan's precision malus, on both attacks until combat has accuracy.
+        temporary: (
+            head: (melee_attack: 5, ranged_attack: 5),
+            body: (hp: 10, melee_defense: 10),
+            dominant_arm: (melee_attack: 15, ranged_attack: 15),
+            off_arm: (melee_defense: 15),
+            leg: (speed: 15),
+        ),
+        // After-effects: precision, lost HP, lost arm (dominant or shield), limp.
+        permanent: (
+            head: (melee_attack: 10, ranged_attack: 10),
+            body: (hp: 15),
+            dominant_arm: (melee_attack: 50, ranged_attack: 50),
+            off_arm: (melee_defense: 40),
+            leg: (speed: 25),
+        ),
+        // Highest percentage of a stat all injuries together can take off.
+        max_malus: 80,
+    ),
 )

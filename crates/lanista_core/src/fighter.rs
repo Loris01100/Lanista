@@ -1,4 +1,7 @@
 pub mod form;
+pub mod injury;
+
+use serde::Deserialize;
 
 use crate::ai::Action;
 use crate::combat::Vec2;
@@ -13,7 +16,9 @@ pub struct FighterId(pub u32);
 pub struct ClassId(pub u32);
 
 /// The six stats of the design plan; its French abbreviation is given for each.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+/// Read from `data/` as percentages (injury maluses), where a missing stat is 0.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Deserialize)]
+#[serde(default, deny_unknown_fields)]
 pub struct Stats {
     /// PV: max hit points.
     pub hp: u32,
