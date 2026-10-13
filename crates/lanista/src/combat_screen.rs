@@ -27,6 +27,8 @@ const FIGHTER_TINTS: [Color; 2] = [
     Color::new(1.0, 0.75, 0.55, 1.0),
     Color::new(0.6, 0.75, 1.0, 1.0),
 ];
+/// Fight speeds offered, with their labels.
+const SPEEDS: [(f32, &str); 3] = [(0.5, "x0,5"), (1.0, "x1"), (1.5, "x1,5")];
 const SAND: Color = Color::new(0.76, 0.66, 0.48, 1.0);
 const STANDS: Color = Color::new(0.16, 0.13, 0.11, 1.0);
 
@@ -67,6 +69,8 @@ pub struct CombatScreen {
     looks: Vec<Look>,
     animations: [Animation; 4],
     bindings: Bindings<Action>,
+    /// Fight speed, a factor of real time: one of `SPEEDS`.
+    speed: f32,
 }
 
 impl CombatScreen {
@@ -110,6 +114,47 @@ impl CombatScreen {
                 animation(3, 0.15, false),
             ],
             bindings,
+            speed: 1.0,
+        }
+    }
+
+    /// Plays the rest of the fight at once, without drawing it.
+    fn skip(&mut self) {
+        combat::run(&mut self.arena, &mut self.ais, self.max_ticks);
+        self.previous = positions(&self.arena);
+        // No cast animation for hits nobody saw.
+        self.seen_events = self.arena.log.len();
+    }
+
+    /// Speed buttons, then the result once the fight is over.
+    fn controls(&mut self, ui: &egui::Context) {
+        egui::Window::new("Contrôles")
+            .title_bar(false)
+            .resizable(false)
+            .anchor(egui::Align2::CENTER_BOTTOM, [0.0, -12.0])
+            .show(ui, |ui| {
+                ui.horizontal(|ui| {
+                    if self.running() {
+                        for (speed, label) in SPEEDS {
+                            ui.selectable_value(&mut self.speed, speed, label);
+                        }
+                        if ui.button("Passer au résultat").clicked() {
+                            self.skip();
+                        }
+                    } else {
+                        ui.label(self.result());
+                    }
+                });
+            });
+    }
+
+    fn result(&self) -> String {
+        if !self.arena.is_over() {
+            return "Temps écoulé, pas de vainqueur".into();
+        }
+        match self.arena.fighters.iter().find(|f| f.is_alive()) {
+            Some(winner) => format!("Vainqueur : combattant {}", winner.id.0),
+            None => "Aucun survivant".into(),
         }
     }
 
@@ -151,7 +196,22 @@ impl Screen for CombatScreen {
         if self.bindings.pressed(ui, &Action::Quit) {
             return Transition::Pop;
         }
-        let dt = get_frame_time();
+        for (action, speed) in [
+            (Action::SlowSpeed, SPEEDS[0].0),
+            (Action::NormalSpeed, SPEEDS[1].0),
+            (Action::FastSpeed, SPEEDS[2].0),
+        ] {
+            if self.bindings.pressed(ui, &action) {
+                self.speed = speed;
+            }
+        }
+        if self.running() && self.bindings.pressed(ui, &Action::Skip) {
+            self.skip();
+        }
+        self.controls(ui);
+
+        // Speed scales time: more or fewer ticks per frame, animations alike.
+        let dt = get_frame_time() * self.speed;
         for _ in 0..self.step.advance(f64::from(dt)) {
             if !self.running() {
                 break;

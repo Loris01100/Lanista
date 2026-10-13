@@ -11,6 +11,11 @@ use reesch::{Assets, Bindings, Button};
 #[derive(PartialEq)]
 enum Action {
     Quit,
+    SlowSpeed,
+    NormalSpeed,
+    FastSpeed,
+    /// Skip to the fight's result.
+    Skip,
 }
 
 fn window() -> Conf {
@@ -36,7 +41,13 @@ async fn main() {
     // `lanista_core` with the seed choice (phase 2, step 4).
     let data = tools::design_data().expect("load the design data");
     let arena = tools::random_duel(&data, 42);
-    let bindings = Bindings::new(vec![(Action::Quit, Button::Key(KeyCode::Escape))]);
+    let bindings = Bindings::new(vec![
+        (Action::Quit, Button::Key(KeyCode::Escape)),
+        (Action::SlowSpeed, Button::Key(KeyCode::Key1)),
+        (Action::NormalSpeed, Button::Key(KeyCode::Key2)),
+        (Action::FastSpeed, Button::Key(KeyCode::Key3)),
+        (Action::Skip, Button::Key(KeyCode::Enter)),
+    ]);
     reesch::run(
         assets,
         theme::apply,

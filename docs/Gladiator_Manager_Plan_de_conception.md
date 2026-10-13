@@ -175,7 +175,7 @@ Ordre d'entraînement conseillé : duel, puis mêlée, puis équipe. L'expérien
 
 ### Regarder plusieurs combats en même temps
 
-C'est faisable dans Godot avec des SubViewports : chaque combat affiché est rendu dans sa propre fenêtre, disposées en grille. Proposition : un combat en grand, les autres combats du joueur en vignettes cliquables pour changer de focus, avec vitesse x1, x2, x4 et un bouton « passer au résultat ». Seuls les combats du joueur sont affichés ; tous les autres tournent sans rendu.
+C'est faisable dans Godot avec des SubViewports : chaque combat affiché est rendu dans sa propre fenêtre, disposées en grille. Proposition : un combat en grand, les autres combats du joueur en vignettes cliquables pour changer de focus, avec vitesse x0,5, x1, x1,5 et un bouton « passer au résultat ». Seuls les combats du joueur sont affichés ; tous les autres tournent sans rendu.
 
 ### Reproductibilité
 
