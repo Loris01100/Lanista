@@ -37,6 +37,25 @@ const FIGHTER_TINTS: [Color; 2] = [
 const SPEEDS: [(f32, &str); 3] = [(0.5, "x0,5"), (1.0, "x1"), (1.5, "x1,5")];
 const SAND: Color = Color::new(0.76, 0.66, 0.48, 1.0);
 const STANDS: Color = Color::new(0.16, 0.13, 0.11, 1.0);
+// ponytail: blood drawn with shapes until the real sprites bring a stain.
+// Opaque, so overlapping blots make one even stain.
+const BLOOD: Color = Color::new(0.45, 0.03, 0.03, 1.0);
+/// Seconds a blood stain takes to spread, at fight speed.
+const BLOOD_SPREAD_SECONDS: f32 = 1.2;
+/// Radius of a fully spread stain, in meters.
+const BLOOD_RADIUS: f32 = 0.7;
+/// The stain sits this far below the fighter's center, under the body lying down, in meters.
+const BLOOD_DROP: f32 = 0.25;
+/// Smaller blots around the stain: offset from its center and radius, as shares of
+/// `BLOOD_RADIUS`. Mirrored for every other fighter so two stains differ.
+const BLOOD_BLOTS: [(f32, f32, f32); 4] = [
+    (0.0, 0.0, 1.0),
+    (0.7, 0.35, 0.55),
+    (-0.55, 0.5, 0.45),
+    (0.2, -0.7, 0.4),
+];
+/// Brightness of a dead fighter's sprite once it lies down, a share of its tint.
+const DEAD_SHADE: f32 = 0.6;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum Pose {
@@ -50,15 +69,15 @@ enum Pose {
 struct Look {
     pose: Pose,
     player: AnimationPlayer,
+    /// Seconds since the death was shown, for the blood stain; `None` while alive.
+    dead_for: Option<f32>,
 }
 
 impl Look {
     fn show(&mut self, pose: Pose) {
         if self.pose != pose {
-            *self = Self {
-                pose,
-                player: AnimationPlayer::default(),
-            };
+            self.pose = pose;
+            self.player = AnimationPlayer::default();
         }
     }
 }
@@ -132,6 +151,7 @@ impl CombatScreen {
             .map(|_| Look {
                 pose: Pose::Idle,
                 player: AnimationPlayer::default(),
+                dead_for: None,
             })
             .collect();
     }
@@ -246,6 +266,9 @@ impl CombatScreen {
             if pose == Pose::Death && look.pose != Pose::Death {
                 sounds.push(DEATH_SOUND);
             }
+            if pose == Pose::Death {
+                look.dead_for = Some(look.dead_for.map_or(0.0, |t| t + dt));
+            }
             look.show(pose);
             let events = look.player.advance(&self.animations[pose as usize], dt);
             if events.contains(&AnimationEvent::Marker("impact")) {
@@ -293,6 +316,14 @@ impl Screen for CombatScreen {
             height + 2.0,
         )));
         draw_rectangle(0.0, 0.0, width, height, SAND);
+        // Blood under everyone.
+        for (fighter, look) in self.arena.fighters.iter().zip(&self.looks) {
+            if let Some(dead_for) = look.dead_for {
+                let x = to_f32(fighter.position.x);
+                let y = to_f32(fighter.position.y) + BLOOD_DROP;
+                draw_blood(x, y, blood_spread(dead_for), fighter.id.0 % 2 == 1);
+            }
+        }
 
         let texture = assets.texture(FIGHTER_SHEET);
         let alpha = self.step.alpha();
@@ -308,11 +339,20 @@ impl Screen for CombatScreen {
             // Sprites face right: turn toward the other fighters' side.
             let others = self.arena.fighters.iter().filter(|f| f.id != fighter.id);
             let flip_x = others.map(|f| f.position.x - to.x).sum::<f64>() < 0.0;
-            let tint = index(fighter.id.0)
+            let mut tint = index(fighter.id.0)
                 .and_then(|i| FIGHTER_TINTS.get(i))
                 .copied()
                 .unwrap_or(WHITE);
-            let frame = look.player.frame(&self.animations[look.pose as usize]);
+            let animation = &self.animations[look.pose as usize];
+            if look.pose == Pose::Death && look.player.is_finished(animation) {
+                tint = Color::new(
+                    tint.r * DEAD_SHADE,
+                    tint.g * DEAD_SHADE,
+                    tint.b * DEAD_SHADE,
+                    tint.a,
+                );
+            }
+            let frame = look.player.frame(animation);
             draw_texture_ex(
                 texture,
                 x - SPRITE_SIZE / 2.0,
@@ -354,6 +394,27 @@ fn volumes(ui: &egui::Context, audio: &mut Audio) {
         });
 }
 
+/// How far a blood stain has spread `dead_for` seconds after the death, from 0 to 1:
+/// fast at first, then slowing down (ease-out).
+fn blood_spread(dead_for: f32) -> f32 {
+    let t = (dead_for / BLOOD_SPREAD_SECONDS).clamp(0.0, 1.0);
+    1.0 - (1.0 - t) * (1.0 - t)
+}
+
+/// A blood stain centered on (`x`, `y`), `spread` of its full size, mirrored if `mirror`.
+fn draw_blood(x: f32, y: f32, spread: f32, mirror: bool) {
+    let side = if mirror { -1.0 } else { 1.0 };
+    let radius = BLOOD_RADIUS * spread;
+    for (dx, dy, size) in BLOOD_BLOTS {
+        draw_circle(
+            x + side * dx * radius,
+            y + dy * radius,
+            size * radius,
+            BLOOD,
+        );
+    }
+}
+
 fn positions(arena: &Arena) -> Vec<combat::Vec2> {
     arena.fighters.iter().map(|f| f.position).collect()
 }
@@ -378,6 +439,41 @@ mod tests {
     use super::*;
 
     const SEEDS: [u64; 4] = [42, 0, 1, 7];
+
+    #[test]
+    fn blood_spreads_fast_then_slows_and_stops() {
+        assert!(blood_spread(0.0).abs() < f32::EPSILON);
+        let (early, late) = (blood_spread(0.3), blood_spread(0.9));
+        assert!(early > 0.3 && late > early && late < 1.0, "{early} {late}");
+        assert!((blood_spread(BLOOD_SPREAD_SECONDS) - 1.0).abs() < f32::EPSILON);
+        assert!((blood_spread(10.0) - 1.0).abs() < f32::EPSILON);
+    }
+
+    /// The loser of seed 42 dies: its stain starts at the death and keeps
+    /// spreading after the fight, the winner never bleeds.
+    #[test]
+    fn only_the_dead_bleed_from_their_death_on() {
+        let mut screen = screen(42);
+        // The fight lasts 133 ticks, under 5 s.
+        for _ in 0..60 * 5 {
+            if screen.looks.iter().any(|look| look.dead_for.is_some()) {
+                break;
+            }
+            screen.advance(1.0 / 60.0);
+        }
+        let dead = screen
+            .arena
+            .fighters
+            .iter()
+            .position(|f| !f.is_alive())
+            .unwrap();
+        assert_eq!(screen.looks[dead].dead_for, Some(0.0));
+        for _ in 0..60 {
+            screen.advance(1.0 / 60.0);
+        }
+        assert!((screen.looks[dead].dead_for.unwrap() - 1.0).abs() < 1e-3);
+        assert!(screen.looks[1 - dead].dead_for.is_none());
+    }
 
     fn screen(seed: u64) -> CombatScreen {
         CombatScreen::new(DesignData::load().unwrap(), seed, Bindings::new(Vec::new()))
