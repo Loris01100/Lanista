@@ -14,6 +14,9 @@ const WOOD_LIGHTER: Color32 = Color32::from_rgb(0x5E, 0x4A, 0x38);
 const WOOD_LIGHTEST: Color32 = Color32::from_rgb(0x75, 0x59, 0x3F);
 
 pub fn apply(ui: &egui::Context) {
+    // `style_mut` sets the active theme's style only: pin it to dark so egui
+    // never switches to its untouched light style.
+    ui.set_theme(egui::Theme::Dark);
     ui.style_mut(|style| {
         // Valve asks for text of at least 9 px at 1280 × 800; aim well above.
         style.text_styles = [
