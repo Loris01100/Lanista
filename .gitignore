@@ -9,5 +9,8 @@ __pycache__/
 !crates/*/tests/*.onnx
 # Private keys stay out of the repository.
 *.key
-# SonarQube scanner working directory.
+# SonarQube scanner working directories.
 .scannerwork/
+.sonar/
+# Coverage report for SonarQube Cloud.
+lcov.info

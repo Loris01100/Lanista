@@ -23,6 +23,7 @@ cargo fmt --all --check
 cargo clippy --workspace --all-targets -- -D warnings
 cargo machete                        # unused dependencies
 cargo deny check                     # advisories, licenses, sources (deny.toml)
+cargo llvm-cov --workspace --lcov --output-path lcov.info  # coverage for SonarQube Cloud, before the scan
 ```
 
 On Linux, linking `lanista` needs the ALSA headers (`libasound2-dev`) for macroquad's audio.

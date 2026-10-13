@@ -1,7 +1,0 @@
-organization=loris01100
-projectKey=Loris01100_Lanista
-serverUrl=https://sonarcloud.io
-serverVersion=8.0.0.110812
-dashboardUrl=https://sonarcloud.io/dashboard?id=Loris01100_Lanista
-ceTaskId=AaEx8fsSqRIYJwJs5c90
-ceTaskUrl=https://sonarcloud.io/api/ce/task?id=AaEx8fsSqRIYJwJs5c90
