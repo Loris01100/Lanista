@@ -1,5 +1,10 @@
-use crate::combat::{Arena, Vec2, edge_distance, spell_damage};
-use crate::fighter::{Fighter, FighterId};
+use crate::combat::{Arena, RADIUS, Vec2, edge_distance, spell_damage};
+use crate::design_data::SpellData;
+use crate::fighter::form::Form;
+use crate::fighter::illness::IllnessLevel;
+use crate::fighter::morale::Morale;
+use crate::fighter::personality::Personality;
+use crate::fighter::{Condition, Fighter, FighterId};
 
 #[derive(Debug, Clone, Copy, PartialEq, Default)]
 pub enum Action {
@@ -20,8 +25,26 @@ pub trait CombatAi {
 /// Score of closing in on an enemy no spell can reach. Any positive value works:
 /// moving is only offered when no cast is possible.
 const MOVE_SCORE: f64 = 1.0;
+// ponytail: AI weights in code like `MOVE_SCORE`; move them to `data/` once balancing needs it.
+/// Retreat score of a fighter with fear 1 at 0 HP; casts score the share of the
+/// target's HP they take, so 1 is a killing blow.
+const RETREAT_WEIGHT: f64 = 2.0;
+/// Below this retreat score a fighter still closes in and fights normally.
+const RETREAT_MIN: f64 = 0.1;
+/// An enemy threatens a fighter within its longest reach plus this margin, in meters.
+const THREAT_MARGIN: f64 = 1.0;
+/// Score of stepping in on an enemy in reach while no spell is ready, at aggression 100.
+const PRESS_SCORE: f64 = 0.05;
+/// Closer than this, in meters, there is nothing left to press.
+const PRESS_MIN_DISTANCE: f64 = 0.1;
+/// Ticks a showman at showmanship 100 waits for its strongest spell instead of a weaker hit.
+const SHOW_WAIT_TICKS: f64 = 60.0;
+/// Share of the strongest spell's value a showman gives to waiting for it.
+const SHOW_WAIT_VALUE: f64 = 0.9;
 
 /// Utility AI: gives every possible action a score and plays the best one.
+/// Its condition (personality, morale, form, injuries, illness) changes the scores,
+/// so an injured or fearful fighter fights differently; a neutral one ignores it.
 // ponytail: aims at the nearest enemy only, and ranged fighters do not keep their distance.
 #[derive(Debug, Default)]
 pub struct UtilityAi;
@@ -32,8 +55,37 @@ impl CombatAi for UtilityAi {
     }
 }
 
+/// How far a trait or gauge is above its neutral value, from -1 to 1.
+fn offset(value: u32, neutral: u32) -> f64 {
+    (f64::from(value) - f64::from(neutral)) / f64::from(neutral)
+}
+
+/// How much a fighter wants out of the fight once hurt, from 0 (neutral or bolder) to 1.
+/// Up with caution, injuries, illness, low form and low morale; down with aggression
+/// and determination.
+#[must_use]
+pub fn fear(condition: &Condition) -> f64 {
+    let p = &condition.personality;
+    let illness = condition.illness.map_or(0.0, |ill| match ill.level {
+        IllnessLevel::Mild => 0.1,
+        IllnessLevel::Moderate => 0.2,
+        IllnessLevel::Severe => 0.3,
+    });
+    let injuries = u32::try_from(condition.injuries.len()).unwrap_or(u32::MAX);
+    let fear = 0.5 * offset(p.caution, Personality::NEUTRAL)
+        - 0.25 * offset(p.aggression, Personality::NEUTRAL)
+        - 0.25 * offset(p.determination, Personality::NEUTRAL)
+        - 0.2 * offset(condition.morale.value(), Morale::NEUTRAL)
+        + 0.2 * (1.0 - f64::from(condition.form.value()) / f64::from(Form::MAX))
+        + 0.15 * f64::from(injuries)
+        + illness;
+    fear.clamp(0.0, 1.0)
+}
+
 /// Every action worth considering for `me`, with its score; higher is better.
-/// Waiting scores 0, a cast scores its damage, moving scores `MOVE_SCORE`.
+/// A cast scores the share of the target's HP it takes; waiting scores 0, or the
+/// value a showman sees in its strongest spell about to be ready; closing in scores
+/// `MOVE_SCORE`; a fearful, hurt fighter scores backing away from a threatening enemy.
 #[must_use]
 pub fn score_actions(arena: &Arena, me: FighterId) -> Vec<(Action, f64)> {
     let mut scored = vec![(Action::Wait, 0.0)];
@@ -46,23 +98,87 @@ pub fn score_actions(arena: &Arena, me: FighterId) -> Vec<(Action, f64)> {
     let distance = edge_distance(me, target);
     for (spell, data) in me.spells.iter().enumerate() {
         if me.can_cast(spell) && distance <= data.reach {
-            let damage = spell_damage(&me.stats, &target.stats, data);
             let cast = Action::Cast {
                 spell,
                 target: target.id,
             };
-            scored.push((cast, f64::from(damage)));
+            scored.push((cast, cast_value(me, target, data)));
         }
     }
-    let longest_reach = me.spells.iter().map(|s| s.reach).fold(0.0, f64::max);
-    if distance > longest_reach {
-        let toward = Vec2::new(
-            target.position.x - me.position.x,
-            target.position.y - me.position.y,
-        );
+    let can_cast = scored.len() > 1;
+    scored[0].1 = show_wait_value(me, target, distance);
+
+    let retreat = fear(&me.condition) * (1.0 - share(me.hp, me.stats.hp)) * RETREAT_WEIGHT;
+    let toward = Vec2::new(
+        target.position.x - me.position.x,
+        target.position.y - me.position.y,
+    );
+    let longest_reach = |f: &Fighter| f.spells.iter().map(|s| s.reach).fold(0.0, f64::max);
+    if retreat > RETREAT_MIN {
+        let away = Vec2::new(-toward.x, -toward.y);
+        let threatened = distance <= longest_reach(target) + THREAT_MARGIN;
+        if threatened && can_back_off(arena, me, away) {
+            scored.push((Action::Move(away), retreat));
+        }
+    } else if distance > longest_reach(me) {
         scored.push((Action::Move(toward), MOVE_SCORE));
+    } else if !can_cast && distance > PRESS_MIN_DISTANCE {
+        let press = offset(me.condition.personality.aggression, Personality::NEUTRAL);
+        if press > 0.0 {
+            scored.push((Action::Move(toward), press * PRESS_SCORE));
+        }
     }
     scored
+}
+
+/// `part` / `whole`, 0 when `whole` is 0.
+fn share(part: u32, whole: u32) -> f64 {
+    if whole == 0 {
+        0.0
+    } else {
+        f64::from(part) / f64::from(whole)
+    }
+}
+
+/// Share of the target's current HP a spell takes; above 1 for overkill.
+fn cast_value(me: &Fighter, target: &Fighter, spell: &SpellData) -> f64 {
+    share(spell_damage(&me.stats, &target.stats, spell), target.hp)
+}
+
+/// What waiting is worth to a showman: a share of its strongest spell's value when
+/// that spell reaches the target, is affordable and will be ready soon; 0 otherwise.
+fn show_wait_value(me: &Fighter, target: &Fighter, distance: f64) -> f64 {
+    let flair = offset(me.condition.personality.showmanship, Personality::NEUTRAL);
+    if flair <= 0.0 {
+        return 0.0;
+    }
+    let Some((spell, data)) = me
+        .spells
+        .iter()
+        .enumerate()
+        .filter(|(_, data)| distance <= data.reach)
+        .max_by_key(|(_, data)| spell_damage(&me.stats, &target.stats, data))
+    else {
+        return 0.0;
+    };
+    let cooldown = f64::from(me.cooldowns[spell]);
+    if cooldown > 0.0 && cooldown <= flair * SHOW_WAIT_TICKS && me.can_afford(spell) {
+        cast_value(me, target, data) * SHOW_WAIT_VALUE
+    } else {
+        0.0
+    }
+}
+
+/// Whether moving 1 m along `direction` would take `me` at least half a meter
+/// away, walls included: a cornered fighter fights instead of backing off.
+fn can_back_off(arena: &Arena, me: &Fighter, direction: Vec2) -> bool {
+    let length = direction.length();
+    if length <= 0.0 {
+        return false;
+    }
+    let x = (me.position.x + direction.x / length).clamp(RADIUS, arena.width - RADIUS);
+    let y = (me.position.y + direction.y / length).clamp(RADIUS, arena.height - RADIUS);
+    Vec2::new(x - me.position.x, y - me.position.y).length() >= 0.5
 }
 
 /// The highest-scored action; on a tie, the first one.
@@ -173,6 +289,165 @@ mod tests {
         };
         assert_eq!(UtilityAi.decide(&arena, FighterId(0)), cast(2));
         arena.fighters[0].cooldowns[2] = 1;
+        assert_eq!(UtilityAi.decide(&arena, FighterId(0)), cast(1));
+    }
+
+    /// Fighter 0 at (`x`, 5) with `hp` left, against fighter 1 touching it on its right.
+    fn face_to_face(x: f64, hp: u32, condition: Condition) -> Arena {
+        let mut me = test_fighter(0, x, 5.0);
+        me.hp = hp;
+        me.condition = condition;
+        let fighters = vec![me, test_fighter(1, x + 1.5, 5.0)];
+        Arena::new(20.0, 20.0, fighters, 0)
+    }
+
+    fn fearful() -> Condition {
+        Condition {
+            personality: Personality {
+                caution: 100,
+                determination: 0,
+                ..Personality::neutral()
+            },
+            ..Condition::default()
+        }
+    }
+
+    fn hit() -> Action {
+        Action::Cast {
+            spell: 0,
+            target: FighterId(1),
+        }
+    }
+
+    #[test]
+    fn fear_is_zero_when_neutral_and_grows_with_caution_injuries_illness_and_fatigue() {
+        use crate::fighter::illness::Illness;
+        use crate::fighter::injury::{Injury, Location, Severity, Side};
+
+        assert!(fear(&Condition::default()).abs() < f64::EPSILON);
+        assert!((fear(&fearful()) - 0.75).abs() < 1e-9);
+        let bold = Personality {
+            aggression: 100,
+            determination: 100,
+            ..Personality::neutral()
+        };
+        let worn = Condition {
+            personality: bold,
+            form: Form::new(0),
+            injuries: vec![Injury {
+                location: Location::Leg(Side::Left),
+                severity: Severity::Medium,
+                weeks_left: 3,
+            }],
+            illness: Some(Illness {
+                level: IllnessLevel::Moderate,
+                weeks_left: 3,
+            }),
+            ..Condition::default()
+        };
+        // 0.2 (form 0) + 0.15 (one injury) + 0.2 (moderate illness) - 0.5 (boldness).
+        assert!((fear(&worn) - 0.05).abs() < 1e-9);
+        assert!(
+            fear(&Condition {
+                morale: Morale::new(0),
+                ..worn.clone()
+            }) > fear(&worn)
+        );
+    }
+
+    #[test]
+    fn a_fearful_hurt_fighter_backs_away() {
+        let arena = face_to_face(5.0, 30, fearful());
+        assert_eq!(
+            UtilityAi.decide(&arena, FighterId(0)),
+            Action::Move(Vec2::new(-1.5, 0.0))
+        );
+        // Unhurt, or neutral, it fights.
+        let arena = face_to_face(5.0, 100, fearful());
+        assert_eq!(UtilityAi.decide(&arena, FighterId(0)), hit());
+        let arena = face_to_face(5.0, 30, Condition::default());
+        assert_eq!(UtilityAi.decide(&arena, FighterId(0)), hit());
+    }
+
+    #[test]
+    fn an_injured_and_ill_fighter_backs_away_too() {
+        use crate::fighter::illness::Illness;
+        use crate::fighter::injury::{Injury, Location, Severity, Side};
+
+        let injury = Injury {
+            location: Location::Arm(Side::Right),
+            severity: Severity::Severe,
+            weeks_left: 6,
+        };
+        let condition = Condition {
+            injuries: vec![injury; 3],
+            illness: Some(Illness {
+                level: IllnessLevel::Severe,
+                weeks_left: 6,
+            }),
+            ..Condition::default()
+        };
+        let arena = face_to_face(5.0, 30, condition);
+        assert!(matches!(
+            UtilityAi.decide(&arena, FighterId(0)),
+            Action::Move(_)
+        ));
+    }
+
+    #[test]
+    fn a_fearful_fighter_still_takes_a_killing_blow() {
+        let mut arena = face_to_face(5.0, 30, fearful());
+        arena.fighters[1].hp = 5;
+        assert_eq!(UtilityAi.decide(&arena, FighterId(0)), hit());
+    }
+
+    #[test]
+    fn a_cornered_fighter_fights() {
+        let arena = face_to_face(RADIUS, 30, fearful());
+        assert_eq!(UtilityAi.decide(&arena, FighterId(0)), hit());
+    }
+
+    #[test]
+    fn an_aggressive_fighter_steps_in_while_its_spells_cool_down() {
+        let aggressive = Condition {
+            personality: Personality {
+                aggression: 100,
+                ..Personality::neutral()
+            },
+            ..Condition::default()
+        };
+        let mut arena = face_to_face(5.0, 100, aggressive);
+        arena.fighters[0].cooldowns[0] = 10;
+        assert_eq!(
+            UtilityAi.decide(&arena, FighterId(0)),
+            Action::Move(Vec2::new(1.5, 0.0))
+        );
+    }
+
+    #[test]
+    fn a_showman_waits_for_its_strongest_spell() {
+        let data = shipped_classes();
+        let murmillo = &data.classes[0];
+        let fighter = |id, x| {
+            Fighter::new(
+                FighterId(id),
+                ClassId(0),
+                murmillo,
+                STATS,
+                Vec2::new(x, 5.0),
+            )
+        };
+        let mut arena = Arena::new(20.0, 20.0, vec![fighter(0, 5.0), fighter(1, 6.5)], 0);
+        arena.fighters[0].cooldowns[2] = 30;
+        let cast = |spell| Action::Cast {
+            spell,
+            target: FighterId(1),
+        };
+        assert_eq!(UtilityAi.decide(&arena, FighterId(0)), cast(1));
+        arena.fighters[0].condition.personality.showmanship = 100;
+        assert_eq!(UtilityAi.decide(&arena, FighterId(0)), Action::Wait);
+        // Too long to wait for: the showman hits now.
+        arena.fighters[0].cooldowns[2] = 100;
         assert_eq!(UtilityAi.decide(&arena, FighterId(0)), cast(1));
     }
 

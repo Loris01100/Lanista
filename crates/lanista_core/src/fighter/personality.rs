@@ -7,8 +7,6 @@ use serde::Deserialize;
 use crate::fighter::percent_of;
 
 /// Each trait goes from 0 to [`Personality::MAX`].
-// ponytail: aggression, caution and showmanship become utility AI inputs with the
-// AI task of phase 3; only determination has an effect for now.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct Personality {
     pub aggression: u32,
@@ -20,6 +18,19 @@ pub struct Personality {
 
 impl Personality {
     pub const MAX: u32 = 100;
+    /// A trait at this value has no effect on the AI.
+    pub const NEUTRAL: u32 = 50;
+
+    /// Every trait at [`Personality::NEUTRAL`].
+    #[must_use]
+    pub fn neutral() -> Self {
+        Self {
+            aggression: Self::NEUTRAL,
+            caution: Self::NEUTRAL,
+            showmanship: Self::NEUTRAL,
+            determination: Self::NEUTRAL,
+        }
+    }
 
     /// A personality with every trait drawn evenly from 0 to [`Personality::MAX`].
     pub fn random<R: Rng + ?Sized>(rng: &mut R) -> Self {

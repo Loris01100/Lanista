@@ -4,8 +4,11 @@ use lanista_core::ai::{CombatAi, UtilityAi};
 use lanista_core::combat::{Arena, RADIUS, Vec2, run, tick};
 use lanista_core::design_data::DesignData;
 use lanista_core::duel::{ARENA_SIZE, MAX_TICKS, STATS};
+use lanista_core::fighter::personality::Personality;
 use lanista_core::fighter::{ClassId, Fighter, FighterId, Stats};
 use proptest::prelude::*;
+use rand::SeedableRng;
+use rand_chacha::ChaCha8Rng;
 
 fn stats() -> impl Strategy<Value = Stats> {
     (
@@ -58,12 +61,16 @@ fn duel(setup: Setup, stats: [Stats; 2], seed: u64) -> (Arena, Vec<Box<dyn Comba
 
 proptest! {
     #[test]
-    fn hp_gauges_and_positions_stay_in_bounds(
+    fn hp_gauges_and_positions_stay_in_bounds_whatever_the_personalities(
         setup in setup(),
         stats in [stats(), stats()],
         seed: u64,
     ) {
         let (mut arena, mut ais) = duel(setup, stats, seed);
+        let mut rng = ChaCha8Rng::seed_from_u64(seed);
+        for f in &mut arena.fighters {
+            f.condition.personality = Personality::random(&mut rng);
+        }
         while !arena.is_over() && arena.tick < MAX_TICKS {
             tick(&mut arena, &mut ais);
             for f in &arena.fighters {

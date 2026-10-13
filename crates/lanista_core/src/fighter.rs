@@ -14,6 +14,11 @@ use serde::Deserialize;
 use crate::ai::Action;
 use crate::combat::Vec2;
 use crate::design_data::{ClassData, Cost, SpellData};
+use crate::fighter::form::Form;
+use crate::fighter::illness::Illness;
+use crate::fighter::injury::Injury;
+use crate::fighter::morale::Morale;
+use crate::fighter::personality::Personality;
 
 /// Index of a fighter in its arena; fighters refer to each other by ID, never by reference.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
@@ -157,10 +162,37 @@ pub struct Fighter {
     pub surrender_hp: u32,
     /// Gave up: out of the fight, alive.
     pub surrendered: bool,
+    /// The fighter's state outside the fight, read by the AI so that an injured or
+    /// fearful fighter fights differently. `stats` already include its effects.
+    pub condition: Condition,
+}
+
+/// Everything about a fighter's state that its combat AI reads, beyond HP and resources.
+#[derive(Debug, Clone, PartialEq)]
+pub struct Condition {
+    pub personality: Personality,
+    pub morale: Morale,
+    pub form: Form,
+    pub injuries: Vec<Injury>,
+    pub illness: Option<Illness>,
+}
+
+impl Default for Condition {
+    /// Neutral personality and morale, full form, healthy: the AI behaves as with no condition.
+    fn default() -> Self {
+        Self {
+            personality: Personality::neutral(),
+            morale: Morale::neutral(),
+            form: Form::full(),
+            injuries: Vec::new(),
+            illness: None,
+        }
+    }
 }
 
 impl Fighter {
-    /// A fighter at full health, mana and endurance, all spells ready, who fights to the death.
+    /// A fighter at full health, mana and endurance, all spells ready, who fights to the death,
+    /// in a neutral condition.
     #[must_use]
     pub fn new(
         id: FighterId,
@@ -182,6 +214,7 @@ impl Fighter {
             action: Action::Wait,
             surrender_hp: 0,
             surrendered: false,
+            condition: Condition::default(),
         }
     }
 
@@ -211,11 +244,22 @@ impl Fighter {
         let Some(data) = self.spells.get(spell) else {
             return false;
         };
-        let affordable = match data.cost {
+        self.cooldowns[spell] == 0 && self.can_afford_spell(data)
+    }
+
+    /// Whether spell `spell` exists and its cost can be paid now, cooldown aside.
+    #[must_use]
+    pub fn can_afford(&self, spell: usize) -> bool {
+        self.spells
+            .get(spell)
+            .is_some_and(|data| self.can_afford_spell(data))
+    }
+
+    fn can_afford_spell(&self, data: &SpellData) -> bool {
+        match data.cost {
             Cost::Mana(n) => self.mana.current >= n,
             Cost::Endurance(n) => self.endurance.current >= n,
-        };
-        self.cooldowns[spell] == 0 && affordable
+        }
     }
 
     /// Spends the cost of spell `spell` and starts its cooldown.
