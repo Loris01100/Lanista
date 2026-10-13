@@ -117,4 +117,13 @@
         // Determination 0 raises the chance by this percentage of it, 100 lowers it as much.
         determination_percent: 50,
     ),
+    career: (
+        // Generated fighters: age, stats within this percentage of the standard
+        // duel's, chance of being right-handed.
+        start_age: (20, 30),
+        stats_spread_percent: 20,
+        right_handed_percent: 85,
+        // Weeks between two birthdays: a season.
+        weeks_per_year: 33,
+    ),
 )

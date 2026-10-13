@@ -5,6 +5,7 @@ use serde::Deserialize;
 use crate::combat::Range;
 use crate::fighter::ClassId;
 use crate::fighter::care::CareRules;
+use crate::fighter::career::CareerRules;
 use crate::fighter::fame::FameRules;
 use crate::fighter::form::FormRules;
 use crate::fighter::illness::IllnessRules;
@@ -34,6 +35,7 @@ pub struct FighterRules {
     pub fame: FameRules,
     pub progression: ProgressionRules,
     pub retirement: RetirementRules,
+    pub career: CareerRules,
 }
 
 #[derive(Debug, Clone, PartialEq, Deserialize)]

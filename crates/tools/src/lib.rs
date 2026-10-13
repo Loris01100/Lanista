@@ -10,22 +10,40 @@ pub fn option(
     name: &str,
     default: u64,
 ) -> Result<u64, String> {
-    let mut value = default;
+    let [value] = options(args, [(name, default)])?;
+    Ok(value)
+}
+
+/// Values of several `--name value` options among `args` (program name excluded),
+/// in the order of `defaults`, each one its default when absent.
+///
+/// # Errors
+/// On an unknown argument, a missing value or a value that is not a whole number.
+pub fn options<const N: usize>(
+    args: impl IntoIterator<Item = String>,
+    defaults: [(&str, u64); N],
+) -> Result<[u64; N], String> {
+    let mut values = defaults.map(|(_, default)| default);
     let mut args = args.into_iter();
     while let Some(arg) = args.next() {
-        if arg != name {
+        let Some(i) = defaults.iter().position(|&(name, _)| name == arg) else {
+            let expected: Vec<String> = defaults
+                .iter()
+                .map(|(name, _)| format!("{name} <number>"))
+                .collect();
             return Err(format!(
-                "unknown argument: {arg} (expected {name} <number>)"
+                "unknown argument: {arg} (expected {})",
+                expected.join(", ")
             ));
-        }
-        let Some(text) = args.next() else {
-            return Err(format!("{name} needs a value"));
         };
-        value = text
+        let Some(text) = args.next() else {
+            return Err(format!("{arg} needs a value"));
+        };
+        values[i] = text
             .parse()
-            .map_err(|_| format!("{name}: not a whole number: {text}"))?;
+            .map_err(|_| format!("{arg}: not a whole number: {text}"))?;
     }
-    Ok(value)
+    Ok(values)
 }
 
 /// `numerator / denominator` with one decimal, rounded down, in integers only.
@@ -53,6 +71,17 @@ mod tests {
         assert!(option(args(&["--seed"]), "--seed", 42).is_err());
         assert!(option(args(&["--seed", "x"]), "--seed", 42).is_err());
         assert!(option(args(&["--graine", "7"]), "--seed", 42).is_err());
+    }
+
+    #[test]
+    fn reads_several_options_in_any_order() {
+        let defaults = [("--seed", 7), ("--weeks", 10)];
+        assert_eq!(options(args(&[]), defaults), Ok([7, 10]));
+        assert_eq!(
+            options(args(&["--weeks", "3", "--seed", "1"]), defaults),
+            Ok([1, 3])
+        );
+        assert!(options(args(&["--fights", "3"]), defaults).is_err());
     }
 
     #[test]
