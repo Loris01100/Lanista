@@ -8,6 +8,7 @@ use crate::fighter::care::CareRules;
 use crate::fighter::form::FormRules;
 use crate::fighter::illness::IllnessRules;
 use crate::fighter::injury::InjuryRules;
+use crate::fighter::personality::PersonalityRules;
 
 /// Everything read from `data/`. `ClassId(i)` is the class at index `i` of `classes`.
 #[derive(Debug, Clone, PartialEq)]
@@ -24,6 +25,7 @@ pub struct FighterRules {
     pub injury: InjuryRules,
     pub illness: IllnessRules,
     pub care: CareRules,
+    pub personality: PersonalityRules,
 }
 
 #[derive(Debug, Clone, PartialEq, Deserialize)]

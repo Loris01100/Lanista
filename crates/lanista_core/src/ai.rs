@@ -76,13 +76,13 @@ fn best(scored: &[(Action, f64)]) -> Action {
     best.0
 }
 
-/// The closest living other fighter; on a tie, the lowest ID.
+/// The closest other fighter still fighting; on a tie, the lowest ID.
 fn nearest_enemy<'a>(arena: &'a Arena, me: &Fighter) -> Option<&'a Fighter> {
     let mut nearest: Option<(&Fighter, f64)> = None;
     for f in arena
         .fighters
         .iter()
-        .filter(|f| f.is_alive() && f.id != me.id)
+        .filter(|f| f.is_fighting() && f.id != me.id)
     {
         let distance = edge_distance(me, f);
         if nearest.is_none_or(|(_, d)| distance < d) {

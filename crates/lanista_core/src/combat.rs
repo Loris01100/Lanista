@@ -67,10 +67,10 @@ impl Arena {
         }
     }
 
-    /// At most one fighter left alive.
+    /// At most one fighter still fighting: the others are dead or gave up.
     #[must_use]
     pub fn is_over(&self) -> bool {
-        self.fighters.iter().filter(|f| f.is_alive()).count() <= 1
+        self.fighters.iter().filter(|f| f.is_fighting()).count() <= 1
     }
 
     #[must_use]
@@ -88,7 +88,7 @@ pub fn tick(arena: &mut Arena, ais: &mut [Box<dyn CombatAi>]) {
     if arena.tick.is_multiple_of(TICKS_PER_DECISION) {
         for (i, ai) in ais.iter_mut().enumerate() {
             let fighter = &arena.fighters[i];
-            if fighter.is_alive() {
+            if fighter.is_fighting() {
                 let action = ai.decide(arena, fighter.id);
                 arena.fighters[i].action = action;
             }
@@ -154,8 +154,9 @@ fn cool_down(arena: &mut Arena) {
     }
 }
 
-/// Casts the spell each living fighter chose, if it is ready, affordable and the
-/// target is alive and in reach; a cast fighter then waits for its next decision.
+/// Casts the spell each fighter still fighting chose, if it is ready, affordable and the
+/// target is still fighting and in reach; a cast fighter then waits for its next decision.
+/// The target dies at 0 HP, or gives up at its surrender threshold.
 // ponytail: resolved in index order, so of two fighters killing each other on the
 // same tick, the lower index survives.
 fn cast_spells(arena: &mut Arena) {
@@ -170,7 +171,7 @@ fn cast_spells(arena: &mut Arena) {
         let Some(defender) = arena.fighters.get(t) else {
             continue;
         };
-        if !caster.is_alive() || !defender.is_alive() || caster.id == target {
+        if !caster.is_fighting() || !defender.is_fighting() || caster.id == target {
             continue;
         }
         if !caster.can_cast(spell) || edge_distance(caster, defender) > caster.spells[spell].reach {
@@ -195,15 +196,20 @@ fn cast_spells(arena: &mut Arena) {
             damage: hp_before - defender.hp,
         });
         let died = !defender.is_alive();
+        let surrendered = defender.surrendered;
         arena.log.push(cast);
         if died {
             arena.log.push(event(EventKind::Death { fighter: target }));
+        } else if surrendered {
+            arena
+                .log
+                .push(event(EventKind::Surrender { fighter: target }));
         }
     }
 }
 
 fn move_fighters(arena: &mut Arena) {
-    for f in arena.fighters.iter_mut().filter(|f| f.is_alive()) {
+    for f in arena.fighters.iter_mut().filter(|f| f.is_fighting()) {
         if let Action::Move(direction) = f.action {
             let length = direction.length();
             if length > 0.0 {
@@ -215,14 +221,14 @@ fn move_fighters(arena: &mut Arena) {
     }
 }
 
-/// Pushes overlapping living fighters apart, each by half the overlap.
+/// Pushes overlapping fighters still fighting apart, each by half the overlap.
 // ponytail: one pass in index order, a crowded melee may keep small overlaps; iterate if visible.
 fn separate(arena: &mut Arena) {
     let fighters = &mut arena.fighters;
     for i in 0..fighters.len() {
         for j in i + 1..fighters.len() {
             let (a, b) = (&fighters[i], &fighters[j]);
-            if !a.is_alive() || !b.is_alive() {
+            if !a.is_fighting() || !b.is_fighting() {
                 continue;
             }
             let offset = Vec2::new(b.position.x - a.position.x, b.position.y - a.position.y);

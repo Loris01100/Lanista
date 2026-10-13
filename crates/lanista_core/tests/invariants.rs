@@ -84,4 +84,29 @@ proptest! {
         run(&mut arena, &mut ais, MAX_TICKS);
         prop_assert!(arena.is_over(), "still going after {} ticks", arena.tick);
     }
+
+    #[test]
+    fn a_fighter_who_gave_up_is_never_hit_again(
+        setup in setup(),
+        thresholds in [0..=100u32, 0..=100u32],
+        seed: u64,
+    ) {
+        let (mut arena, mut ais) = duel(setup, [STATS; 2], seed);
+        for (f, threshold) in arena.fighters.iter_mut().zip(thresholds) {
+            f.surrender_hp = threshold;
+        }
+        let mut hp_when_out: [Option<u32>; 2] = [None; 2];
+        while !arena.is_over() && arena.tick < MAX_TICKS {
+            tick(&mut arena, &mut ais);
+            for (f, out) in arena.fighters.iter().zip(&mut hp_when_out) {
+                if let Some(hp) = *out {
+                    prop_assert_eq!(f.hp, hp);
+                } else if f.surrendered {
+                    prop_assert!(f.is_alive() && f.hp <= f.surrender_hp);
+                    *out = Some(f.hp);
+                }
+            }
+        }
+        prop_assert!(arena.is_over());
+    }
 }

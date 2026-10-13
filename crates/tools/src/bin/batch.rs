@@ -51,7 +51,7 @@ fn main() -> ExitCode {
             Outcome {
                 classes: arena.fighters.iter().map(|f| index(f.class.0)).collect(),
                 winner: over
-                    .then(|| arena.fighters.iter().position(Fighter::is_alive))
+                    .then(|| arena.fighters.iter().position(Fighter::is_fighting))
                     .flatten(),
                 ticks: arena.tick,
                 over,

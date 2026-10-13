@@ -25,6 +25,10 @@ pub enum EventKind {
     Death {
         fighter: FighterId,
     },
+    /// Reached its surrender threshold: out of the fight, alive.
+    Surrender {
+        fighter: FighterId,
+    },
 }
 
 /// Summary of a fight, built from its log.
@@ -32,9 +36,9 @@ pub enum EventKind {
 pub struct Report {
     /// Ticks played.
     pub ticks: u32,
-    /// At most one fighter is left alive.
+    /// At most one fighter is still fighting.
     pub over: bool,
-    /// The last fighter alive; `None` if the fight is not over or nobody survived.
+    /// The last fighter still fighting; `None` if the fight is not over or nobody is left.
     pub winner: Option<FighterId>,
     /// In the order of the arena's fighters.
     pub fighters: Vec<FighterReport>,
@@ -48,6 +52,7 @@ pub struct FighterReport {
     pub damage_dealt: u32,
     pub damage_taken: u32,
     pub spells_cast: u32,
+    pub surrendered: bool,
 }
 
 impl Report {
@@ -63,6 +68,7 @@ impl Report {
                 damage_dealt: 0,
                 damage_taken: 0,
                 spells_cast: 0,
+                surrendered: f.surrendered,
             })
             .collect();
         let index = |id: FighterId| usize::try_from(id.0).ok();
@@ -85,7 +91,11 @@ impl Report {
         }
         let over = arena.is_over();
         let winner = if over {
-            arena.fighters.iter().find(|f| f.is_alive()).map(|f| f.id)
+            arena
+                .fighters
+                .iter()
+                .find(|f| f.is_fighting())
+                .map(|f| f.id)
         } else {
             None
         };
@@ -108,15 +118,16 @@ impl fmt::Display for Report {
                     self.ticks, winner.0
                 )?;
             }
-            (true, None) => writeln!(f, "over after {} ticks, no survivor", self.ticks)?,
+            (true, None) => writeln!(f, "over after {} ticks, no winner", self.ticks)?,
             (false, _) => writeln!(f, "not over after {} ticks", self.ticks)?,
         }
         for r in &self.fighters {
-            writeln!(
+            write!(
                 f,
                 "fighter {}: {}/{} HP, dealt {}, taken {}, {} spells cast",
                 r.id.0, r.hp, r.max_hp, r.damage_dealt, r.damage_taken, r.spells_cast
             )?;
+            writeln!(f, "{}", if r.surrendered { ", gave up" } else { "" })?;
         }
         Ok(())
     }
@@ -148,6 +159,9 @@ pub fn log_text(arena: &Arena) -> String {
             EventKind::Death { fighter } => {
                 writeln!(text, "[{:>5}] fighter {} dies", event.tick, fighter.0)
             }
+            EventKind::Surrender { fighter } => {
+                writeln!(text, "[{:>5}] fighter {} gives up", event.tick, fighter.0)
+            }
         };
     }
     text
@@ -168,19 +182,9 @@ mod tests {
         }
     }
 
-    /// Fighter 0 hits fighter 1, which does nothing, until it runs out of endurance.
+    /// Fighter 0 hits fighter 1, which fights to the death.
     fn one_sided() -> Arena {
-        let fighters = vec![test_fighter(0, 5.0, 5.0), test_fighter(1, 6.5, 5.0)];
-        let mut arena = Arena::new(20.0, 20.0, fighters, 0);
-        arena.fighters[1].hp = 25;
-        let hit = Action::Cast {
-            spell: 0,
-            target: FighterId(1),
-        };
-        let mut ais: Vec<Box<dyn CombatAi>> =
-            vec![Box::new(Fixed(hit)), Box::new(Fixed(Action::Wait))];
-        run(&mut arena, &mut ais, 600);
-        arena
+        one_sided_with_threshold(0)
     }
 
     #[test]
@@ -192,7 +196,7 @@ mod tests {
             .iter()
             .filter_map(|e| match e.kind {
                 EventKind::Cast { damage, .. } => Some(damage),
-                EventKind::Death { .. } => None,
+                EventKind::Death { .. } | EventKind::Surrender { .. } => None,
             })
             .collect();
         assert_eq!(damages, [10, 10, 5]);
@@ -202,6 +206,57 @@ mod tests {
                 fighter: FighterId(1)
             })
         );
+    }
+
+    /// Fighter 0 hits fighter 1 (10 damage a hit, 25 HP) until the fight ends.
+    fn one_sided_with_threshold(surrender_hp: u32) -> Arena {
+        let fighters = vec![test_fighter(0, 5.0, 5.0), test_fighter(1, 6.5, 5.0)];
+        let mut arena = Arena::new(20.0, 20.0, fighters, 0);
+        arena.fighters[1].hp = 25;
+        arena.fighters[1].surrender_hp = surrender_hp;
+        let hit = Action::Cast {
+            spell: 0,
+            target: FighterId(1),
+        };
+        let mut ais: Vec<Box<dyn CombatAi>> =
+            vec![Box::new(Fixed(hit)), Box::new(Fixed(Action::Wait))];
+        run(&mut arena, &mut ais, 600);
+        arena
+    }
+
+    #[test]
+    fn a_fighter_gives_up_at_its_threshold_and_lives() {
+        let arena = one_sided_with_threshold(15);
+        // 25 → 15 HP: at the threshold after the first hit.
+        assert!(arena.is_over());
+        assert_eq!(arena.fighters[1].hp, 15);
+        assert!(arena.fighters[1].is_alive() && !arena.fighters[1].is_fighting());
+        assert_eq!(
+            arena.log.last().map(|e| e.kind),
+            Some(EventKind::Surrender {
+                fighter: FighterId(1)
+            })
+        );
+        let report = Report::new(&arena);
+        assert_eq!(report.winner, Some(FighterId(0)));
+        assert!(report.fighters[1].surrendered);
+        assert!(
+            report
+                .to_string()
+                .contains("fighter 1: 15/100 HP, dealt 0, taken 10, 0 spells cast, gave up")
+        );
+        assert!(log_text(&arena).ends_with(
+            "fighter 1 gives up
+"
+        ));
+    }
+
+    #[test]
+    fn a_blow_past_the_threshold_kills() {
+        // 25 → 15 → 5: still above 4 after two hits, the third one kills.
+        let arena = one_sided_with_threshold(4);
+        assert!(!arena.fighters[1].is_alive());
+        assert!(!arena.fighters[1].surrendered);
     }
 
     #[test]

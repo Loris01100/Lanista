@@ -179,9 +179,21 @@ impl CombatScreen {
         if !self.arena.is_over() {
             return "Temps écoulé, pas de vainqueur".into();
         }
-        match self.arena.fighters.iter().find(|f| f.is_alive()) {
+        let winner = match self.arena.fighters.iter().find(|f| f.is_fighting()) {
             Some(winner) => format!("Vainqueur : combattant {}", winner.id.0),
-            None => "Aucun survivant".into(),
+            None => "Aucun vainqueur".into(),
+        };
+        let gave_up: Vec<String> = self
+            .arena
+            .fighters
+            .iter()
+            .filter(|f| f.surrendered)
+            .map(|f| f.id.0.to_string())
+            .collect();
+        if gave_up.is_empty() {
+            winner
+        } else {
+            format!("{winner} (abandon : combattant {})", gave_up.join(", "))
         }
     }
 
@@ -423,9 +435,10 @@ mod tests {
                 .iter()
                 .filter(|e| match e.kind {
                     EventKind::Cast { caster, .. } => {
-                        !winner_only || screen.arena.fighters[index(caster.0).unwrap()].is_alive()
+                        !winner_only
+                            || screen.arena.fighters[index(caster.0).unwrap()].is_fighting()
                     }
-                    EventKind::Death { .. } => false,
+                    EventKind::Death { .. } | EventKind::Surrender { .. } => false,
                 })
                 .count()
         };

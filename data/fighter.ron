@@ -63,4 +63,10 @@
         // Care keeps this percentage of the weeks left, rounded up, at least 1.
         weeks_kept_percent: 50,
     ),
+    personality: (
+        // Surrender threshold, as a percentage of max HP, from determination 0 to 100:
+        // a fearful fighter gives up early, a fully determined one fights to the death.
+        surrender_percent_least_determined: 50,
+        surrender_percent_most_determined: 0,
+    ),
 )

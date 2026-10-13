@@ -2,6 +2,7 @@ pub mod care;
 pub mod form;
 pub mod illness;
 pub mod injury;
+pub mod personality;
 
 use rand::{Rng, RngExt};
 use serde::Deserialize;
@@ -111,10 +112,15 @@ pub struct Fighter {
     pub position: Vec2,
     /// Last decision of its AI, applied every tick until the next one.
     pub action: Action,
+    /// Hit points at or below which it gives up (see `Personality::surrender_hp`);
+    /// 0 fights to the death.
+    pub surrender_hp: u32,
+    /// Gave up: out of the fight, alive.
+    pub surrendered: bool,
 }
 
 impl Fighter {
-    /// A fighter at full health, mana and endurance, all spells ready.
+    /// A fighter at full health, mana and endurance, all spells ready, who fights to the death.
     #[must_use]
     pub fn new(
         id: FighterId,
@@ -134,6 +140,8 @@ impl Fighter {
             cooldowns: vec![0; class_data.spells.len()],
             position,
             action: Action::Wait,
+            surrender_hp: 0,
+            surrendered: false,
         }
     }
 
@@ -142,9 +150,19 @@ impl Fighter {
         self.hp > 0
     }
 
-    /// Takes `damage` hit points off, stopping at 0.
+    /// Alive and has not given up.
+    #[must_use]
+    pub fn is_fighting(&self) -> bool {
+        self.is_alive() && !self.surrendered
+    }
+
+    /// Takes `damage` hit points off, stopping at 0: a blow that reaches 0 kills.
+    /// A survivor left at or below `surrender_hp` gives up.
     pub fn take_damage(&mut self, damage: u32) {
         self.hp = self.hp.saturating_sub(damage);
+        if self.is_alive() && self.hp <= self.surrender_hp {
+            self.surrendered = true;
+        }
     }
 
     /// Whether spell `spell` exists, is off cooldown and is affordable.
