@@ -55,4 +55,12 @@
         worsening_chance: 0.5,
         worsening_weeks: (2, 4),
     ),
+    care: (
+        // Price of care, decided by the player (money comes in phase 4).
+        // Permanent injuries can't be cared for.
+        injury_cost: (light: 20, medium: 60, severe: 150),
+        illness_cost: (mild: 15, moderate: 50, severe: 120),
+        // Care keeps this percentage of the weeks left, rounded up, at least 1.
+        weeks_kept_percent: 50,
+    ),
 )

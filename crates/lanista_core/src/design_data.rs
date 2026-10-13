@@ -4,6 +4,7 @@ use serde::Deserialize;
 
 use crate::combat::Range;
 use crate::fighter::ClassId;
+use crate::fighter::care::CareRules;
 use crate::fighter::form::FormRules;
 use crate::fighter::illness::IllnessRules;
 use crate::fighter::injury::InjuryRules;
@@ -22,6 +23,7 @@ pub struct FighterRules {
     pub form: FormRules,
     pub injury: InjuryRules,
     pub illness: IllnessRules,
+    pub care: CareRules,
 }
 
 #[derive(Debug, Clone, PartialEq, Deserialize)]
