@@ -9,8 +9,8 @@ use crate::design_data::{DesignData, FighterRules};
 use crate::duel::{ARENA_SIZE, STATS, play};
 use crate::fighter::fame::{Fame, FightOutcome, FightResult};
 use crate::fighter::form::{Form, FormEvent};
-use crate::fighter::illness::{Illness, roll_illness};
-use crate::fighter::injury::{Injury, Side, heal_week, injured_stats, roll_injury};
+use crate::fighter::illness::{Illness, IllnessLevel, roll_illness};
+use crate::fighter::injury::{Injury, Severity, Side, heal_week, injured_stats, roll_injury};
 use crate::fighter::morale::{Morale, MoraleEvent};
 use crate::fighter::personality::Personality;
 use crate::fighter::progression::{ProgressEvent, age_decline, progress, random_potential};
@@ -222,7 +222,8 @@ impl CareerFighter {
             self.combat_fighter(FighterId(0), data, Vec2::new(3.0, middle)),
             opponent.combat_fighter(FighterId(1), data, Vec2::new(ARENA_SIZE - 3.0, middle)),
         ];
-        let mut arena = Arena::new(ARENA_SIZE, ARENA_SIZE, fighters, seed);
+        let start = Arena::new(ARENA_SIZE, ARENA_SIZE, fighters, seed);
+        let mut arena = start.clone();
         play(&mut arena);
         let total = |stats: Stats| stats.to_array().iter().map(|&v| u64::from(v)).sum::<u64>();
         let stronger = total(opponent.fighting_stats(rules)) > total(self.fighting_stats(rules));
@@ -231,6 +232,7 @@ impl CareerFighter {
         let died = !arena.fighters[0].is_alive();
         let summary = FightSummary {
             seed,
+            start,
             opponent,
             against_stronger: stronger,
             result: outcome.result,
@@ -323,6 +325,35 @@ pub enum Activity {
     Fight,
 }
 
+/// Below this form, `suggested_plan` rests.
+pub const REST_BELOW_FORM: u32 = 50;
+
+/// A simple stand-in for the player's decisions, shared by the `career` tool and the
+/// game's default choice: care for anything medium or worse, rest when tired, badly
+/// hurt or ill, otherwise fight on odd weeks and train on even ones.
+// ponytail: the rival managers' rules of phase 4 will replace it.
+#[must_use]
+pub fn suggested_plan(fighter: &CareerFighter, week: u64) -> WeekPlan {
+    let badly_hurt = fighter
+        .injuries
+        .iter()
+        .any(|i| matches!(i.severity, Severity::Medium | Severity::Severe));
+    let ill = fighter
+        .illness
+        .is_some_and(|i| i.level != IllnessLevel::Mild);
+    let activity = if badly_hurt || ill || fighter.form.value() < REST_BELOW_FORM {
+        Activity::Rest
+    } else if week % 2 == 1 {
+        Activity::Fight
+    } else {
+        Activity::Train
+    };
+    WeekPlan {
+        activity,
+        care: badly_hurt || ill,
+    }
+}
+
 /// The player's decisions for one fighter and one week.
 // ponytail: care is all or nothing here; choosing injury by injury comes with
 // the fighter screen in phase 4.
@@ -352,6 +383,9 @@ pub struct WeekReport {
 pub struct FightSummary {
     /// Replaying the duel with this seed gives the same fight.
     pub seed: u64,
+    /// The fight before its first tick, the career fighter as `FighterId(0)`:
+    /// playing it with utility AIs gives this very fight, to watch it.
+    pub start: Arena,
     pub opponent: CareerFighter,
     pub against_stronger: bool,
     pub result: FightResult,
@@ -501,6 +535,42 @@ mod tests {
             assert_eq!(f.play_week(plan(Activity::Fight), &mut rng, &data), None);
             assert_eq!(f, before);
         }
+    }
+
+    #[test]
+    fn the_start_of_a_fight_replays_it() {
+        let data = data();
+        let mut rng = ChaCha8Rng::seed_from_u64(5);
+        let mut f = fighter(7);
+        let report = f.play_week(plan(Activity::Fight), &mut rng, &data).unwrap();
+        let fight = report.fight.unwrap();
+        let mut replay = fight.start.clone();
+        assert_eq!(replay.tick, 0);
+        play(&mut replay);
+        assert_eq!(replay.tick, fight.ticks);
+        assert_eq!(!replay.fighters[0].is_alive(), fight.died);
+    }
+
+    #[test]
+    fn the_suggested_plan_rests_the_tired_and_the_hurt() {
+        let mut f = fighter(7);
+        assert_eq!(suggested_plan(&f, 1).activity, Activity::Fight);
+        assert_eq!(suggested_plan(&f, 2).activity, Activity::Train);
+        f.form = Form::new(REST_BELOW_FORM - 1);
+        assert_eq!(suggested_plan(&f, 1).activity, Activity::Rest);
+        f.form = Form::full();
+        f.injuries.push(Injury {
+            location: crate::fighter::injury::Location::Body,
+            severity: Severity::Medium,
+            weeks_left: 3,
+        });
+        assert_eq!(
+            suggested_plan(&f, 1),
+            WeekPlan {
+                activity: Activity::Rest,
+                care: true
+            }
+        );
     }
 
     #[test]

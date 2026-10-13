@@ -1,10 +1,12 @@
-//! Watching a fight: the logic runs at its fixed tick rate, fighters are drawn
-//! as animated sprites at positions interpolated between the last two ticks.
+//! Watching a fight, a standard duel or a career fight: the logic runs at its
+//! fixed tick rate, fighters are drawn as animated sprites at positions
+//! interpolated between the last two ticks.
 
 use lanista_core::ai::{self, CombatAi};
 use lanista_core::combat::{self, Arena};
 use lanista_core::design_data::DesignData;
 use lanista_core::duel::{MAX_TICKS, random_duel, utility_ais};
+use lanista_core::fighter::FighterId;
 use lanista_core::log::EventKind;
 use macroquad::prelude::*;
 use reesch::{
@@ -82,10 +84,21 @@ impl Look {
     }
 }
 
+/// What the fight on screen is.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum Mode {
+    /// A standard duel; another seed can be picked.
+    Free {
+        /// Seed of the next fight, edited in the controls.
+        next_seed: u64,
+    },
+    /// A career fight, watched once, fighter 0 being the player's.
+    Watch,
+}
+
 pub struct CombatScreen {
     data: DesignData,
-    /// Seed of the next fight, edited in the controls.
-    next_seed: u64,
+    mode: Mode,
     arena: Arena,
     ais: Vec<Box<dyn CombatAi>>,
     step: FixedStep,
@@ -101,9 +114,20 @@ pub struct CombatScreen {
 }
 
 impl CombatScreen {
-    /// The standard duel of `seed`, the same as `simulate --seed <seed>`.
+    /// The standard duel of `seed`, the same as `simulate --seed <seed>`; another
+    /// seed can be picked on screen.
     pub fn new(data: DesignData, seed: u64, bindings: Bindings<Action>) -> Self {
         let arena = random_duel(&data, seed);
+        Self::with(data, arena, Mode::Free { next_seed: seed }, bindings)
+    }
+
+    /// Watches the fight `arena`, from its first tick: a career fight, fighter 0
+    /// being the player's. Once it is over, « Continuer » goes back.
+    pub fn watch(data: DesignData, arena: Arena, bindings: Bindings<Action>) -> Self {
+        Self::with(data, arena, Mode::Watch, bindings)
+    }
+
+    fn with(data: DesignData, arena: Arena, mode: Mode, bindings: Bindings<Action>) -> Self {
         let animation = |row: u16, frame_time, looping| Animation {
             first: row * SHEET.columns,
             frames: 4,
@@ -113,10 +137,10 @@ impl CombatScreen {
         };
         let mut screen = Self {
             data,
-            next_seed: seed,
-            ais: utility_ais(&arena),
-            previous: positions(&arena),
-            arena,
+            mode,
+            ais: Vec::new(),
+            previous: Vec::new(),
+            arena: arena.clone(),
             step: FixedStep::new(combat::TICKS_PER_SECOND),
             seen_events: 0,
             looks: Vec::new(),
@@ -133,13 +157,13 @@ impl CombatScreen {
             bindings,
             speed: 1.0,
         };
-        screen.start(seed);
+        screen.show(arena);
         screen
     }
 
-    /// Starts the duel of `seed` from the beginning; the speed is kept.
-    fn start(&mut self, seed: u64) {
-        self.arena = random_duel(&self.data, seed);
+    /// Shows `arena` from where it is; the speed is kept.
+    fn show(&mut self, arena: Arena) {
+        self.arena = arena;
         self.ais = utility_ais(&self.arena);
         self.previous = positions(&self.arena);
         self.step = FixedStep::new(combat::TICKS_PER_SECOND);
@@ -165,9 +189,10 @@ impl CombatScreen {
     }
 
     /// Speed buttons, then the result once the fight is over; the seed of the
-    /// next fight.
-    fn controls(&mut self, ui: &egui::Context) {
-        let mut start = false;
+    /// next fight, or « Continuer » for a watched fight. Returns whether to go back.
+    fn controls(&mut self, ui: &egui::Context) -> bool {
+        let mut start = None;
+        let mut done = false;
         egui::Window::new("Contrôles")
             .title_bar(false)
             .resizable(false)
@@ -184,14 +209,34 @@ impl CombatScreen {
                     } else {
                         ui.label(self.result());
                     }
-                    ui.separator();
-                    ui.label(format!("Graine {}", self.arena.seed));
-                    ui.add(egui::DragValue::new(&mut self.next_seed));
-                    start = ui.button("Lancer").clicked();
+                    match &mut self.mode {
+                        Mode::Free { next_seed } => {
+                            ui.separator();
+                            ui.label(format!("Graine {}", self.arena.seed));
+                            ui.add(egui::DragValue::new(next_seed));
+                            if ui.button("Lancer").clicked() {
+                                start = Some(*next_seed);
+                            }
+                        }
+                        Mode::Watch => {
+                            let finished = !self.running();
+                            done = finished && ui.button("Continuer").clicked();
+                        }
+                    }
                 });
             });
-        if start {
-            self.start(self.next_seed);
+        if let Some(seed) = start {
+            self.show(random_duel(&self.data, seed));
+        }
+        done
+    }
+
+    /// How the result names fighter `id`.
+    fn name(&self, id: FighterId) -> String {
+        match (self.mode, id.0) {
+            (Mode::Watch, 0) => "votre combattant".into(),
+            (Mode::Watch, _) => "l'adversaire".into(),
+            (Mode::Free { .. }, n) => format!("combattant {n}"),
         }
     }
 
@@ -200,7 +245,7 @@ impl CombatScreen {
             return "Temps écoulé, pas de vainqueur".into();
         }
         let winner = match self.arena.fighters.iter().find(|f| f.is_fighting()) {
-            Some(winner) => format!("Vainqueur : combattant {}", winner.id.0),
+            Some(winner) => format!("Vainqueur : {}", self.name(winner.id)),
             None => "Aucun vainqueur".into(),
         };
         let gave_up: Vec<String> = self
@@ -208,12 +253,12 @@ impl CombatScreen {
             .fighters
             .iter()
             .filter(|f| f.surrendered)
-            .map(|f| f.id.0.to_string())
+            .map(|f| self.name(f.id))
             .collect();
         if gave_up.is_empty() {
             winner
         } else {
-            format!("{winner} (abandon : combattant {})", gave_up.join(", "))
+            format!("{winner} (abandon : {})", gave_up.join(", "))
         }
     }
 
@@ -296,7 +341,9 @@ impl Screen for CombatScreen {
         if self.running() && self.bindings.pressed(ui, &Action::Skip) {
             self.skip();
         }
-        self.controls(ui);
+        if self.controls(ui) {
+            return Transition::Pop;
+        }
         volumes(ui, audio);
         audio.play_music(assets, MUSIC);
         // Speed scales time: more or fewer ticks per frame, animations alike.
@@ -439,6 +486,41 @@ mod tests {
     use super::*;
 
     const SEEDS: [u64; 4] = [42, 0, 1, 7];
+
+    /// The first week of career 7 is a fight its fighter gives up: watched frame
+    /// by frame, it is the very fight the career played.
+    #[test]
+    fn a_watched_career_fight_is_the_one_the_career_played() {
+        use lanista_core::fighter::career::{Activity, CareerFighter, WeekPlan};
+        use rand_chacha::ChaCha8Rng;
+        use rand_chacha::rand_core::SeedableRng;
+
+        let data = DesignData::load().unwrap();
+        let mut rng = ChaCha8Rng::seed_from_u64(7);
+        let mut fighter = CareerFighter::random(&mut rng, &data);
+        let plan = WeekPlan {
+            activity: Activity::Fight,
+            care: false,
+        };
+        let fight = fighter
+            .play_week(plan, &mut rng, &data)
+            .unwrap()
+            .fight
+            .unwrap();
+        let mut screen = CombatScreen::watch(data, fight.start.clone(), Bindings::new(Vec::new()));
+        // Past the one-minute limit.
+        for _ in 0..60 * 70 {
+            screen.advance(1.0 / 60.0);
+        }
+        let mut expected = fight.start;
+        play(&mut expected);
+        assert_eq!(log_text(&screen.arena), log_text(&expected));
+        assert_eq!(screen.arena.tick, fight.ticks);
+        assert_eq!(
+            screen.result(),
+            "Vainqueur : l'adversaire (abandon : votre combattant)"
+        );
+    }
 
     #[test]
     fn blood_spreads_fast_then_slows_and_stops() {

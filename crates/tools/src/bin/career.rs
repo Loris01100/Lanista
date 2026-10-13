@@ -7,18 +7,13 @@ use std::process::ExitCode;
 use lanista_core::design_data::DesignData;
 use lanista_core::fighter::Stats;
 use lanista_core::fighter::career::{
-    Activity, CareerFighter, FightSummary, Status, WeekPlan, WeekReport,
+    Activity, CareerFighter, FightSummary, Status, WeekReport, suggested_plan,
 };
 use lanista_core::fighter::fame::FightResult;
-use lanista_core::fighter::illness::IllnessLevel;
-use lanista_core::fighter::injury::Severity;
 use lanista_core::fighter::personality::Personality;
 use rand::SeedableRng;
 use rand_chacha::ChaCha8Rng;
 use tools::{one_decimal, options};
-
-/// Below this form the fighter rests.
-const REST_BELOW_FORM: u32 = 50;
 
 fn main() -> ExitCode {
     let [seed, weeks] = match options(std::env::args().skip(1), [("--seed", 7), ("--weeks", 10)]) {
@@ -41,7 +36,7 @@ fn main() -> ExitCode {
     print!("{}", describe(&fighter, &data));
     for week in 1..=weeks {
         let before = fighter.clone();
-        let plan = plan(&fighter, week);
+        let plan = suggested_plan(&fighter, week);
         let Some(report) = fighter.play_week(plan, &mut rng, &data) else {
             break;
         };
@@ -53,29 +48,6 @@ fn main() -> ExitCode {
         Status::Dead => println!("\ndied at {}", fighter.age),
     }
     ExitCode::SUCCESS
-}
-
-/// Stand-in for the player's decisions: care for anything medium or worse, rest when
-/// tired, badly hurt or ill; otherwise fight on odd weeks and train on even ones.
-fn plan(fighter: &CareerFighter, week: u64) -> WeekPlan {
-    let badly_hurt = fighter
-        .injuries
-        .iter()
-        .any(|i| matches!(i.severity, Severity::Medium | Severity::Severe));
-    let ill = fighter
-        .illness
-        .is_some_and(|i| i.level != IllnessLevel::Mild);
-    let activity = if badly_hurt || ill || fighter.form.value() < REST_BELOW_FORM {
-        Activity::Rest
-    } else if week % 2 == 1 {
-        Activity::Fight
-    } else {
-        Activity::Train
-    };
-    WeekPlan {
-        activity,
-        care: badly_hurt || ill,
-    }
 }
 
 fn class_name(fighter: &CareerFighter, data: &DesignData) -> String {

@@ -10,6 +10,7 @@ publish.workspace = true
 [dependencies]
 lanista_core = { version = "0.1.0", path = "../lanista_core" }
 macroquad = "0.4.16"
+rand_chacha = "0.10.0"
 reesch = { version = "0.1.0", path = "../reesch" }
 
 [lints]

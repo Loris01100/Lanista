@@ -1,15 +1,18 @@
-//! The game: for now, one duel watched on screen.
+//! The game: for now, one fighter's career followed week after week, its fights
+//! watched on screen, and the standard duel.
 
+mod career_screen;
 mod combat_screen;
 mod theme;
 
-use combat_screen::{CombatScreen, DEATH_SOUND, FIGHTER_SHEET, HIT_SOUND, MUSIC};
+use career_screen::CareerScreen;
+use combat_screen::{DEATH_SOUND, FIGHTER_SHEET, HIT_SOUND, MUSIC};
 use lanista_core::design_data::DesignData;
 use macroquad::prelude::*;
 use reesch::{Assets, Bindings, Button};
 
 /// What the player can do; bound to keys in `main`.
-#[derive(PartialEq)]
+#[derive(Clone, PartialEq)]
 enum Action {
     Quit,
     SlowSpeed,
@@ -17,10 +20,12 @@ enum Action {
     FastSpeed,
     /// Skip to the fight's result.
     Skip,
+    /// Play the career's next week.
+    NextWeek,
 }
 
-/// Seed of the duel shown at launch; another one is picked on screen.
-const FIRST_SEED: u64 = 42;
+/// Seed of the career shown at launch, the one of `career --seed 7`.
+const CAREER_SEED: u64 = 7;
 
 fn window() -> Conf {
     Conf {
@@ -51,11 +56,12 @@ async fn main() {
         (Action::NormalSpeed, Button::Key(KeyCode::Key2)),
         (Action::FastSpeed, Button::Key(KeyCode::Key3)),
         (Action::Skip, Button::Key(KeyCode::Enter)),
+        (Action::NextWeek, Button::Key(KeyCode::Space)),
     ]);
     reesch::run(
         assets,
         theme::apply,
-        Box::new(CombatScreen::new(data, FIRST_SEED, bindings)),
+        Box::new(CareerScreen::new(data, CAREER_SEED, bindings)),
     )
     .await;
 }
