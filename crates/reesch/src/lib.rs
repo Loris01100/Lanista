@@ -1,9 +1,11 @@
 //! Generic game engine on macroquad + egui. Knows nothing about the game.
 
+pub mod animation;
 pub mod assets;
 pub mod fixed_step;
 pub mod screen;
 
+pub use animation::{Animation, AnimationEvent, AnimationPlayer, SpriteSheet};
 pub use assets::Assets;
 /// The egui version egui-macroquad was built with: use this one, never a
 /// separate egui dependency.
