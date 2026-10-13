@@ -1,5 +1,7 @@
 //! Phase 0 prototype, now on `reesch`: a Kenney sprite and an egui button.
 
+mod theme;
+
 use macroquad::prelude::*;
 use reesch::{Assets, Bindings, Button, Screen, Transition, egui};
 
@@ -48,7 +50,16 @@ impl Screen for Prototype {
     }
 }
 
-#[macroquad::main("Lanista")]
+fn window() -> Conf {
+    Conf {
+        window_title: "Lanista".to_owned(),
+        window_width: 1280,
+        window_height: 800,
+        ..Default::default()
+    }
+}
+
+#[macroquad::main(window)]
 async fn main() {
     // ponytail: relative to the working directory (the workspace root with
     // `cargo run`); resolve next to the executable when packaging for Steam.
@@ -61,6 +72,7 @@ async fn main() {
     let bindings = Bindings::new(vec![(Action::Quit, Button::Key(KeyCode::Escape))]);
     reesch::run(
         assets,
+        theme::apply,
         Box::new(Prototype {
             clicks: 0,
             bindings,

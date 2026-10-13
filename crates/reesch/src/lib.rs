@@ -17,13 +17,25 @@ pub use fixed_step::FixedStep;
 pub use input::{Bindings, Button};
 pub use screen::{Screen, ScreenStack, Transition};
 
+/// Screen height the UI is designed for (Steam Deck, 1280 × 800): the UI is
+/// scaled to keep the same layout at any window height.
+const UI_DESIGN_HEIGHT: f32 = 800.0;
+
 /// Runs the game from its first screen until the last one is popped.
 /// Load every asset before, then call it from the `#[macroquad::main]` function.
-pub async fn run(assets: Assets, first: Box<dyn Screen>) {
+/// `setup_ui` runs once to set the egui theme and fonts.
+pub async fn run(assets: Assets, setup_ui: impl FnOnce(&egui::Context), first: Box<dyn Screen>) {
+    egui_macroquad::cfg(setup_ui);
     let mut stack = ScreenStack::new(first);
     while !stack.is_empty() {
         // One egui pass per frame: the top screen builds its UI there.
-        egui_macroquad::ui(|ui| stack.update(ui, &assets));
+        egui_macroquad::ui(|ui| {
+            let zoom = macroquad::window::screen_height() / UI_DESIGN_HEIGHT;
+            if zoom > 0.0 && (ui.zoom_factor() - zoom).abs() > f32::EPSILON {
+                ui.set_zoom_factor(zoom);
+            }
+            stack.update(ui, &assets);
+        });
         stack.draw(&assets);
         egui_macroquad::draw();
         macroquad::window::next_frame().await;
