@@ -4,6 +4,7 @@ mod combat_screen;
 mod theme;
 
 use combat_screen::{CombatScreen, FIGHTER_SHEET};
+use lanista_core::design_data::DesignData;
 use macroquad::prelude::*;
 use reesch::{Assets, Bindings, Button};
 
@@ -17,6 +18,9 @@ enum Action {
     /// Skip to the fight's result.
     Skip,
 }
+
+/// Seed of the duel shown at launch; another one is picked on screen.
+const FIRST_SEED: u64 = 42;
 
 fn window() -> Conf {
     Conf {
@@ -37,10 +41,7 @@ async fn main() {
         .load_texture(FIGHTER_SHEET)
         .await
         .expect("load the fighter spritesheet");
-    // ponytail: borrows the setup of the `simulate` tool; moves to
-    // `lanista_core` with the seed choice (phase 2, step 4).
-    let data = tools::design_data().expect("load the design data");
-    let arena = tools::random_duel(&data, 42);
+    let data = DesignData::load().expect("load the design data");
     let bindings = Bindings::new(vec![
         (Action::Quit, Button::Key(KeyCode::Escape)),
         (Action::SlowSpeed, Button::Key(KeyCode::Key1)),
@@ -51,7 +52,7 @@ async fn main() {
     reesch::run(
         assets,
         theme::apply,
-        Box::new(CombatScreen::new(arena, tools::MAX_TICKS, bindings)),
+        Box::new(CombatScreen::new(data, FIRST_SEED, bindings)),
     )
     .await;
 }

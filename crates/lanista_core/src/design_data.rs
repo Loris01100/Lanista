@@ -55,6 +55,18 @@ impl DesignData {
         })
     }
 
+    /// Reads `data/classes.ron` at run time, so balancing needs no rebuild.
+    ///
+    /// # Errors
+    /// If the file cannot be read or parsed.
+    // ponytail: path of the source tree; resolve next to the executable when
+    // packaging for Steam.
+    pub fn load() -> Result<Self, String> {
+        let path = concat!(env!("CARGO_MANIFEST_DIR"), "/../../data/classes.ron");
+        let text = std::fs::read_to_string(path).map_err(|e| format!("{path}: {e}"))?;
+        Self::from_ron(&text).map_err(|e| format!("{path}: {e}"))
+    }
+
     #[must_use]
     pub fn class(&self, id: ClassId) -> Option<&ClassData> {
         self.classes.get(usize::try_from(id.0).ok()?)

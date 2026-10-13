@@ -9,6 +9,7 @@ publish.workspace = true
 
 [dependencies]
 libm = "0.2.16"
+rand = { version = "0.10.3", default-features = false }
 rand_chacha = "0.10.0"
 ron = "0.12.2"
 serde = { version = "1.0.229", features = ["derive"] }

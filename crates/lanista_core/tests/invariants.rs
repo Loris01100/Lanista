@@ -3,22 +3,9 @@
 use lanista_core::ai::{CombatAi, UtilityAi};
 use lanista_core::combat::{Arena, RADIUS, Vec2, run, tick};
 use lanista_core::design_data::DesignData;
+use lanista_core::duel::{ARENA_SIZE, MAX_TICKS, STATS};
 use lanista_core::fighter::{ClassId, Fighter, FighterId, Stats};
 use proptest::prelude::*;
-
-/// One minute of fight.
-const MAX_TICKS: u32 = 1800;
-const SIZE: f64 = 20.0;
-
-/// Same stats as the tools, so only the classes make a difference.
-const STATS: Stats = Stats {
-    hp: 100,
-    melee_attack: 20,
-    ranged_attack: 20,
-    speed: 30,
-    melee_defense: 10,
-    ranged_defense: 10,
-};
 
 fn stats() -> impl Strategy<Value = Stats> {
     (
@@ -42,7 +29,7 @@ fn stats() -> impl Strategy<Value = Stats> {
 }
 
 fn position() -> impl Strategy<Value = Vec2> {
-    (RADIUS..SIZE - RADIUS, RADIUS..SIZE - RADIUS).prop_map(|(x, y)| Vec2::new(x, y))
+    (RADIUS..ARENA_SIZE - RADIUS, RADIUS..ARENA_SIZE - RADIUS).prop_map(|(x, y)| Vec2::new(x, y))
 }
 
 /// Class index and position of each fighter.
@@ -62,7 +49,7 @@ fn duel(setup: Setup, stats: [Stats; 2], seed: u64) -> (Arena, Vec<Box<dyn Comba
         })
         .collect();
     let ais: Vec<Box<dyn CombatAi>> = vec![Box::new(UtilityAi), Box::new(UtilityAi)];
-    (Arena::new(SIZE, SIZE, fighters, seed), ais)
+    (Arena::new(ARENA_SIZE, ARENA_SIZE, fighters, seed), ais)
 }
 
 proptest! {
@@ -79,8 +66,8 @@ proptest! {
                 prop_assert!(f.hp <= f.stats.hp);
                 prop_assert!(f.mana.current <= f.mana.max);
                 prop_assert!(f.endurance.current <= f.endurance.max);
-                prop_assert!((RADIUS..=SIZE - RADIUS).contains(&f.position.x));
-                prop_assert!((RADIUS..=SIZE - RADIUS).contains(&f.position.y));
+                prop_assert!((RADIUS..=ARENA_SIZE - RADIUS).contains(&f.position.x));
+                prop_assert!((RADIUS..=ARENA_SIZE - RADIUS).contains(&f.position.y));
             }
         }
     }

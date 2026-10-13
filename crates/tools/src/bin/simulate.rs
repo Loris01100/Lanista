@@ -2,8 +2,10 @@
 
 use std::process::ExitCode;
 
+use lanista_core::design_data::DesignData;
+use lanista_core::duel::{play, random_duel};
 use lanista_core::log::{Report, log_text};
-use tools::{design_data, option, play, random_duel};
+use tools::option;
 
 fn main() -> ExitCode {
     let seed = match option(std::env::args().skip(1), "--seed", 42) {
@@ -13,7 +15,7 @@ fn main() -> ExitCode {
             return ExitCode::from(2);
         }
     };
-    let data = match design_data() {
+    let data = match DesignData::load() {
         Ok(data) => data,
         Err(e) => {
             eprintln!("{e}");

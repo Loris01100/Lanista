@@ -9,8 +9,6 @@ publish.workspace = true
 
 [dependencies]
 lanista_core = { version = "0.1.0", path = "../lanista_core" }
-rand = { version = "0.10.3", default-features = false }
-rand_chacha = "0.10.0"
 rayon = "1.12.0"
 
 [lints]

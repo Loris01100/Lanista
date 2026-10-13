@@ -1,8 +1,10 @@
 //! Watching a fight: the logic runs at its fixed tick rate, fighters are drawn
 //! as animated sprites at positions interpolated between the last two ticks.
 
-use lanista_core::ai::{self, CombatAi, UtilityAi};
+use lanista_core::ai::{self, CombatAi};
 use lanista_core::combat::{self, Arena};
+use lanista_core::design_data::DesignData;
+use lanista_core::duel::{MAX_TICKS, random_duel, utility_ais};
 use lanista_core::log::EventKind;
 use macroquad::prelude::*;
 use reesch::{
@@ -58,9 +60,11 @@ impl Look {
 }
 
 pub struct CombatScreen {
+    data: DesignData,
+    /// Seed of the next fight, edited in the controls.
+    next_seed: u64,
     arena: Arena,
     ais: Vec<Box<dyn CombatAi>>,
-    max_ticks: u32,
     step: FixedStep,
     /// Fighter positions before the last tick, to interpolate from.
     previous: Vec<combat::Vec2>,
@@ -74,20 +78,9 @@ pub struct CombatScreen {
 }
 
 impl CombatScreen {
-    pub fn new(arena: Arena, max_ticks: u32, bindings: Bindings<Action>) -> Self {
-        let ais = arena
-            .fighters
-            .iter()
-            .map(|_| Box::new(UtilityAi) as Box<dyn CombatAi>)
-            .collect();
-        let looks = arena
-            .fighters
-            .iter()
-            .map(|_| Look {
-                pose: Pose::Idle,
-                player: AnimationPlayer::default(),
-            })
-            .collect();
+    /// The standard duel of `seed`, the same as `simulate --seed <seed>`.
+    pub fn new(data: DesignData, seed: u64, bindings: Bindings<Action>) -> Self {
+        let arena = random_duel(&data, seed);
         let animation = |row: u16, frame_time, looping| Animation {
             first: row * SHEET.columns,
             frames: 4,
@@ -95,14 +88,15 @@ impl CombatScreen {
             looping,
             markers: Vec::new(),
         };
-        Self {
+        let mut screen = Self {
+            data,
+            next_seed: seed,
+            ais: utility_ais(&arena),
             previous: positions(&arena),
             arena,
-            ais,
-            max_ticks,
             step: FixedStep::new(combat::TICKS_PER_SECOND),
             seen_events: 0,
-            looks,
+            looks: Vec::new(),
             // Same order as `Pose`.
             animations: [
                 animation(0, 0.25, true),
@@ -115,19 +109,41 @@ impl CombatScreen {
             ],
             bindings,
             speed: 1.0,
-        }
+        };
+        screen.start(seed);
+        screen
+    }
+
+    /// Starts the duel of `seed` from the beginning; the speed is kept.
+    fn start(&mut self, seed: u64) {
+        self.arena = random_duel(&self.data, seed);
+        self.ais = utility_ais(&self.arena);
+        self.previous = positions(&self.arena);
+        self.step = FixedStep::new(combat::TICKS_PER_SECOND);
+        self.seen_events = 0;
+        self.looks = self
+            .arena
+            .fighters
+            .iter()
+            .map(|_| Look {
+                pose: Pose::Idle,
+                player: AnimationPlayer::default(),
+            })
+            .collect();
     }
 
     /// Plays the rest of the fight at once, without drawing it.
     fn skip(&mut self) {
-        combat::run(&mut self.arena, &mut self.ais, self.max_ticks);
+        combat::run(&mut self.arena, &mut self.ais, MAX_TICKS);
         self.previous = positions(&self.arena);
         // No cast animation for hits nobody saw.
         self.seen_events = self.arena.log.len();
     }
 
-    /// Speed buttons, then the result once the fight is over.
+    /// Speed buttons, then the result once the fight is over; the seed of the
+    /// next fight.
     fn controls(&mut self, ui: &egui::Context) {
+        let mut start = false;
         egui::Window::new("Contrôles")
             .title_bar(false)
             .resizable(false)
@@ -144,8 +160,15 @@ impl CombatScreen {
                     } else {
                         ui.label(self.result());
                     }
+                    ui.separator();
+                    ui.label(format!("Graine {}", self.arena.seed));
+                    ui.add(egui::DragValue::new(&mut self.next_seed));
+                    start = ui.button("Lancer").clicked();
                 });
             });
+        if start {
+            self.start(self.next_seed);
+        }
     }
 
     fn result(&self) -> String {
@@ -159,7 +182,7 @@ impl CombatScreen {
     }
 
     fn running(&self) -> bool {
-        !self.arena.is_over() && self.arena.tick < self.max_ticks
+        !self.arena.is_over() && self.arena.tick < MAX_TICKS
     }
 
     fn animate(&mut self, dt: f32) {

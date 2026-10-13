@@ -11,7 +11,6 @@ publish.workspace = true
 lanista_core = { version = "0.1.0", path = "../lanista_core" }
 macroquad = "0.4.16"
 reesch = { version = "0.1.0", path = "../reesch" }
-tools = { version = "0.1.0", path = "../tools" }
 
 [lints]
 workspace = true

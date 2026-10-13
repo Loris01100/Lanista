@@ -1019,7 +1019,6 @@ dependencies = [
  "lanista_core",
  "macroquad",
  "reesch",
- "tools",
 ]
 
 [[package]]
@@ -1029,6 +1028,7 @@ dependencies = [
  "insta",
  "libm",
  "proptest",
+ "rand",
  "rand_chacha",
  "ron",
  "serde",
@@ -2293,8 +2293,6 @@ name = "tools"
 version = "0.1.0"
 dependencies = [
  "lanista_core",
- "rand",
- "rand_chacha",
  "rayon",
 ]
 

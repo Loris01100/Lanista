@@ -4,20 +4,9 @@
 use lanista_core::ai::{CombatAi, UtilityAi};
 use lanista_core::combat::{Arena, Vec2, run};
 use lanista_core::design_data::DesignData;
-use lanista_core::fighter::{ClassId, Fighter, FighterId, Stats};
+use lanista_core::duel::{MAX_TICKS, STATS};
+use lanista_core::fighter::{ClassId, Fighter, FighterId};
 use lanista_core::log::{Report, log_text};
-
-/// One minute of fight.
-const MAX_TICKS: u32 = 1800;
-
-const STATS: Stats = Stats {
-    hp: 100,
-    melee_attack: 20,
-    ranged_attack: 20,
-    speed: 30,
-    melee_defense: 10,
-    ranged_defense: 10,
-};
 
 /// A duel between utility AIs on a 20 × 20 m floor, starting 14 m apart.
 fn duel(classes: [u32; 2], seed: u64) -> String {
