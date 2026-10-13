@@ -26,9 +26,12 @@ impl FixedStep {
     }
 
     /// Adds the time of the last frame, in seconds, and returns how many
-    /// logic ticks to run now.
+    /// logic ticks to run now. A time that is not a finite number is ignored:
+    /// a NaN would stick in the accumulator and stop the logic for good.
     pub fn advance(&mut self, frame_time: f64) -> u32 {
-        self.accumulator += frame_time.clamp(0.0, MAX_FRAME_TIME);
+        if frame_time.is_finite() {
+            self.accumulator += frame_time.clamp(0.0, MAX_FRAME_TIME);
+        }
         let mut ticks = 0;
         while self.accumulator >= self.tick_duration {
             self.accumulator -= self.tick_duration;
@@ -70,6 +73,16 @@ mod tests {
         let mut step = FixedStep::new(30);
         assert_eq!(step.advance(10.0), 7); // 0.25 s at 30 ticks per second
         assert!(step.alpha() < 1.0);
+    }
+
+    #[test]
+    fn non_finite_frame_time_is_ignored() {
+        let mut step = FixedStep::new(30);
+        for time in [f64::NAN, f64::INFINITY, f64::NEG_INFINITY] {
+            assert_eq!(step.advance(time), 0);
+        }
+        // Still ticking afterwards.
+        assert_eq!(step.advance(1.0 / 30.0), 1);
     }
 
     #[test]
