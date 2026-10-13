@@ -97,7 +97,8 @@ mod tests {
     use super::*;
     use crate::combat::tick;
     use crate::design_data::DesignData;
-    use crate::fighter::{ClassId, Stats, test_fighter};
+    use crate::duel::STATS;
+    use crate::fighter::{ClassId, test_fighter};
 
     #[test]
     fn waits_when_alone() {
@@ -140,17 +141,6 @@ mod tests {
         DesignData::from_ron(include_str!("../../../data/classes.ron")).unwrap()
     }
 
-    fn stats() -> Stats {
-        Stats {
-            hp: 100,
-            melee_attack: 20,
-            ranged_attack: 20,
-            speed: 30,
-            melee_defense: 10,
-            ranged_defense: 10,
-        }
-    }
-
     #[test]
     fn picks_the_strongest_ready_spell() {
         let data = shipped_classes();
@@ -160,14 +150,14 @@ mod tests {
                 FighterId(0),
                 ClassId(0),
                 murmillo,
-                stats(),
+                STATS,
                 Vec2::new(5.0, 5.0),
             ),
             Fighter::new(
                 FighterId(1),
                 ClassId(0),
                 murmillo,
-                stats(),
+                STATS,
                 Vec2::new(6.5, 5.0),
             ),
         ];
@@ -190,14 +180,14 @@ mod tests {
                 FighterId(0),
                 ClassId(0),
                 &data.classes[0],
-                stats(),
+                STATS,
                 Vec2::new(3.0, 10.0),
             ),
             Fighter::new(
                 FighterId(1),
                 ClassId(1),
                 &data.classes[1],
-                stats(),
+                STATS,
                 Vec2::new(17.0, 10.0),
             ),
         ];
