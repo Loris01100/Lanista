@@ -24,14 +24,14 @@ cargo fmt --all --check
 cargo clippy --workspace --all-targets -- -D warnings
 cargo machete                        # unused dependencies
 cargo deny check                     # advisories, licenses, sources (deny.toml)
-cargo llvm-cov --workspace --lcov --output-path lcov.info  # coverage for SonarQube Cloud, before the scan
+cargo llvm-cov --workspace --lcov --output-path lcov.info  # coverage for SonarQube Cloud, before a local scan
 ```
 
 On Linux, linking `lanista` needs the ALSA headers (`libasound2-dev`) for macroquad's audio.
 
 Python module `lanista_py` (PyO3, cdylib, no Rust tests): create `python/.venv` once (`py -m venv python/.venv`, then `pip install maturin` inside it), activate it, then `maturin develop -m crates/lanista_py/Cargo.toml` and `python -c "import lanista_py"`.
 
-CI ([.github/workflows/ci.yml](.github/workflows/ci.yml)) runs all of the above; clippy and tests run on both Windows and Linux so determinism breaks show up. Any clippy warning fails CI, and the `pedantic` group is on for the whole workspace (`[workspace.lints.clippy]` in the root `Cargo.toml`; each crate has `[lints] workspace = true`, which a new crate must add too). Fix a lint rather than silencing it, or use a local `#[expect(clippy::…, reason = "…")]`. Package metadata (edition, authors, repository, `license-file`, `publish = false`) lives in `[workspace.package]` and each crate inherits it with `<field>.workspace = true`; a new crate must do the same. `publish = false` is what lets `deny.toml` skip license checks for workspace crates. The code is proprietary (all rights reserved, see `LICENSE`).
+CI ([.github/workflows/ci.yml](.github/workflows/ci.yml)) runs all of the above; clippy and tests run on both Windows and Linux so determinism breaks show up. Each push to `main` also runs the SonarQube Cloud analysis with coverage (`sonar` job, `sonar-project.properties`, `SONAR_TOKEN` repository secret; automatic analysis is off in SonarQube Cloud). Any clippy warning fails CI, and the `pedantic` group is on for the whole workspace (`[workspace.lints.clippy]` in the root `Cargo.toml`; each crate has `[lints] workspace = true`, which a new crate must add too). Fix a lint rather than silencing it, or use a local `#[expect(clippy::…, reason = "…")]`. Package metadata (edition, authors, repository, `license-file`, `publish = false`) lives in `[workspace.package]` and each crate inherits it with `<field>.workspace = true`; a new crate must do the same. `publish = false` is what lets `deny.toml` skip license checks for workspace crates. The code is proprietary (all rights reserved, see `LICENSE`).
 
 `[profile.dev.package."*"] opt-level = 2` in the root `Cargo.toml` is deliberate: simulations are too slow with unoptimized dependencies in debug.
 
