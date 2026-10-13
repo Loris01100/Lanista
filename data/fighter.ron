@@ -69,4 +69,26 @@
         surrender_percent_least_determined: 50,
         surrender_percent_most_determined: 0,
     ),
+    morale: (
+        // Morale goes from 0 to 100, neutral at 50.
+        victory: 10,
+        defeat: 10,
+        injury: 8,
+        illness: 5,
+        // Morale gained per fame point gained, in percent.
+        fame_percent: 50,
+        // Bonus on every stat at morale 100, malus at 0, in percent.
+        combat_percent: 5,
+    ),
+    fame: (
+        // Fame goes from 0 to 100.
+        victory: 5,
+        victory_against_stronger: 5,
+        spectacular_hit: 1,
+        // A hit is spectacular from this percentage of the target's max HP.
+        spectacular_hit_percent: 30,
+        surrender: 8,
+        // A fight stopped by the time limit, for every fighter in it.
+        dull_fight: 3,
+    ),
 )

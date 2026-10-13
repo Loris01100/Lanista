@@ -1,7 +1,9 @@
 pub mod care;
+pub mod fame;
 pub mod form;
 pub mod illness;
 pub mod injury;
+pub mod morale;
 pub mod personality;
 
 use rand::{Rng, RngExt};
