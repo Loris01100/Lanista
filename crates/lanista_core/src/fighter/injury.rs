@@ -3,8 +3,8 @@
 use rand::{Rng, RngExt};
 use serde::Deserialize;
 
-use crate::fighter::Stats;
 use crate::fighter::form::{Form, FormRules};
+use crate::fighter::{Stats, percent_of, pick};
 
 /// Left or right: a fighter's dominant hand, or the side of an arm or leg.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
@@ -67,7 +67,7 @@ impl Injury {
             Severity::Severe => rules.severity_percent.severe,
             Severity::Permanent => 100,
         };
-        map_stats(base, |value| value.saturating_mul(percent) / 100)
+        base.map(|value| value.saturating_mul(percent) / 100)
     }
 }
 
@@ -141,45 +141,11 @@ pub fn injured_stats(
         .iter()
         .map(|injury| injury.malus(dominant, rules))
         .fold(Stats::default(), |sum, malus| {
-            zip_stats(sum, malus, u32::saturating_add)
+            sum.zip(malus, u32::saturating_add)
         });
-    zip_stats(stats, total, |value, percent| {
-        let kept = u64::from(100 - percent.min(rules.max_malus).min(100));
-        u32::try_from(u64::from(value) * kept / 100).unwrap_or(value)
+    stats.zip(total, |value, percent| {
+        percent_of(value, 100 - percent.min(rules.max_malus).min(100))
     })
-}
-
-/// A value drawn among `choices` with a chance proportional to its weight.
-/// Falls back to the last choice when all weights are 0.
-fn pick<R: Rng + ?Sized, T: Copy>(rng: &mut R, choices: &[(u32, T)]) -> T {
-    let total: u32 = choices.iter().map(|(weight, _)| weight).sum();
-    let mut draw = if total == 0 {
-        0
-    } else {
-        rng.random_range(0..total)
-    };
-    for &(weight, value) in choices {
-        if draw < weight {
-            return value;
-        }
-        draw -= weight;
-    }
-    choices[choices.len() - 1].1
-}
-
-fn map_stats(stats: Stats, f: impl Fn(u32) -> u32) -> Stats {
-    zip_stats(stats, stats, |value, _| f(value))
-}
-
-fn zip_stats(a: Stats, b: Stats, f: impl Fn(u32, u32) -> u32) -> Stats {
-    Stats {
-        hp: f(a.hp, b.hp),
-        melee_attack: f(a.melee_attack, b.melee_attack),
-        ranged_attack: f(a.ranged_attack, b.ranged_attack),
-        speed: f(a.speed, b.speed),
-        melee_defense: f(a.melee_defense, b.melee_defense),
-        ranged_defense: f(a.ranged_defense, b.ranged_defense),
-    }
 }
 
 /// Injury odds, healing times and maluses, read from `data/fighter.ron`.

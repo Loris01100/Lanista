@@ -1,6 +1,8 @@
 pub mod form;
+pub mod illness;
 pub mod injury;
 
+use rand::{Rng, RngExt};
 use serde::Deserialize;
 
 use crate::ai::Action;
@@ -16,7 +18,7 @@ pub struct FighterId(pub u32);
 pub struct ClassId(pub u32);
 
 /// The six stats of the design plan; its French abbreviation is given for each.
-/// Read from `data/` as percentages (injury maluses), where a missing stat is 0.
+/// Read from `data/` as percentages (injury and illness maluses), where a missing stat is 0.
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Deserialize)]
 #[serde(default, deny_unknown_fields)]
 pub struct Stats {
@@ -32,6 +34,50 @@ pub struct Stats {
     pub melee_defense: u32,
     /// DL: ranged damage reduction.
     pub ranged_defense: u32,
+}
+
+impl Stats {
+    /// `f` applied to every stat.
+    #[must_use]
+    pub fn map(self, f: impl Fn(u32) -> u32) -> Self {
+        self.zip(self, |value, _| f(value))
+    }
+
+    /// `f` applied to each stat of `self` and the same stat of `other`.
+    #[must_use]
+    pub fn zip(self, other: Self, f: impl Fn(u32, u32) -> u32) -> Self {
+        Self {
+            hp: f(self.hp, other.hp),
+            melee_attack: f(self.melee_attack, other.melee_attack),
+            ranged_attack: f(self.ranged_attack, other.ranged_attack),
+            speed: f(self.speed, other.speed),
+            melee_defense: f(self.melee_defense, other.melee_defense),
+            ranged_defense: f(self.ranged_defense, other.ranged_defense),
+        }
+    }
+}
+
+/// `percent` % of `value`, rounded down, in integers so every platform agrees.
+pub(crate) fn percent_of(value: u32, percent: u32) -> u32 {
+    u32::try_from(u64::from(value) * u64::from(percent) / 100).unwrap_or(u32::MAX)
+}
+
+/// A value drawn among `choices` with a chance proportional to its weight.
+/// Falls back to the last choice when all weights are 0.
+pub(crate) fn pick<R: Rng + ?Sized, T: Copy>(rng: &mut R, choices: &[(u32, T)]) -> T {
+    let total: u32 = choices.iter().map(|(weight, _)| weight).sum();
+    let mut draw = if total == 0 {
+        0
+    } else {
+        rng.random_range(0..total)
+    };
+    for &(weight, value) in choices {
+        if draw < weight {
+            return value;
+        }
+        draw -= weight;
+    }
+    choices[choices.len() - 1].1
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

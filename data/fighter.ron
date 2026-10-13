@@ -40,4 +40,19 @@
         // Highest percentage of a stat all injuries together can take off.
         max_malus: 80,
     ),
+    illness: (
+        // Chance of falling ill per week at form 100, raised by the risk formula.
+        chance_per_week: 0.05,
+        // Relative chances of each level.
+        level_weights: (mild: 70, moderate: 25, severe: 5),
+        // Lowest and highest weeks to heal without care (at least 1).
+        weeks: (mild: (1, 2), moderate: (3, 5), severe: (6, 8)),
+        // Percentage taken off every stat.
+        malus: (mild: 5, moderate: 15, severe: 30),
+        // Percentage of the usual form gain a week of rest gives.
+        rest_percent: (mild: 100, moderate: 50, severe: 25),
+        // Fighting with a severe illness may make it last longer.
+        worsening_chance: 0.5,
+        worsening_weeks: (2, 4),
+    ),
 )
