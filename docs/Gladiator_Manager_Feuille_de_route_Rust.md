@@ -244,7 +244,7 @@ Objectif : la crate `moteur`, générique, et un premier rendu du combat.
 
 ### Phase 3 — Le combattant complet
 
-- Forme (0 à 100) et formule de risque du plan de conception.
+- Forme (0 à 100) et formule de risque du plan de conception. Fait : module `lanista_core::fighter::form`. `Form` garde une valeur de 0 à 100 ; `Form::after(FormEvent, &FormRules)` applique un combat, une défense de titre, une semaine d'entraînement (pertes) ou de repos (gain), sans sortir des bornes ; `Form::risk(base, &FormRules)` donne `base × (1 + k × (1 − forme / 100))`, plafonné à 1. Les valeurs sont des données de design dans `data/fighter.ron` (k = 2 ; provisoirement combat −20, défense de titre −30, entraînement −5, repos +15, à régler pendant l'équilibrage), lu avec `data/classes.ron` par `DesignData` (`DesignData::from_ron(classes, fighter)`, champ `fighter.form`). Tests : valeurs exactes de la formule (risque de base à forme 100, doublé à 50, triplé à 0) et `proptest` (une forme plus basse ne baisse jamais le risque, le risque reste une probabilité). La forme n'est pas encore portée par un combattant : elle le sera avec le combattant de carrière de cette phase.
 - Blessures avec localisation et gravité, main dominante, blessures permanentes.
 - Maladies sur trois niveaux.
 - Soins décidés par le joueur.

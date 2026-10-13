@@ -1,14 +1,23 @@
-//! Design data (classes, spells) read from the RON files of `data/`.
+//! Design data (classes, spells, fighter rules) read from the RON files of `data/`.
 
 use serde::Deserialize;
 
 use crate::combat::Range;
 use crate::fighter::ClassId;
+use crate::fighter::form::FormRules;
 
 /// Everything read from `data/`. `ClassId(i)` is the class at index `i` of `classes`.
 #[derive(Debug, Clone, PartialEq)]
 pub struct DesignData {
     pub classes: Vec<ClassData>,
+    pub fighter: FighterRules,
+}
+
+/// Rules of the fighter's physical state, from `data/fighter.ron`.
+#[derive(Debug, Clone, PartialEq, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct FighterRules {
+    pub form: FormRules,
 }
 
 #[derive(Debug, Clone, PartialEq, Deserialize)]
@@ -45,26 +54,29 @@ pub enum Cost {
 }
 
 impl DesignData {
-    /// Reads the content of `data/classes.ron`.
+    /// Reads the content of `data/classes.ron` and `data/fighter.ron`.
     ///
     /// # Errors
-    /// If the text is not valid RON or does not match the expected fields.
-    pub fn from_ron(classes: &str) -> Result<Self, ron::error::SpannedError> {
+    /// If a text is not valid RON or does not match the expected fields.
+    pub fn from_ron(classes: &str, fighter: &str) -> Result<Self, ron::error::SpannedError> {
         Ok(Self {
             classes: ron::from_str(classes)?,
+            fighter: ron::from_str(fighter)?,
         })
     }
 
-    /// Reads `data/classes.ron` at run time, so balancing needs no rebuild.
+    /// Reads `data/classes.ron` and `data/fighter.ron` at run time, so balancing needs no rebuild.
     ///
     /// # Errors
-    /// If the file cannot be read or parsed.
+    /// If a file cannot be read or parsed.
     // ponytail: path of the source tree; resolve next to the executable when
     // packaging for Steam.
     pub fn load() -> Result<Self, String> {
-        let path = concat!(env!("CARGO_MANIFEST_DIR"), "/../../data/classes.ron");
-        let text = std::fs::read_to_string(path).map_err(|e| format!("{path}: {e}"))?;
-        Self::from_ron(&text).map_err(|e| format!("{path}: {e}"))
+        let read = |path: &str| std::fs::read_to_string(path).map_err(|e| format!("{path}: {e}"));
+        let classes = concat!(env!("CARGO_MANIFEST_DIR"), "/../../data/classes.ron");
+        let fighter = concat!(env!("CARGO_MANIFEST_DIR"), "/../../data/fighter.ron");
+        Self::from_ron(&read(classes)?, &read(fighter)?)
+            .map_err(|e| format!("{classes} or {fighter}: {e}"))
     }
 
     #[must_use]
@@ -78,10 +90,11 @@ mod tests {
     use super::*;
 
     const CLASSES: &str = include_str!("../../../data/classes.ron");
+    const FIGHTER: &str = include_str!("../../../data/fighter.ron");
 
     #[test]
     fn shipped_data_loads() {
-        let data = DesignData::from_ron(CLASSES).unwrap();
+        let data = DesignData::from_ron(CLASSES, FIGHTER).unwrap();
         assert_eq!(data.classes.len(), 2);
         for class in &data.classes {
             assert_eq!(class.spells.len(), 3, "{}", class.name);
@@ -90,7 +103,7 @@ mod tests {
 
     #[test]
     fn finds_a_class_by_id() {
-        let data = DesignData::from_ron(CLASSES).unwrap();
+        let data = DesignData::from_ron(CLASSES, FIGHTER).unwrap();
         assert_eq!(data.class(ClassId(1)), data.classes.get(1));
         assert_eq!(data.class(ClassId(2)), None);
     }
@@ -98,6 +111,12 @@ mod tests {
     #[test]
     fn rejects_unknown_fields() {
         let typo = r#"[(name: "X", max_mana: 0, max_endurance: 0, spels: [])]"#;
-        assert!(DesignData::from_ron(typo).is_err());
+        assert!(DesignData::from_ron(typo, FIGHTER).is_err());
+    }
+
+    #[test]
+    fn shipped_form_rules_triple_risk_at_form_0() {
+        let data = DesignData::from_ron(CLASSES, FIGHTER).unwrap();
+        assert!((data.fighter.form.risk_factor - 2.0).abs() < f64::EPSILON);
     }
 }

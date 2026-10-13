@@ -1,0 +1,13 @@
+// Rules of the fighter's physical state: placeholder values, to tune while balancing.
+(
+    form: (
+        // k of the risk formula: injury and illness risk is tripled at form 0 with k = 2.
+        risk_factor: 2.0,
+        // Form lost per fight, per title defense and per week of training,
+        // and recovered per week of rest (form goes from 0 to 100).
+        fight: 20,
+        title_defense: 30,
+        training: 5,
+        rest: 15,
+    ),
+)

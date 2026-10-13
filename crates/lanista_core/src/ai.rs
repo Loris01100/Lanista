@@ -138,7 +138,11 @@ mod tests {
     }
 
     fn shipped_classes() -> DesignData {
-        DesignData::from_ron(include_str!("../../../data/classes.ron")).unwrap()
+        DesignData::from_ron(
+            include_str!("../../../data/classes.ron"),
+            include_str!("../../../data/fighter.ron"),
+        )
+        .unwrap()
     }
 
     #[test]

@@ -40,7 +40,11 @@ fn setup() -> impl Strategy<Value = Setup> {
 }
 
 fn duel(setup: Setup, stats: [Stats; 2], seed: u64) -> (Arena, Vec<Box<dyn CombatAi>>) {
-    let data = DesignData::from_ron(include_str!("../../../data/classes.ron")).unwrap();
+    let data = DesignData::from_ron(
+        include_str!("../../../data/classes.ron"),
+        include_str!("../../../data/fighter.ron"),
+    )
+    .unwrap();
     let fighters = (0..2u32)
         .zip(setup.into_iter().zip(stats))
         .map(|(id, ((class, position), stats))| {

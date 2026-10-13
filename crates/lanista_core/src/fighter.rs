@@ -1,3 +1,5 @@
+pub mod form;
+
 use crate::ai::Action;
 use crate::combat::Vec2;
 use crate::design_data::{ClassData, Cost, SpellData};
