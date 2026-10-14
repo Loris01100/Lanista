@@ -2288,6 +2288,67 @@ mod tests {
         }
     }
 
+    /// The milestone of phase 5: seasons follow one another where rankings, champions and
+    /// markets change without the player.
+    #[test]
+    fn three_seasons_live_without_the_player() {
+        let data = data();
+        let mut state = GameState::new(7, &data);
+        state.fighters[0].status = Status::Retired;
+        let start = state.clone();
+        let season = u64::from(data.calendar.season_weeks());
+        let wanted = usize::try_from(data.world.roster.wanted).unwrap();
+        let mut title_changes = vec![0; state.colosseums.len()];
+        let mut leaders = Vec::new();
+        for week in 1..=3 * season {
+            let summary = next_week(&mut state, &Decisions::default(), &data);
+            for (c, news) in summary.titles {
+                if !matches!(news, TitleNews::Fight { result, .. } if title_kept(result)) {
+                    title_changes[c] += 1;
+                }
+            }
+            // A club that loses a fighter after its signings (sold to another, killed in
+            // a title defense) recruits the next week.
+            for rival in &state.rivals {
+                assert!(rival.money >= 0, "week {week}: {}", rival.money);
+                assert!(rival.active() + 1 >= wanted, "week {week}");
+            }
+            if week % season == 0 {
+                let rosters = state.rosters();
+                let firsts: Vec<Contender> = state
+                    .colosseums
+                    .iter()
+                    .map(|c| c.active_ranking(rosters).next().unwrap().contender)
+                    .collect();
+                leaders.push(firsts);
+            }
+        }
+        // Every title changed hands, and the first ranks are not those of the first season.
+        assert!(title_changes.iter().all(|&n| n > 0), "{title_changes:?}");
+        assert_ne!(leaders[0], leaders[2]);
+        // The clubs replaced those who died or retired, and bought from one another.
+        for (rival, before) in state.rivals.iter().zip(&start.rivals) {
+            assert!(rival.fighters.len() > before.fighters.len());
+        }
+        let sold = state
+            .rivals
+            .iter()
+            .flat_map(|r| &r.fighters)
+            .filter(|f| f.status == Status::Sold)
+            .count();
+        assert!(sold > 0);
+        // Three off-seasons of rookies, some signed by the clubs.
+        let rookie_age = data.economy.market.rookie_age;
+        let young = state
+            .rivals
+            .iter()
+            .flat_map(|r| &r.fighters)
+            .filter(|f| f.status == Status::Active && f.age <= rookie_age + 2)
+            .count();
+        assert!(young > 0);
+        assert_eq!(state.date(&data).season, 4);
+    }
+
     #[test]
     fn rival_fighters_follow_their_clubs_rules_and_the_club_meets_those_registered() {
         let data = data();
