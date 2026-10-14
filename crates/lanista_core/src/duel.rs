@@ -27,7 +27,7 @@ pub const STATS: Stats = Stats {
 /// fighter 1 in the right quarter. The arena gets the same seed.
 ///
 /// # Panics
-/// If `data` has no class.
+/// If `data` has no class, which [`DesignData::from_ron`] rejects: a bug, not a data error.
 #[must_use]
 pub fn random_duel(data: &DesignData, seed: u64) -> Arena {
     assert!(!data.classes.is_empty(), "no class in the design data");

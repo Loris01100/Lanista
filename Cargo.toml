@@ -4,10 +4,16 @@ members = ["crates/*"]
 
 [workspace.package]
 edition = "2024"
+# Highest `rust-version` among the dependencies (tract).
+rust-version = "1.91"
 authors = ["Loris01100"]
 repository = "https://github.com/Loris01100/Lanista"
 license-file = "LICENSE"
 publish = false
+
+[profile.release]
+lto = "thin"
+codegen-units = 1
 
 [profile.dev.package."*"]
 opt-level = 2

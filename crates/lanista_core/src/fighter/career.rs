@@ -52,7 +52,7 @@ impl CareerFighter {
     /// no fame, full form, healthy.
     ///
     /// # Panics
-    /// If `data` has no class.
+    /// If `data` has no class, which [`DesignData::from_ron`] rejects: a bug, not a data error.
     pub fn random<R: Rng + ?Sized>(rng: &mut R, data: &DesignData) -> Self {
         assert!(!data.classes.is_empty(), "no class in the design data");
         let rules = &data.fighter;

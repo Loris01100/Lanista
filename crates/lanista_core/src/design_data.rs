@@ -71,30 +71,145 @@ pub enum Cost {
     Endurance(u32),
 }
 
+const CLASSES_FILE: &str = "data/classes.ron";
+const FIGHTER_FILE: &str = "data/fighter.ron";
+
+/// Why the design data could not be loaded; `file` is the file at fault.
+#[derive(Debug)]
+pub enum LoadError {
+    Io {
+        file: &'static str,
+        source: std::io::Error,
+    },
+    /// Not valid RON, or not the expected fields.
+    Ron {
+        file: &'static str,
+        source: ron::error::SpannedError,
+    },
+    /// Parsed, but a value would break the game, e.g. a range whose lowest is above its highest.
+    Invalid {
+        file: &'static str,
+        field: &'static str,
+        problem: &'static str,
+    },
+}
+
+impl std::fmt::Display for LoadError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Io { file, source } => write!(f, "{file}: {source}"),
+            Self::Ron { file, source } => write!(f, "{file}: {source}"),
+            Self::Invalid {
+                file,
+                field,
+                problem,
+            } => write!(f, "{file}: {field}: {problem}"),
+        }
+    }
+}
+
+impl std::error::Error for LoadError {
+    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
+        match self {
+            Self::Io { source, .. } => Some(source),
+            Self::Ron { source, .. } => Some(source),
+            Self::Invalid { .. } => None,
+        }
+    }
+}
+
 impl DesignData {
     /// Reads the content of `data/classes.ron` and `data/fighter.ron`.
     ///
     /// # Errors
-    /// If a text is not valid RON or does not match the expected fields.
-    pub fn from_ron(classes: &str, fighter: &str) -> Result<Self, ron::error::SpannedError> {
-        Ok(Self {
-            classes: ron::from_str(classes)?,
-            fighter: ron::from_str(fighter)?,
-        })
+    /// If a text is not valid RON or does not match the expected fields, or if a value
+    /// would make the game panic later (no class, a range upside down, a chance outside 0 to 1).
+    pub fn from_ron(classes: &str, fighter: &str) -> Result<Self, LoadError> {
+        let data = Self {
+            classes: ron::from_str(classes).map_err(|source| LoadError::Ron {
+                file: CLASSES_FILE,
+                source,
+            })?,
+            fighter: ron::from_str(fighter).map_err(|source| LoadError::Ron {
+                file: FIGHTER_FILE,
+                source,
+            })?,
+        };
+        data.validate()?;
+        Ok(data)
     }
 
     /// Reads `data/classes.ron` and `data/fighter.ron` at run time, so balancing needs no rebuild.
     ///
     /// # Errors
-    /// If a file cannot be read or parsed.
+    /// If a file cannot be read, or [`DesignData::from_ron`] rejects it.
     // ponytail: path of the source tree; resolve next to the executable when
     // packaging for Steam.
-    pub fn load() -> Result<Self, String> {
-        let read = |path: &str| std::fs::read_to_string(path).map_err(|e| format!("{path}: {e}"));
-        let classes = concat!(env!("CARGO_MANIFEST_DIR"), "/../../data/classes.ron");
-        let fighter = concat!(env!("CARGO_MANIFEST_DIR"), "/../../data/fighter.ron");
-        Self::from_ron(&read(classes)?, &read(fighter)?)
-            .map_err(|e| format!("{classes} or {fighter}: {e}"))
+    pub fn load() -> Result<Self, LoadError> {
+        let read = |file: &'static str| {
+            let path = format!("{}/../../{file}", env!("CARGO_MANIFEST_DIR"));
+            std::fs::read_to_string(path).map_err(|source| LoadError::Io { file, source })
+        };
+        Self::from_ron(&read(CLASSES_FILE)?, &read(FIGHTER_FILE)?)
+    }
+
+    /// Rejects the values the rest of the game would panic on.
+    fn validate(&self) -> Result<(), LoadError> {
+        if self.classes.is_empty() {
+            return Err(LoadError::Invalid {
+                file: CLASSES_FILE,
+                field: "classes",
+                problem: "no class",
+            });
+        }
+        let rules = &self.fighter;
+        let ranges = [
+            ("career.start_age", rules.career.start_age),
+            (
+                "injury.healing_weeks.light",
+                rules.injury.healing_weeks.light,
+            ),
+            (
+                "injury.healing_weeks.medium",
+                rules.injury.healing_weeks.medium,
+            ),
+            (
+                "injury.healing_weeks.severe",
+                rules.injury.healing_weeks.severe,
+            ),
+            ("illness.weeks.mild", rules.illness.weeks.mild),
+            ("illness.weeks.moderate", rules.illness.weeks.moderate),
+            ("illness.weeks.severe", rules.illness.weeks.severe),
+            ("illness.worsening_weeks", rules.illness.worsening_weeks),
+            (
+                "progression.potential_headroom_percent",
+                rules.progression.potential_headroom_percent,
+            ),
+        ];
+        let chances = [
+            ("injury.chance_per_fight", rules.injury.chance_per_fight),
+            ("illness.chance_per_week", rules.illness.chance_per_week),
+            ("illness.worsening_chance", rules.illness.worsening_chance),
+        ];
+        let invalid = |field, problem| LoadError::Invalid {
+            file: FIGHTER_FILE,
+            field,
+            problem,
+        };
+        if let Some(&(field, _)) = ranges.iter().find(|(_, (min, max))| min > max) {
+            return Err(invalid(field, "lowest above highest"));
+        }
+        if let Some(&(field, _)) = chances
+            .iter()
+            .find(|(_, chance)| !(0.0..=1.0).contains(chance))
+        {
+            return Err(invalid(field, "not a chance from 0 to 1"));
+        }
+        // A negative factor would turn a tired fighter's chances negative.
+        if rules.form.risk_factor.is_nan() || rules.form.risk_factor < 0.0 {
+            return Err(invalid("form.risk_factor", "below 0"));
+        }
+        Ok(())
     }
 
     #[must_use]
@@ -129,7 +244,26 @@ mod tests {
     #[test]
     fn rejects_unknown_fields() {
         let typo = r#"[(name: "X", max_mana: 0, max_endurance: 0, spels: [])]"#;
-        assert!(DesignData::from_ron(typo, FIGHTER).is_err());
+        assert!(matches!(
+            DesignData::from_ron(typo, FIGHTER),
+            Err(LoadError::Ron {
+                file: CLASSES_FILE,
+                ..
+            })
+        ));
+    }
+
+    #[test]
+    fn rejects_values_the_game_would_panic_on() {
+        let field = |classes: &str, fighter: &str| match DesignData::from_ron(classes, fighter) {
+            Err(LoadError::Invalid { field, .. }) => field,
+            other => panic!("expected an invalid field, got {other:?}"),
+        };
+        assert_eq!(field("[]", FIGHTER), "classes");
+        let upside_down = FIGHTER.replacen("start_age: (20, 30)", "start_age: (30, 20)", 1);
+        assert_eq!(field(CLASSES, &upside_down), "career.start_age");
+        let not_a_chance = FIGHTER.replacen("worsening_chance: 0.5", "worsening_chance: 1.5", 1);
+        assert_eq!(field(CLASSES, &not_a_chance), "illness.worsening_chance");
     }
 
     #[test]
