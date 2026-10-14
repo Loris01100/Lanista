@@ -28,19 +28,26 @@ fn main() -> ExitCode {
         }
     };
     let mut state = GameState::new(seed, &data);
-    println!("seed {seed}");
+    println!("seed {seed}, money {}", state.money);
     print!("{}", describe(&state.fighters[0], &data));
     for week in 1..=weeks {
         let before = state.fighters[0].clone();
+        let money = state.money;
         // No plan: the club follows `suggested_plan`.
-        let Some(report) = next_week(&mut state, &Decisions::default(), &data).swap_remove(0)
-        else {
+        let mut summary = next_week(&mut state, &Decisions::default(), &data);
+        let Some(report) = summary.reports.swap_remove(0) else {
             break;
         };
         print!(
             "\n{}",
             week_text(week, &before, &state.fighters[0], &report, &data)
         );
+        let moves: Vec<String> = summary
+            .ledger
+            .iter()
+            .map(|t| format!("{:?} {:+}", t.flow, t.amount))
+            .collect();
+        println!("  money {money} -> {}: {}", state.money, moves.join(", "));
     }
     let fighter = &state.fighters[0];
     match fighter.status {
@@ -124,9 +131,6 @@ fn week_text(
         Activity::Fight => "fight",
     };
     let _ = writeln!(text, "week {week} (age {}): {activity}", before.age);
-    if report.care_cost > 0 {
-        let _ = writeln!(text, "  care: {} paid", report.care_cost);
-    }
     if let Some(fight) = &report.fight {
         let _ = writeln!(text, "  {}", fight_text(fight, data));
     }

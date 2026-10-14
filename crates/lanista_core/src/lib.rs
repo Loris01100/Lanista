@@ -3,6 +3,7 @@ pub mod calendar;
 pub mod combat;
 pub mod design_data;
 pub mod duel;
+pub mod economy;
 pub mod fighter;
 pub mod log;
 pub mod state;

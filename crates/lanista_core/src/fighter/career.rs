@@ -180,6 +180,17 @@ impl CareerFighter {
         Some(report)
     }
 
+    /// Price of caring for every injury and illness where care helps, without caring.
+    #[must_use]
+    pub fn care_cost(&self, rules: &FighterRules) -> u32 {
+        let injuries = self
+            .injuries
+            .iter()
+            .filter_map(|i| i.care_cost(&rules.care));
+        let illness = self.illness.and_then(|i| i.care_cost(&rules.care));
+        injuries.chain(illness).sum()
+    }
+
     /// Cares for every injury and illness where care helps; returns the total price.
     fn care(&mut self, rules: &FighterRules) -> u32 {
         let mut cost = 0_u32;
@@ -371,7 +382,7 @@ pub struct WeekPlan {
 #[derive(Debug, Clone, PartialEq)]
 pub struct WeekReport {
     pub plan: WeekPlan,
-    /// Price of the care given; paid from the club's money in phase 4.
+    /// Price of the care given; `state::next_week` takes it from the club's money.
     pub care_cost: u32,
     pub fight: Option<FightSummary>,
     pub new_injury: Option<Injury>,

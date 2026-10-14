@@ -1,0 +1,17 @@
+// Prices and purses: placeholder values, to tune while balancing.
+(
+    starting_money: 500,
+    // Each week, for each active fighter, even into debt.
+    upkeep: 10,
+    // Each training session.
+    training_cost: 5,
+    // The only colosseum until phase 5: low level and free to enter, so a club
+    // without money can always fight its way back.
+    colosseum: (
+        entry_fee: 0,
+        win_prize: 50,
+        // Paid win or lose: base + per_fame × (fame of both fighters).
+        receipts_base: 20,
+        receipts_per_fame: 1,
+    ),
+)

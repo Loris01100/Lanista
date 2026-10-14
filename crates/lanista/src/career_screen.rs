@@ -7,6 +7,7 @@ use std::rc::Rc;
 use lanista_core::calendar::SeasonPhase;
 use lanista_core::combat::Arena;
 use lanista_core::design_data::DesignData;
+use lanista_core::economy::{Flow, Transaction};
 use lanista_core::fighter::career::{
     Activity, CareerFighter, FightSummary, Status, WeekPlan, WeekReport, suggested_plan,
 };
@@ -61,14 +62,18 @@ impl CareerScreen {
             return None;
         }
         let before = self.fighter().clone();
-        let week = self.state.week;
+        let (week, money) = (self.state.week, self.state.money);
         let decisions = Decisions {
             plans: vec![self.plan],
+            hire_free_agent: false,
         };
-        let report = next_week(&mut self.state, &decisions, &self.data)
+        let mut summary = next_week(&mut self.state, &decisions, &self.data);
+        let report = summary
+            .reports
             .swap_remove(0)
             .expect("an active fighter plays the week");
-        let lines = week_lines(&before, self.fighter(), &report, &self.data);
+        let mut lines = week_lines(&before, self.fighter(), &report, &self.data);
+        lines.push(money_line(money, self.state.money, &summary.ledger));
         self.journal.insert(0, (week, lines));
         self.plan = suggested_plan(self.fighter(), self.state.week);
         report.fight.map(|fight| fight.start)
@@ -77,18 +82,6 @@ impl CareerScreen {
     /// The club's only fighter, followed by this screen.
     fn fighter(&self) -> &CareerFighter {
         &self.state.fighters[0]
-    }
-
-    /// Total price of caring for everything care would shorten.
-    fn care_cost(&self) -> u32 {
-        let care = &self.data.fighter.care;
-        let injuries = self
-            .fighter()
-            .injuries
-            .iter()
-            .filter_map(|i| i.care_cost(care));
-        let illness = self.fighter().illness.and_then(|i| i.care_cost(care));
-        injuries.chain(illness).sum()
     }
 
     fn sheet(&self, ui: &mut egui::Ui) {
@@ -162,6 +155,7 @@ impl CareerScreen {
             "Saison {}, semaine {} : {phase}",
             date.season, date.week
         ));
+        ui.label(format!("Argent : {}", self.state.money));
         if self.fighter().status != Status::Active {
             ui.label("La carrière est terminée.");
             return false;
@@ -171,13 +165,17 @@ impl CareerScreen {
                 ui.selectable_value(&mut self.plan.activity, activity, activity_name(activity));
             }
         });
-        let cost = self.care_cost();
+        let cost = self.fighter().care_cost(&self.data.fighter);
         if cost == 0 {
             self.plan.care = false;
             ui.add_enabled(
                 false,
                 egui::Checkbox::new(&mut self.plan.care, "Rien à soigner"),
             );
+        } else if i64::from(cost) > self.state.money {
+            self.plan.care = false;
+            let text = format!("Soigner (coût {cost}) : pas assez d'argent");
+            ui.add_enabled(false, egui::Checkbox::new(&mut self.plan.care, text));
         } else {
             ui.checkbox(&mut self.plan.care, format!("Soigner (coût {cost})"));
         }
@@ -332,6 +330,33 @@ fn change(name: &str, before: u32, after: u32) -> String {
     }
 }
 
+/// The club's money after the week and why it moved: `Argent 530 (+30) : recettes +20, …`.
+fn money_line(before: i64, after: i64, ledger: &[Transaction]) -> String {
+    let mut line = if before == after {
+        format!("Argent {after}")
+    } else {
+        format!("Argent {after} ({:+})", after - before)
+    };
+    let moves: Vec<String> = ledger
+        .iter()
+        .map(|t| {
+            let name = match t.flow {
+                Flow::Upkeep => "entretien",
+                Flow::Care => "soins",
+                Flow::Training => "entraînement",
+                Flow::EntryFee => "inscription",
+                Flow::WinPrize => "prime de victoire",
+                Flow::Receipts => "recettes",
+            };
+            format!("{name} {:+}", t.amount)
+        })
+        .collect();
+    if !moves.is_empty() {
+        line = format!("{line} : {}", moves.join(", "));
+    }
+    line
+}
+
 /// What a week changed, in the player's language.
 fn week_lines(
     before: &CareerFighter,
@@ -341,9 +366,6 @@ fn week_lines(
 ) -> Vec<String> {
     let dominant = after.dominant_hand;
     let mut lines = vec![activity_name(report.plan.activity).to_owned()];
-    if report.care_cost > 0 {
-        lines.push(format!("Soins : {}", report.care_cost));
-    }
     if let Some(fight) = &report.fight {
         lines.push(fight_text(fight, data));
     }
@@ -473,6 +495,10 @@ mod tests {
         assert!(
             first.contains(&"Forme 80 (-20), moral 40 (-10), renommée 0".to_owned()),
             "{first:?}"
+        );
+        assert_eq!(
+            first.last().unwrap(),
+            "Argent 510 (+10) : recettes +20, entretien -10"
         );
     }
 
