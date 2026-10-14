@@ -16,6 +16,7 @@ use crate::fighter::personality::Personality;
 use crate::fighter::progression::{ProgressEvent, age_decline, progress, random_potential};
 use crate::fighter::retirement::decides_to_retire;
 use crate::fighter::{ClassId, Condition, Fighter, FighterId, Stats};
+use crate::log::Report;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Status {
@@ -246,6 +247,7 @@ impl CareerFighter {
         let summary = FightSummary {
             seed,
             start,
+            report: Report::new(&arena),
             opponent,
             against_stronger: stronger,
             result: outcome.result,
@@ -400,6 +402,8 @@ pub struct FightSummary {
     /// The fight before its first tick, the career fighter as `FighterId(0)`:
     /// playing it with utility AIs gives this very fight, to watch it.
     pub start: Arena,
+    /// Damage dealt and taken and spells cast by each side, the career fighter first.
+    pub report: Report,
     pub opponent: CareerFighter,
     pub against_stronger: bool,
     pub result: FightResult,
@@ -556,6 +560,7 @@ mod tests {
         assert_eq!(replay.tick, 0);
         play(&mut replay);
         assert_eq!(replay.tick, fight.ticks);
+        assert_eq!(Report::new(&replay), fight.report);
         assert_eq!(!replay.fighters[0].is_alive(), fight.died);
     }
 

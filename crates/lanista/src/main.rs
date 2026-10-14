@@ -1,13 +1,14 @@
-//! The game: for now, one fighter's career followed week after week, its fights
-//! watched on screen, and the standard duel.
+//! The game: for now, one club managed week after week, its fights watched on
+//! screen, and the standard duel.
 
-mod career_screen;
+mod club_screen;
 mod combat_screen;
+mod texts;
 mod theme;
 
 use std::rc::Rc;
 
-use career_screen::CareerScreen;
+use club_screen::ClubScreen;
 use combat_screen::{DEATH_SOUND, FIGHTER_SHEET, HIT_SOUND, MUSIC};
 use lanista_core::design_data::DesignData;
 use macroquad::prelude::*;
@@ -22,11 +23,11 @@ enum Action {
     FastSpeed,
     /// Skip to the fight's result.
     Skip,
-    /// Play the career's next week.
+    /// Play the club's next week.
     NextWeek,
 }
 
-/// Seed of the career shown at launch, the one of `career --seed 7`.
+/// Seed of the game shown at launch, the one of `career --seed 7`.
 const CAREER_SEED: u64 = 7;
 
 fn window() -> Conf {
@@ -63,7 +64,7 @@ async fn main() {
     reesch::run(
         assets,
         theme::apply,
-        Box::new(CareerScreen::new(data, CAREER_SEED, bindings)),
+        Box::new(ClubScreen::new(data, CAREER_SEED, bindings)),
     )
     .await;
 }
