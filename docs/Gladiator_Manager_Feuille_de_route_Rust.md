@@ -38,7 +38,7 @@ Ce qui ne change pas : la règle d'or. La logique du jeu est séparée de l'affi
 | Mesures de performance | `criterion` | Vitesse de simulation |
 | Qualité | `rustfmt`, `clippy` | Lancés en CI |
 | Éditeur | VS Code + rust-analyzer + CodeLLDB | CodeLLDB pour le débogueur |
-| Sprites | Aseprite ou LibreSprite, Kenney.nl, OpenGameArt | Export en spritesheets PNG |
+| Sprites | Aseprite, Kenney.nl, OpenGameArt | Export en spritesheets PNG, formats dans [Formats_graphiques.md](Formats_graphiques.md) |
 | Versionnage | Git + Git LFS + GitHub | LFS pour les PNG, sons, fichiers Aseprite |
 
 Toutes les versions de crates sont figées par le `Cargo.lock`, versionné dans le dépôt puisque le projet produit un exécutable.
@@ -288,6 +288,7 @@ Objectif : la crate `moteur`, générique, et un premier rendu du combat.
 - Mêlée de 3 à 20 et King of the hill, sans alliance entre combattants d'un même club.
 - Équipement refusable, malus et bonus de renommée.
 - Types d'arène : sable qui ralentit, piliers qui bloquent les tirs, arène étroite.
+- Apparence aléatoire des combattants, pour les distinguer dans une mêlée à 20. Le personnage est composé de calques superposés (tête, corps, bras gauche, bras droit, jambe gauche, jambe droite), tous sur la même grille que la spritesheet du combattant ; un seul `AnimationPlayer` donne l'index d'image à tous les calques. Une variante par forme seulement (chauve, cheveux courts, longs…) : les couleurs (cheveux, peau, tunique) sont des teintes appliquées au dessin, à partir de sprites dessinés en gris clair. La tête peut n'être qu'une image par variante, avec un décalage par image d'animation pour suivre le corps. `lanista_core` tire une `Appearance` (indices de forme et de teinte) avec la graine du combattant et la garde dans la sauvegarde ; `lanista` dessine les calques. Les blessures et l'équipement refusé pourront s'ajouter comme calques par membre. Commencer avec 2 formes de cheveux et 3 teintes. Formats et export Aseprite : [Formats_graphiques.md](Formats_graphiques.md).
 - Render targets dans `reesch` : dessiner une scène dans une texture (repoussé de la phase 2, dont le jalon n'en a pas besoin).
 - Vue multi-combats : un combat principal en grand, les autres dans des render targets en vignettes cliquables.
 - Optimisations : IA appelée quelques fois par seconde, regroupement des sprites, mesure avec `criterion` d'une mêlée à 20.
