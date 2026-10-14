@@ -1,0 +1,3861 @@
+{
+  "version": 8,
+  "state": {
+    "week": 59,
+    "money": 730,
+    "fighters": [
+      {
+        "class": 0,
+        "stats": {
+          "hp": 88,
+          "melee_attack": 17,
+          "ranged_attack": 19,
+          "speed": 28,
+          "melee_defense": 11,
+          "ranged_defense": 8
+        },
+        "potential": {
+          "hp": 141,
+          "melee_attack": 21,
+          "ranged_attack": 26,
+          "speed": 45,
+          "melee_defense": 14,
+          "ranged_defense": 10
+        },
+        "dominant_hand": "Right",
+        "age": 22,
+        "weeks_this_year": 10,
+        "personality": {
+          "aggression": 85,
+          "caution": 36,
+          "showmanship": 36,
+          "determination": 49
+        },
+        "morale": 30,
+        "fame": 4,
+        "form": 52,
+        "injuries": [],
+        "illness": {
+          "level": "Mild",
+          "weeks_left": 2
+        },
+        "status": "Dead",
+        "record": {
+          "wins": 1,
+          "losses": 4,
+          "draws": 0
+        },
+        "observed_weeks": 0
+      },
+      {
+        "class": 1,
+        "stats": {
+          "hp": 117,
+          "melee_attack": 28,
+          "ranged_attack": 29,
+          "speed": 42,
+          "melee_defense": 14,
+          "ranged_defense": 10
+        },
+        "potential": {
+          "hp": 146,
+          "melee_attack": 30,
+          "ranged_attack": 36,
+          "speed": 44,
+          "melee_defense": 14,
+          "ranged_defense": 10
+        },
+        "dominant_hand": "Right",
+        "age": 27,
+        "weeks_this_year": 28,
+        "personality": {
+          "aggression": 24,
+          "caution": 18,
+          "showmanship": 45,
+          "determination": 31
+        },
+        "morale": 90,
+        "fame": 77,
+        "form": 52,
+        "injuries": [],
+        "illness": {
+          "level": "Mild",
+          "weeks_left": 2
+        },
+        "status": "Active",
+        "record": {
+          "wins": 16,
+          "losses": 5,
+          "draws": 0
+        },
+        "observed_weeks": 1
+      },
+      {
+        "class": 0,
+        "stats": {
+          "hp": 108,
+          "melee_attack": 23,
+          "ranged_attack": 22,
+          "speed": 31,
+          "melee_defense": 11,
+          "ranged_defense": 10
+        },
+        "potential": {
+          "hp": 144,
+          "melee_attack": 32,
+          "ranged_attack": 37,
+          "speed": 42,
+          "melee_defense": 13,
+          "ranged_defense": 12
+        },
+        "dominant_hand": "Right",
+        "age": 27,
+        "weeks_this_year": 7,
+        "personality": {
+          "aggression": 72,
+          "caution": 43,
+          "showmanship": 91,
+          "determination": 100
+        },
+        "morale": 78,
+        "fame": 18,
+        "form": 52,
+        "injuries": [],
+        "illness": null,
+        "status": "Dead",
+        "record": {
+          "wins": 2,
+          "losses": 1,
+          "draws": 0
+        },
+        "observed_weeks": 1
+      },
+      {
+        "class": 0,
+        "stats": {
+          "hp": 81,
+          "melee_attack": 23,
+          "ranged_attack": 18,
+          "speed": 25,
+          "melee_defense": 11,
+          "ranged_defense": 10
+        },
+        "potential": {
+          "hp": 102,
+          "melee_attack": 34,
+          "ranged_attack": 24,
+          "speed": 31,
+          "melee_defense": 11,
+          "ranged_defense": 13
+        },
+        "dominant_hand": "Right",
+        "age": 22,
+        "weeks_this_year": 9,
+        "personality": {
+          "aggression": 41,
+          "caution": 87,
+          "showmanship": 50,
+          "determination": 98
+        },
+        "morale": 61,
+        "fame": 12,
+        "form": 76,
+        "injuries": [],
+        "illness": null,
+        "status": "Dead",
+        "record": {
+          "wins": 1,
+          "losses": 1,
+          "draws": 0
+        },
+        "observed_weeks": 5
+      },
+      {
+        "class": 1,
+        "stats": {
+          "hp": 105,
+          "melee_attack": 20,
+          "ranged_attack": 28,
+          "speed": 32,
+          "melee_defense": 17,
+          "ranged_defense": 13
+        },
+        "potential": {
+          "hp": 144,
+          "melee_attack": 20,
+          "ranged_attack": 38,
+          "speed": 32,
+          "melee_defense": 18,
+          "ranged_defense": 15
+        },
+        "dominant_hand": "Right",
+        "age": 25,
+        "weeks_this_year": 25,
+        "personality": {
+          "aggression": 6,
+          "caution": 37,
+          "showmanship": 11,
+          "determination": 11
+        },
+        "morale": 95,
+        "fame": 72,
+        "form": 45,
+        "injuries": [
+          {
+            "location": "Body",
+            "severity": "Permanent",
+            "weeks_left": 0
+          }
+        ],
+        "illness": {
+          "level": "Mild",
+          "weeks_left": 1
+        },
+        "status": "Active",
+        "record": {
+          "wins": 9,
+          "losses": 0,
+          "draws": 9
+        },
+        "observed_weeks": 3
+      },
+      {
+        "class": 1,
+        "stats": {
+          "hp": 95,
+          "melee_attack": 23,
+          "ranged_attack": 19,
+          "speed": 33,
+          "melee_defense": 12,
+          "ranged_defense": 14
+        },
+        "potential": {
+          "hp": 141,
+          "melee_attack": 29,
+          "ranged_attack": 27,
+          "speed": 44,
+          "melee_defense": 12,
+          "ranged_defense": 15
+        },
+        "dominant_hand": "Left",
+        "age": 21,
+        "weeks_this_year": 0,
+        "personality": {
+          "aggression": 61,
+          "caution": 60,
+          "showmanship": 12,
+          "determination": 79
+        },
+        "morale": 61,
+        "fame": 40,
+        "form": 58,
+        "injuries": [
+          {
+            "location": {
+              "Arm": "Left"
+            },
+            "severity": "Permanent",
+            "weeks_left": 0
+          },
+          {
+            "location": "Body",
+            "severity": "Permanent",
+            "weeks_left": 0
+          }
+        ],
+        "illness": null,
+        "status": "Dead",
+        "record": {
+          "wins": 6,
+          "losses": 3,
+          "draws": 0
+        },
+        "observed_weeks": 1
+      },
+      {
+        "class": 0,
+        "stats": {
+          "hp": 96,
+          "melee_attack": 16,
+          "ranged_attack": 20,
+          "speed": 34,
+          "melee_defense": 13,
+          "ranged_defense": 12
+        },
+        "potential": {
+          "hp": 134,
+          "melee_attack": 25,
+          "ranged_attack": 28,
+          "speed": 45,
+          "melee_defense": 13,
+          "ranged_defense": 14
+        },
+        "dominant_hand": "Right",
+        "age": 30,
+        "weeks_this_year": 21,
+        "personality": {
+          "aggression": 98,
+          "caution": 8,
+          "showmanship": 12,
+          "determination": 31
+        },
+        "morale": 0,
+        "fame": 0,
+        "form": 49,
+        "injuries": [],
+        "illness": null,
+        "status": "Active",
+        "record": {
+          "wins": 0,
+          "losses": 6,
+          "draws": 0
+        },
+        "observed_weeks": 23
+      }
+    ],
+    "colosseums": [
+      {
+        "ranking": [
+          {
+            "contender": {
+              "Club": 1
+            },
+            "elo": 1140
+          },
+          {
+            "contender": {
+              "Club": 4
+            },
+            "elo": 1103
+          },
+          {
+            "contender": {
+              "Rival": {
+                "club": 2,
+                "fighter": 17
+              }
+            },
+            "elo": 1079
+          },
+          {
+            "contender": {
+              "Rival": {
+                "club": 0,
+                "fighter": 13
+              }
+            },
+            "elo": 1035
+          },
+          {
+            "contender": {
+              "Rival": {
+                "club": 0,
+                "fighter": 6
+              }
+            },
+            "elo": 1033
+          },
+          {
+            "contender": {
+              "Rival": {
+                "club": 2,
+                "fighter": 14
+              }
+            },
+            "elo": 1030
+          },
+          {
+            "contender": {
+              "Rival": {
+                "club": 1,
+                "fighter": 17
+              }
+            },
+            "elo": 1021
+          },
+          {
+            "contender": {
+              "Rival": {
+                "club": 2,
+                "fighter": 12
+              }
+            },
+            "elo": 1015
+          },
+          {
+            "contender": {
+              "Rival": {
+                "club": 1,
+                "fighter": 14
+              }
+            },
+            "elo": 1010
+          },
+          {
+            "contender": {
+              "Rival": {
+                "club": 0,
+                "fighter": 4
+              }
+            },
+            "elo": 1001
+          },
+          {
+            "contender": {
+              "Rival": {
+                "club": 0,
+                "fighter": 16
+              }
+            },
+            "elo": 1000
+          },
+          {
+            "contender": {
+              "Rival": {
+                "club": 2,
+                "fighter": 16
+              }
+            },
+            "elo": 998
+          },
+          {
+            "contender": {
+              "Rival": {
+                "club": 2,
+                "fighter": 11
+              }
+            },
+            "elo": 990
+          },
+          {
+            "contender": {
+              "Rival": {
+                "club": 0,
+                "fighter": 7
+              }
+            },
+            "elo": 989
+          },
+          {
+            "contender": {
+              "Rival": {
+                "club": 1,
+                "fighter": 18
+              }
+            },
+            "elo": 988
+          },
+          {
+            "contender": {
+              "Rival": {
+                "club": 0,
+                "fighter": 14
+              }
+            },
+            "elo": 984
+          },
+          {
+            "contender": {
+              "Rival": {
+                "club": 2,
+                "fighter": 7
+              }
+            },
+            "elo": 982
+          },
+          {
+            "contender": {
+              "Rival": {
+                "club": 1,
+                "fighter": 19
+              }
+            },
+            "elo": 973
+          },
+          {
+            "contender": {
+              "Rival": {
+                "club": 0,
+                "fighter": 12
+              }
+            },
+            "elo": 973
+          },
+          {
+            "contender": {
+              "Rival": {
+                "club": 1,
+                "fighter": 10
+              }
+            },
+            "elo": 972
+          },
+          {
+            "contender": {
+              "Rival": {
+                "club": 2,
+                "fighter": 4
+              }
+            },
+            "elo": 971
+          },
+          {
+            "contender": {
+              "Rival": {
+                "club": 1,
+                "fighter": 5
+              }
+            },
+            "elo": 967
+          },
+          {
+            "contender": {
+              "Rival": {
+                "club": 0,
+                "fighter": 0
+              }
+            },
+            "elo": 967
+          },
+          {
+            "contender": {
+              "Rival": {
+                "club": 0,
+                "fighter": 10
+              }
+            },
+            "elo": 944
+          },
+          {
+            "contender": {
+              "Rival": {
+                "club": 0,
+                "fighter": 8
+              }
+            },
+            "elo": 942
+          },
+          {
+            "contender": {
+              "Rival": {
+                "club": 2,
+                "fighter": 0
+              }
+            },
+            "elo": 931
+          },
+          {
+            "contender": {
+              "Rival": {
+                "club": 1,
+                "fighter": 3
+              }
+            },
+            "elo": 912
+          },
+          {
+            "contender": {
+              "Club": 6
+            },
+            "elo": 908
+          },
+          {
+            "contender": {
+              "Rival": {
+                "club": 1,
+                "fighter": 2
+              }
+            },
+            "elo": 903
+          },
+          {
+            "contender": {
+              "Rival": {
+                "club": 1,
+                "fighter": 0
+              }
+            },
+            "elo": 860
+          }
+        ],
+        "champion": {
+          "Rival": {
+            "club": 2,
+            "fighter": 17
+          }
+        },
+        "title_since": 58
+      },
+      {
+        "ranking": [
+          {
+            "contender": {
+              "Rival": {
+                "club": 1,
+                "fighter": 16
+              }
+            },
+            "elo": 1259
+          },
+          {
+            "contender": {
+              "Rival": {
+                "club": 1,
+                "fighter": 19
+              }
+            },
+            "elo": 1072
+          },
+          {
+            "contender": {
+              "Rival": {
+                "club": 2,
+                "fighter": 12
+              }
+            },
+            "elo": 1050
+          },
+          {
+            "contender": {
+              "Rival": {
+                "club": 0,
+                "fighter": 14
+              }
+            },
+            "elo": 1037
+          },
+          {
+            "contender": {
+              "Rival": {
+                "club": 2,
+                "fighter": 7
+              }
+            },
+            "elo": 1018
+          },
+          {
+            "contender": {
+              "Rival": {
+                "club": 2,
+                "fighter": 9
+              }
+            },
+            "elo": 1018
+          },
+          {
+            "contender": {
+              "Rival": {
+                "club": 0,
+                "fighter": 0
+              }
+            },
+            "elo": 1011
+          },
+          {
+            "contender": {
+              "Rival": {
+                "club": 1,
+                "fighter": 10
+              }
+            },
+            "elo": 1008
+          },
+          {
+            "contender": {
+              "Rival": {
+                "club": 0,
+                "fighter": 13
+              }
+            },
+            "elo": 1003
+          },
+          {
+            "contender": {
+              "Rival": {
+                "club": 2,
+                "fighter": 4
+              }
+            },
+            "elo": 1002
+          },
+          {
+            "contender": {
+              "Rival": {
+                "club": 1,
+                "fighter": 14
+              }
+            },
+            "elo": 1002
+          },
+          {
+            "contender": {
+              "Rival": {
+                "club": 2,
+                "fighter": 11
+              }
+            },
+            "elo": 1000
+          },
+          {
+            "contender": {
+              "Rival": {
+                "club": 0,
+                "fighter": 12
+              }
+            },
+            "elo": 997
+          },
+          {
+            "contender": {
+              "Rival": {
+                "club": 0,
+                "fighter": 7
+              }
+            },
+            "elo": 996
+          },
+          {
+            "contender": {
+              "Rival": {
+                "club": 0,
+                "fighter": 16
+              }
+            },
+            "elo": 985
+          },
+          {
+            "contender": {
+              "Rival": {
+                "club": 2,
+                "fighter": 16
+              }
+            },
+            "elo": 985
+          },
+          {
+            "contender": {
+              "Rival": {
+                "club": 0,
+                "fighter": 6
+              }
+            },
+            "elo": 984
+          },
+          {
+            "contender": {
+              "Rival": {
+                "club": 1,
+                "fighter": 18
+              }
+            },
+            "elo": 984
+          },
+          {
+            "contender": {
+              "Rival": {
+                "club": 1,
+                "fighter": 17
+              }
+            },
+            "elo": 971
+          },
+          {
+            "contender": {
+              "Rival": {
+                "club": 1,
+                "fighter": 5
+              }
+            },
+            "elo": 968
+          },
+          {
+            "contender": {
+              "Rival": {
+                "club": 0,
+                "fighter": 4
+              }
+            },
+            "elo": 953
+          },
+          {
+            "contender": {
+              "Rival": {
+                "club": 0,
+                "fighter": 10
+              }
+            },
+            "elo": 952
+          },
+          {
+            "contender": {
+              "Rival": {
+                "club": 0,
+                "fighter": 8
+              }
+            },
+            "elo": 951
+          },
+          {
+            "contender": {
+              "Rival": {
+                "club": 1,
+                "fighter": 3
+              }
+            },
+            "elo": 935
+          },
+          {
+            "contender": {
+              "Rival": {
+                "club": 2,
+                "fighter": 0
+              }
+            },
+            "elo": 926
+          },
+          {
+            "contender": {
+              "Rival": {
+                "club": 1,
+                "fighter": 2
+              }
+            },
+            "elo": 912
+          },
+          {
+            "contender": {
+              "Rival": {
+                "club": 1,
+                "fighter": 0
+              }
+            },
+            "elo": 878
+          }
+        ],
+        "champion": {
+          "Rival": {
+            "club": 1,
+            "fighter": 16
+          }
+        },
+        "title_since": 57
+      }
+    ],
+    "rivals": [
+      {
+        "money": 13897,
+        "fighters": [
+          {
+            "class": 1,
+            "stats": {
+              "hp": 116,
+              "melee_attack": 22,
+              "ranged_attack": 22,
+              "speed": 32,
+              "melee_defense": 13,
+              "ranged_defense": 14
+            },
+            "potential": {
+              "hp": 170,
+              "melee_attack": 22,
+              "ranged_attack": 31,
+              "speed": 40,
+              "melee_defense": 13,
+              "ranged_defense": 15
+            },
+            "dominant_hand": "Right",
+            "age": 24,
+            "weeks_this_year": 28,
+            "personality": {
+              "aggression": 99,
+              "caution": 7,
+              "showmanship": 68,
+              "determination": 32
+            },
+            "morale": 30,
+            "fame": 30,
+            "form": 59,
+            "injuries": [],
+            "illness": null,
+            "status": "Active",
+            "record": {
+              "wins": 11,
+              "losses": 12,
+              "draws": 0
+            },
+            "observed_weeks": 0
+          },
+          {
+            "class": 1,
+            "stats": {
+              "hp": 106,
+              "melee_attack": 21,
+              "ranged_attack": 20,
+              "speed": 26,
+              "melee_defense": 11,
+              "ranged_defense": 10
+            },
+            "potential": {
+              "hp": 173,
+              "melee_attack": 27,
+              "ranged_attack": 32,
+              "speed": 31,
+              "melee_defense": 15,
+              "ranged_defense": 16
+            },
+            "dominant_hand": "Right",
+            "age": 27,
+            "weeks_this_year": 11,
+            "personality": {
+              "aggression": 39,
+              "caution": 31,
+              "showmanship": 47,
+              "determination": 94
+            },
+            "morale": 81,
+            "fame": 13,
+            "form": 75,
+            "injuries": [],
+            "illness": null,
+            "status": "Dead",
+            "record": {
+              "wins": 3,
+              "losses": 1,
+              "draws": 2
+            },
+            "observed_weeks": 0
+          },
+          {
+            "class": 1,
+            "stats": {
+              "hp": 88,
+              "melee_attack": 18,
+              "ranged_attack": 17,
+              "speed": 34,
+              "melee_defense": 8,
+              "ranged_defense": 9
+            },
+            "potential": {
+              "hp": 113,
+              "melee_attack": 25,
+              "ranged_attack": 30,
+              "speed": 43,
+              "melee_defense": 12,
+              "ranged_defense": 12
+            },
+            "dominant_hand": "Right",
+            "age": 30,
+            "weeks_this_year": 1,
+            "personality": {
+              "aggression": 45,
+              "caution": 31,
+              "showmanship": 89,
+              "determination": 67
+            },
+            "morale": 65,
+            "fame": 10,
+            "form": 80,
+            "injuries": [],
+            "illness": null,
+            "status": "Dead",
+            "record": {
+              "wins": 1,
+              "losses": 1,
+              "draws": 0
+            },
+            "observed_weeks": 0
+          },
+          {
+            "class": 0,
+            "stats": {
+              "hp": 97,
+              "melee_attack": 19,
+              "ranged_attack": 22,
+              "speed": 25,
+              "melee_defense": 9,
+              "ranged_defense": 8
+            },
+            "potential": {
+              "hp": 154,
+              "melee_attack": 24,
+              "ranged_attack": 28,
+              "speed": 33,
+              "melee_defense": 15,
+              "ranged_defense": 14
+            },
+            "dominant_hand": "Left",
+            "age": 21,
+            "weeks_this_year": 0,
+            "personality": {
+              "aggression": 82,
+              "caution": 91,
+              "showmanship": 54,
+              "determination": 67
+            },
+            "morale": 50,
+            "fame": 0,
+            "form": 100,
+            "injuries": [],
+            "illness": null,
+            "status": "Dead",
+            "record": {
+              "wins": 0,
+              "losses": 1,
+              "draws": 0
+            },
+            "observed_weeks": 0
+          },
+          {
+            "class": 0,
+            "stats": {
+              "hp": 109,
+              "melee_attack": 28,
+              "ranged_attack": 19,
+              "speed": 33,
+              "melee_defense": 13,
+              "ranged_defense": 11
+            },
+            "potential": {
+              "hp": 174,
+              "melee_attack": 33,
+              "ranged_attack": 27,
+              "speed": 44,
+              "melee_defense": 16,
+              "ranged_defense": 11
+            },
+            "dominant_hand": "Left",
+            "age": 23,
+            "weeks_this_year": 28,
+            "personality": {
+              "aggression": 83,
+              "caution": 30,
+              "showmanship": 81,
+              "determination": 32
+            },
+            "morale": 50,
+            "fame": 40,
+            "form": 60,
+            "injuries": [],
+            "illness": null,
+            "status": "Active",
+            "record": {
+              "wins": 10,
+              "losses": 13,
+              "draws": 0
+            },
+            "observed_weeks": 0
+          },
+          {
+            "class": 1,
+            "stats": {
+              "hp": 127,
+              "melee_attack": 32,
+              "ranged_attack": 25,
+              "speed": 34,
+              "melee_defense": 10,
+              "ranged_defense": 19
+            },
+            "potential": {
+              "hp": 174,
+              "melee_attack": 34,
+              "ranged_attack": 33,
+              "speed": 52,
+              "melee_defense": 18,
+              "ranged_defense": 20
+            },
+            "dominant_hand": "Right",
+            "age": 25,
+            "weeks_this_year": 29,
+            "personality": {
+              "aggression": 7,
+              "caution": 15,
+              "showmanship": 10,
+              "determination": 42
+            },
+            "morale": 87,
+            "fame": 37,
+            "form": 80,
+            "injuries": [],
+            "illness": null,
+            "status": "Dead",
+            "record": {
+              "wins": 10,
+              "losses": 6,
+              "draws": 0
+            },
+            "observed_weeks": 0
+          },
+          {
+            "class": 1,
+            "stats": {
+              "hp": 140,
+              "melee_attack": 28,
+              "ranged_attack": 24,
+              "speed": 42,
+              "melee_defense": 15,
+              "ranged_defense": 20
+            },
+            "potential": {
+              "hp": 182,
+              "melee_attack": 37,
+              "ranged_attack": 34,
+              "speed": 58,
+              "melee_defense": 15,
+              "ranged_defense": 20
+            },
+            "dominant_hand": "Right",
+            "age": 26,
+            "weeks_this_year": 28,
+            "personality": {
+              "aggression": 93,
+              "caution": 57,
+              "showmanship": 53,
+              "determination": 43
+            },
+            "morale": 54,
+            "fame": 2,
+            "form": 63,
+            "injuries": [],
+            "illness": null,
+            "status": "Active",
+            "record": {
+              "wins": 12,
+              "losses": 12,
+              "draws": 0
+            },
+            "observed_weeks": 0
+          },
+          {
+            "class": 1,
+            "stats": {
+              "hp": 114,
+              "melee_attack": 28,
+              "ranged_attack": 23,
+              "speed": 41,
+              "melee_defense": 14,
+              "ranged_defense": 13
+            },
+            "potential": {
+              "hp": 154,
+              "melee_attack": 38,
+              "ranged_attack": 31,
+              "speed": 70,
+              "melee_defense": 20,
+              "ranged_defense": 21
+            },
+            "dominant_hand": "Right",
+            "age": 29,
+            "weeks_this_year": 28,
+            "personality": {
+              "aggression": 61,
+              "caution": 65,
+              "showmanship": 65,
+              "determination": 39
+            },
+            "morale": 0,
+            "fame": 0,
+            "form": 60,
+            "injuries": [],
+            "illness": null,
+            "status": "Active",
+            "record": {
+              "wins": 6,
+              "losses": 9,
+              "draws": 11
+            },
+            "observed_weeks": 0
+          },
+          {
+            "class": 0,
+            "stats": {
+              "hp": 126,
+              "melee_attack": 21,
+              "ranged_attack": 26,
+              "speed": 34,
+              "melee_defense": 14,
+              "ranged_defense": 11
+            },
+            "potential": {
+              "hp": 206,
+              "melee_attack": 27,
+              "ranged_attack": 38,
+              "speed": 48,
+              "melee_defense": 14,
+              "ranged_defense": 16
+            },
+            "dominant_hand": "Right",
+            "age": 29,
+            "weeks_this_year": 28,
+            "personality": {
+              "aggression": 64,
+              "caution": 28,
+              "showmanship": 69,
+              "determination": 26
+            },
+            "morale": 0,
+            "fame": 0,
+            "form": 73,
+            "injuries": [],
+            "illness": null,
+            "status": "Active",
+            "record": {
+              "wins": 6,
+              "losses": 13,
+              "draws": 0
+            },
+            "observed_weeks": 0
+          },
+          {
+            "class": 1,
+            "stats": {
+              "hp": 99,
+              "melee_attack": 24,
+              "ranged_attack": 26,
+              "speed": 28,
+              "melee_defense": 10,
+              "ranged_defense": 9
+            },
+            "potential": {
+              "hp": 172,
+              "melee_attack": 32,
+              "ranged_attack": 44,
+              "speed": 42,
+              "melee_defense": 14,
+              "ranged_defense": 13
+            },
+            "dominant_hand": "Right",
+            "age": 28,
+            "weeks_this_year": 3,
+            "personality": {
+              "aggression": 24,
+              "caution": 52,
+              "showmanship": 5,
+              "determination": 86
+            },
+            "morale": 73,
+            "fame": 25,
+            "form": 75,
+            "injuries": [],
+            "illness": null,
+            "status": "Dead",
+            "record": {
+              "wins": 2,
+              "losses": 1,
+              "draws": 0
+            },
+            "observed_weeks": 0
+          },
+          {
+            "class": 0,
+            "stats": {
+              "hp": 158,
+              "melee_attack": 25,
+              "ranged_attack": 29,
+              "speed": 36,
+              "melee_defense": 13,
+              "ranged_defense": 14
+            },
+            "potential": {
+              "hp": 194,
+              "melee_attack": 25,
+              "ranged_attack": 36,
+              "speed": 50,
+              "melee_defense": 16,
+              "ranged_defense": 14
+            },
+            "dominant_hand": "Right",
+            "age": 27,
+            "weeks_this_year": 28,
+            "personality": {
+              "aggression": 83,
+              "caution": 19,
+              "showmanship": 4,
+              "determination": 1
+            },
+            "morale": 3,
+            "fame": 0,
+            "form": 56,
+            "injuries": [],
+            "illness": null,
+            "status": "Active",
+            "record": {
+              "wins": 4,
+              "losses": 11,
+              "draws": 0
+            },
+            "observed_weeks": 0
+          },
+          {
+            "class": 0,
+            "stats": {
+              "hp": 110,
+              "melee_attack": 23,
+              "ranged_attack": 24,
+              "speed": 33,
+              "melee_defense": 11,
+              "ranged_defense": 11
+            },
+            "potential": {
+              "hp": 174,
+              "melee_attack": 41,
+              "ranged_attack": 36,
+              "speed": 59,
+              "melee_defense": 16,
+              "ranged_defense": 15
+            },
+            "dominant_hand": "Right",
+            "age": 21,
+            "weeks_this_year": 7,
+            "personality": {
+              "aggression": 36,
+              "caution": 53,
+              "showmanship": 39,
+              "determination": 44
+            },
+            "morale": 32,
+            "fame": 11,
+            "form": 70,
+            "injuries": [],
+            "illness": null,
+            "status": "Dead",
+            "record": {
+              "wins": 1,
+              "losses": 3,
+              "draws": 0
+            },
+            "observed_weeks": 0
+          },
+          {
+            "class": 1,
+            "stats": {
+              "hp": 102,
+              "melee_attack": 29,
+              "ranged_attack": 23,
+              "speed": 39,
+              "melee_defense": 16,
+              "ranged_defense": 14
+            },
+            "potential": {
+              "hp": 128,
+              "melee_attack": 37,
+              "ranged_attack": 30,
+              "speed": 63,
+              "melee_defense": 16,
+              "ranged_defense": 14
+            },
+            "dominant_hand": "Right",
+            "age": 25,
+            "weeks_this_year": 26,
+            "personality": {
+              "aggression": 9,
+              "caution": 10,
+              "showmanship": 16,
+              "determination": 6
+            },
+            "morale": 18,
+            "fame": 2,
+            "form": 52,
+            "injuries": [],
+            "illness": null,
+            "status": "Active",
+            "record": {
+              "wins": 7,
+              "losses": 9,
+              "draws": 5
+            },
+            "observed_weeks": 0
+          },
+          {
+            "class": 0,
+            "stats": {
+              "hp": 108,
+              "melee_attack": 28,
+              "ranged_attack": 21,
+              "speed": 40,
+              "melee_defense": 15,
+              "ranged_defense": 10
+            },
+            "potential": {
+              "hp": 127,
+              "melee_attack": 40,
+              "ranged_attack": 31,
+              "speed": 70,
+              "melee_defense": 19,
+              "ranged_defense": 13
+            },
+            "dominant_hand": "Right",
+            "age": 30,
+            "weeks_this_year": 22,
+            "personality": {
+              "aggression": 17,
+              "caution": 1,
+              "showmanship": 88,
+              "determination": 70
+            },
+            "morale": 58,
+            "fame": 34,
+            "form": 50,
+            "injuries": [],
+            "illness": null,
+            "status": "Active",
+            "record": {
+              "wins": 11,
+              "losses": 9,
+              "draws": 0
+            },
+            "observed_weeks": 0
+          },
+          {
+            "class": 1,
+            "stats": {
+              "hp": 124,
+              "melee_attack": 21,
+              "ranged_attack": 21,
+              "speed": 39,
+              "melee_defense": 17,
+              "ranged_defense": 13
+            },
+            "potential": {
+              "hp": 150,
+              "melee_attack": 24,
+              "ranged_attack": 32,
+              "speed": 51,
+              "melee_defense": 19,
+              "ranged_defense": 15
+            },
+            "dominant_hand": "Right",
+            "age": 26,
+            "weeks_this_year": 19,
+            "personality": {
+              "aggression": 97,
+              "caution": 7,
+              "showmanship": 51,
+              "determination": 73
+            },
+            "morale": 61,
+            "fame": 16,
+            "form": 70,
+            "injuries": [],
+            "illness": null,
+            "status": "Active",
+            "record": {
+              "wins": 10,
+              "losses": 10,
+              "draws": 0
+            },
+            "observed_weeks": 0
+          },
+          {
+            "class": 1,
+            "stats": {
+              "hp": 142,
+              "melee_attack": 27,
+              "ranged_attack": 28,
+              "speed": 38,
+              "melee_defense": 16,
+              "ranged_defense": 14
+            },
+            "potential": {
+              "hp": 214,
+              "melee_attack": 42,
+              "ranged_attack": 34,
+              "speed": 56,
+              "melee_defense": 19,
+              "ranged_defense": 21
+            },
+            "dominant_hand": "Left",
+            "age": 29,
+            "weeks_this_year": 14,
+            "personality": {
+              "aggression": 67,
+              "caution": 96,
+              "showmanship": 99,
+              "determination": 79
+            },
+            "morale": 100,
+            "fame": 100,
+            "form": 50,
+            "injuries": [],
+            "illness": null,
+            "status": "Sold",
+            "record": {
+              "wins": 25,
+              "losses": 1,
+              "draws": 4
+            },
+            "observed_weeks": 0
+          },
+          {
+            "class": 1,
+            "stats": {
+              "hp": 99,
+              "melee_attack": 19,
+              "ranged_attack": 23,
+              "speed": 36,
+              "melee_defense": 10,
+              "ranged_defense": 13
+            },
+            "potential": {
+              "hp": 153,
+              "melee_attack": 24,
+              "ranged_attack": 28,
+              "speed": 60,
+              "melee_defense": 12,
+              "ranged_defense": 14
+            },
+            "dominant_hand": "Right",
+            "age": 21,
+            "weeks_this_year": 1,
+            "personality": {
+              "aggression": 43,
+              "caution": 69,
+              "showmanship": 28,
+              "determination": 45
+            },
+            "morale": 40,
+            "fame": 8,
+            "form": 50,
+            "injuries": [],
+            "illness": null,
+            "status": "Active",
+            "record": {
+              "wins": 1,
+              "losses": 2,
+              "draws": 4
+            },
+            "observed_weeks": 0
+          }
+        ]
+      },
+      {
+        "money": 13229,
+        "fighters": [
+          {
+            "class": 0,
+            "stats": {
+              "hp": 100,
+              "melee_attack": 22,
+              "ranged_attack": 22,
+              "speed": 32,
+              "melee_defense": 14,
+              "ranged_defense": 13
+            },
+            "potential": {
+              "hp": 106,
+              "melee_attack": 22,
+              "ranged_attack": 23,
+              "speed": 39,
+              "melee_defense": 14,
+              "ranged_defense": 13
+            },
+            "dominant_hand": "Right",
+            "age": 23,
+            "weeks_this_year": 28,
+            "personality": {
+              "aggression": 89,
+              "caution": 79,
+              "showmanship": 7,
+              "determination": 15
+            },
+            "morale": 0,
+            "fame": 0,
+            "form": 25,
+            "injuries": [],
+            "illness": null,
+            "status": "Active",
+            "record": {
+              "wins": 0,
+              "losses": 19,
+              "draws": 1
+            },
+            "observed_weeks": 0
+          },
+          {
+            "class": 0,
+            "stats": {
+              "hp": 109,
+              "melee_attack": 21,
+              "ranged_attack": 22,
+              "speed": 33,
+              "melee_defense": 8,
+              "ranged_defense": 10
+            },
+            "potential": {
+              "hp": 153,
+              "melee_attack": 25,
+              "ranged_attack": 38,
+              "speed": 45,
+              "melee_defense": 14,
+              "ranged_defense": 17
+            },
+            "dominant_hand": "Right",
+            "age": 21,
+            "weeks_this_year": 1,
+            "personality": {
+              "aggression": 61,
+              "caution": 98,
+              "showmanship": 70,
+              "determination": 74
+            },
+            "morale": 63,
+            "fame": 7,
+            "form": 80,
+            "injuries": [],
+            "illness": null,
+            "status": "Dead",
+            "record": {
+              "wins": 1,
+              "losses": 1,
+              "draws": 0
+            },
+            "observed_weeks": 0
+          },
+          {
+            "class": 0,
+            "stats": {
+              "hp": 99,
+              "melee_attack": 24,
+              "ranged_attack": 26,
+              "speed": 33,
+              "melee_defense": 12,
+              "ranged_defense": 12
+            },
+            "potential": {
+              "hp": 105,
+              "melee_attack": 38,
+              "ranged_attack": 26,
+              "speed": 36,
+              "melee_defense": 12,
+              "ranged_defense": 12
+            },
+            "dominant_hand": "Left",
+            "age": 27,
+            "weeks_this_year": 28,
+            "personality": {
+              "aggression": 96,
+              "caution": 52,
+              "showmanship": 51,
+              "determination": 24
+            },
+            "morale": 0,
+            "fame": 0,
+            "form": 34,
+            "injuries": [],
+            "illness": null,
+            "status": "Active",
+            "record": {
+              "wins": 4,
+              "losses": 17,
+              "draws": 0
+            },
+            "observed_weeks": 0
+          },
+          {
+            "class": 0,
+            "stats": {
+              "hp": 108,
+              "melee_attack": 23,
+              "ranged_attack": 21,
+              "speed": 40,
+              "melee_defense": 17,
+              "ranged_defense": 14
+            },
+            "potential": {
+              "hp": 117,
+              "melee_attack": 31,
+              "ranged_attack": 25,
+              "speed": 40,
+              "melee_defense": 17,
+              "ranged_defense": 14
+            },
+            "dominant_hand": "Right",
+            "age": 22,
+            "weeks_this_year": 28,
+            "personality": {
+              "aggression": 46,
+              "caution": 30,
+              "showmanship": 51,
+              "determination": 13
+            },
+            "morale": 0,
+            "fame": 0,
+            "form": 18,
+            "injuries": [],
+            "illness": {
+              "level": "Mild",
+              "weeks_left": 2
+            },
+            "status": "Active",
+            "record": {
+              "wins": 4,
+              "losses": 14,
+              "draws": 1
+            },
+            "observed_weeks": 0
+          },
+          {
+            "class": 0,
+            "stats": {
+              "hp": 91,
+              "melee_attack": 23,
+              "ranged_attack": 18,
+              "speed": 34,
+              "melee_defense": 10,
+              "ranged_defense": 11
+            },
+            "potential": {
+              "hp": 126,
+              "melee_attack": 38,
+              "ranged_attack": 31,
+              "speed": 59,
+              "melee_defense": 12,
+              "ranged_defense": 13
+            },
+            "dominant_hand": "Right",
+            "age": 24,
+            "weeks_this_year": 15,
+            "personality": {
+              "aggression": 42,
+              "caution": 18,
+              "showmanship": 89,
+              "determination": 74
+            },
+            "morale": 72,
+            "fame": 24,
+            "form": 45,
+            "injuries": [],
+            "illness": null,
+            "status": "Dead",
+            "record": {
+              "wins": 4,
+              "losses": 5,
+              "draws": 0
+            },
+            "observed_weeks": 0
+          },
+          {
+            "class": 0,
+            "stats": {
+              "hp": 129,
+              "melee_attack": 25,
+              "ranged_attack": 27,
+              "speed": 42,
+              "melee_defense": 15,
+              "ranged_defense": 14
+            },
+            "potential": {
+              "hp": 156,
+              "melee_attack": 34,
+              "ranged_attack": 42,
+              "speed": 60,
+              "melee_defense": 18,
+              "ranged_defense": 20
+            },
+            "dominant_hand": "Right",
+            "age": 31,
+            "weeks_this_year": 28,
+            "personality": {
+              "aggression": 89,
+              "caution": 74,
+              "showmanship": 44,
+              "determination": 32
+            },
+            "morale": 0,
+            "fame": 0,
+            "form": 48,
+            "injuries": [],
+            "illness": null,
+            "status": "Active",
+            "record": {
+              "wins": 10,
+              "losses": 14,
+              "draws": 1
+            },
+            "observed_weeks": 0
+          },
+          {
+            "class": 0,
+            "stats": {
+              "hp": 103,
+              "melee_attack": 25,
+              "ranged_attack": 19,
+              "speed": 36,
+              "melee_defense": 14,
+              "ranged_defense": 11
+            },
+            "potential": {
+              "hp": 132,
+              "melee_attack": 42,
+              "ranged_attack": 27,
+              "speed": 48,
+              "melee_defense": 16,
+              "ranged_defense": 12
+            },
+            "dominant_hand": "Right",
+            "age": 27,
+            "weeks_this_year": 3,
+            "personality": {
+              "aggression": 68,
+              "caution": 72,
+              "showmanship": 88,
+              "determination": 42
+            },
+            "morale": 66,
+            "fame": 6,
+            "form": 40,
+            "injuries": [],
+            "illness": null,
+            "status": "Dead",
+            "record": {
+              "wins": 2,
+              "losses": 2,
+              "draws": 0
+            },
+            "observed_weeks": 0
+          },
+          {
+            "class": 0,
+            "stats": {
+              "hp": 114,
+              "melee_attack": 19,
+              "ranged_attack": 19,
+              "speed": 30,
+              "melee_defense": 10,
+              "ranged_defense": 9
+            },
+            "potential": {
+              "hp": 144,
+              "melee_attack": 25,
+              "ranged_attack": 32,
+              "speed": 50,
+              "melee_defense": 19,
+              "ranged_defense": 15
+            },
+            "dominant_hand": "Right",
+            "age": 29,
+            "weeks_this_year": 0,
+            "personality": {
+              "aggression": 1,
+              "caution": 57,
+              "showmanship": 28,
+              "determination": 66
+            },
+            "morale": 50,
+            "fame": 1,
+            "form": 100,
+            "injuries": [],
+            "illness": null,
+            "status": "Dead",
+            "record": {
+              "wins": 0,
+              "losses": 1,
+              "draws": 0
+            },
+            "observed_weeks": 0
+          },
+          {
+            "class": 0,
+            "stats": {
+              "hp": 98,
+              "melee_attack": 27,
+              "ranged_attack": 27,
+              "speed": 42,
+              "melee_defense": 14,
+              "ranged_defense": 14
+            },
+            "potential": {
+              "hp": 135,
+              "melee_attack": 37,
+              "ranged_attack": 37,
+              "speed": 62,
+              "melee_defense": 16,
+              "ranged_defense": 21
+            },
+            "dominant_hand": "Right",
+            "age": 27,
+            "weeks_this_year": 3,
+            "personality": {
+              "aggression": 8,
+              "caution": 78,
+              "showmanship": 80,
+              "determination": 49
+            },
+            "morale": 43,
+            "fame": 7,
+            "form": 40,
+            "injuries": [],
+            "illness": null,
+            "status": "Dead",
+            "record": {
+              "wins": 1,
+              "losses": 3,
+              "draws": 0
+            },
+            "observed_weeks": 0
+          },
+          {
+            "class": 1,
+            "stats": {
+              "hp": 148,
+              "melee_attack": 27,
+              "ranged_attack": 20,
+              "speed": 35,
+              "melee_defense": 16,
+              "ranged_defense": 12
+            },
+            "potential": {
+              "hp": 250,
+              "melee_attack": 38,
+              "ranged_attack": 26,
+              "speed": 42,
+              "melee_defense": 20,
+              "ranged_defense": 12
+            },
+            "dominant_hand": "Left",
+            "age": 26,
+            "weeks_this_year": 17,
+            "personality": {
+              "aggression": 49,
+              "caution": 59,
+              "showmanship": 38,
+              "determination": 100
+            },
+            "morale": 100,
+            "fame": 51,
+            "form": 40,
+            "injuries": [],
+            "illness": null,
+            "status": "Dead",
+            "record": {
+              "wins": 8,
+              "losses": 1,
+              "draws": 2
+            },
+            "observed_weeks": 0
+          },
+          {
+            "class": 1,
+            "stats": {
+              "hp": 124,
+              "melee_attack": 27,
+              "ranged_attack": 27,
+              "speed": 42,
+              "melee_defense": 18,
+              "ranged_defense": 12
+            },
+            "potential": {
+              "hp": 183,
+              "melee_attack": 31,
+              "ranged_attack": 32,
+              "speed": 49,
+              "melee_defense": 22,
+              "ranged_defense": 12
+            },
+            "dominant_hand": "Right",
+            "age": 22,
+            "weeks_this_year": 28,
+            "personality": {
+              "aggression": 18,
+              "caution": 82,
+              "showmanship": 65,
+              "determination": 26
+            },
+            "morale": 10,
+            "fame": 8,
+            "form": 40,
+            "injuries": [
+              {
+                "location": "Body",
+                "severity": "Permanent",
+                "weeks_left": 0
+              }
+            ],
+            "illness": {
+              "level": "Mild",
+              "weeks_left": 1
+            },
+            "status": "Active",
+            "record": {
+              "wins": 9,
+              "losses": 10,
+              "draws": 8
+            },
+            "observed_weeks": 0
+          },
+          {
+            "class": 1,
+            "stats": {
+              "hp": 119,
+              "melee_attack": 23,
+              "ranged_attack": 21,
+              "speed": 24,
+              "melee_defense": 11,
+              "ranged_defense": 9
+            },
+            "potential": {
+              "hp": 145,
+              "melee_attack": 26,
+              "ranged_attack": 28,
+              "speed": 34,
+              "melee_defense": 18,
+              "ranged_defense": 12
+            },
+            "dominant_hand": "Left",
+            "age": 29,
+            "weeks_this_year": 9,
+            "personality": {
+              "aggression": 8,
+              "caution": 0,
+              "showmanship": 96,
+              "determination": 93
+            },
+            "morale": 95,
+            "fame": 51,
+            "form": 30,
+            "injuries": [],
+            "illness": {
+              "level": "Mild",
+              "weeks_left": 1
+            },
+            "status": "Dead",
+            "record": {
+              "wins": 5,
+              "losses": 1,
+              "draws": 0
+            },
+            "observed_weeks": 0
+          },
+          {
+            "class": 0,
+            "stats": {
+              "hp": 112,
+              "melee_attack": 18,
+              "ranged_attack": 17,
+              "speed": 29,
+              "melee_defense": 10,
+              "ranged_defense": 11
+            },
+            "potential": {
+              "hp": 141,
+              "melee_attack": 32,
+              "ranged_attack": 20,
+              "speed": 43,
+              "melee_defense": 15,
+              "ranged_defense": 13
+            },
+            "dominant_hand": "Right",
+            "age": 26,
+            "weeks_this_year": 3,
+            "personality": {
+              "aggression": 16,
+              "caution": 94,
+              "showmanship": 6,
+              "determination": 68
+            },
+            "morale": 50,
+            "fame": 0,
+            "form": 60,
+            "injuries": [],
+            "illness": null,
+            "status": "Dead",
+            "record": {
+              "wins": 0,
+              "losses": 1,
+              "draws": 2
+            },
+            "observed_weeks": 0
+          },
+          {
+            "class": 1,
+            "stats": {
+              "hp": 102,
+              "melee_attack": 22,
+              "ranged_attack": 17,
+              "speed": 27,
+              "melee_defense": 10,
+              "ranged_defense": 9
+            },
+            "potential": {
+              "hp": 143,
+              "melee_attack": 29,
+              "ranged_attack": 26,
+              "speed": 46,
+              "melee_defense": 17,
+              "ranged_defense": 13
+            },
+            "dominant_hand": "Right",
+            "age": 29,
+            "weeks_this_year": 6,
+            "personality": {
+              "aggression": 50,
+              "caution": 70,
+              "showmanship": 69,
+              "determination": 65
+            },
+            "morale": 35,
+            "fame": 0,
+            "form": 40,
+            "injuries": [],
+            "illness": null,
+            "status": "Dead",
+            "record": {
+              "wins": 0,
+              "losses": 2,
+              "draws": 2
+            },
+            "observed_weeks": 0
+          },
+          {
+            "class": 1,
+            "stats": {
+              "hp": 131,
+              "melee_attack": 22,
+              "ranged_attack": 24,
+              "speed": 49,
+              "melee_defense": 14,
+              "ranged_defense": 15
+            },
+            "potential": {
+              "hp": 157,
+              "melee_attack": 26,
+              "ranged_attack": 31,
+              "speed": 62,
+              "melee_defense": 14,
+              "ranged_defense": 15
+            },
+            "dominant_hand": "Right",
+            "age": 26,
+            "weeks_this_year": 24,
+            "personality": {
+              "aggression": 4,
+              "caution": 48,
+              "showmanship": 60,
+              "determination": 25
+            },
+            "morale": 0,
+            "fame": 0,
+            "form": 49,
+            "injuries": [],
+            "illness": {
+              "level": "Moderate",
+              "weeks_left": 3
+            },
+            "status": "Active",
+            "record": {
+              "wins": 4,
+              "losses": 4,
+              "draws": 14
+            },
+            "observed_weeks": 0
+          },
+          {
+            "class": 1,
+            "stats": {
+              "hp": 108,
+              "melee_attack": 19,
+              "ranged_attack": 21,
+              "speed": 25,
+              "melee_defense": 8,
+              "ranged_defense": 10
+            },
+            "potential": {
+              "hp": 147,
+              "melee_attack": 28,
+              "ranged_attack": 27,
+              "speed": 42,
+              "melee_defense": 12,
+              "ranged_defense": 17
+            },
+            "dominant_hand": "Right",
+            "age": 24,
+            "weeks_this_year": 4,
+            "personality": {
+              "aggression": 68,
+              "caution": 93,
+              "showmanship": 37,
+              "determination": 90
+            },
+            "morale": 45,
+            "fame": 1,
+            "form": 100,
+            "injuries": [],
+            "illness": null,
+            "status": "Dead",
+            "record": {
+              "wins": 0,
+              "losses": 1,
+              "draws": 0
+            },
+            "observed_weeks": 0
+          },
+          {
+            "class": 0,
+            "stats": {
+              "hp": 154,
+              "melee_attack": 32,
+              "ranged_attack": 27,
+              "speed": 50,
+              "melee_defense": 15,
+              "ranged_defense": 15
+            },
+            "potential": {
+              "hp": 200,
+              "melee_attack": 32,
+              "ranged_attack": 37,
+              "speed": 75,
+              "melee_defense": 15,
+              "ranged_defense": 16
+            },
+            "dominant_hand": "Right",
+            "age": 22,
+            "weeks_this_year": 20,
+            "personality": {
+              "aggression": 93,
+              "caution": 21,
+              "showmanship": 37,
+              "determination": 73
+            },
+            "morale": 95,
+            "fame": 100,
+            "form": 44,
+            "injuries": [
+              {
+                "location": {
+                  "Leg": "Right"
+                },
+                "severity": "Permanent",
+                "weeks_left": 0
+              }
+            ],
+            "illness": {
+              "level": "Moderate",
+              "weeks_left": 2
+            },
+            "status": "Active",
+            "record": {
+              "wins": 26,
+              "losses": 4,
+              "draws": 0
+            },
+            "observed_weeks": 0
+          },
+          {
+            "class": 1,
+            "stats": {
+              "hp": 122,
+              "melee_attack": 29,
+              "ranged_attack": 23,
+              "speed": 35,
+              "melee_defense": 13,
+              "ranged_defense": 16
+            },
+            "potential": {
+              "hp": 207,
+              "melee_attack": 33,
+              "ranged_attack": 33,
+              "speed": 43,
+              "melee_defense": 13,
+              "ranged_defense": 16
+            },
+            "dominant_hand": "Right",
+            "age": 22,
+            "weeks_this_year": 19,
+            "personality": {
+              "aggression": 16,
+              "caution": 58,
+              "showmanship": 91,
+              "determination": 10
+            },
+            "morale": 29,
+            "fame": 14,
+            "form": 44,
+            "injuries": [],
+            "illness": null,
+            "status": "Active",
+            "record": {
+              "wins": 8,
+              "losses": 9,
+              "draws": 3
+            },
+            "observed_weeks": 0
+          },
+          {
+            "class": 1,
+            "stats": {
+              "hp": 139,
+              "melee_attack": 20,
+              "ranged_attack": 24,
+              "speed": 44,
+              "melee_defense": 10,
+              "ranged_defense": 11
+            },
+            "potential": {
+              "hp": 189,
+              "melee_attack": 28,
+              "ranged_attack": 31,
+              "speed": 56,
+              "melee_defense": 10,
+              "ranged_defense": 13
+            },
+            "dominant_hand": "Right",
+            "age": 21,
+            "weeks_this_year": 15,
+            "personality": {
+              "aggression": 47,
+              "caution": 3,
+              "showmanship": 14,
+              "determination": 7
+            },
+            "morale": 0,
+            "fame": 0,
+            "form": 27,
+            "injuries": [],
+            "illness": null,
+            "status": "Active",
+            "record": {
+              "wins": 7,
+              "losses": 9,
+              "draws": 1
+            },
+            "observed_weeks": 0
+          },
+          {
+            "class": 0,
+            "stats": {
+              "hp": 131,
+              "melee_attack": 24,
+              "ranged_attack": 23,
+              "speed": 38,
+              "melee_defense": 16,
+              "ranged_defense": 12
+            },
+            "potential": {
+              "hp": 194,
+              "melee_attack": 36,
+              "ranged_attack": 31,
+              "speed": 46,
+              "melee_defense": 16,
+              "ranged_defense": 14
+            },
+            "dominant_hand": "Left",
+            "age": 28,
+            "weeks_this_year": 16,
+            "personality": {
+              "aggression": 69,
+              "caution": 29,
+              "showmanship": 66,
+              "determination": 34
+            },
+            "morale": 78,
+            "fame": 30,
+            "form": 18,
+            "injuries": [
+              {
+                "location": {
+                  "Arm": "Left"
+                },
+                "severity": "Light",
+                "weeks_left": 1
+              }
+            ],
+            "illness": null,
+            "status": "Active",
+            "record": {
+              "wins": 10,
+              "losses": 8,
+              "draws": 0
+            },
+            "observed_weeks": 0
+          }
+        ]
+      },
+      {
+        "money": 14196,
+        "fighters": [
+          {
+            "class": 0,
+            "stats": {
+              "hp": 113,
+              "melee_attack": 30,
+              "ranged_attack": 20,
+              "speed": 39,
+              "melee_defense": 11,
+              "ranged_defense": 13
+            },
+            "potential": {
+              "hp": 184,
+              "melee_attack": 36,
+              "ranged_attack": 24,
+              "speed": 44,
+              "melee_defense": 11,
+              "ranged_defense": 13
+            },
+            "dominant_hand": "Right",
+            "age": 26,
+            "weeks_this_year": 28,
+            "personality": {
+              "aggression": 53,
+              "caution": 23,
+              "showmanship": 22,
+              "determination": 3
+            },
+            "morale": 8,
+            "fame": 6,
+            "form": 53,
+            "injuries": [],
+            "illness": {
+              "level": "Moderate",
+              "weeks_left": 4
+            },
+            "status": "Active",
+            "record": {
+              "wins": 6,
+              "losses": 16,
+              "draws": 0
+            },
+            "observed_weeks": 0
+          },
+          {
+            "class": 1,
+            "stats": {
+              "hp": 104,
+              "melee_attack": 16,
+              "ranged_attack": 18,
+              "speed": 33,
+              "melee_defense": 8,
+              "ranged_defense": 8
+            },
+            "potential": {
+              "hp": 140,
+              "melee_attack": 23,
+              "ranged_attack": 30,
+              "speed": 55,
+              "melee_defense": 12,
+              "ranged_defense": 10
+            },
+            "dominant_hand": "Right",
+            "age": 30,
+            "weeks_this_year": 2,
+            "personality": {
+              "aggression": 33,
+              "caution": 88,
+              "showmanship": 63,
+              "determination": 42
+            },
+            "morale": 64,
+            "fame": 21,
+            "form": 60,
+            "injuries": [
+              {
+                "location": {
+                  "Arm": "Right"
+                },
+                "severity": "Light",
+                "weeks_left": 1
+              }
+            ],
+            "illness": null,
+            "status": "Dead",
+            "record": {
+              "wins": 2,
+              "losses": 1,
+              "draws": 0
+            },
+            "observed_weeks": 0
+          },
+          {
+            "class": 0,
+            "stats": {
+              "hp": 117,
+              "melee_attack": 23,
+              "ranged_attack": 16,
+              "speed": 24,
+              "melee_defense": 9,
+              "ranged_defense": 10
+            },
+            "potential": {
+              "hp": 163,
+              "melee_attack": 39,
+              "ranged_attack": 25,
+              "speed": 33,
+              "melee_defense": 11,
+              "ranged_defense": 14
+            },
+            "dominant_hand": "Right",
+            "age": 25,
+            "weeks_this_year": 4,
+            "personality": {
+              "aggression": 9,
+              "caution": 80,
+              "showmanship": 60,
+              "determination": 55
+            },
+            "morale": 43,
+            "fame": 0,
+            "form": 55,
+            "injuries": [],
+            "illness": null,
+            "status": "Dead",
+            "record": {
+              "wins": 1,
+              "losses": 3,
+              "draws": 0
+            },
+            "observed_weeks": 0
+          },
+          {
+            "class": 0,
+            "stats": {
+              "hp": 101,
+              "melee_attack": 27,
+              "ranged_attack": 24,
+              "speed": 31,
+              "melee_defense": 13,
+              "ranged_defense": 12
+            },
+            "potential": {
+              "hp": 134,
+              "melee_attack": 39,
+              "ranged_attack": 27,
+              "speed": 44,
+              "melee_defense": 17,
+              "ranged_defense": 14
+            },
+            "dominant_hand": "Right",
+            "age": 23,
+            "weeks_this_year": 12,
+            "personality": {
+              "aggression": 64,
+              "caution": 16,
+              "showmanship": 80,
+              "determination": 18
+            },
+            "morale": 0,
+            "fame": 3,
+            "form": 50,
+            "injuries": [
+              {
+                "location": "Body",
+                "severity": "Permanent",
+                "weeks_left": 0
+              }
+            ],
+            "illness": null,
+            "status": "Dead",
+            "record": {
+              "wins": 4,
+              "losses": 13,
+              "draws": 0
+            },
+            "observed_weeks": 0
+          },
+          {
+            "class": 1,
+            "stats": {
+              "hp": 131,
+              "melee_attack": 20,
+              "ranged_attack": 17,
+              "speed": 36,
+              "melee_defense": 12,
+              "ranged_defense": 11
+            },
+            "potential": {
+              "hp": 161,
+              "melee_attack": 25,
+              "ranged_attack": 27,
+              "speed": 44,
+              "melee_defense": 15,
+              "ranged_defense": 15
+            },
+            "dominant_hand": "Right",
+            "age": 31,
+            "weeks_this_year": 28,
+            "personality": {
+              "aggression": 48,
+              "caution": 49,
+              "showmanship": 6,
+              "determination": 28
+            },
+            "morale": 0,
+            "fame": 0,
+            "form": 62,
+            "injuries": [
+              {
+                "location": {
+                  "Leg": "Right"
+                },
+                "severity": "Permanent",
+                "weeks_left": 0
+              }
+            ],
+            "illness": null,
+            "status": "Active",
+            "record": {
+              "wins": 6,
+              "losses": 8,
+              "draws": 11
+            },
+            "observed_weeks": 0
+          },
+          {
+            "class": 1,
+            "stats": {
+              "hp": 140,
+              "melee_attack": 27,
+              "ranged_attack": 28,
+              "speed": 38,
+              "melee_defense": 16,
+              "ranged_defense": 13
+            },
+            "potential": {
+              "hp": 214,
+              "melee_attack": 42,
+              "ranged_attack": 34,
+              "speed": 56,
+              "melee_defense": 19,
+              "ranged_defense": 21
+            },
+            "dominant_hand": "Left",
+            "age": 29,
+            "weeks_this_year": 0,
+            "personality": {
+              "aggression": 67,
+              "caution": 96,
+              "showmanship": 99,
+              "determination": 79
+            },
+            "morale": 92,
+            "fame": 100,
+            "form": 65,
+            "injuries": [],
+            "illness": null,
+            "status": "Sold",
+            "record": {
+              "wins": 18,
+              "losses": 1,
+              "draws": 4
+            },
+            "observed_weeks": 0
+          },
+          {
+            "class": 0,
+            "stats": {
+              "hp": 109,
+              "melee_attack": 24,
+              "ranged_attack": 26,
+              "speed": 41,
+              "melee_defense": 12,
+              "ranged_defense": 18
+            },
+            "potential": {
+              "hp": 133,
+              "melee_attack": 39,
+              "ranged_attack": 26,
+              "speed": 50,
+              "melee_defense": 14,
+              "ranged_defense": 18
+            },
+            "dominant_hand": "Right",
+            "age": 21,
+            "weeks_this_year": 13,
+            "personality": {
+              "aggression": 42,
+              "caution": 21,
+              "showmanship": 69,
+              "determination": 54
+            },
+            "morale": 67,
+            "fame": 58,
+            "form": 50,
+            "injuries": [
+              {
+                "location": {
+                  "Leg": "Right"
+                },
+                "severity": "Permanent",
+                "weeks_left": 0
+              }
+            ],
+            "illness": {
+              "level": "Mild",
+              "weeks_left": 1
+            },
+            "status": "Dead",
+            "record": {
+              "wins": 11,
+              "losses": 11,
+              "draws": 0
+            },
+            "observed_weeks": 0
+          },
+          {
+            "class": 1,
+            "stats": {
+              "hp": 120,
+              "melee_attack": 25,
+              "ranged_attack": 31,
+              "speed": 44,
+              "melee_defense": 19,
+              "ranged_defense": 18
+            },
+            "potential": {
+              "hp": 159,
+              "melee_attack": 32,
+              "ranged_attack": 37,
+              "speed": 57,
+              "melee_defense": 19,
+              "ranged_defense": 18
+            },
+            "dominant_hand": "Right",
+            "age": 21,
+            "weeks_this_year": 28,
+            "personality": {
+              "aggression": 34,
+              "caution": 76,
+              "showmanship": 48,
+              "determination": 1
+            },
+            "morale": 0,
+            "fame": 0,
+            "form": 44,
+            "injuries": [],
+            "illness": null,
+            "status": "Active",
+            "record": {
+              "wins": 8,
+              "losses": 8,
+              "draws": 9
+            },
+            "observed_weeks": 0
+          },
+          {
+            "class": 0,
+            "stats": {
+              "hp": 126,
+              "melee_attack": 29,
+              "ranged_attack": 27,
+              "speed": 33,
+              "melee_defense": 13,
+              "ranged_defense": 17
+            },
+            "potential": {
+              "hp": 181,
+              "melee_attack": 37,
+              "ranged_attack": 33,
+              "speed": 52,
+              "melee_defense": 13,
+              "ranged_defense": 21
+            },
+            "dominant_hand": "Right",
+            "age": 21,
+            "weeks_this_year": 7,
+            "personality": {
+              "aggression": 20,
+              "caution": 46,
+              "showmanship": 6,
+              "determination": 72
+            },
+            "morale": 92,
+            "fame": 100,
+            "form": 44,
+            "injuries": [
+              {
+                "location": "Body",
+                "severity": "Medium",
+                "weeks_left": 3
+              }
+            ],
+            "illness": null,
+            "status": "Dead",
+            "record": {
+              "wins": 18,
+              "losses": 4,
+              "draws": 0
+            },
+            "observed_weeks": 0
+          },
+          {
+            "class": 1,
+            "stats": {
+              "hp": 127,
+              "melee_attack": 31,
+              "ranged_attack": 29,
+              "speed": 40,
+              "melee_defense": 19,
+              "ranged_defense": 15
+            },
+            "potential": {
+              "hp": 216,
+              "melee_attack": 45,
+              "ranged_attack": 40,
+              "speed": 40,
+              "melee_defense": 19,
+              "ranged_defense": 22
+            },
+            "dominant_hand": "Right",
+            "age": 21,
+            "weeks_this_year": 28,
+            "personality": {
+              "aggression": 61,
+              "caution": 67,
+              "showmanship": 93,
+              "determination": 19
+            },
+            "morale": 0,
+            "fame": 0,
+            "form": 59,
+            "injuries": [],
+            "illness": null,
+            "status": "Active",
+            "record": {
+              "wins": 6,
+              "losses": 5,
+              "draws": 14
+            },
+            "observed_weeks": 0
+          },
+          {
+            "class": 0,
+            "stats": {
+              "hp": 130,
+              "melee_attack": 28,
+              "ranged_attack": 19,
+              "speed": 40,
+              "melee_defense": 9,
+              "ranged_defense": 10
+            },
+            "potential": {
+              "hp": 235,
+              "melee_attack": 37,
+              "ranged_attack": 24,
+              "speed": 61,
+              "melee_defense": 10,
+              "ranged_defense": 18
+            },
+            "dominant_hand": "Right",
+            "age": 24,
+            "weeks_this_year": 3,
+            "personality": {
+              "aggression": 24,
+              "caution": 61,
+              "showmanship": 98,
+              "determination": 42
+            },
+            "morale": 53,
+            "fame": 0,
+            "form": 60,
+            "injuries": [],
+            "illness": null,
+            "status": "Dead",
+            "record": {
+              "wins": 1,
+              "losses": 2,
+              "draws": 0
+            },
+            "observed_weeks": 0
+          },
+          {
+            "class": 1,
+            "stats": {
+              "hp": 151,
+              "melee_attack": 27,
+              "ranged_attack": 33,
+              "speed": 39,
+              "melee_defense": 16,
+              "ranged_defense": 13
+            },
+            "potential": {
+              "hp": 248,
+              "melee_attack": 38,
+              "ranged_attack": 44,
+              "speed": 43,
+              "melee_defense": 16,
+              "ranged_defense": 15
+            },
+            "dominant_hand": "Right",
+            "age": 22,
+            "weeks_this_year": 24,
+            "personality": {
+              "aggression": 11,
+              "caution": 79,
+              "showmanship": 16,
+              "determination": 28
+            },
+            "morale": 0,
+            "fame": 0,
+            "form": 69,
+            "injuries": [
+              {
+                "location": {
+                  "Arm": "Right"
+                },
+                "severity": "Permanent",
+                "weeks_left": 0
+              },
+              {
+                "location": {
+                  "Leg": "Left"
+                },
+                "severity": "Permanent",
+                "weeks_left": 0
+              }
+            ],
+            "illness": null,
+            "status": "Active",
+            "record": {
+              "wins": 7,
+              "losses": 8,
+              "draws": 6
+            },
+            "observed_weeks": 0
+          },
+          {
+            "class": 1,
+            "stats": {
+              "hp": 137,
+              "melee_attack": 24,
+              "ranged_attack": 26,
+              "speed": 41,
+              "melee_defense": 10,
+              "ranged_defense": 12
+            },
+            "potential": {
+              "hp": 222,
+              "melee_attack": 27,
+              "ranged_attack": 36,
+              "speed": 55,
+              "melee_defense": 15,
+              "ranged_defense": 14
+            },
+            "dominant_hand": "Right",
+            "age": 31,
+            "weeks_this_year": 23,
+            "personality": {
+              "aggression": 84,
+              "caution": 9,
+              "showmanship": 84,
+              "determination": 17
+            },
+            "morale": 70,
+            "fame": 18,
+            "form": 55,
+            "injuries": [],
+            "illness": null,
+            "status": "Active",
+            "record": {
+              "wins": 14,
+              "losses": 12,
+              "draws": 0
+            },
+            "observed_weeks": 0
+          },
+          {
+            "class": 0,
+            "stats": {
+              "hp": 116,
+              "melee_attack": 26,
+              "ranged_attack": 22,
+              "speed": 36,
+              "melee_defense": 11,
+              "ranged_defense": 11
+            },
+            "potential": {
+              "hp": 171,
+              "melee_attack": 40,
+              "ranged_attack": 32,
+              "speed": 44,
+              "melee_defense": 13,
+              "ranged_defense": 16
+            },
+            "dominant_hand": "Right",
+            "age": 28,
+            "weeks_this_year": 25,
+            "personality": {
+              "aggression": 82,
+              "caution": 37,
+              "showmanship": 37,
+              "determination": 65
+            },
+            "morale": 55,
+            "fame": 42,
+            "form": 55,
+            "injuries": [],
+            "illness": null,
+            "status": "Dead",
+            "record": {
+              "wins": 6,
+              "losses": 4,
+              "draws": 0
+            },
+            "observed_weeks": 0
+          },
+          {
+            "class": 1,
+            "stats": {
+              "hp": 117,
+              "melee_attack": 23,
+              "ranged_attack": 23,
+              "speed": 36,
+              "melee_defense": 11,
+              "ranged_defense": 12
+            },
+            "potential": {
+              "hp": 177,
+              "melee_attack": 32,
+              "ranged_attack": 31,
+              "speed": 53,
+              "melee_defense": 12,
+              "ranged_defense": 13
+            },
+            "dominant_hand": "Right",
+            "age": 22,
+            "weeks_this_year": 16,
+            "personality": {
+              "aggression": 14,
+              "caution": 23,
+              "showmanship": 62,
+              "determination": 20
+            },
+            "morale": 54,
+            "fame": 25,
+            "form": 40,
+            "injuries": [],
+            "illness": {
+              "level": "Mild",
+              "weeks_left": 1
+            },
+            "status": "Active",
+            "record": {
+              "wins": 5,
+              "losses": 3,
+              "draws": 1
+            },
+            "observed_weeks": 0
+          },
+          {
+            "class": 1,
+            "stats": {
+              "hp": 113,
+              "melee_attack": 19,
+              "ranged_attack": 22,
+              "speed": 35,
+              "melee_defense": 12,
+              "ranged_defense": 12
+            },
+            "potential": {
+              "hp": 177,
+              "melee_attack": 23,
+              "ranged_attack": 27,
+              "speed": 46,
+              "melee_defense": 18,
+              "ranged_defense": 15
+            },
+            "dominant_hand": "Right",
+            "age": 26,
+            "weeks_this_year": 9,
+            "personality": {
+              "aggression": 89,
+              "caution": 78,
+              "showmanship": 28,
+              "determination": 80
+            },
+            "morale": 80,
+            "fame": 20,
+            "form": 60,
+            "injuries": [],
+            "illness": null,
+            "status": "Dead",
+            "record": {
+              "wins": 4,
+              "losses": 3,
+              "draws": 0
+            },
+            "observed_weeks": 0
+          },
+          {
+            "class": 1,
+            "stats": {
+              "hp": 119,
+              "melee_attack": 20,
+              "ranged_attack": 21,
+              "speed": 34,
+              "melee_defense": 10,
+              "ranged_defense": 10
+            },
+            "potential": {
+              "hp": 151,
+              "melee_attack": 26,
+              "ranged_attack": 24,
+              "speed": 40,
+              "melee_defense": 14,
+              "ranged_defense": 11
+            },
+            "dominant_hand": "Right",
+            "age": 21,
+            "weeks_this_year": 1,
+            "personality": {
+              "aggression": 77,
+              "caution": 83,
+              "showmanship": 49,
+              "determination": 68
+            },
+            "morale": 9,
+            "fame": 6,
+            "form": 34,
+            "injuries": [],
+            "illness": {
+              "level": "Mild",
+              "weeks_left": 1
+            },
+            "status": "Active",
+            "record": {
+              "wins": 1,
+              "losses": 2,
+              "draws": 4
+            },
+            "observed_weeks": 0
+          },
+          {
+            "class": 1,
+            "stats": {
+              "hp": 142,
+              "melee_attack": 27,
+              "ranged_attack": 29,
+              "speed": 38,
+              "melee_defense": 16,
+              "ranged_defense": 14
+            },
+            "potential": {
+              "hp": 214,
+              "melee_attack": 42,
+              "ranged_attack": 34,
+              "speed": 56,
+              "melee_defense": 19,
+              "ranged_defense": 21
+            },
+            "dominant_hand": "Left",
+            "age": 29,
+            "weeks_this_year": 28,
+            "personality": {
+              "aggression": 67,
+              "caution": 96,
+              "showmanship": 99,
+              "determination": 79
+            },
+            "morale": 100,
+            "fame": 100,
+            "form": 39,
+            "injuries": [],
+            "illness": null,
+            "status": "Active",
+            "record": {
+              "wins": 30,
+              "losses": 1,
+              "draws": 5
+            },
+            "observed_weeks": 0
+          },
+          {
+            "class": 0,
+            "stats": {
+              "hp": 106,
+              "melee_attack": 22,
+              "ranged_attack": 17,
+              "speed": 24,
+              "melee_defense": 10,
+              "ranged_defense": 11
+            },
+            "potential": {
+              "hp": 128,
+              "melee_attack": 38,
+              "ranged_attack": 30,
+              "speed": 37,
+              "melee_defense": 12,
+              "ranged_defense": 14
+            },
+            "dominant_hand": "Right",
+            "age": 21,
+            "weeks_this_year": 1,
+            "personality": {
+              "aggression": 90,
+              "caution": 49,
+              "showmanship": 43,
+              "determination": 58
+            },
+            "morale": 45,
+            "fame": 0,
+            "form": 100,
+            "injuries": [],
+            "illness": null,
+            "status": "Active",
+            "record": {
+              "wins": 0,
+              "losses": 0,
+              "draws": 0
+            },
+            "observed_weeks": 0
+          }
+        ]
+      }
+    ],
+    "challenges": [
+      {
+        "fighter": 1,
+        "colosseum": 0,
+        "rival": {
+          "club": 2,
+          "fighter": 17
+        }
+      }
+    ],
+    "free_agents": [
+      {
+        "class": 1,
+        "stats": {
+          "hp": 98,
+          "melee_attack": 20,
+          "ranged_attack": 17,
+          "speed": 34,
+          "melee_defense": 10,
+          "ranged_defense": 9
+        },
+        "potential": {
+          "hp": 164,
+          "melee_attack": 33,
+          "ranged_attack": 25,
+          "speed": 54,
+          "melee_defense": 16,
+          "ranged_defense": 15
+        },
+        "dominant_hand": "Right",
+        "age": 22,
+        "weeks_this_year": 20,
+        "personality": {
+          "aggression": 16,
+          "caution": 26,
+          "showmanship": 82,
+          "determination": 50
+        },
+        "morale": 45,
+        "fame": 0,
+        "form": 100,
+        "injuries": [],
+        "illness": null,
+        "status": "Active",
+        "record": {
+          "wins": 0,
+          "losses": 0,
+          "draws": 0
+        },
+        "observed_weeks": 22
+      },
+      {
+        "class": 0,
+        "stats": {
+          "hp": 89,
+          "melee_attack": 21,
+          "ranged_attack": 20,
+          "speed": 24,
+          "melee_defense": 10,
+          "ranged_defense": 8
+        },
+        "potential": {
+          "hp": 112,
+          "melee_attack": 26,
+          "ranged_attack": 32,
+          "speed": 34,
+          "melee_defense": 15,
+          "ranged_defense": 13
+        },
+        "dominant_hand": "Right",
+        "age": 29,
+        "weeks_this_year": 18,
+        "personality": {
+          "aggression": 13,
+          "caution": 51,
+          "showmanship": 33,
+          "determination": 81
+        },
+        "morale": 35,
+        "fame": 0,
+        "form": 100,
+        "injuries": [],
+        "illness": null,
+        "status": "Active",
+        "record": {
+          "wins": 0,
+          "losses": 0,
+          "draws": 0
+        },
+        "observed_weeks": 0
+      },
+      {
+        "class": 1,
+        "stats": {
+          "hp": 89,
+          "melee_attack": 24,
+          "ranged_attack": 22,
+          "speed": 29,
+          "melee_defense": 11,
+          "ranged_defense": 11
+        },
+        "potential": {
+          "hp": 138,
+          "melee_attack": 32,
+          "ranged_attack": 31,
+          "speed": 49,
+          "melee_defense": 16,
+          "ranged_defense": 16
+        },
+        "dominant_hand": "Right",
+        "age": 21,
+        "weeks_this_year": 1,
+        "personality": {
+          "aggression": 96,
+          "caution": 100,
+          "showmanship": 27,
+          "determination": 44
+        },
+        "morale": 50,
+        "fame": 0,
+        "form": 100,
+        "injuries": [],
+        "illness": null,
+        "status": "Active",
+        "record": {
+          "wins": 0,
+          "losses": 0,
+          "draws": 0
+        },
+        "observed_weeks": 0
+      },
+      {
+        "class": 0,
+        "stats": {
+          "hp": 85,
+          "melee_attack": 18,
+          "ranged_attack": 22,
+          "speed": 33,
+          "melee_defense": 11,
+          "ranged_defense": 8
+        },
+        "potential": {
+          "hp": 102,
+          "melee_attack": 23,
+          "ranged_attack": 37,
+          "speed": 41,
+          "melee_defense": 18,
+          "ranged_defense": 13
+        },
+        "dominant_hand": "Right",
+        "age": 21,
+        "weeks_this_year": 1,
+        "personality": {
+          "aggression": 81,
+          "caution": 56,
+          "showmanship": 81,
+          "determination": 47
+        },
+        "morale": 35,
+        "fame": 0,
+        "form": 100,
+        "injuries": [],
+        "illness": null,
+        "status": "Active",
+        "record": {
+          "wins": 0,
+          "losses": 0,
+          "draws": 0
+        },
+        "observed_weeks": 0
+      },
+      {
+        "class": 1,
+        "stats": {
+          "hp": 85,
+          "melee_attack": 20,
+          "ranged_attack": 18,
+          "speed": 27,
+          "melee_defense": 9,
+          "ranged_defense": 9
+        },
+        "potential": {
+          "hp": 107,
+          "melee_attack": 32,
+          "ranged_attack": 22,
+          "speed": 37,
+          "melee_defense": 12,
+          "ranged_defense": 15
+        },
+        "dominant_hand": "Right",
+        "age": 21,
+        "weeks_this_year": 1,
+        "personality": {
+          "aggression": 46,
+          "caution": 68,
+          "showmanship": 36,
+          "determination": 51
+        },
+        "morale": 50,
+        "fame": 0,
+        "form": 100,
+        "injuries": [],
+        "illness": null,
+        "status": "Active",
+        "record": {
+          "wins": 0,
+          "losses": 0,
+          "draws": 0
+        },
+        "observed_weeks": 0
+      },
+      {
+        "class": 0,
+        "stats": {
+          "hp": 98,
+          "melee_attack": 16,
+          "ranged_attack": 18,
+          "speed": 30,
+          "melee_defense": 9,
+          "ranged_defense": 11
+        },
+        "potential": {
+          "hp": 146,
+          "melee_attack": 27,
+          "ranged_attack": 25,
+          "speed": 36,
+          "melee_defense": 14,
+          "ranged_defense": 19
+        },
+        "dominant_hand": "Right",
+        "age": 21,
+        "weeks_this_year": 1,
+        "personality": {
+          "aggression": 91,
+          "caution": 57,
+          "showmanship": 88,
+          "determination": 85
+        },
+        "morale": 35,
+        "fame": 0,
+        "form": 100,
+        "injuries": [],
+        "illness": null,
+        "status": "Active",
+        "record": {
+          "wins": 0,
+          "losses": 0,
+          "draws": 0
+        },
+        "observed_weeks": 0
+      },
+      {
+        "class": 1,
+        "stats": {
+          "hp": 96,
+          "melee_attack": 22,
+          "ranged_attack": 19,
+          "speed": 29,
+          "melee_defense": 11,
+          "ranged_defense": 8
+        },
+        "potential": {
+          "hp": 168,
+          "melee_attack": 27,
+          "ranged_attack": 27,
+          "speed": 45,
+          "melee_defense": 16,
+          "ranged_defense": 13
+        },
+        "dominant_hand": "Right",
+        "age": 21,
+        "weeks_this_year": 1,
+        "personality": {
+          "aggression": 2,
+          "caution": 88,
+          "showmanship": 69,
+          "determination": 17
+        },
+        "morale": 45,
+        "fame": 0,
+        "form": 100,
+        "injuries": [],
+        "illness": null,
+        "status": "Active",
+        "record": {
+          "wins": 0,
+          "losses": 0,
+          "draws": 0
+        },
+        "observed_weeks": 0
+      },
+      {
+        "class": 0,
+        "stats": {
+          "hp": 104,
+          "melee_attack": 23,
+          "ranged_attack": 23,
+          "speed": 34,
+          "melee_defense": 8,
+          "ranged_defense": 12
+        },
+        "potential": {
+          "hp": 177,
+          "melee_attack": 35,
+          "ranged_attack": 30,
+          "speed": 43,
+          "melee_defense": 12,
+          "ranged_defense": 16
+        },
+        "dominant_hand": "Left",
+        "age": 20,
+        "weeks_this_year": 1,
+        "personality": {
+          "aggression": 74,
+          "caution": 9,
+          "showmanship": 14,
+          "determination": 71
+        },
+        "morale": 50,
+        "fame": 0,
+        "form": 100,
+        "injuries": [],
+        "illness": null,
+        "status": "Active",
+        "record": {
+          "wins": 0,
+          "losses": 0,
+          "draws": 0
+        },
+        "observed_weeks": 0
+      },
+      {
+        "class": 0,
+        "stats": {
+          "hp": 92,
+          "melee_attack": 16,
+          "ranged_attack": 23,
+          "speed": 28,
+          "melee_defense": 8,
+          "ranged_defense": 9
+        },
+        "potential": {
+          "hp": 135,
+          "melee_attack": 20,
+          "ranged_attack": 31,
+          "speed": 41,
+          "melee_defense": 11,
+          "ranged_defense": 13
+        },
+        "dominant_hand": "Right",
+        "age": 20,
+        "weeks_this_year": 1,
+        "personality": {
+          "aggression": 42,
+          "caution": 60,
+          "showmanship": 27,
+          "determination": 2
+        },
+        "morale": 50,
+        "fame": 0,
+        "form": 100,
+        "injuries": [],
+        "illness": null,
+        "status": "Active",
+        "record": {
+          "wins": 0,
+          "losses": 0,
+          "draws": 0
+        },
+        "observed_weeks": 0
+      },
+      {
+        "class": 1,
+        "stats": {
+          "hp": 105,
+          "melee_attack": 21,
+          "ranged_attack": 16,
+          "speed": 35,
+          "melee_defense": 10,
+          "ranged_defense": 11
+        },
+        "potential": {
+          "hp": 157,
+          "melee_attack": 32,
+          "ranged_attack": 25,
+          "speed": 53,
+          "melee_defense": 17,
+          "ranged_defense": 16
+        },
+        "dominant_hand": "Right",
+        "age": 20,
+        "weeks_this_year": 1,
+        "personality": {
+          "aggression": 32,
+          "caution": 37,
+          "showmanship": 66,
+          "determination": 13
+        },
+        "morale": 50,
+        "fame": 0,
+        "form": 100,
+        "injuries": [],
+        "illness": null,
+        "status": "Active",
+        "record": {
+          "wins": 0,
+          "losses": 0,
+          "draws": 0
+        },
+        "observed_weeks": 0
+      },
+      {
+        "class": 1,
+        "stats": {
+          "hp": 109,
+          "melee_attack": 19,
+          "ranged_attack": 21,
+          "speed": 24,
+          "melee_defense": 11,
+          "ranged_defense": 11
+        },
+        "potential": {
+          "hp": 180,
+          "melee_attack": 31,
+          "ranged_attack": 30,
+          "speed": 32,
+          "melee_defense": 18,
+          "ranged_defense": 15
+        },
+        "dominant_hand": "Right",
+        "age": 20,
+        "weeks_this_year": 1,
+        "personality": {
+          "aggression": 35,
+          "caution": 74,
+          "showmanship": 82,
+          "determination": 92
+        },
+        "morale": 45,
+        "fame": 0,
+        "form": 100,
+        "injuries": [],
+        "illness": {
+          "level": "Mild",
+          "weeks_left": 2
+        },
+        "status": "Active",
+        "record": {
+          "wins": 0,
+          "losses": 0,
+          "draws": 0
+        },
+        "observed_weeks": 0
+      },
+      {
+        "class": 1,
+        "stats": {
+          "hp": 84,
+          "melee_attack": 18,
+          "ranged_attack": 18,
+          "speed": 27,
+          "melee_defense": 11,
+          "ranged_defense": 10
+        },
+        "potential": {
+          "hp": 101,
+          "melee_attack": 27,
+          "ranged_attack": 23,
+          "speed": 39,
+          "melee_defense": 14,
+          "ranged_defense": 14
+        },
+        "dominant_hand": "Right",
+        "age": 20,
+        "weeks_this_year": 1,
+        "personality": {
+          "aggression": 80,
+          "caution": 22,
+          "showmanship": 97,
+          "determination": 27
+        },
+        "morale": 50,
+        "fame": 0,
+        "form": 100,
+        "injuries": [],
+        "illness": null,
+        "status": "Active",
+        "record": {
+          "wins": 0,
+          "losses": 0,
+          "draws": 0
+        },
+        "observed_weeks": 0
+      },
+      {
+        "class": 0,
+        "stats": {
+          "hp": 85,
+          "melee_attack": 22,
+          "ranged_attack": 21,
+          "speed": 30,
+          "melee_defense": 9,
+          "ranged_defense": 11
+        },
+        "potential": {
+          "hp": 109,
+          "melee_attack": 34,
+          "ranged_attack": 35,
+          "speed": 50,
+          "melee_defense": 15,
+          "ranged_defense": 17
+        },
+        "dominant_hand": "Right",
+        "age": 20,
+        "weeks_this_year": 1,
+        "personality": {
+          "aggression": 75,
+          "caution": 19,
+          "showmanship": 70,
+          "determination": 0
+        },
+        "morale": 50,
+        "fame": 0,
+        "form": 100,
+        "injuries": [],
+        "illness": null,
+        "status": "Active",
+        "record": {
+          "wins": 0,
+          "losses": 0,
+          "draws": 0
+        },
+        "observed_weeks": 0
+      },
+      {
+        "class": 1,
+        "stats": {
+          "hp": 99,
+          "melee_attack": 20,
+          "ranged_attack": 21,
+          "speed": 26,
+          "melee_defense": 10,
+          "ranged_defense": 9
+        },
+        "potential": {
+          "hp": 125,
+          "melee_attack": 24,
+          "ranged_attack": 25,
+          "speed": 44,
+          "melee_defense": 15,
+          "ranged_defense": 15
+        },
+        "dominant_hand": "Right",
+        "age": 20,
+        "weeks_this_year": 1,
+        "personality": {
+          "aggression": 86,
+          "caution": 3,
+          "showmanship": 70,
+          "determination": 27
+        },
+        "morale": 50,
+        "fame": 0,
+        "form": 100,
+        "injuries": [],
+        "illness": null,
+        "status": "Active",
+        "record": {
+          "wins": 0,
+          "losses": 0,
+          "draws": 0
+        },
+        "observed_weeks": 0
+      },
+      {
+        "class": 0,
+        "stats": {
+          "hp": 98,
+          "melee_attack": 17,
+          "ranged_attack": 21,
+          "speed": 33,
+          "melee_defense": 8,
+          "ranged_defense": 8
+        },
+        "potential": {
+          "hp": 130,
+          "melee_attack": 22,
+          "ranged_attack": 34,
+          "speed": 57,
+          "melee_defense": 14,
+          "ranged_defense": 11
+        },
+        "dominant_hand": "Right",
+        "age": 20,
+        "weeks_this_year": 1,
+        "personality": {
+          "aggression": 59,
+          "caution": 31,
+          "showmanship": 13,
+          "determination": 27
+        },
+        "morale": 50,
+        "fame": 0,
+        "form": 100,
+        "injuries": [],
+        "illness": null,
+        "status": "Active",
+        "record": {
+          "wins": 0,
+          "losses": 0,
+          "draws": 0
+        },
+        "observed_weeks": 0
+      }
+    ],
+    "transfer_list": [],
+    "sale_offers": [],
+    "counter_offer": null,
+    "staff": {
+      "trainer": 2
+    },
+    "rng": {
+      "seed": [
+        200,
+        12,
+        64,
+        59,
+        208,
+        32,
+        108,
+        9,
+        55,
+        166,
+        59,
+        111,
+        242,
+        79,
+        37,
+        30,
+        60,
+        187,
+        47,
+        27,
+        179,
+        132,
+        86,
+        90,
+        154,
+        160,
+        102,
+        21,
+        13,
+        27,
+        32,
+        63
+      ],
+      "stream": 0,
+      "word_pos": 14736
+    }
+  }
+}

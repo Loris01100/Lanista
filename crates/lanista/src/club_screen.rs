@@ -1,5 +1,5 @@
 //! The player's club, week after week: the general menu, the fighter list, a
-//! fighter's sheet, the summary of the week's fights, the colosseums and the market. Fights are watched in the
+//! fighter's sheet, the summary of the week's fights, the colosseums, the market and the staff. Fights are watched in the
 //! combat screen; the same seed and decisions give the same game as the `career` tool.
 //! The game is saved after every week, and when the player asks.
 
@@ -19,6 +19,7 @@ use lanista_core::fighter::injury::{Injury, Severity, Side};
 use lanista_core::fighter::morale::Morale;
 use lanista_core::market::{Move, Target, value};
 use lanista_core::rivals::RivalId;
+use lanista_core::staff::StaffMove;
 use lanista_core::state::{Decisions, GameState, next_week};
 use macroquad::prelude::*;
 use reesch::{Assets, Audio, Bindings, Screen, Transition, egui};
@@ -30,7 +31,8 @@ use crate::texts::{
     STAT_NAMES, activity_name, arena_name, challenger_text, change, class_name, club_name,
     colosseum_name, condition_text, contender_name, fight_text, fighter_name, free_agent_name,
     illness_text, injury_text, market_news_text, money_line, move_text, profile_name, range_texts,
-    record_text, rival_fighter_name, title_news_text, week_lines,
+    record_text, rival_fighter_name, staff_move_text, staff_news_text, title_news_text,
+    trainer_text, week_lines,
 };
 
 /// Seed of the standard duel offered from the club.
@@ -53,6 +55,8 @@ enum View {
     Colosseums,
     /// Free agents, rival fighters for sale, and the club's fighters to sell or release.
     Market,
+    /// The trainer, hired and dismissed.
+    Staff,
 }
 
 /// One of the club's fights, as the fight summary shows it.
@@ -181,6 +185,7 @@ impl ClubScreen {
         self.histories
             .resize_with(self.state.fighters.len(), Vec::new);
         let mut overview = vec![money_line(money, self.state.money, &summary.ledger)];
+        overview.extend(summary.staff.map(staff_news_text));
         overview.extend(
             summary
                 .market
@@ -210,7 +215,7 @@ impl ClubScreen {
                 let money = summary
                     .ledger
                     .iter()
-                    .filter(|t| t.fighter == i)
+                    .filter(|t| t.fighter == Some(i))
                     .filter(|t| {
                         matches!(
                             t.flow,
@@ -289,6 +294,7 @@ impl ClubScreen {
             });
             ui.selectable_value(&mut self.view, View::Colosseums, "Colisées");
             ui.selectable_value(&mut self.view, View::Market, "Marché");
+            ui.selectable_value(&mut self.view, View::Staff, "Personnel");
             ui.separator();
             if ui.button("Duel standard").clicked() {
                 let duel =
@@ -321,6 +327,9 @@ impl ClubScreen {
                 "Marché : {}",
                 move_text(m, &self.state, &self.data)
             ));
+        }
+        if let Some(m) = self.decisions.staff {
+            ui.label(format!("Personnel : {}", staff_move_text(m)));
         }
         if let Some((id, price)) = self.state.counter_offer {
             ui.label(format!(
@@ -723,6 +732,60 @@ impl ClubScreen {
         });
     }
 
+    /// The staff: the trainer the club has, and each level to hire in its place.
+    fn staff(&mut self, ui: &mut egui::Ui) {
+        let data = &self.data;
+        let state = &self.state;
+        let chosen = &mut self.decisions.staff;
+        ui.heading("Personnel");
+        ui.label(
+            "L'entraîneur rend l'entraînement plus profitable et moins fatigant. \
+             Son salaire est payé chaque semaine, même à crédit ; un changement compte \
+             dès la semaine qui se joue.",
+        );
+        ui.add_space(6.0);
+        ui.strong("Entraîneur");
+        match (state.staff.trainer, state.trainer(data)) {
+            (Some(level), Some(trainer)) => {
+                ui.label(format!("Niveau {level} : {}", trainer_text(trainer)));
+            }
+            _ => {
+                ui.label(format!(
+                    "Aucun : séance {}, sans bonus",
+                    data.economy.training_cost
+                ));
+            }
+        }
+        if let Some(m) = *chosen {
+            ui.horizontal(|ui| {
+                ui.strong(format!("Cette semaine : {}", staff_move_text(m)));
+                if ui.button("Annuler").clicked() {
+                    *chosen = None;
+                }
+            });
+        }
+        egui::Grid::new("trainers").striped(true).show(ui, |ui| {
+            for (level, trainer) in (1..).zip(&data.economy.staff.trainers) {
+                ui.label(format!("Niveau {level}"));
+                ui.label(trainer_text(trainer));
+                if state.staff.trainer == Some(level) {
+                    let dismiss = StaffMove::DismissTrainer;
+                    staff_toggle(
+                        ui,
+                        chosen,
+                        dismiss,
+                        "Renvoyer",
+                        state.may_staff(dismiss, data),
+                    );
+                } else {
+                    let hire = StaffMove::HireTrainer(level);
+                    staff_toggle(ui, chosen, hire, "Engager", state.may_staff(hire, data));
+                }
+                ui.end_row();
+            }
+        });
+    }
+
     /// "Ludus Magnus, prudent : 10 combattants, argent 500" for each rival club.
     fn rival_lines(&self) -> Vec<String> {
         self.data
@@ -770,6 +833,7 @@ impl Screen for ClubScreen {
             View::Fights => again = self.fight_summary(ui),
             View::Colosseums => self.colosseums(ui),
             View::Market => self.market(ui),
+            View::Staff => self.staff(ui),
         });
         if let Some(transition) = transition {
             return transition;
@@ -808,6 +872,22 @@ fn toggle(ui: &mut egui::Ui, moves: &mut Vec<Move>, m: Move, label: &str, enable
             }
             moves.push(m);
         }
+    }
+}
+
+/// A button choosing `m` as the week's change of staff, or taking it back when chosen
+/// already; only a chosen one may be clicked when not `enabled`.
+fn staff_toggle(
+    ui: &mut egui::Ui,
+    chosen: &mut Option<StaffMove>,
+    m: StaffMove,
+    label: &str,
+    enabled: bool,
+) {
+    let selected = *chosen == Some(m);
+    let button = egui::SelectableLabel::new(selected, label);
+    if ui.add_enabled(enabled || selected, button).clicked() {
+        *chosen = if selected { None } else { Some(m) };
     }
 }
 
@@ -1244,6 +1324,19 @@ mod tests {
             menu[1],
             "Mirmillon n° 1 : Combat à Capoue, Contre un Augure, plus fort : abandon, renommée -8"
         );
+    }
+
+    #[test]
+    fn a_hired_trainer_is_told_in_the_menu_and_paid() {
+        let mut screen = screen(7);
+        screen.decisions.staff = Some(StaffMove::HireTrainer(2));
+        screen.next_week();
+        let (_, menu) = screen.last_week.as_ref().unwrap();
+        assert!(menu[0].contains("salaires -20"), "{menu:?}");
+        assert_eq!(menu[1], "Entraîneur de niveau 2 engagé");
+        assert_eq!(screen.state.staff.trainer, Some(2));
+        // The next week's decisions keep the trainer, with no new change.
+        assert_eq!(screen.decisions.staff, None);
     }
 
     #[test]

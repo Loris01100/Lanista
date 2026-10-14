@@ -1,5 +1,5 @@
 //! What the player reads, in French: fighters, injuries, illnesses, fights,
-//! weeks, money, colosseums and the market.
+//! weeks, money, colosseums, the market and the staff.
 
 use lanista_core::colosseum::{
     ArenaKind, Challenge, ColosseumId, Contender, TitleNews, title_kept,
@@ -14,6 +14,7 @@ use lanista_core::fighter::illness::{Illness, IllnessLevel};
 use lanista_core::fighter::injury::{Injury, Location, Severity, Side};
 use lanista_core::market::{MarketNews, Move, Target, stat_ranges};
 use lanista_core::rivals::{Profile, RivalId};
+use lanista_core::staff::{StaffMove, TrainerRules};
 use lanista_core::state::GameState;
 
 /// Stat names, in `Stats::to_array` order.
@@ -133,6 +134,34 @@ pub fn move_text(m: Move, state: &GameState, data: &DesignData) -> String {
             rival_fighter_name(id, state, data)
         ),
     }
+}
+
+/// A change of staff, as chosen for the week.
+pub fn staff_move_text(m: StaffMove) -> String {
+    match m {
+        StaffMove::HireTrainer(level) => format!("Engager un entraîneur de niveau {level}"),
+        StaffMove::DismissTrainer => "Renvoyer l'entraîneur".into(),
+    }
+}
+
+/// A change of staff, once made.
+pub fn staff_news_text(m: StaffMove) -> String {
+    match m {
+        StaffMove::HireTrainer(level) => format!("Entraîneur de niveau {level} engagé"),
+        StaffMove::DismissTrainer => "Entraîneur renvoyé".into(),
+    }
+}
+
+/// What a trainer level costs and brings: "salaire 20 par semaine, séance 6, progression
+/// +20 %, 1 de forme épargnée par séance".
+pub fn trainer_text(trainer: &TrainerRules) -> String {
+    format!(
+        "salaire {} par semaine, séance {}, progression +{} %, {} de forme épargnée par séance",
+        trainer.salary,
+        trainer.training_cost,
+        trainer.coaching.progress_percent,
+        trainer.coaching.form_spared
+    )
 }
 
 /// What happened on the market, in one line, from the game after the week.
@@ -352,6 +381,7 @@ pub fn money_line(before: i64, after: i64, ledger: &[Transaction]) -> String {
                 Flow::ChampionBonus => "bonus champion",
                 Flow::Purchase => "achat",
                 Flow::Sale => "vente",
+                Flow::Salary => "salaires",
             };
             format!("{name} {:+}", t.amount)
         })

@@ -10,4 +10,5 @@ pub mod log;
 pub mod market;
 pub mod rivals;
 pub mod save;
+pub mod staff;
 pub mod state;

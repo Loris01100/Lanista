@@ -5,8 +5,21 @@
     max_fighters: 3,
     // Each week, for each active fighter, even into debt.
     upkeep: 10,
-    // Each training session.
+    // Each training session without a trainer.
     training_cost: 5,
+    staff: (
+        // Trainer levels 1 to 5: salary paid every week, even into debt; price of a
+        // training session; chance added to each stat's chance to improve at a session,
+        // in percent of it; form a session costs less (5 without a trainer,
+        // data/fighter.ron).
+        trainers: [
+            (salary: 10, training_cost: 5, coaching: (progress_percent: 10, form_spared: 1)),
+            (salary: 20, training_cost: 6, coaching: (progress_percent: 20, form_spared: 1)),
+            (salary: 35, training_cost: 7, coaching: (progress_percent: 35, form_spared: 2)),
+            (salary: 55, training_cost: 8, coaching: (progress_percent: 50, form_spared: 3)),
+            (salary: 80, training_cost: 10, coaching: (progress_percent: 75, form_spared: 4)),
+        ],
+    ),
     market: (
         // Free agents, signed for nothing: missing ones arrive at the end of the week,
         // the least valuable leave beyond the most.

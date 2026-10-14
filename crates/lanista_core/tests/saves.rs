@@ -9,6 +9,7 @@ use std::path::PathBuf;
 use lanista_core::design_data::DesignData;
 use lanista_core::market::{Move, Target};
 use lanista_core::save::{VERSION, from_json, to_json};
+use lanista_core::staff::StaffMove;
 use lanista_core::state::{Decisions, GameState, next_week};
 use proptest::prelude::*;
 
@@ -88,6 +89,7 @@ fn keep_a_save_of_the_current_version() {
             Move::Sign(0),
             Move::List(0),
         ],
+        staff: Some(StaffMove::HireTrainer(2)),
     };
     next_week(&mut state, &hire, &data);
     while state.week <= 31

@@ -1,10 +1,11 @@
 //! Money: what comes in (prizes, receipts) and goes out (upkeep, care, training,
-//! entry fees). Money only comes from fights; there is no sponsor.
+//! entry fees, staff salaries). Money only comes from fights; there is no sponsor.
 
 use serde::Deserialize;
 
 use crate::fighter::fame::Fame;
 use crate::market::MarketRules;
+use crate::staff::StaffRules;
 
 /// Prices and purses, from `data/economy.ron`.
 #[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
@@ -16,8 +17,9 @@ pub struct EconomyRules {
     pub max_fighters: u32,
     /// Paid each week for each active fighter, even into debt.
     pub upkeep: u32,
-    /// Paid for each training session.
+    /// Paid for each training session without a trainer.
     pub training_cost: u32,
+    pub staff: StaffRules,
     pub market: MarketRules,
 }
 
@@ -61,13 +63,15 @@ pub enum Flow {
     Purchase,
     /// The club's fighter sold to a rival.
     Sale,
+    /// A staff member's weekly salary.
+    Salary,
 }
 
-/// Money in (positive) or out (negative) for one of the club's fighters.
+/// Money in (positive) or out (negative) for one of the club's fighters, or for the club.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct Transaction {
-    /// Index of the fighter in the club.
-    pub fighter: usize,
+    /// Index of the fighter in the club; `None` for the club's own costs, its staff.
+    pub fighter: Option<usize>,
     pub flow: Flow,
     pub amount: i64,
 }

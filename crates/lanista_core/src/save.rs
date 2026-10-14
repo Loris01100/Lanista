@@ -9,18 +9,19 @@ use crate::state::GameState;
 
 /// Version written in new saves. Raise it with any change to the saved types,
 /// and add the migration from the previous version to [`MIGRATIONS`].
-pub const VERSION: u64 = 7;
+pub const VERSION: u64 = 8;
 
 /// `MIGRATIONS[i]` turns a version `i + 1` save into a version `i + 2` one,
 /// working on the JSON so the old types need not be kept.
 type Migration = fn(&mut Value, &DesignData);
-const MIGRATIONS: [Migration; 6] = [
+const MIGRATIONS: [Migration; 7] = [
     no_colosseums,
     title_since,
     no_challenges,
     no_rivals,
     no_market,
     rival_rosters,
+    no_staff,
 ];
 const _: () = assert!(MIGRATIONS.len() as u64 == VERSION - 1);
 
@@ -148,6 +149,11 @@ fn rival_rosters(save: &mut Value, data: &DesignData) {
     state["counter_offer"] = Value::Null;
 }
 
+/// Version 8 adds the club's staff, no one hired.
+fn no_staff(save: &mut Value, _: &DesignData) {
+    save["state"]["staff"] = json!({ "trainer": null });
+}
+
 #[derive(Serialize)]
 struct Save<'a> {
     version: u64,
@@ -268,12 +274,12 @@ mod tests {
     fn unknown_versions_are_refused() {
         let data = data();
         let save = to_json(&GameState::new(7, &data));
-        let newer = save.replacen("\"version\": 7", "\"version\": 8", 1);
+        let newer = save.replacen("\"version\": 8", "\"version\": 9", 1);
         assert!(matches!(
             from_json(&newer, &data),
-            Err(SaveError::Version(Some(8)))
+            Err(SaveError::Version(Some(9)))
         ));
-        let none = save.replacen("\"version\": 7", "\"versio\": 7", 1);
+        let none = save.replacen("\"version\": 8", "\"versio\": 8", 1);
         assert!(matches!(
             from_json(&none, &data),
             Err(SaveError::Version(None))

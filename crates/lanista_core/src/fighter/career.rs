@@ -19,6 +19,7 @@ use crate::fighter::retirement::decides_to_retire;
 use crate::fighter::{ClassId, Condition, Fighter, FighterId, Stats};
 use crate::log::Report;
 use crate::rivals::RivalId;
+use crate::staff::Coaching;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum Status {
@@ -169,11 +170,13 @@ impl CareerFighter {
     /// Plays one week following `plan`; `None`, and nothing changes, if the fighter
     /// is retired or dead. In order: care, the week's activity, then healing,
     /// the illness draw and, once a year, ageing and the retirement decision.
-    /// A fight is against `opponent`, or a new random fighter without one.
+    /// A fight is against `opponent`, or a new random fighter without one; training
+    /// gains more and costs less form with the club trainer's `coaching`.
     pub fn play_week<R: Rng + ?Sized>(
         &mut self,
         plan: WeekPlan,
         opponent: Option<&mut Self>,
+        coaching: Coaching,
         rng: &mut R,
         data: &DesignData,
     ) -> Option<WeekReport> {
@@ -191,8 +194,10 @@ impl CareerFighter {
                 };
             }
             Activity::Train => {
-                self.form = self.form.after(FormEvent::Training, &rules.form);
-                self.progress(ProgressEvent::Training, rng, rules);
+                let lost = rules.form.training.saturating_sub(coaching.form_spared);
+                self.form = Form::new(self.form.value().saturating_sub(lost));
+                let coaching_percent = coaching.progress_percent;
+                self.progress(ProgressEvent::Training { coaching_percent }, rng, rules);
             }
             Activity::Fight(_) | Activity::TitleFight(_) | Activity::Challenge(..) => {
                 let form = if matches!(plan.activity, Activity::TitleFight(_)) {
@@ -610,13 +615,47 @@ mod tests {
         let mut rng = ChaCha8Rng::seed_from_u64(0);
         let mut f = fighter(7);
         f.form = Form::new(50);
-        f.play_week(plan(Activity::Rest), None, &mut rng, &data)
-            .unwrap();
+        f.play_week(
+            plan(Activity::Rest),
+            None,
+            Coaching::default(),
+            &mut rng,
+            &data,
+        )
+        .unwrap();
         assert_eq!(f.form.value(), 65);
-        f.play_week(plan(Activity::Train), None, &mut rng, &data)
-            .unwrap();
+        f.play_week(
+            plan(Activity::Train),
+            None,
+            Coaching::default(),
+            &mut rng,
+            &data,
+        )
+        .unwrap();
         assert_eq!(f.form.value(), 60);
         assert_eq!(f.weeks_this_year, 2);
+    }
+
+    #[test]
+    fn a_trainer_spares_form() {
+        let data = data();
+        let mut rng = ChaCha8Rng::seed_from_u64(0);
+        let mut f = fighter(7);
+        f.form = Form::new(50);
+        let coaching = Coaching {
+            progress_percent: 50,
+            form_spared: 3,
+        };
+        f.play_week(plan(Activity::Train), None, coaching, &mut rng, &data)
+            .unwrap();
+        assert_eq!(f.form.value(), 48);
+        let spared_all = Coaching {
+            form_spared: 99,
+            ..coaching
+        };
+        f.play_week(plan(Activity::Train), None, spared_all, &mut rng, &data)
+            .unwrap();
+        assert_eq!(f.form.value(), 48);
     }
 
     #[test]
@@ -625,7 +664,13 @@ mod tests {
         let mut rng = ChaCha8Rng::seed_from_u64(1);
         let mut f = fighter(7);
         let report = f
-            .play_week(plan(Activity::Fight(ColosseumId(0))), None, &mut rng, &data)
+            .play_week(
+                plan(Activity::Fight(ColosseumId(0))),
+                None,
+                Coaching::default(),
+                &mut rng,
+                &data,
+            )
             .unwrap();
         let fight = report.fight.unwrap();
         if f.status == Status::Active {
@@ -646,7 +691,13 @@ mod tests {
         };
         f.injuries.push(injury);
         let report = f
-            .play_week(plan(Activity::Rest), None, &mut rng, &data)
+            .play_week(
+                plan(Activity::Rest),
+                None,
+                Coaching::default(),
+                &mut rng,
+                &data,
+            )
             .unwrap();
         assert_eq!(report.healed_injuries, vec![injury]);
         assert_eq!(f.injuries, []);
@@ -678,7 +729,13 @@ mod tests {
         let mut birthdays = 0;
         for _ in 0..data.calendar.season_weeks() {
             let report = f
-                .play_week(plan(Activity::Rest), None, &mut rng, &data)
+                .play_week(
+                    plan(Activity::Rest),
+                    None,
+                    Coaching::default(),
+                    &mut rng,
+                    &data,
+                )
                 .unwrap();
             birthdays += u32::from(report.birthday);
         }
@@ -694,7 +751,13 @@ mod tests {
             f.status = status;
             let before = f.clone();
             assert_eq!(
-                f.play_week(plan(Activity::Fight(ColosseumId(0))), None, &mut rng, &data),
+                f.play_week(
+                    plan(Activity::Fight(ColosseumId(0))),
+                    None,
+                    Coaching::default(),
+                    &mut rng,
+                    &data
+                ),
                 None
             );
             assert_eq!(f, before);
@@ -707,7 +770,13 @@ mod tests {
         let mut rng = ChaCha8Rng::seed_from_u64(5);
         let mut f = fighter(7);
         let report = f
-            .play_week(plan(Activity::Fight(ColosseumId(0))), None, &mut rng, &data)
+            .play_week(
+                plan(Activity::Fight(ColosseumId(0))),
+                None,
+                Coaching::default(),
+                &mut rng,
+                &data,
+            )
             .unwrap();
         let fight = report.fight.unwrap();
         let mut replay = fight.start.clone();
@@ -727,7 +796,13 @@ mod tests {
             let mut f = fighter(7);
             let mut opponent = fighter(seed + 100);
             let report = f
-                .play_week(plan(fight), Some(&mut opponent), &mut rng, &data)
+                .play_week(
+                    plan(fight),
+                    Some(&mut opponent),
+                    Coaching::default(),
+                    &mut rng,
+                    &data,
+                )
                 .unwrap();
             let summary = report.fight.unwrap();
             assert_eq!(summary.opponent, fighter(seed + 100));
@@ -771,7 +846,13 @@ mod tests {
             let mut f = CareerFighter::random(&mut rng, &data);
             let reports: Vec<_> = (0..10)
                 .filter_map(|_| {
-                    f.play_week(plan(Activity::Fight(ColosseumId(0))), None, &mut rng, &data)
+                    f.play_week(
+                        plan(Activity::Fight(ColosseumId(0))),
+                        None,
+                        Coaching::default(),
+                        &mut rng,
+                        &data,
+                    )
                 })
                 .collect();
             (f, reports)

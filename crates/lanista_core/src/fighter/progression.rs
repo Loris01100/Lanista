@@ -11,7 +11,10 @@ use crate::fighter::morale::Morale;
 /// What can make a fighter progress.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ProgressEvent {
-    Training,
+    /// A session whose trainer adds this percentage of the chance to it (0 without one).
+    Training {
+        coaching_percent: u32,
+    },
     Fight,
 }
 
@@ -42,7 +45,8 @@ pub fn age_percent(age: u32, rules: &ProgressionRules) -> u32 {
 
 /// Stats after `event`: each stat below its potential has a chance to gain
 /// its `rules.gain`, never past the potential. The chance is the event's,
-/// scaled by the age bracket and by morale (± `rules.morale_percent` at 100 and 0).
+/// scaled by the age bracket, by morale (± `rules.morale_percent` at 100 and 0) and,
+/// for training, raised by the trainer's coaching.
 pub fn progress<R: Rng + ?Sized>(
     rng: &mut R,
     stats: Stats,
@@ -52,15 +56,19 @@ pub fn progress<R: Rng + ?Sized>(
     morale: Morale,
     rules: &ProgressionRules,
 ) -> Stats {
-    let base = match event {
-        ProgressEvent::Training => rules.training_chance,
-        ProgressEvent::Fight => rules.fight_chance,
+    let (base, coaching_percent) = match event {
+        ProgressEvent::Training { coaching_percent } => (rules.training_chance, coaching_percent),
+        ProgressEvent::Fight => (rules.fight_chance, 0),
     };
     let morale_offset = i64::from(morale.value()) - i64::from(Morale::NEUTRAL);
     let morale_percent =
         100 + morale_offset * i64::from(rules.morale_percent) / i64::from(Morale::NEUTRAL);
-    // Chance out of 1 000 000: base % × age % × morale %.
-    let chance = i64::from(base) * i64::from(age_percent(age, rules)) * morale_percent.max(0);
+    // Chance out of 1 000 000: base % × age % × morale % × coaching %.
+    let chance = i64::from(base)
+        * i64::from(age_percent(age, rules))
+        * morale_percent.max(0)
+        * (100 + i64::from(coaching_percent))
+        / 100;
     let chance = u32::try_from(chance.clamp(0, 1_000_000)).unwrap_or(0);
     let mut stats = stats.to_array();
     let caps = potential.to_array();
@@ -157,11 +165,16 @@ mod tests {
 
     /// Total points gained over `weeks` training sessions, from `STATS`, far from potential.
     fn gained(age: u32, morale: u32, weeks: u32) -> u32 {
+        coached(age, morale, weeks, 0)
+    }
+
+    /// The same with a trainer adding `coaching_percent`.
+    fn coached(age: u32, morale: u32, weeks: u32, coaching_percent: u32) -> u32 {
         let mut rng = ChaCha8Rng::seed_from_u64(3);
         let potential = STATS.map(|v| v * 10);
         let mut stats = STATS;
         for _ in 0..weeks {
-            let event = ProgressEvent::Training;
+            let event = ProgressEvent::Training { coaching_percent };
             stats = progress(
                 &mut rng,
                 stats,
@@ -198,6 +211,12 @@ mod tests {
     }
 
     #[test]
+    fn a_trainer_raises_training_gains() {
+        let (alone, coached) = (gained(22, 50, 200), coached(22, 50, 200, 75));
+        assert!(coached > alone, "{alone} {coached}");
+    }
+
+    #[test]
     fn potential_caps_progression() {
         let mut rng = ChaCha8Rng::seed_from_u64(4);
         let potential = Stats { hp: 101, ..STATS };
@@ -228,7 +247,7 @@ mod tests {
         fn progress_stays_between_stats_and_potential(seed: u64, age in 18..50u32, morale in 0..=100u32) {
             let mut rng = ChaCha8Rng::seed_from_u64(seed);
             let potential = random_potential(&mut rng, STATS, &rules());
-            let after = progress(&mut rng, STATS, potential, ProgressEvent::Training, age, Morale::new(morale), &rules());
+            let after = progress(&mut rng, STATS, potential, ProgressEvent::Training { coaching_percent: 0 }, age, Morale::new(morale), &rules());
             for ((before, after), cap) in STATS.to_array().into_iter().zip(after.to_array()).zip(potential.to_array()) {
                 prop_assert!(before <= after && after <= cap);
             }
