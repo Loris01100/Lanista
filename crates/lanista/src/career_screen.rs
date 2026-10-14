@@ -14,9 +14,8 @@ use lanista_core::fighter::form::Form;
 use lanista_core::fighter::illness::{Illness, IllnessLevel};
 use lanista_core::fighter::injury::{Injury, Location, Severity, Side};
 use lanista_core::fighter::morale::Morale;
+use lanista_core::state::{Decisions, GameState, next_week};
 use macroquad::prelude::*;
-use rand_chacha::ChaCha8Rng;
-use rand_chacha::rand_core::SeedableRng;
 use reesch::{Assets, Audio, Bindings, Screen, Transition, egui};
 
 use crate::Action;
@@ -31,10 +30,7 @@ const STAT_NAMES: [&str; 6] = ["PV", "AC", "AL", "VIT", "DC", "DL"];
 pub struct CareerScreen {
     data: Rc<DesignData>,
     seed: u64,
-    rng: ChaCha8Rng,
-    fighter: CareerFighter,
-    /// Number of the next week, from 1.
-    week: u64,
+    state: GameState,
     /// This week's decisions, the suggested ones until the player changes them.
     plan: WeekPlan,
     /// What each week changed, newest first.
@@ -45,15 +41,12 @@ pub struct CareerScreen {
 impl CareerScreen {
     /// The career of the fighter generated from `seed`, as `career --seed <seed>`.
     pub fn new(data: Rc<DesignData>, seed: u64, bindings: Bindings<Action>) -> Self {
-        let mut rng = ChaCha8Rng::seed_from_u64(seed);
-        let fighter = CareerFighter::random(&mut rng, &data);
-        let plan = suggested_plan(&fighter, 1);
+        let state = GameState::new(seed, &data);
+        let plan = suggested_plan(&state.fighters[0], state.week);
         Self {
             data,
             seed,
-            rng,
-            fighter,
-            week: 1,
+            state,
             plan,
             journal: Vec::new(),
             bindings,
@@ -63,31 +56,42 @@ impl CareerScreen {
     /// Plays the week with the current plan and logs it; returns the fight to
     /// watch, if any. Nothing happens once the career is over.
     fn next_week(&mut self) -> Option<Arena> {
-        let before = self.fighter.clone();
-        let report = self
-            .fighter
-            .play_week(self.plan, &mut self.rng, &self.data)?;
-        let lines = week_lines(&before, &self.fighter, &report, &self.data);
-        self.journal.insert(0, (self.week, lines));
-        self.week += 1;
-        self.plan = suggested_plan(&self.fighter, self.week);
+        if self.fighter().status != Status::Active {
+            return None;
+        }
+        let before = self.fighter().clone();
+        let week = self.state.week;
+        let decisions = Decisions {
+            plans: vec![self.plan],
+        };
+        let report = next_week(&mut self.state, &decisions, &self.data)
+            .swap_remove(0)
+            .expect("an active fighter plays the week");
+        let lines = week_lines(&before, self.fighter(), &report, &self.data);
+        self.journal.insert(0, (week, lines));
+        self.plan = suggested_plan(self.fighter(), self.state.week);
         report.fight.map(|fight| fight.start)
+    }
+
+    /// The club's only fighter, followed by this screen.
+    fn fighter(&self) -> &CareerFighter {
+        &self.state.fighters[0]
     }
 
     /// Total price of caring for everything care would shorten.
     fn care_cost(&self) -> u32 {
         let care = &self.data.fighter.care;
         let injuries = self
-            .fighter
+            .fighter()
             .injuries
             .iter()
             .filter_map(|i| i.care_cost(care));
-        let illness = self.fighter.illness.and_then(|i| i.care_cost(care));
+        let illness = self.fighter().illness.and_then(|i| i.care_cost(care));
         injuries.chain(illness).sum()
     }
 
     fn sheet(&self, ui: &mut egui::Ui) {
-        let f = &self.fighter;
+        let f = self.fighter();
         let rules = &self.data.fighter;
         ui.heading(format!("{}, {} ans", class_name(f, &self.data), f.age));
         let hand = match f.dominant_hand {
@@ -147,8 +151,8 @@ impl CareerScreen {
 
     /// The week's decisions; returns whether to play the week.
     fn decisions(&mut self, ui: &mut egui::Ui) -> bool {
-        ui.heading(format!("Semaine {}", self.week));
-        if self.fighter.status != Status::Active {
+        ui.heading(format!("Semaine {}", self.state.week));
+        if self.fighter().status != Status::Active {
             ui.label("La carrière est terminée.");
             return false;
         }
@@ -167,7 +171,7 @@ impl CareerScreen {
         } else {
             ui.checkbox(&mut self.plan.care, format!("Soigner (coût {cost})"));
         }
-        let ill = self.fighter.illness.is_some_and(|i| !i.fight_advised());
+        let ill = self.fighter().illness.is_some_and(|i| !i.fight_advised());
         if ill && self.plan.activity == Activity::Fight {
             ui.colored_label(
                 egui::Color32::LIGHT_RED,
@@ -384,6 +388,8 @@ mod tests {
     use lanista_core::combat::Vec2;
     use lanista_core::duel::play;
     use lanista_core::fighter::FighterId;
+    use rand_chacha::ChaCha8Rng;
+    use rand_chacha::rand_core::SeedableRng;
 
     use super::*;
 
@@ -416,8 +422,8 @@ mod tests {
             for _ in 0..10 {
                 screen.next_week();
             }
-            assert_eq!(screen.fighter, tool_career(seed, 10), "seed {seed}");
-            assert_eq!(screen.week, 11);
+            assert_eq!(*screen.fighter(), tool_career(seed, 10), "seed {seed}");
+            assert_eq!(screen.state.week, 11);
         }
     }
 
@@ -469,15 +475,15 @@ mod tests {
         };
         assert!(screen.next_week().is_none());
         assert_eq!(screen.journal[0].1[0], "Repos");
-        assert_eq!(screen.fighter.form, Form::full());
+        assert_eq!(screen.fighter().form, Form::full());
     }
 
     #[test]
     fn a_finished_career_plays_no_more_weeks() {
         let mut screen = screen(7);
-        screen.fighter.status = Status::Retired;
+        screen.state.fighters[0].status = Status::Retired;
         assert!(screen.next_week().is_none());
-        assert_eq!(screen.week, 1);
+        assert_eq!(screen.state.week, 1);
         assert_eq!(screen.journal, []);
     }
 

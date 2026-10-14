@@ -261,7 +261,7 @@ Objectif : la crate `moteur`, générique, et un premier rendu du combat.
 
 ### Phase 4 — Management
 
-- `GameState` et `next_week`.
+- `GameState` et `next_week`. Fait : module `lanista_core::state`. `GameState` tient la semaine à jouer (à partir de 1), le club du joueur (`fighters`, des `CareerFighter` désignés par leur place dans le `Vec`) et l'unique `ChaCha8Rng` de la partie : même graine et mêmes décisions, même partie. `GameState::new(graine, données)` crée un club d'un seul combattant, celui que tire `CareerFighter::random` en premier avec cette graine (l'effectif viendra avec la liste des combattants et le marché). `Decisions` porte un `WeekPlan` par combattant, dans l'ordre du club ; un combattant sans plan suit `suggested_plan`, et `suggested_decisions` les donne tous. `next_week(&mut GameState, &Decisions, &DesignData)` joue la semaine de chaque combattant dans l'ordre du club, puis passe à la semaine suivante, même sans combattant actif ; elle renvoie le `WeekReport` de chacun (`None` pour un retraité ou un mort). Les données de design restent hors de l'état : elles ne font pas partie de la sauvegarde. L'écran de carrière et l'outil `career` passent maintenant par `GameState` et `next_week` (même sortie qu'avant pour `career --seed 7 --weeks 10`). Tests : nouvelle partie, décisions suivies et semaine suivante, plan absent égal au plan suggéré, la semaine avance sans combattant actif, même graine même partie.
 - Calendrier : semaines, saison de 33 semaines, phases de la saison.
 - Économie : flux d'entrée et de sortie, filet de sécurité (free agents, colisée gratuit).
 - Écrans : menu général, liste des combattants, fiche combattant, résumé de combat.

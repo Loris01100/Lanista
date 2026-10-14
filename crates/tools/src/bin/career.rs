@@ -6,13 +6,10 @@ use std::process::ExitCode;
 
 use lanista_core::design_data::DesignData;
 use lanista_core::fighter::Stats;
-use lanista_core::fighter::career::{
-    Activity, CareerFighter, FightSummary, Status, WeekReport, suggested_plan,
-};
+use lanista_core::fighter::career::{Activity, CareerFighter, FightSummary, Status, WeekReport};
 use lanista_core::fighter::fame::FightResult;
 use lanista_core::fighter::personality::Personality;
-use rand::SeedableRng;
-use rand_chacha::ChaCha8Rng;
+use lanista_core::state::{Decisions, GameState, next_week};
 use tools::{one_decimal, options};
 
 fn main() -> ExitCode {
@@ -30,18 +27,22 @@ fn main() -> ExitCode {
             return ExitCode::FAILURE;
         }
     };
-    let mut rng = ChaCha8Rng::seed_from_u64(seed);
-    let mut fighter = CareerFighter::random(&mut rng, &data);
+    let mut state = GameState::new(seed, &data);
     println!("seed {seed}");
-    print!("{}", describe(&fighter, &data));
+    print!("{}", describe(&state.fighters[0], &data));
     for week in 1..=weeks {
-        let before = fighter.clone();
-        let plan = suggested_plan(&fighter, week);
-        let Some(report) = fighter.play_week(plan, &mut rng, &data) else {
+        let before = state.fighters[0].clone();
+        // No plan: the club follows `suggested_plan`.
+        let Some(report) = next_week(&mut state, &Decisions::default(), &data).swap_remove(0)
+        else {
             break;
         };
-        print!("\n{}", week_text(week, &before, &fighter, &report, &data));
+        print!(
+            "\n{}",
+            week_text(week, &before, &state.fighters[0], &report, &data)
+        );
     }
+    let fighter = &state.fighters[0];
     match fighter.status {
         Status::Active => {}
         Status::Retired => println!("\nretired at {}", fighter.age),

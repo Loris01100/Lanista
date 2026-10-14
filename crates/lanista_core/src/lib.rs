@@ -4,3 +4,4 @@ pub mod design_data;
 pub mod duel;
 pub mod fighter;
 pub mod log;
+pub mod state;
