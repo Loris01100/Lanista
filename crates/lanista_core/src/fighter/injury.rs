@@ -120,6 +120,26 @@ pub fn roll_injury<R: Rng + ?Sized>(
     })
 }
 
+/// `injury` as a doctor leaves it: one that would leave an after-effect is only severe
+/// with a chance of `spared_percent`, healing in the weeks of a severe one. Draws
+/// nothing for a temporary injury or without a doctor (`spared_percent` 0).
+pub fn spare_after_effect<R: Rng + ?Sized>(
+    rng: &mut R,
+    injury: Injury,
+    spared_percent: u32,
+    rules: &InjuryRules,
+) -> Injury {
+    if !injury.is_permanent() || spared_percent == 0 || rng.random_range(0..100) >= spared_percent {
+        return injury;
+    }
+    let (min, max) = rules.healing_weeks.severe;
+    Injury {
+        severity: Severity::Severe,
+        weeks_left: rng.random_range(min..=max),
+        ..injury
+    }
+}
+
 /// One week of natural healing: every temporary injury gets a week closer to healed,
 /// and healed ones are removed. Permanent injuries stay.
 pub fn heal_week(injuries: &mut Vec<Injury>) {
@@ -323,6 +343,38 @@ mod tests {
         let lost_arm = injury(Location::Arm(Side::Right), Severity::Permanent, 0);
         let stats = injured_stats(STATS, &[arm, lost_arm], Side::Right, &rules());
         assert_eq!(stats.melee_attack, 4, "60 % + 60 % capped at 80 %");
+    }
+
+    #[test]
+    fn a_doctor_spares_after_effects_only() {
+        let mut rng = ChaCha8Rng::seed_from_u64(5);
+        let rules = rules();
+        let permanent = Injury {
+            location: Location::Head,
+            severity: Severity::Permanent,
+            weeks_left: 0,
+        };
+        assert_eq!(
+            spare_after_effect(&mut rng, permanent, 0, &rules),
+            permanent
+        );
+        let spared = spare_after_effect(&mut rng, permanent, 100, &rules);
+        assert_eq!(
+            (spared.location, spared.severity),
+            (Location::Head, Severity::Severe)
+        );
+        let (min, max) = rules.healing_weeks.severe;
+        assert!((min..=max).contains(&spared.weeks_left));
+        let light = Injury {
+            severity: Severity::Light,
+            weeks_left: 2,
+            ..permanent
+        };
+        assert_eq!(spare_after_effect(&mut rng, light, 100, &rules), light);
+        let kept = (0..1000)
+            .filter(|_| spare_after_effect(&mut rng, permanent, 30, &rules).is_permanent())
+            .count();
+        assert!(kept.abs_diff(700) < 50, "{kept}");
     }
 
     #[test]

@@ -10,6 +10,7 @@ use crate::fighter::career::CareerFighter;
 use crate::fighter::fame::Fame;
 use crate::fighter::percent_of;
 use crate::rivals::RivalId;
+use crate::staff::Scouting;
 
 /// From `data/economy.ron`.
 #[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
@@ -126,29 +127,38 @@ pub fn value(fighter: &CareerFighter, rules: &MarketRules) -> u32 {
 
 /// What the club sees of each trained stat of a fighter out of it, in `Stats::to_array`
 /// order: `None` while hidden, else a range holding it. `shown_stats` are seen at first,
-/// `revealed_per_week` more for each week observed, then the ranges narrow. The order
+/// `revealed_per_week` more for each week observed, then the ranges narrow; the
+/// recruiter's `scouting` reveals more each week and narrows every range. The order
 /// stats are revealed in, and the place of a stat in its range (so that the middle does
 /// not give it away), come from the hidden potential.
 // ponytail: order and place derived from the potential rather than drawn and saved; draw
 // them once players learn to read them.
 #[must_use]
-pub fn stat_ranges(fighter: &CareerFighter, rules: &MarketRules) -> [Option<(u32, u32)>; 6] {
+pub fn stat_ranges(
+    fighter: &CareerFighter,
+    rules: &MarketRules,
+    scouting: &Scouting,
+) -> [Option<(u32, u32)>; 6] {
     let potential = fighter.potential.to_array();
     let mix = |i: usize| (potential[i] * 37 + 11 * u32::try_from(i).unwrap_or(0)) % 101;
     let mut order: Vec<usize> = (0..6).collect();
     order.sort_by_key(|&i| mix(i));
     let weeks = fighter.observed_weeks;
+    let per_week = rules
+        .revealed_per_week
+        .saturating_add(scouting.revealed_per_week);
     let shown = rules
         .shown_stats
-        .saturating_add(rules.revealed_per_week.saturating_mul(weeks));
+        .saturating_add(per_week.saturating_mul(weeks));
     let to_see_all = 6_u32
         .saturating_sub(rules.shown_stats)
-        .div_ceil(rules.revealed_per_week.max(1));
+        .div_ceil(per_week.max(1));
     let width = if weeks > to_see_all {
         rules.narrowed_range_percent
     } else {
         rules.range_percent
     };
+    let width = percent_of(width, scouting.range_width_percent);
     let stats = fighter.stats.to_array();
     let mut ranges = [None; 6];
     for &i in order.iter().take(usize::try_from(shown).unwrap_or(6)) {
@@ -157,6 +167,29 @@ pub fn stat_ranges(fighter: &CareerFighter, rules: &MarketRules) -> [Option<(u32
         ranges[i] = Some((low, low + wide));
     }
     ranges
+}
+
+/// The recruiter's estimate of the total of `fighter`'s hidden potential, a range of
+/// `scouting.potential_range_percent` of it holding it, once observed for a week;
+/// `None` before, or without a recruiter able to tell.
+#[must_use]
+pub fn potential_range(fighter: &CareerFighter, scouting: &Scouting) -> Option<(u32, u32)> {
+    if scouting.potential_range_percent == 0 || fighter.observed_weeks == 0 {
+        return None;
+    }
+    let total: u32 = fighter.potential.to_array().iter().sum();
+    let wide = percent_of(total, scouting.potential_range_percent);
+    // Its place in the range, from the stats, so that the middle does not give it away.
+    let stats: u32 = fighter.stats.to_array().iter().sum();
+    let low = total - percent_of(wide, (stats * 37) % 101);
+    Some((low, low + wide))
+}
+
+/// Whether the recruiter's `scouting` sees the personality of `fighter`, out of the
+/// club: once observed for a week, by a recruiter able to tell.
+#[must_use]
+pub fn personality_seen(fighter: &CareerFighter, scouting: &Scouting) -> bool {
+    scouting.personality && fighter.observed_weeks > 0
 }
 
 /// Whether `fighter` refuses to join the player's club, whose best fame is
@@ -252,7 +285,7 @@ mod tests {
             let mut seen = Vec::new();
             for weeks in 0..5 {
                 fighter.observed_weeks = weeks;
-                let ranges = stat_ranges(&fighter, rules);
+                let ranges = stat_ranges(&fighter, rules, &Scouting::default());
                 seen.push(ranges.iter().flatten().count());
                 for (&stat, range) in stats.iter().zip(ranges) {
                     let Some((low, high)) = range else { continue };
@@ -269,9 +302,9 @@ mod tests {
             assert_eq!(seen, [2, 4, 6, 6, 6]);
             // A stat once seen stays seen.
             fighter.observed_weeks = 0;
-            let first = stat_ranges(&fighter, rules);
+            let first = stat_ranges(&fighter, rules, &Scouting::default());
             fighter.observed_weeks = 1;
-            let second = stat_ranges(&fighter, rules);
+            let second = stat_ranges(&fighter, rules, &Scouting::default());
             assert!(
                 first
                     .iter()
@@ -279,6 +312,40 @@ mod tests {
                     .all(|(a, b)| a.is_none() || b.is_some())
             );
         }
+    }
+
+    #[test]
+    fn a_recruiter_reveals_more_narrower_and_the_potential() {
+        let data = data();
+        let rules = &data.economy.market;
+        let mut rng = ChaCha8Rng::seed_from_u64(2);
+        let mut fighter = CareerFighter::random(&mut rng, &data);
+        let scouting = Scouting {
+            revealed_per_week: 2,
+            range_width_percent: 50,
+            potential_range_percent: 20,
+            personality: true,
+        };
+        let alone = Scouting::default();
+        fighter.observed_weeks = 1;
+        let seen = |s: &Scouting| stat_ranges(&fighter, rules, s).iter().flatten().count();
+        assert_eq!((seen(&alone), seen(&scouting)), (4, 6));
+        let stats = fighter.stats.to_array();
+        for (&stat, range) in stats.iter().zip(stat_ranges(&fighter, rules, &scouting)) {
+            let (low, high) = range.unwrap();
+            assert!(low <= stat && stat <= high);
+            let usual = percent_of(stat, rules.range_percent);
+            assert_eq!(high - low, percent_of(usual, 50));
+        }
+        let total: u32 = fighter.potential.to_array().iter().sum();
+        let (low, high) = potential_range(&fighter, &scouting).unwrap();
+        assert!(low <= total && total <= high);
+        assert_eq!(high - low, percent_of(total, 20));
+        assert!(potential_range(&fighter, &alone).is_none());
+        assert!(personality_seen(&fighter, &scouting) && !personality_seen(&fighter, &alone));
+        fighter.observed_weeks = 0;
+        assert!(potential_range(&fighter, &scouting).is_none());
+        assert!(!personality_seen(&fighter, &scouting));
     }
 
     #[test]

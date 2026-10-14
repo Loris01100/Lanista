@@ -9,12 +9,12 @@ use crate::state::GameState;
 
 /// Version written in new saves. Raise it with any change to the saved types,
 /// and add the migration from the previous version to [`MIGRATIONS`].
-pub const VERSION: u64 = 8;
+pub const VERSION: u64 = 9;
 
 /// `MIGRATIONS[i]` turns a version `i + 1` save into a version `i + 2` one,
 /// working on the JSON so the old types need not be kept.
 type Migration = fn(&mut Value, &DesignData);
-const MIGRATIONS: [Migration; 7] = [
+const MIGRATIONS: [Migration; 8] = [
     no_colosseums,
     title_since,
     no_challenges,
@@ -22,6 +22,7 @@ const MIGRATIONS: [Migration; 7] = [
     no_market,
     rival_rosters,
     no_staff,
+    no_doctor_or_recruiter,
 ];
 const _: () = assert!(MIGRATIONS.len() as u64 == VERSION - 1);
 
@@ -154,6 +155,13 @@ fn no_staff(save: &mut Value, _: &DesignData) {
     save["state"]["staff"] = json!({ "trainer": null });
 }
 
+/// Version 9 adds a doctor and a recruiter to the staff, neither hired.
+fn no_doctor_or_recruiter(save: &mut Value, _: &DesignData) {
+    let staff = &mut save["state"]["staff"];
+    staff["doctor"] = Value::Null;
+    staff["recruiter"] = Value::Null;
+}
+
 #[derive(Serialize)]
 struct Save<'a> {
     version: u64,
@@ -274,12 +282,12 @@ mod tests {
     fn unknown_versions_are_refused() {
         let data = data();
         let save = to_json(&GameState::new(7, &data));
-        let newer = save.replacen("\"version\": 8", "\"version\": 9", 1);
+        let newer = save.replacen("\"version\": 9", "\"version\": 10", 1);
         assert!(matches!(
             from_json(&newer, &data),
-            Err(SaveError::Version(Some(9)))
+            Err(SaveError::Version(Some(10)))
         ));
-        let none = save.replacen("\"version\": 8", "\"versio\": 8", 1);
+        let none = save.replacen("\"version\": 9", "\"versio\": 9", 1);
         assert!(matches!(
             from_json(&none, &data),
             Err(SaveError::Version(None))

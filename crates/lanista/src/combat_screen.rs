@@ -498,7 +498,7 @@ mod tests {
     fn a_watched_career_fight_is_the_one_the_career_played() {
         use lanista_core::colosseum::ColosseumId;
         use lanista_core::fighter::career::{Activity, CareerFighter, WeekPlan};
-        use lanista_core::staff::Coaching;
+        use lanista_core::staff::StaffEffects;
         use rand_chacha::ChaCha8Rng;
         use rand_chacha::rand_core::SeedableRng;
 
@@ -510,7 +510,7 @@ mod tests {
             care: false,
         };
         let fight = fighter
-            .play_week(plan, None, Coaching::default(), &mut rng, &data)
+            .play_week(plan, None, StaffEffects::default(), &mut rng, &data)
             .unwrap()
             .fight
             .unwrap();

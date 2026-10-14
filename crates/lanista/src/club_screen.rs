@@ -11,6 +11,7 @@ use lanista_core::colosseum::{Challenge, ColosseumId, Contender};
 use lanista_core::combat::Arena;
 use lanista_core::design_data::DesignData;
 use lanista_core::economy::Flow;
+use lanista_core::fighter::care::CareRules;
 use lanista_core::fighter::career::{Activity, CareerFighter, FightSummary, Status, WeekPlan};
 use lanista_core::fighter::fame::Fame;
 use lanista_core::fighter::form::Form;
@@ -19,7 +20,7 @@ use lanista_core::fighter::injury::{Injury, Severity, Side};
 use lanista_core::fighter::morale::Morale;
 use lanista_core::market::{Move, Target, value};
 use lanista_core::rivals::RivalId;
-use lanista_core::staff::StaffMove;
+use lanista_core::staff::{Role, Scouting, StaffMove};
 use lanista_core::state::{Decisions, GameState, next_week};
 use macroquad::prelude::*;
 use reesch::{Assets, Audio, Bindings, Screen, Transition, egui};
@@ -29,10 +30,11 @@ use crate::combat_screen::CombatScreen;
 use crate::saves;
 use crate::texts::{
     STAT_NAMES, activity_name, arena_name, challenger_text, change, class_name, club_name,
-    colosseum_name, condition_text, contender_name, fight_text, fighter_name, free_agent_name,
-    illness_text, injury_text, market_news_text, money_line, move_text, profile_name, range_texts,
-    record_text, rival_fighter_name, staff_move_text, staff_news_text, title_news_text,
-    trainer_text, week_lines,
+    colosseum_name, condition_text, contender_name, doctor_text, fight_text, fighter_name,
+    free_agent_name, illness_text, injury_text, market_news_text, money_line, move_text,
+    outside_personality_text, personality_text, potential_text, profile_name, range_texts,
+    record_text, recruiter_text, rival_fighter_name, role_title, staff_move_text, staff_news_text,
+    title_news_text, trainer_text, week_lines,
 };
 
 /// Seed of the standard duel offered from the club.
@@ -55,7 +57,7 @@ enum View {
     Colosseums,
     /// Free agents, rival fighters for sale, and the club's fighters to sell or release.
     Market,
-    /// The trainer, hired and dismissed.
+    /// The trainer, the doctor and the recruiter, hired and dismissed.
     Staff,
 }
 
@@ -185,7 +187,7 @@ impl ClubScreen {
         self.histories
             .resize_with(self.state.fighters.len(), Vec::new);
         let mut overview = vec![money_line(money, self.state.money, &summary.ledger)];
-        overview.extend(summary.staff.map(staff_news_text));
+        overview.extend(summary.staff.iter().map(|&m| staff_news_text(m)));
         overview.extend(
             summary
                 .market
@@ -328,7 +330,7 @@ impl ClubScreen {
                 move_text(m, &self.state, &self.data)
             ));
         }
-        if let Some(m) = self.decisions.staff {
+        for &m in &self.decisions.staff {
             ui.label(format!("Personnel : {}", staff_move_text(m)));
         }
         if let Some((id, price)) = self.state.counter_offer {
@@ -453,6 +455,7 @@ impl ClubScreen {
         ui.heading("Combattants");
         let data = &self.data;
         let money = self.state.money;
+        let care = self.state.care_rules(data);
         let special: Vec<_> = (0..self.state.fighters.len())
             .map(|i| self.special_fights(i))
             .collect();
@@ -486,7 +489,9 @@ impl ClubScreen {
                     ui.label(f.fame.value().to_string());
                     ui.label(condition_text(f));
                     if f.status == Status::Active {
-                        ui.horizontal(|ui| plan_editor(ui, plan, f, &special[i], money, data));
+                        ui.horizontal(|ui| {
+                            plan_editor(ui, plan, f, &special[i], (money, &care), data);
+                        });
                     } else {
                         ui.label("");
                     }
@@ -513,7 +518,8 @@ impl ClubScreen {
             if f.status == Status::Active
                 && let Some(plan) = self.decisions.plans.get_mut(index)
             {
-                plan_editor(ui, plan, f, &special, self.state.money, data);
+                let care = self.state.care_rules(data);
+                plan_editor(ui, plan, f, &special, (self.state.money, &care), data);
                 challenge_picker(ui, plan, index, &self.state, data);
             } else {
                 ui.label("Carrière terminée");
@@ -732,56 +738,58 @@ impl ClubScreen {
         });
     }
 
-    /// The staff: the trainer the club has, and each level to hire in its place.
+    /// The staff: for each post, who holds it, and each level to hire in its place.
     fn staff(&mut self, ui: &mut egui::Ui) {
         let data = &self.data;
         let state = &self.state;
         let chosen = &mut self.decisions.staff;
         ui.heading("Personnel");
         ui.label(
-            "L'entraîneur rend l'entraînement plus profitable et moins fatigant. \
-             Son salaire est payé chaque semaine, même à crédit ; un changement compte \
-             dès la semaine qui se joue.",
+            "L'entraîneur rend l'entraînement plus profitable et moins fatigant, le médecin \
+             rend les soins plus efficaces et évite des séquelles, le recruteur montre mieux \
+             les combattants observés. Chaque salaire est payé chaque semaine, même à \
+             crédit ; un changement compte dès la semaine qui se joue.",
         );
-        ui.add_space(6.0);
-        ui.strong("Entraîneur");
-        match (state.staff.trainer, state.trainer(data)) {
-            (Some(level), Some(trainer)) => {
-                ui.label(format!("Niveau {level} : {}", trainer_text(trainer)));
-            }
-            _ => {
-                ui.label(format!(
-                    "Aucun : séance {}, sans bonus",
-                    data.economy.training_cost
-                ));
-            }
-        }
-        if let Some(m) = *chosen {
+        let mut cancel = None;
+        for (n, &m) in chosen.iter().enumerate() {
             ui.horizontal(|ui| {
                 ui.strong(format!("Cette semaine : {}", staff_move_text(m)));
                 if ui.button("Annuler").clicked() {
-                    *chosen = None;
+                    cancel = Some(n);
                 }
             });
         }
-        egui::Grid::new("trainers").striped(true).show(ui, |ui| {
-            for (level, trainer) in (1..).zip(&data.economy.staff.trainers) {
-                ui.label(format!("Niveau {level}"));
-                ui.label(trainer_text(trainer));
-                if state.staff.trainer == Some(level) {
-                    let dismiss = StaffMove::DismissTrainer;
-                    staff_toggle(
-                        ui,
-                        chosen,
-                        dismiss,
-                        "Renvoyer",
-                        state.may_staff(dismiss, data),
-                    );
-                } else {
-                    let hire = StaffMove::HireTrainer(level);
-                    staff_toggle(ui, chosen, hire, "Engager", state.may_staff(hire, data));
-                }
-                ui.end_row();
+        if let Some(n) = cancel {
+            chosen.remove(n);
+        }
+        egui::ScrollArea::vertical().show(ui, |ui| {
+            for role in Role::ALL {
+                ui.add_space(6.0);
+                ui.strong(role_title(role));
+                let held = state.staff.level(role);
+                match held.and_then(|level| level_text(role, level, data)) {
+                    Some(text) => ui.label(format!("Niveau {} : {text}", held.unwrap_or(0))),
+                    None if role == Role::Trainer => ui.label(format!(
+                        "Aucun : séance {}, sans bonus",
+                        data.economy.training_cost
+                    )),
+                    None => ui.label("Aucun"),
+                };
+                egui::Grid::new(("staff", role_title(role)))
+                    .striped(true)
+                    .show(ui, |ui| {
+                        for level in (1..).take(data.economy.staff.levels(role)) {
+                            ui.label(format!("Niveau {level}"));
+                            ui.label(level_text(role, level, data).unwrap_or_default());
+                            let (m, label) = if held == Some(level) {
+                                (StaffMove::Dismiss(role), "Renvoyer")
+                            } else {
+                                (StaffMove::Hire(role, level), "Engager")
+                            };
+                            staff_toggle(ui, chosen, m, label, state.may_staff(m, data));
+                            ui.end_row();
+                        }
+                    });
             }
         });
     }
@@ -875,19 +883,34 @@ fn toggle(ui: &mut egui::Ui, moves: &mut Vec<Move>, m: Move, label: &str, enable
     }
 }
 
-/// A button choosing `m` as the week's change of staff, or taking it back when chosen
-/// already; only a chosen one may be clicked when not `enabled`.
+/// What `level` of `role` costs and brings; `None` for a level not on offer.
+fn level_text(role: Role, level: u32, data: &DesignData) -> Option<String> {
+    let staff = &data.economy.staff;
+    match role {
+        Role::Trainer => staff.trainer(level).map(trainer_text),
+        Role::Doctor => staff
+            .doctor(level)
+            .map(|d| doctor_text(d, &data.fighter.care)),
+        Role::Recruiter => staff.recruiter(level).map(recruiter_text),
+    }
+}
+
+/// A button choosing `m` as the week's change for its post, in place of another, or
+/// taking it back when chosen already; only a chosen one may be clicked when not `enabled`.
 fn staff_toggle(
     ui: &mut egui::Ui,
-    chosen: &mut Option<StaffMove>,
+    chosen: &mut Vec<StaffMove>,
     m: StaffMove,
     label: &str,
     enabled: bool,
 ) {
-    let selected = *chosen == Some(m);
+    let selected = chosen.contains(&m);
     let button = egui::SelectableLabel::new(selected, label);
     if ui.add_enabled(enabled || selected, button).clicked() {
-        *chosen = if selected { None } else { Some(m) };
+        chosen.retain(|other| other.role() != m.role());
+        if !selected {
+            chosen.push(m);
+        }
     }
 }
 
@@ -906,16 +929,24 @@ fn market_header(ui: &mut egui::Ui, first: &[&str], last: &[&str]) {
     ui.end_row();
 }
 
-/// What the club sees of a fighter out of it: `name`, age, fame, record and the stats
-/// seen.
-fn outside_cells(ui: &mut egui::Ui, name: String, fighter: &CareerFighter, data: &DesignData) {
+/// What the club sees of a fighter out of it, with the recruiter's `scouting`: `name`,
+/// age, fame, record, the stats seen, the potential estimated and the personality.
+fn outside_cells(
+    ui: &mut egui::Ui,
+    name: String,
+    fighter: &CareerFighter,
+    scouting: &Scouting,
+    data: &DesignData,
+) {
     ui.label(name);
     ui.label(fighter.age.to_string());
     ui.label(fighter.fame.value().to_string());
     ui.label(record_text(fighter.record));
-    for range in range_texts(fighter, data) {
+    for range in range_texts(fighter, scouting, data) {
         ui.label(range);
     }
+    ui.label(potential_text(fighter, scouting));
+    ui.label(outside_personality_text(fighter, scouting));
 }
 
 const OUTSIDE: [&str; 4] = ["Combattant", "Âge", "Renommée", "Bilan"];
@@ -924,9 +955,10 @@ fn free_agent_grid(ui: &mut egui::Ui, state: &GameState, moves: &mut Vec<Move>, 
     ui.add_space(6.0);
     ui.strong("Free agents (gratuits)");
     egui::Grid::new("free agents").striped(true).show(ui, |ui| {
-        market_header(ui, &OUTSIDE, &["", ""]);
+        market_header(ui, &OUTSIDE, &["Potentiel", "Personnalité", "", ""]);
+        let scouting = state.scouting(data);
         for (a, f) in state.free_agents.iter().enumerate() {
-            outside_cells(ui, free_agent_name(a, f, data), f, data);
+            outside_cells(ui, free_agent_name(a, f, data), f, &scouting, data);
             let observe = Move::Observe(Target::FreeAgent(a));
             toggle(ui, moves, observe, &observe_label(f), true);
             let sign = Move::Sign(a);
@@ -950,14 +982,19 @@ fn rival_grid(
     egui::Grid::new("rival fighters")
         .striped(true)
         .show(ui, |ui| {
-            market_header(ui, &OUTSIDE, &["Valeur estimée", "", ""]);
+            market_header(
+                ui,
+                &OUTSIDE,
+                &["Potentiel", "Personnalité", "Valeur estimée", "", ""],
+            );
+            let scouting = state.scouting(data);
             for (club, rival) in state.rivals.iter().enumerate() {
                 for (fighter, f) in rival.fighters.iter().enumerate() {
                     if f.status != Status::Active {
                         continue;
                     }
                     let id = RivalId { club, fighter };
-                    outside_cells(ui, rival_fighter_name(id, state, data), f, data);
+                    outside_cells(ui, rival_fighter_name(id, state, data), f, &scouting, data);
                     // ponytail: the value rounded, until the recruiter estimates it.
                     let estimate = value(f, &data.economy.market) / 10 * 10;
                     ui.label(format!("≈ {estimate}"));
@@ -1022,13 +1059,14 @@ fn new_seed() -> u64 {
 }
 
 /// A fighter's week, in one line: rest, training, a fight, a title fight or a received
-/// challenge (in `special`, with their names), and care.
+/// challenge (in `special`, with their names), and care at the price of the club's
+/// `care`, all within its `money`.
 fn plan_editor(
     ui: &mut egui::Ui,
     plan: &mut WeekPlan,
     fighter: &CareerFighter,
     special: &[(Activity, String)],
-    money: i64,
+    (money, care): (i64, &CareRules),
     data: &DesignData,
 ) {
     for activity in [Activity::Rest, Activity::Train] {
@@ -1059,7 +1097,7 @@ fn plan_editor(
     for (activity, name) in special {
         ui.selectable_value(&mut plan.activity, *activity, name);
     }
-    let cost = fighter.care_cost(&data.fighter);
+    let cost = fighter.care_cost(care);
     if cost == 0 {
         plan.care = false;
     } else if i64::from(cost) > money {
@@ -1180,14 +1218,7 @@ fn sheet(ui: &mut egui::Ui, index: usize, f: &CareerFighter, data: &DesignData) 
     });
 
     ui.add_space(8.0);
-    let p = &f.personality;
-    ui.label(format!(
-        "Agressivité {}, prudence {}, goût du spectacle {}, détermination {}",
-        p.aggression.value(),
-        p.caution.value(),
-        p.showmanship.value(),
-        p.determination.value()
-    ));
+    ui.label(personality_text(&f.personality));
     ui.add_space(8.0);
     ui.strong("Blessures");
     if f.injuries.is_empty() {
@@ -1327,16 +1358,43 @@ mod tests {
     }
 
     #[test]
-    fn a_hired_trainer_is_told_in_the_menu_and_paid() {
+    fn hired_staff_is_told_in_the_menu_and_paid() {
         let mut screen = screen(7);
-        screen.decisions.staff = Some(StaffMove::HireTrainer(2));
+        screen.decisions.staff = vec![
+            StaffMove::Hire(Role::Trainer, 2),
+            StaffMove::Hire(Role::Doctor, 1),
+            StaffMove::Hire(Role::Recruiter, 5),
+        ];
+        let id = RivalId {
+            club: 0,
+            fighter: 0,
+        };
+        screen.decisions.moves = vec![Move::Observe(Target::Rival(id))];
         screen.next_week();
         let (_, menu) = screen.last_week.as_ref().unwrap();
-        assert!(menu[0].contains("salaires -20"), "{menu:?}");
-        assert_eq!(menu[1], "Entraîneur de niveau 2 engagé");
-        assert_eq!(screen.state.staff.trainer, Some(2));
-        // The next week's decisions keep the trainer, with no new change.
-        assert_eq!(screen.decisions.staff, None);
+        assert!(
+            menu[0].contains("salaires -20, salaires -10, salaires -65"),
+            "{menu:?}"
+        );
+        assert_eq!(
+            menu[1..4],
+            [
+                "Entraîneur de niveau 2 engagé",
+                "Médecin de niveau 1 engagé",
+                "Recruteur de niveau 5 engagé"
+            ]
+        );
+        // The next week's decisions keep the staff, with no new change.
+        assert_eq!(screen.decisions.staff, []);
+        // The recruiter sees the observed fighter's potential and personality.
+        let state = &screen.state;
+        let scouting = state.scouting(&screen.data);
+        let observed = state.rival_fighter(id).unwrap();
+        assert_eq!(observed.observed_weeks, 1);
+        assert_ne!(potential_text(observed, &scouting), "?");
+        assert!(outside_personality_text(observed, &scouting).starts_with("Agr "));
+        let unseen = &state.free_agents[0];
+        assert_eq!(outside_personality_text(unseen, &scouting), "?");
     }
 
     #[test]
@@ -1392,7 +1450,7 @@ mod tests {
             format!("Offrir 100 pour {class} n° 2 (Ludus Dacicus)")
         );
         // Two stats seen at first, the others hidden.
-        let seen = range_texts(wanted, &data);
+        let seen = range_texts(wanted, &Scouting::default(), &data);
         assert_eq!(seen.iter().filter(|r| *r == "?").count(), 4);
         // A low offer is refused, and the week tells it.
         screen.decisions.moves = vec![Move::Offer(target, 10), Move::List(0)];

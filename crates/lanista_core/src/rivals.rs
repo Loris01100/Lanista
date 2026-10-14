@@ -121,7 +121,7 @@ pub fn plan(
     data: &DesignData,
 ) -> WeekPlan {
     let hurt = badly_hurt_or_ill(fighter);
-    let care_cost = i64::from(fighter.care_cost(&data.fighter));
+    let care_cost = i64::from(fighter.care_cost(&data.fighter.care));
     let care = hurt && care_cost > 0 && *money - care_cost >= i64::from(rules.care_reserve);
     if care {
         *money -= care_cost;
@@ -222,7 +222,7 @@ mod tests {
             severity: Severity::Severe,
             weeks_left: 5,
         });
-        let cost = i64::from(fighter.care_cost(&data.fighter));
+        let cost = i64::from(fighter.care_cost(&data.fighter.care));
         assert!(cost > 0);
         let even = [0.5, 0.5];
         let mut money = cost + 100;

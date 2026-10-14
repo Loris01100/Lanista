@@ -6,15 +6,19 @@ use lanista_core::colosseum::{
 };
 use lanista_core::design_data::DesignData;
 use lanista_core::economy::{Flow, Transaction};
+use lanista_core::fighter::care::CareRules;
 use lanista_core::fighter::career::{
     Activity, CareerFighter, FightSummary, Record, Status, WeekReport,
 };
 use lanista_core::fighter::fame::FightResult;
 use lanista_core::fighter::illness::{Illness, IllnessLevel};
 use lanista_core::fighter::injury::{Injury, Location, Severity, Side};
-use lanista_core::market::{MarketNews, Move, Target, stat_ranges};
+use lanista_core::fighter::personality::Personality;
+use lanista_core::market::{
+    MarketNews, Move, Target, personality_seen, potential_range, stat_ranges,
+};
 use lanista_core::rivals::{Profile, RivalId};
-use lanista_core::staff::{StaffMove, TrainerRules};
+use lanista_core::staff::{DoctorRules, RecruiterRules, Role, Scouting, StaffMove, TrainerRules};
 use lanista_core::state::GameState;
 
 /// Stat names, in `Stats::to_array` order.
@@ -74,12 +78,50 @@ pub fn rival_fighter_name(id: RivalId, state: &GameState, data: &DesignData) -> 
     )
 }
 
-/// What the club sees of each trained stat of a fighter out of it: "40-60", or "?".
-pub fn range_texts(fighter: &CareerFighter, data: &DesignData) -> Vec<String> {
-    stat_ranges(fighter, &data.economy.market)
-        .iter()
-        .map(|range| range.map_or_else(|| "?".into(), |(low, high)| format!("{low}-{high}")))
+/// "40-60", or "?" for what is not seen.
+fn range_text(range: Option<(u32, u32)>) -> String {
+    range.map_or_else(|| "?".into(), |(low, high)| format!("{low}-{high}"))
+}
+
+/// What the club sees of each trained stat of a fighter out of it, with the
+/// recruiter's `scouting`: "40-60", or "?".
+pub fn range_texts(fighter: &CareerFighter, scouting: &Scouting, data: &DesignData) -> Vec<String> {
+    stat_ranges(fighter, &data.economy.market, scouting)
+        .into_iter()
+        .map(range_text)
         .collect()
+}
+
+/// The recruiter's estimate of the total of a fighter's potential: "380-460", or "?".
+pub fn potential_text(fighter: &CareerFighter, scouting: &Scouting) -> String {
+    range_text(potential_range(fighter, scouting))
+}
+
+/// "Agressivité 60, prudence 40, goût du spectacle 50, détermination 70".
+pub fn personality_text(p: &Personality) -> String {
+    format!(
+        "Agressivité {}, prudence {}, goût du spectacle {}, détermination {}",
+        p.aggression.value(),
+        p.caution.value(),
+        p.showmanship.value(),
+        p.determination.value()
+    )
+}
+
+/// The personality of a fighter out of the club, in short, if the recruiter sees it:
+/// "Agr 60, Pru 40, Spe 50, Dét 70", or "?".
+pub fn outside_personality_text(fighter: &CareerFighter, scouting: &Scouting) -> String {
+    if !personality_seen(fighter, scouting) {
+        return "?".into();
+    }
+    let p = &fighter.personality;
+    format!(
+        "Agr {}, Pru {}, Spe {}, Dét {}",
+        p.aggression.value(),
+        p.caution.value(),
+        p.showmanship.value(),
+        p.determination.value()
+    )
 }
 
 /// "3 V, 1 D, 2 N".
@@ -136,19 +178,40 @@ pub fn move_text(m: Move, state: &GameState, data: &DesignData) -> String {
     }
 }
 
+/// The name of a post, as in "un médecin".
+pub fn role_name(role: Role) -> &'static str {
+    match role {
+        Role::Trainer => "entraîneur",
+        Role::Doctor => "médecin",
+        Role::Recruiter => "recruteur",
+    }
+}
+
+/// The name of a post, as a title.
+pub fn role_title(role: Role) -> &'static str {
+    match role {
+        Role::Trainer => "Entraîneur",
+        Role::Doctor => "Médecin",
+        Role::Recruiter => "Recruteur",
+    }
+}
+
 /// A change of staff, as chosen for the week.
 pub fn staff_move_text(m: StaffMove) -> String {
     match m {
-        StaffMove::HireTrainer(level) => format!("Engager un entraîneur de niveau {level}"),
-        StaffMove::DismissTrainer => "Renvoyer l'entraîneur".into(),
+        StaffMove::Hire(role, level) => {
+            format!("Engager un {} de niveau {level}", role_name(role))
+        }
+        StaffMove::Dismiss(Role::Trainer) => "Renvoyer l'entraîneur".into(),
+        StaffMove::Dismiss(role) => format!("Renvoyer le {}", role_name(role)),
     }
 }
 
 /// A change of staff, once made.
 pub fn staff_news_text(m: StaffMove) -> String {
     match m {
-        StaffMove::HireTrainer(level) => format!("Entraîneur de niveau {level} engagé"),
-        StaffMove::DismissTrainer => "Entraîneur renvoyé".into(),
+        StaffMove::Hire(role, level) => format!("{} de niveau {level} engagé", role_title(role)),
+        StaffMove::Dismiss(role) => format!("{} renvoyé", role_title(role)),
     }
 }
 
@@ -161,6 +224,42 @@ pub fn trainer_text(trainer: &TrainerRules) -> String {
         trainer.training_cost,
         trainer.coaching.progress_percent,
         trainer.coaching.form_spared
+    )
+}
+
+/// What a doctor level costs and brings: "salaire 20 par semaine, les soins laissent 40 %
+/// des semaines (50 sans médecin), prix des soins 110 %, séquelle évitée 30 fois sur 100".
+pub fn doctor_text(doctor: &DoctorRules, care: &CareRules) -> String {
+    let medicine = &doctor.medicine;
+    let kept = medicine.care_rules(care).weeks_kept_percent;
+    format!(
+        "salaire {} par semaine, les soins laissent {kept} % des semaines ({} sans médecin), \
+         prix des soins {} %, séquelle évitée {} fois sur 100",
+        doctor.salary,
+        care.weeks_kept_percent,
+        medicine.care_cost_percent,
+        medicine.after_effect_spared_percent
+    )
+}
+
+/// What a recruiter level costs and brings: "salaire 30 par semaine, 1 stat de plus
+/// révélée par semaine, fourchettes à 70 %, potentiel estimé à 40 % près, personnalité
+/// cachée".
+pub fn recruiter_text(recruiter: &RecruiterRules) -> String {
+    let scouting = &recruiter.scouting;
+    let potential = match scouting.potential_range_percent {
+        0 => "potentiel non estimé".to_owned(),
+        percent => format!("potentiel estimé à {percent} % près"),
+    };
+    let personality = if scouting.personality {
+        "personnalité vue"
+    } else {
+        "personnalité cachée"
+    };
+    format!(
+        "salaire {} par semaine, {} stat de plus révélée par semaine, fourchettes à {} %, \
+         {potential}, {personality}",
+        recruiter.salary, scouting.revealed_per_week, scouting.range_width_percent
     )
 }
 
@@ -406,6 +505,9 @@ pub fn week_lines(
     }
     if let Some(injury) = &report.new_injury {
         lines.push(format!("Blessure : {}", injury_text(*injury, dominant)));
+    }
+    if report.after_effect_spared {
+        lines.push("Séquelle évitée par le médecin".into());
     }
     for injury in &report.healed_injuries {
         lines.push(format!(

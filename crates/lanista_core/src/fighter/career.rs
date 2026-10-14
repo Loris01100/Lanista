@@ -8,10 +8,13 @@ use crate::colosseum::ColosseumId;
 use crate::combat::{Arena, Vec2};
 use crate::design_data::{DesignData, FighterRules};
 use crate::duel::{ARENA_SIZE, STATS, play};
+use crate::fighter::care::CareRules;
 use crate::fighter::fame::{Fame, FightOutcome, FightResult};
 use crate::fighter::form::{Form, FormEvent};
 use crate::fighter::illness::{Illness, IllnessLevel, roll_illness};
-use crate::fighter::injury::{Injury, Severity, Side, heal_week, injured_stats, roll_injury};
+use crate::fighter::injury::{
+    Injury, Severity, Side, heal_week, injured_stats, roll_injury, spare_after_effect,
+};
 use crate::fighter::morale::{Morale, MoraleEvent};
 use crate::fighter::personality::Personality;
 use crate::fighter::progression::{ProgressEvent, age_decline, progress, random_potential};
@@ -19,7 +22,7 @@ use crate::fighter::retirement::decides_to_retire;
 use crate::fighter::{ClassId, Condition, Fighter, FighterId, Stats};
 use crate::log::Report;
 use crate::rivals::RivalId;
-use crate::staff::Coaching;
+use crate::staff::{Medicine, StaffEffects};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum Status {
@@ -170,13 +173,14 @@ impl CareerFighter {
     /// Plays one week following `plan`; `None`, and nothing changes, if the fighter
     /// is retired or dead. In order: care, the week's activity, then healing,
     /// the illness draw and, once a year, ageing and the retirement decision.
-    /// A fight is against `opponent`, or a new random fighter without one; training
-    /// gains more and costs less form with the club trainer's `coaching`.
+    /// A fight is against `opponent`, or a new random fighter without one. The club's
+    /// `staff` helps: training gains more and costs less form with the trainer's
+    /// coaching, care and injuries follow the doctor's medicine.
     pub fn play_week<R: Rng + ?Sized>(
         &mut self,
         plan: WeekPlan,
         opponent: Option<&mut Self>,
-        coaching: Coaching,
+        staff: StaffEffects,
         rng: &mut R,
         data: &DesignData,
     ) -> Option<WeekReport> {
@@ -184,7 +188,8 @@ impl CareerFighter {
             return None;
         }
         let rules = &data.fighter;
-        let care_cost = if plan.care { self.care(rules) } else { 0 };
+        let care = staff.medicine.care_rules(&rules.care);
+        let care_cost = if plan.care { self.care(&care) } else { 0 };
         let mut report = WeekReport::new(plan, care_cost);
         match plan.activity {
             Activity::Rest => {
@@ -194,6 +199,7 @@ impl CareerFighter {
                 };
             }
             Activity::Train => {
+                let coaching = staff.coaching;
                 let lost = rules.form.training.saturating_sub(coaching.form_spared);
                 self.form = Form::new(self.form.value().saturating_sub(lost));
                 let coaching_percent = coaching.progress_percent;
@@ -212,9 +218,10 @@ impl CareerFighter {
                     stranger = Self::random(rng, data);
                     &mut stranger
                 };
-                let (fight, injury) = self.fight(opponent, form, rng, data);
+                let (fight, injury, spared) = self.fight(opponent, form, staff.medicine, rng, data);
                 report.fight = Some(fight);
                 report.new_injury = injury;
+                report.after_effect_spared = spared;
                 if self.status == Status::Dead {
                     return Some(report);
                 }
@@ -224,25 +231,22 @@ impl CareerFighter {
         Some(report)
     }
 
-    /// Price of caring for every injury and illness where care helps, without caring.
+    /// Price of caring for every injury and illness where `care` helps, without caring.
     #[must_use]
-    pub fn care_cost(&self, rules: &FighterRules) -> u32 {
-        let injuries = self
-            .injuries
-            .iter()
-            .filter_map(|i| i.care_cost(&rules.care));
-        let illness = self.illness.and_then(|i| i.care_cost(&rules.care));
+    pub fn care_cost(&self, care: &CareRules) -> u32 {
+        let injuries = self.injuries.iter().filter_map(|i| i.care_cost(care));
+        let illness = self.illness.and_then(|i| i.care_cost(care));
         injuries.chain(illness).sum()
     }
 
-    /// Cares for every injury and illness where care helps; returns the total price.
-    fn care(&mut self, rules: &FighterRules) -> u32 {
+    /// Cares for every injury and illness where `care` helps; returns the total price.
+    fn care(&mut self, care: &CareRules) -> u32 {
         let mut cost = 0_u32;
         for injury in &mut self.injuries {
-            cost = cost.saturating_add(injury.treat(&rules.care).unwrap_or(0));
+            cost = cost.saturating_add(injury.treat(care).unwrap_or(0));
         }
         if let Some(illness) = &mut self.illness {
-            cost = cost.saturating_add(illness.treat(&rules.care).unwrap_or(0));
+            cost = cost.saturating_add(illness.treat(care).unwrap_or(0));
         }
         cost
     }
@@ -316,14 +320,16 @@ impl CareerFighter {
 
     /// A duel against `opponent`, then its effects on both: fame, death, morale, form
     /// (`form`'s cost), illness worsening, a possible injury and progression. Returns
-    /// this fighter's new injury.
+    /// this fighter's new injury, and whether its doctor's `medicine` spared it an
+    /// after-effect.
     fn fight<R: Rng + ?Sized>(
         &mut self,
         opponent: &mut Self,
         form: FormEvent,
+        medicine: Medicine,
         rng: &mut R,
         data: &DesignData,
-    ) -> (FightSummary, Option<Injury>) {
+    ) -> (FightSummary, Option<Injury>, bool) {
         let rules = &data.fighter;
         let (seed, start, arena) = self.duel(opponent, rng, data);
         let stronger = opponent.stronger_than(self, rules);
@@ -345,23 +351,27 @@ impl CareerFighter {
             fame_change,
             ticks: arena.tick,
         };
-        let injury = self.after_fight(outcome.result, fame_change, form, rng, rules);
-        opponent.after_fight(theirs.result, their_fame, form, rng, rules);
-        (summary, injury)
+        let (injury, spared) =
+            self.after_fight(outcome.result, fame_change, form, medicine, rng, rules);
+        let alone = Medicine::default();
+        opponent.after_fight(theirs.result, their_fame, form, alone, rng, rules);
+        (summary, injury, spared)
     }
 
-    /// What a fight leaves a survivor: morale, a possible injury (returned), form
-    /// (`form`'s cost), illness worsening and progression.
+    /// What a fight leaves a survivor: morale, a possible injury (returned, with
+    /// whether `medicine` kept it from leaving an after-effect), form (`form`'s cost),
+    /// illness worsening and progression.
     fn after_fight<R: Rng + ?Sized>(
         &mut self,
         result: FightResult,
         fame_change: i32,
         form: FormEvent,
+        medicine: Medicine,
         rng: &mut R,
         rules: &FighterRules,
-    ) -> Option<Injury> {
+    ) -> (Option<Injury>, bool) {
         if self.status == Status::Dead {
-            return None;
+            return (None, false);
         }
         match result {
             FightResult::Won => {
@@ -378,7 +388,10 @@ impl CareerFighter {
                 .after(MoraleEvent::FameGained(gained), &rules.morale);
         }
         // The risk follows the form the fighter went in with.
-        let injury = roll_injury(rng, self.form, &rules.injury, &rules.form);
+        let rolled = roll_injury(rng, self.form, &rules.injury, &rules.form);
+        let spared_percent = medicine.after_effect_spared_percent;
+        let injury = rolled.map(|i| spare_after_effect(rng, i, spared_percent, &rules.injury));
+        let spared = rolled.is_some_and(|i| i.is_permanent()) && injury != rolled;
         if let Some(injury) = injury {
             self.injuries.push(injury);
             self.morale = self.morale.after(MoraleEvent::Injury, &rules.morale);
@@ -388,7 +401,7 @@ impl CareerFighter {
             .illness
             .map(|illness| illness.after_fight(rng, &rules.illness));
         self.progress(ProgressEvent::Fight, rng, rules);
-        injury
+        (injury, spared)
     }
 
     /// The end of a week whose fight was played as someone's opponent: healing, the
@@ -518,6 +531,8 @@ pub struct WeekReport {
     pub care_cost: u32,
     pub fight: Option<FightSummary>,
     pub new_injury: Option<Injury>,
+    /// The doctor kept the new injury from leaving an after-effect: it is only severe.
+    pub after_effect_spared: bool,
     pub healed_injuries: Vec<Injury>,
     pub new_illness: Option<Illness>,
     pub illness_healed: bool,
@@ -532,6 +547,7 @@ impl WeekReport {
             care_cost,
             fight: None,
             new_injury: None,
+            after_effect_spared: false,
             healed_injuries: Vec::new(),
             new_illness: None,
             illness_healed: false,
@@ -573,6 +589,8 @@ pub struct CareerRules {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::fighter::injury::Location;
+    use crate::staff::Coaching;
     use rand::SeedableRng;
     use rand_chacha::ChaCha8Rng;
 
@@ -618,7 +636,7 @@ mod tests {
         f.play_week(
             plan(Activity::Rest),
             None,
-            Coaching::default(),
+            StaffEffects::default(),
             &mut rng,
             &data,
         )
@@ -627,7 +645,7 @@ mod tests {
         f.play_week(
             plan(Activity::Train),
             None,
-            Coaching::default(),
+            StaffEffects::default(),
             &mut rng,
             &data,
         )
@@ -646,16 +664,57 @@ mod tests {
             progress_percent: 50,
             form_spared: 3,
         };
-        f.play_week(plan(Activity::Train), None, coaching, &mut rng, &data)
+        let staff = StaffEffects {
+            coaching,
+            ..StaffEffects::default()
+        };
+        f.play_week(plan(Activity::Train), None, staff, &mut rng, &data)
             .unwrap();
         assert_eq!(f.form.value(), 48);
-        let spared_all = Coaching {
-            form_spared: 99,
-            ..coaching
+        let spared_all = StaffEffects {
+            coaching: Coaching {
+                form_spared: 99,
+                ..coaching
+            },
+            ..staff
         };
         f.play_week(plan(Activity::Train), None, spared_all, &mut rng, &data)
             .unwrap();
         assert_eq!(f.form.value(), 48);
+    }
+
+    #[test]
+    fn a_doctor_s_care_shortens_recovery_more_at_its_price() {
+        let data = data();
+        let injury = Injury {
+            location: Location::Body,
+            severity: Severity::Severe,
+            weeks_left: 8,
+        };
+        let medicine = Medicine {
+            care_weeks_off_percent: 25,
+            care_cost_percent: 150,
+            after_effect_spared_percent: 0,
+        };
+        let staff = StaffEffects {
+            medicine,
+            ..StaffEffects::default()
+        };
+        let cared = |staff: StaffEffects| {
+            let mut f = fighter(7);
+            f.injuries = vec![injury];
+            let mut rng = ChaCha8Rng::seed_from_u64(0);
+            let rest = WeekPlan {
+                activity: Activity::Rest,
+                care: true,
+            };
+            let report = f.play_week(rest, None, staff, &mut rng, &data).unwrap();
+            (report.care_cost, f.injuries[0].weeks_left)
+        };
+        let severe = data.fighter.care.injury_cost.severe;
+        // Half the 8 weeks kept without a doctor, a quarter with it, then a week heals.
+        assert_eq!(cared(StaffEffects::default()), (severe, 3));
+        assert_eq!(cared(staff), (severe * 3 / 2, 1));
     }
 
     #[test]
@@ -667,7 +726,7 @@ mod tests {
             .play_week(
                 plan(Activity::Fight(ColosseumId(0))),
                 None,
-                Coaching::default(),
+                StaffEffects::default(),
                 &mut rng,
                 &data,
             )
@@ -694,7 +753,7 @@ mod tests {
             .play_week(
                 plan(Activity::Rest),
                 None,
-                Coaching::default(),
+                StaffEffects::default(),
                 &mut rng,
                 &data,
             )
@@ -732,7 +791,7 @@ mod tests {
                 .play_week(
                     plan(Activity::Rest),
                     None,
-                    Coaching::default(),
+                    StaffEffects::default(),
                     &mut rng,
                     &data,
                 )
@@ -754,7 +813,7 @@ mod tests {
                 f.play_week(
                     plan(Activity::Fight(ColosseumId(0))),
                     None,
-                    Coaching::default(),
+                    StaffEffects::default(),
                     &mut rng,
                     &data
                 ),
@@ -773,7 +832,7 @@ mod tests {
             .play_week(
                 plan(Activity::Fight(ColosseumId(0))),
                 None,
-                Coaching::default(),
+                StaffEffects::default(),
                 &mut rng,
                 &data,
             )
@@ -799,7 +858,7 @@ mod tests {
                 .play_week(
                     plan(fight),
                     Some(&mut opponent),
-                    Coaching::default(),
+                    StaffEffects::default(),
                     &mut rng,
                     &data,
                 )
@@ -849,7 +908,7 @@ mod tests {
                     f.play_week(
                         plan(Activity::Fight(ColosseumId(0))),
                         None,
-                        Coaching::default(),
+                        StaffEffects::default(),
                         &mut rng,
                         &data,
                     )

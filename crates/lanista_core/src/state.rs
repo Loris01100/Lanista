@@ -14,6 +14,7 @@ use crate::colosseum::{
 };
 use crate::design_data::DesignData;
 use crate::economy::{Flow, Transaction};
+use crate::fighter::care::CareRules;
 use crate::fighter::career::{
     Activity, CareerFighter, Status, WeekPlan, WeekReport, suggested_plan,
 };
@@ -21,7 +22,10 @@ use crate::fighter::fame::{Fame, FightResult};
 use crate::fighter::{FighterId, percent_of};
 use crate::market::{self, MarketNews, Move, SaleOffer, Target, value};
 use crate::rivals::{self, Rival, RivalId};
-use crate::staff::{Coaching, Staff, StaffMove, TrainerRules};
+use crate::staff::{
+    DoctorRules, Medicine, RecruiterRules, Role, Scouting, Staff, StaffEffects, StaffMove,
+    TrainerRules,
+};
 
 const REST: WeekPlan = WeekPlan {
     activity: Activity::Rest,
@@ -218,7 +222,7 @@ impl GameState {
                 .map(|i| self.suggested_plan(i, data))
                 .collect(),
             moves: Vec::new(),
-            staff: None,
+            staff: Vec::new(),
         }
     }
 
@@ -363,10 +367,39 @@ impl GameState {
         data.economy.staff.trainer(self.staff.trainer?)
     }
 
-    /// What the club's trainer brings to a training session.
+    /// The club's doctor, `None` without one or with a level missing from `data`.
     #[must_use]
-    pub fn coaching(&self, data: &DesignData) -> Coaching {
-        self.trainer(data).map(|t| t.coaching).unwrap_or_default()
+    pub fn doctor<'a>(&self, data: &'a DesignData) -> Option<&'a DoctorRules> {
+        data.economy.staff.doctor(self.staff.doctor?)
+    }
+
+    /// The club's recruiter, `None` without one or with a level missing from `data`.
+    #[must_use]
+    pub fn recruiter<'a>(&self, data: &'a DesignData) -> Option<&'a RecruiterRules> {
+        data.economy.staff.recruiter(self.staff.recruiter?)
+    }
+
+    /// What the club's trainer and doctor bring to its fighters' weeks.
+    #[must_use]
+    pub fn staff_effects(&self, data: &DesignData) -> StaffEffects {
+        StaffEffects {
+            coaching: self.trainer(data).map(|t| t.coaching).unwrap_or_default(),
+            medicine: self.doctor(data).map(|d| d.medicine).unwrap_or_default(),
+        }
+    }
+
+    /// What the club's recruiter shows of the fighters out of the club.
+    #[must_use]
+    pub fn scouting(&self, data: &DesignData) -> Scouting {
+        self.recruiter(data).map(|r| r.scouting).unwrap_or_default()
+    }
+
+    /// Care prices and effect, set by the doctor.
+    #[must_use]
+    pub fn care_rules(&self, data: &DesignData) -> CareRules {
+        self.staff_effects(data)
+            .medicine
+            .care_rules(&data.fighter.care)
     }
 
     /// The price of a training session, set by the trainer.
@@ -376,20 +409,21 @@ impl GameState {
             .map_or(data.economy.training_cost, |t| t.training_cost)
     }
 
-    /// Whether `m` may be made now: a trainer is hired at a level of `data` the club
-    /// does not have yet, with the money for a first salary; dismissed if there is one.
+    /// Whether `m` may be made now: someone is hired for a post at a level of `data`
+    /// the club does not have there yet, with the money for a first salary; dismissed
+    /// if there is one.
     #[must_use]
     pub fn may_staff(&self, m: StaffMove, data: &DesignData) -> bool {
         match m {
-            StaffMove::HireTrainer(level) => {
-                self.staff.trainer != Some(level)
+            StaffMove::Hire(role, level) => {
+                self.staff.level(role) != Some(level)
                     && data
                         .economy
                         .staff
-                        .trainer(level)
-                        .is_some_and(|t| i64::from(t.salary) <= self.money)
+                        .salary(role, level)
+                        .is_some_and(|salary| i64::from(salary) <= self.money)
             }
-            StaffMove::DismissTrainer => self.staff.trainer.is_some(),
+            StaffMove::Dismiss(role) => self.staff.level(role).is_some(),
         }
     }
 
@@ -414,8 +448,9 @@ pub struct Decisions {
     /// Signing a free agent costs nothing: with the free colosseum, the safety net
     /// that lets a club without money or fighters start again.
     pub moves: Vec<Move>,
-    /// A change of staff, made before the week if `GameState::may_staff` allows it.
-    pub staff: Option<StaffMove>,
+    /// Changes of staff, each made before the week if `GameState::may_staff` allows it
+    /// at its turn; only the first for each post counts.
+    pub staff: Vec<StaffMove>,
 }
 
 /// What a week did to the club.
@@ -431,8 +466,8 @@ pub struct WeekSummary {
     pub refusals: Vec<Challenge>,
     /// What the club did and heard on the market, in the order it happened.
     pub market: Vec<MarketNews>,
-    /// The change of staff made.
-    pub staff: Option<StaffMove>,
+    /// The changes of staff made.
+    pub staff: Vec<StaffMove>,
 }
 
 /// Plays one week for the whole club: the market moves and the change of staff before
@@ -451,8 +486,10 @@ pub struct WeekSummary {
 pub fn next_week(state: &mut GameState, decisions: &Decisions, data: &DesignData) -> WeekSummary {
     let mut ledger = Vec::new();
     let mut market = market_moves(state, &decisions.moves, data, &mut ledger);
-    let staff = staff_week(state, decisions.staff, data, &mut ledger);
-    let (coaching, training_cost) = (state.coaching(data), state.training_cost(data));
+    let staff = staff_week(state, &decisions.staff, data, &mut ledger);
+    let effects = state.staff_effects(data);
+    // A training session's price, and the doctor's for care.
+    let costs = (state.training_cost(data), effects.medicine);
     let (wanted, title_meetings) = week_plans(state, decisions, data);
     let rival_plans = state.rival_plans(data);
     // The rival fighters who had their fight, against the club's fighters.
@@ -460,7 +497,7 @@ pub fn next_week(state: &mut GameState, decisions: &Decisions, data: &DesignData
     let mut titles = Vec::new();
     let mut reports = Vec::with_capacity(state.fighters.len());
     for (i, fighter) in state.fighters.iter_mut().enumerate() {
-        let plan = affordable(wanted[i], fighter, state.money, training_cost, data);
+        let plan = affordable(wanted[i], fighter, state.money, costs, data);
         let fame = fighter.fame;
         // The colosseum and the rival fighter met there.
         let meeting = match plan.activity {
@@ -473,13 +510,13 @@ pub fn next_week(state: &mut GameState, decisions: &Decisions, data: &DesignData
                 &fought,
             ),
         };
-        if let Some(met) = meeting.and_then(|(_, id)| fought.get_mut(id.club)?.get_mut(id.fighter))
-        {
-            *met = true;
+        // Met in the rosters `fought` was made from.
+        if let Some((_, id)) = meeting {
+            fought[id.club][id.fighter] = true;
         }
         let opponent =
             meeting.and_then(|(_, id)| state.rivals.get_mut(id.club)?.fighters.get_mut(id.fighter));
-        let report = fighter.play_week(plan, opponent, coaching, &mut state.rng, data);
+        let report = fighter.play_week(plan, opponent, effects, &mut state.rng, data);
         if let Some(report) = &report {
             let mut pay = |flow, amount: i64| {
                 if amount != 0 {
@@ -493,7 +530,7 @@ pub fn next_week(state: &mut GameState, decisions: &Decisions, data: &DesignData
             };
             pay(Flow::Care, -i64::from(report.care_cost));
             if report.plan.activity == Activity::Train {
-                pay(Flow::Training, -i64::from(training_cost));
+                pay(Flow::Training, -i64::from(costs.0));
             }
             if let (Some(fight), Some((c, id))) = (&report.fight, meeting)
                 && let Some(rules) = data.world.colosseums.get(c)
@@ -554,30 +591,47 @@ pub fn next_week(state: &mut GameState, decisions: &Decisions, data: &DesignData
     }
 }
 
-/// The change of staff `m` made before the week, if still allowed, then the staff's
-/// salaries paid in `ledger`, even into debt; returns the change made.
+/// The changes of staff `moves` made before the week, the first for each post, each
+/// if still allowed at its turn, then the salaries paid in `ledger`, post by post, even
+/// into debt; returns the changes made.
 fn staff_week(
     state: &mut GameState,
-    m: Option<StaffMove>,
+    moves: &[StaffMove],
     data: &DesignData,
     ledger: &mut Vec<Transaction>,
-) -> Option<StaffMove> {
-    let m = m.filter(|&m| state.may_staff(m, data));
-    match m {
-        Some(StaffMove::HireTrainer(level)) => state.staff.trainer = Some(level),
-        Some(StaffMove::DismissTrainer) => state.staff.trainer = None,
-        None => {}
+) -> Vec<StaffMove> {
+    let mut made = Vec::new();
+    let mut seen = Vec::new();
+    for &m in moves {
+        if seen.contains(&m.role()) {
+            continue;
+        }
+        seen.push(m.role());
+        if !state.may_staff(m, data) {
+            continue;
+        }
+        match m {
+            StaffMove::Hire(role, level) => state.staff.set(role, Some(level)),
+            StaffMove::Dismiss(role) => state.staff.set(role, None),
+        }
+        made.push(m);
     }
-    if let Some(trainer) = state.trainer(data) {
-        let amount = -i64::from(trainer.salary);
-        state.money += amount;
-        ledger.push(Transaction {
-            fighter: None,
-            flow: Flow::Salary,
-            amount,
-        });
+    for role in Role::ALL {
+        let salary = state
+            .staff
+            .level(role)
+            .and_then(|level| data.economy.staff.salary(role, level));
+        if let Some(salary) = salary {
+            let amount = -i64::from(salary);
+            state.money += amount;
+            ledger.push(Transaction {
+                fighter: None,
+                flow: Flow::Salary,
+                amount,
+            });
+        }
     }
-    m
+    made
 }
 
 /// The market moves made before the week, in this order, each if still allowed: the
@@ -736,7 +790,7 @@ fn off_season_starts(state: &GameState, data: &DesignData) -> bool {
 /// The free agents' week: they rest, and leave the market if they die or retire.
 fn free_agent_weeks(state: &mut GameState, data: &DesignData) {
     for agent in &mut state.free_agents {
-        agent.play_week(REST, None, Coaching::default(), &mut state.rng, data);
+        agent.play_week(REST, None, StaffEffects::default(), &mut state.rng, data);
     }
     state.free_agents.retain(|f| f.status == Status::Active);
 }
@@ -1125,7 +1179,7 @@ fn rival_weeks(
             let report = first.play_week(
                 plan,
                 Some(&mut second),
-                Coaching::default(),
+                StaffEffects::default(),
                 &mut state.rng,
                 data,
             );
@@ -1159,7 +1213,8 @@ fn rival_weeks(
                 continue;
             }
             let plan = plans[club][fighter];
-            if let Some(report) = f.play_week(plan, None, Coaching::default(), &mut state.rng, data)
+            if let Some(report) =
+                f.play_week(plan, None, StaffEffects::default(), &mut state.rng, data)
             {
                 let training = if plan.activity == Activity::Train {
                     data.economy.training_cost
@@ -1286,18 +1341,19 @@ fn opposite(result: FightResult) -> FightResult {
     }
 }
 
-/// `plan` without what `money` cannot pay for: care first, then the activity, a
-/// training session costing `training_cost`.
+/// `plan` without what `money` cannot pay for: care first, at the price of the doctor's
+/// `medicine`, then the activity, a training session costing `training_cost`.
 fn affordable(
     mut plan: WeekPlan,
     fighter: &CareerFighter,
     money: i64,
-    training_cost: u32,
+    (training_cost, medicine): (u32, Medicine),
     data: &DesignData,
 ) -> WeekPlan {
     let mut left = money;
     if plan.care {
-        let cost = i64::from(fighter.care_cost(&data.fighter));
+        let care = medicine.care_rules(&data.fighter.care);
+        let cost = i64::from(fighter.care_cost(&care));
         if cost > left {
             plan.care = false;
         } else {
@@ -1341,7 +1397,7 @@ mod tests {
         Decisions {
             plans: vec![REST],
             moves: moves.to_vec(),
-            staff: None,
+            staff: Vec::new(),
         }
     }
 
@@ -1445,9 +1501,9 @@ mod tests {
         let mut state = GameState::new(7, &data);
         let trainer = data.economy.staff.trainer(3).unwrap();
         let mut train = plan(Activity::Train, false);
-        train.staff = Some(StaffMove::HireTrainer(3));
+        train.staff = vec![StaffMove::Hire(Role::Trainer, 3)];
         let summary = next_week(&mut state, &train, &data);
-        assert_eq!(summary.staff, Some(StaffMove::HireTrainer(3)));
+        assert_eq!(summary.staff, [StaffMove::Hire(Role::Trainer, 3)]);
         assert_eq!(state.staff.trainer, Some(3));
         assert_eq!(summary.ledger[0].fighter, None);
         let salary = (Flow::Salary, -i64::from(trainer.salary));
@@ -1455,10 +1511,10 @@ mod tests {
         assert_eq!(flows(&summary)[..2], [salary, session]);
         // Paid on, without a new decision.
         let summary = next_week(&mut state, &plan(Activity::Rest, false), &data);
-        assert_eq!(summary.staff, None);
+        assert_eq!(summary.staff, []);
         assert_eq!(flows(&summary)[0], salary);
         let mut dismiss = plan(Activity::Rest, false);
-        dismiss.staff = Some(StaffMove::DismissTrainer);
+        dismiss.staff = vec![StaffMove::Dismiss(Role::Trainer)];
         let summary = next_week(&mut state, &dismiss, &data);
         assert_eq!(state.staff.trainer, None);
         assert!(
@@ -1473,21 +1529,22 @@ mod tests {
         let data = data();
         let mut state = GameState::new(7, &data);
         let levels = u32::try_from(data.economy.staff.trainers.len()).unwrap();
-        assert!(state.may_staff(StaffMove::HireTrainer(1), &data));
-        assert!(!state.may_staff(StaffMove::HireTrainer(0), &data));
-        assert!(!state.may_staff(StaffMove::HireTrainer(levels + 1), &data));
-        assert!(!state.may_staff(StaffMove::DismissTrainer, &data));
+        assert!(state.may_staff(StaffMove::Hire(Role::Trainer, 1), &data));
+        assert!(!state.may_staff(StaffMove::Hire(Role::Trainer, 0), &data));
+        assert!(!state.may_staff(StaffMove::Hire(Role::Trainer, levels + 1), &data));
+        assert!(!state.may_staff(StaffMove::Dismiss(Role::Trainer), &data));
         state.money = 0;
         let mut hire = plan(Activity::Rest, false);
-        hire.staff = Some(StaffMove::HireTrainer(1));
+        hire.staff = vec![StaffMove::Hire(Role::Trainer, 1)];
         let summary = next_week(&mut state, &hire, &data);
-        assert_eq!((summary.staff, state.staff.trainer), (None, None));
+        assert_eq!(summary.staff, []);
+        assert_eq!(state.staff.trainer, None);
         // A trainer already there is paid even into debt.
         state.staff.trainer = Some(1);
         state.money = 0;
         next_week(&mut state, &plan(Activity::Rest, false), &data);
         assert!(state.money < 0);
-        assert!(!state.may_staff(StaffMove::HireTrainer(2), &data));
+        assert!(!state.may_staff(StaffMove::Hire(Role::Trainer, 2), &data));
     }
 
     #[test]
@@ -1522,6 +1579,63 @@ mod tests {
     }
 
     #[test]
+    fn each_post_is_hired_once_a_week_and_paid_in_turn() {
+        let data = data();
+        let mut state = GameState::new(7, &data);
+        let staff = &data.economy.staff;
+        let mut week = plan(Activity::Rest, false);
+        week.staff = vec![
+            StaffMove::Hire(Role::Recruiter, 2),
+            StaffMove::Hire(Role::Doctor, 4),
+            // A second change for the same post does not count.
+            StaffMove::Hire(Role::Recruiter, 5),
+        ];
+        let summary = next_week(&mut state, &week, &data);
+        assert_eq!(summary.staff, week.staff[..2]);
+        assert_eq!(
+            (
+                state.staff.trainer,
+                state.staff.doctor,
+                state.staff.recruiter
+            ),
+            (None, Some(4), Some(2))
+        );
+        let salary = |s: u32| (Flow::Salary, -i64::from(s));
+        assert_eq!(
+            flows(&summary)[..2],
+            [
+                salary(staff.doctor(4).unwrap().salary),
+                salary(staff.recruiter(2).unwrap().salary)
+            ]
+        );
+        assert_eq!(state.scouting(&data), staff.recruiter(2).unwrap().scouting);
+    }
+
+    #[test]
+    fn the_doctor_sets_the_price_of_care() {
+        let data = data();
+        let mut state = GameState::new(7, &data);
+        state.staff.doctor = Some(5);
+        state.fighters[0].injuries.push(Injury {
+            location: Location::Body,
+            severity: Severity::Severe,
+            weeks_left: 8,
+        });
+        let medicine = data.economy.staff.doctor(5).unwrap().medicine;
+        let price = state.fighters[0].care_cost(&state.care_rules(&data));
+        let usual = state.fighters[0].care_cost(&data.fighter.care);
+        assert_eq!(price, usual * medicine.care_cost_percent / 100);
+        let summary = next_week(&mut state, &plan(Activity::Rest, true), &data);
+        assert_eq!(flows(&summary)[1], (Flow::Care, -i64::from(price)));
+        let kept = data.fighter.care.weeks_kept_percent - medicine.care_weeks_off_percent;
+        // Care, then a week of healing.
+        assert_eq!(
+            state.fighters[0].injuries[0].weeks_left,
+            (8 * kept).div_ceil(100) - 1
+        );
+    }
+
+    #[test]
     fn care_is_paid_when_the_club_can() {
         let data = data();
         let mut state = GameState::new(7, &data);
@@ -1530,7 +1644,7 @@ mod tests {
             severity: Severity::Medium,
             weeks_left: 4,
         });
-        let price = state.fighters[0].care_cost(&data.fighter);
+        let price = state.fighters[0].care_cost(&data.fighter.care);
         assert!(price > 0);
         let summary = next_week(&mut state, &plan(Activity::Rest, true), &data);
         assert_eq!(flows(&summary)[0], (Flow::Care, -i64::from(price)));
@@ -1965,7 +2079,7 @@ mod tests {
                 care: false,
             }],
             moves: list.moves.clone(),
-            staff: None,
+            staff: Vec::new(),
         };
         // A merchant in debt cannot keep its reserve.
         state.rivals[2].money = -1000;
