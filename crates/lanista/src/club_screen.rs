@@ -124,12 +124,14 @@ impl ClubScreen {
         }
     }
 
-    /// Plays on from `state`, a loaded or new game.
+    /// Plays on from `state`, a loaded or new game, which the autosave now holds:
+    /// the next launch resumes it, not the game it replaced.
     // ponytail: the week log and fight summaries are not saved, so they start
     // empty; save them once the game keeps a history in `GameState`.
     fn replace(&mut self, state: GameState) {
         let saves = self.saves.take();
         *self = Self::new(Rc::clone(&self.data), state, saves, self.bindings.clone());
+        self.save(saves::AUTO, false);
     }
 
     /// Writes the game to `file`; tells the player only when asked or when it fails.
@@ -769,6 +771,41 @@ mod tests {
         screen.next_week();
         screen.load();
         assert_eq!(screen.state, resumed.state);
+        // Quitting right after loading resumes the loaded game, not the one before.
+        assert_eq!(open().state, resumed.state);
+        std::fs::remove_dir_all(folder).unwrap();
+    }
+
+    /// The milestone of phase 4: a whole season with one club, saved and reloaded
+    /// halfway, plays on exactly as if it had never stopped.
+    #[test]
+    fn a_whole_season_is_played_saved_and_reloaded() {
+        let data = Rc::new(DesignData::load().unwrap());
+        let folder = std::env::temp_dir().join(format!("lanista-season-{}", std::process::id()));
+        let open = || {
+            ClubScreen::open(
+                Rc::clone(&data),
+                7,
+                Some(folder.clone()),
+                Bindings::new(Vec::new()),
+            )
+        };
+        let mut screen = open();
+        let age = screen.state.fighters[0].age;
+        let half = u64::from(data.calendar.season_weeks() / 2);
+        for _ in 0..half {
+            screen.next_week();
+        }
+        let mut reloaded = open();
+        for _ in half..u64::from(data.calendar.season_weeks()) {
+            screen.next_week();
+            reloaded.next_week();
+            assert_eq!(reloaded.fights, screen.fights);
+        }
+        assert_eq!(reloaded.state, screen.state);
+        let next = screen.state.date(&data);
+        assert_eq!((next.season, next.week), (2, 1));
+        assert_eq!(screen.state.fighters[0].age, age + 1);
         std::fs::remove_dir_all(folder).unwrap();
     }
 }
