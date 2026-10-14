@@ -3,6 +3,7 @@
 
 use rand::SeedableRng;
 use rand_chacha::ChaCha8Rng;
+use serde::{Deserialize, Serialize};
 
 use crate::calendar::Date;
 use crate::design_data::DesignData;
@@ -10,7 +11,7 @@ use crate::economy::{Flow, Transaction};
 use crate::fighter::career::{Activity, CareerFighter, WeekPlan, WeekReport, suggested_plan};
 use crate::fighter::fame::FightResult;
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct GameState {
     /// Number of the next week to play, from 1.
     pub week: u64,

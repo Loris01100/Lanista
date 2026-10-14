@@ -2,12 +2,12 @@
 //! and for a severe illness a risk of getting worse when fighting.
 
 use rand::{Rng, RngExt};
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 
 use crate::fighter::form::{Form, FormRules};
 use crate::fighter::{Stats, percent_of, pick};
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
 pub enum IllnessLevel {
     /// Small malus on every stat.
     Mild,
@@ -18,7 +18,7 @@ pub enum IllnessLevel {
 }
 
 /// A fighter has at most one illness at a time.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Illness {
     pub level: IllnessLevel,
     /// Weeks before it heals.

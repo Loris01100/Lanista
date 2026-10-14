@@ -2,7 +2,7 @@
 //! and one week of their life (care, rest, training or a fight, healing, ageing).
 
 use rand::{Rng, RngExt};
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 
 use crate::combat::{Arena, Vec2};
 use crate::design_data::{DesignData, FighterRules};
@@ -18,7 +18,7 @@ use crate::fighter::retirement::decides_to_retire;
 use crate::fighter::{ClassId, Condition, Fighter, FighterId, Stats};
 use crate::log::Report;
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum Status {
     Active,
     /// Decided to stop; only the fighter decides.
@@ -26,7 +26,7 @@ pub enum Status {
     Dead,
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct CareerFighter {
     pub class: ClassId,
     /// Trained stats, before injuries, illness and morale.

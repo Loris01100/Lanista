@@ -1,7 +1,9 @@
 //! The player's club, week after week: the general menu, the fighter list, a
 //! fighter's sheet and the summary of the week's fights. Fights are watched in the
 //! combat screen; the same seed and decisions give the same game as the `career` tool.
+//! The game is saved after every week, and when the player asks.
 
+use std::path::PathBuf;
 use std::rc::Rc;
 
 use lanista_core::calendar::SeasonPhase;
@@ -20,6 +22,7 @@ use reesch::{Assets, Audio, Bindings, Screen, Transition, egui};
 
 use crate::Action;
 use crate::combat_screen::CombatScreen;
+use crate::saves;
 use crate::texts::{
     STAT_NAMES, activity_name, change, class_name, condition_text, fight_text, fighter_name,
     illness_text, injury_text, money_line, week_lines,
@@ -68,13 +71,44 @@ pub struct ClubScreen {
     fights: Vec<FightReport>,
     /// Fights still to watch, the next one last.
     to_watch: Vec<Arena>,
+    /// Folder of the save files; `None` saves nothing.
+    saves: Option<PathBuf>,
+    /// The outcome of the last save or load, for the player.
+    message: Option<String>,
     bindings: Bindings<Action>,
 }
 
 impl ClubScreen {
-    /// The game of `seed`, whose first fighter is the one of `career --seed <seed>`.
-    pub fn new(data: Rc<DesignData>, seed: u64, bindings: Bindings<Action>) -> Self {
-        let state = GameState::new(seed, &data);
+    /// The game of the autosave in `saves`, or else a new game of `seed`.
+    pub fn open(
+        data: Rc<DesignData>,
+        seed: u64,
+        saves: Option<PathBuf>,
+        bindings: Bindings<Action>,
+    ) -> Self {
+        let autosave = saves
+            .as_deref()
+            .map_or(Ok(None), |folder| saves::read(folder, saves::AUTO, &data));
+        let (state, message) = match autosave {
+            Ok(Some(state)) => (state, Some("Partie reprise".to_owned())),
+            Ok(None) => (GameState::new(seed, &data), None),
+            Err(e) => (
+                GameState::new(seed, &data),
+                Some(format!("Sauvegarde automatique illisible : {e}")),
+            ),
+        };
+        let mut screen = Self::new(data, state, saves, bindings);
+        screen.message = message;
+        screen
+    }
+
+    /// The game `state`, saved in `saves`.
+    pub fn new(
+        data: Rc<DesignData>,
+        state: GameState,
+        saves: Option<PathBuf>,
+        bindings: Bindings<Action>,
+    ) -> Self {
         Self {
             decisions: state.suggested_decisions(),
             histories: vec![Vec::new(); state.fighters.len()],
@@ -84,7 +118,39 @@ impl ClubScreen {
             last_week: None,
             fights: Vec::new(),
             to_watch: Vec::new(),
+            saves,
+            message: None,
             bindings,
+        }
+    }
+
+    /// Plays on from `state`, a loaded or new game.
+    // ponytail: the week log and fight summaries are not saved, so they start
+    // empty; save them once the game keeps a history in `GameState`.
+    fn replace(&mut self, state: GameState) {
+        let saves = self.saves.take();
+        *self = Self::new(Rc::clone(&self.data), state, saves, self.bindings.clone());
+    }
+
+    /// Writes the game to `file`; tells the player only when asked or when it fails.
+    fn save(&mut self, file: &str, asked: bool) {
+        let Some(folder) = &self.saves else { return };
+        match saves::write(folder, file, &self.state) {
+            Ok(()) if asked => self.message = Some("Partie sauvegardée".into()),
+            Ok(()) => {}
+            Err(e) => self.message = Some(format!("Sauvegarde impossible : {e}")),
+        }
+    }
+
+    fn load(&mut self) {
+        let Some(folder) = &self.saves else { return };
+        match saves::read(folder, saves::MANUAL, &self.data) {
+            Ok(Some(state)) => {
+                self.replace(state);
+                self.message = Some("Partie chargée".into());
+            }
+            Ok(None) => self.message = Some("Aucune sauvegarde".into()),
+            Err(e) => self.message = Some(format!("Sauvegarde illisible : {e}")),
         }
     }
 
@@ -139,6 +205,8 @@ impl ClubScreen {
             self.view = View::Fights;
         }
         self.decisions = self.state.suggested_decisions();
+        // Saved before the fights are watched: quitting during one keeps its outcome.
+        self.save(saves::AUTO, false);
     }
 
     fn top_bar(&mut self, ui: &mut egui::Ui) -> Option<Transition> {
@@ -157,6 +225,10 @@ impl ClubScreen {
             ui.separator();
             ui.strong(format!("Argent : {}", self.state.money));
             ui.separator();
+            if let Some(message) = &self.message {
+                ui.label(message);
+                ui.separator();
+            }
             ui.selectable_value(&mut self.view, View::Menu, "Menu");
             ui.selectable_value(&mut self.view, View::Roster, "Combattants");
             ui.add_enabled_ui(!self.fights.is_empty(), |ui| {
@@ -196,6 +268,21 @@ impl ClubScreen {
             "Recruter un free agent (gratuit) en début de semaine",
         );
         let play = ui.button("Semaine suivante (Espace)").clicked();
+        if self.saves.is_some() {
+            ui.horizontal(|ui| {
+                if ui.button("Sauvegarder").clicked() {
+                    self.save(saves::MANUAL, true);
+                }
+                if ui.button("Charger").clicked() {
+                    self.load();
+                }
+                if ui.button("Nouvelle partie").clicked() {
+                    let seed = new_seed();
+                    self.replace(GameState::new(seed, &self.data));
+                    self.message = Some(format!("Nouvelle partie, graine {seed}"));
+                }
+            });
+        }
         ui.separator();
         if let Some((week, lines)) = &self.last_week {
             ui.strong(format!("Semaine {week}"));
@@ -429,6 +516,13 @@ impl Screen for ClubScreen {
     }
 }
 
+/// A seed for a new game: the game, unlike `lanista_core`, may read the clock.
+fn new_seed() -> u64 {
+    std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map_or(0, |d| d.as_secs())
+}
+
 /// A fighter's week, in one line: rest, training or a fight, and care.
 fn plan_editor(
     ui: &mut egui::Ui,
@@ -534,11 +628,9 @@ mod tests {
     use super::*;
 
     fn screen(seed: u64) -> ClubScreen {
-        ClubScreen::new(
-            Rc::new(DesignData::load().unwrap()),
-            seed,
-            Bindings::new(Vec::new()),
-        )
+        let data = Rc::new(DesignData::load().unwrap());
+        let state = GameState::new(seed, &data);
+        ClubScreen::new(data, state, None, Bindings::new(Vec::new()))
     }
 
     /// What `career --seed <seed> --weeks <weeks>` plays.
@@ -651,5 +743,32 @@ mod tests {
         assert_eq!(screen.decisions.plans.len(), 2);
         assert_eq!(screen.histories[1].len(), 1);
         assert!(!screen.decisions.hire_free_agent);
+    }
+
+    #[test]
+    fn each_week_is_saved_and_resumed_at_launch() {
+        let data = Rc::new(DesignData::load().unwrap());
+        let folder = std::env::temp_dir().join(format!("lanista-club-{}", std::process::id()));
+        let open = || {
+            ClubScreen::open(
+                Rc::clone(&data),
+                7,
+                Some(folder.clone()),
+                Bindings::new(Vec::new()),
+            )
+        };
+        let mut screen = open();
+        assert_eq!((screen.state.week, &screen.message), (1, &None));
+        screen.next_week();
+        screen.next_week();
+        let resumed = open();
+        assert_eq!(resumed.state, screen.state);
+        assert_eq!(resumed.message.as_deref(), Some("Partie reprise"));
+        // A manual save is loaded back over a game played further.
+        screen.save(saves::MANUAL, true);
+        screen.next_week();
+        screen.load();
+        assert_eq!(screen.state, resumed.state);
+        std::fs::remove_dir_all(folder).unwrap();
     }
 }

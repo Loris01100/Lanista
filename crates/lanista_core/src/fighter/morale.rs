@@ -1,11 +1,12 @@
 //! Morale: from 0 to 100, neutral at 50. Up with wins and fame, down with defeats,
 //! injuries and illnesses; a small bonus or malus in combat. No loyalty.
 
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 
 use crate::fighter::{Stats, percent_of};
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
+#[serde(from = "u32", into = "u32")]
 pub struct Morale(u32);
 
 /// What changes a fighter's morale.
@@ -84,6 +85,19 @@ pub struct MoraleRules {
     pub fame_percent: u32,
     /// Largest bonus or malus on every stat in combat, in percent, at morale 100 or 0.
     pub combat_percent: u32,
+}
+
+// Saves go through `new`: an edited value stays within its bounds.
+impl From<u32> for Morale {
+    fn from(value: u32) -> Self {
+        Self::new(value)
+    }
+}
+
+impl From<Morale> for u32 {
+    fn from(value: Morale) -> Self {
+        value.0
+    }
 }
 
 #[cfg(test)]

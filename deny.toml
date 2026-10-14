@@ -35,6 +35,9 @@ exceptions = [
     { crate = "target-lexicon", allow = ["Apache-2.0 WITH LLVM-exception"] },
     # egui's default fonts (Hack, Noto, Ubuntu): both licenses allow bundling in a commercial game.
     { crate = "epaint_default_fonts", allow = ["OFL-1.1", "Ubuntu-font-1.0"] },
+    # Dependency of `directories` (save folder). MPL-2.0 is copyleft per file: fine
+    # unmodified in a proprietary game; a modified copy would have to be published.
+    { crate = "option-ext", allow = ["MPL-2.0"] },
 ]
 
 [licenses.private]

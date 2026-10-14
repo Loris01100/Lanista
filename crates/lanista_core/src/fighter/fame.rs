@@ -1,13 +1,14 @@
 //! Fame: a gauge from 0 to 100 that follows a fighter's style and daring.
 //! It will raise the takings the fighter brings in (economy, phase 4).
 
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 
 use crate::combat::Arena;
 use crate::fighter::{Fighter, FighterId};
 use crate::log::EventKind;
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Default)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Default, Serialize, Deserialize)]
+#[serde(from = "u32", into = "u32")]
 pub struct Fame(u32);
 
 impl Fame {
@@ -132,6 +133,19 @@ pub struct FameRules {
     pub surrender: u32,
     /// Lost by every fighter when the fight ends on the time limit.
     pub dull_fight: u32,
+}
+
+// Saves go through `new`: an edited value stays within its bounds.
+impl From<u32> for Fame {
+    fn from(value: u32) -> Self {
+        Self::new(value)
+    }
+}
+
+impl From<Fame> for u32 {
+    fn from(value: Fame) -> Self {
+        value.0
+    }
 }
 
 #[cfg(test)]

@@ -6,4 +6,5 @@ pub mod duel;
 pub mod economy;
 pub mod fighter;
 pub mod log;
+pub mod save;
 pub mod state;

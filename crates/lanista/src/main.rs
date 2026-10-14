@@ -3,6 +3,7 @@
 
 mod club_screen;
 mod combat_screen;
+mod saves;
 mod texts;
 mod theme;
 
@@ -27,7 +28,7 @@ enum Action {
     NextWeek,
 }
 
-/// Seed of the game shown at launch, the one of `career --seed 7`.
+/// Seed of the game started at launch when there is no autosave, the one of `career --seed 7`.
 const CAREER_SEED: u64 = 7;
 
 fn window() -> Conf {
@@ -64,7 +65,12 @@ async fn main() {
     reesch::run(
         assets,
         theme::apply,
-        Box::new(ClubScreen::new(data, CAREER_SEED, bindings)),
+        Box::new(ClubScreen::open(
+            data,
+            CAREER_SEED,
+            saves::folder(),
+            bindings,
+        )),
     )
     .await;
 }

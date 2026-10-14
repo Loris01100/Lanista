@@ -1,13 +1,13 @@
 //! Injuries: a location, a severity and the weeks left to heal; permanent ones never heal.
 
 use rand::{Rng, RngExt};
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 
 use crate::fighter::form::{Form, FormRules};
 use crate::fighter::{Stats, percent_of, pick};
 
 /// Left or right: a fighter's dominant hand, or the side of an arm or leg.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
 pub enum Side {
     Left,
     Right,
@@ -15,7 +15,7 @@ pub enum Side {
 
 /// Where an injury is. Arms and legs have a side; whether an arm is the dominant one
 /// depends on the fighter's dominant hand.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
 pub enum Location {
     Head,
     Body,
@@ -23,7 +23,7 @@ pub enum Location {
     Leg(Side),
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
 pub enum Severity {
     Light,
     Medium,
@@ -32,7 +32,7 @@ pub enum Severity {
     Permanent,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Injury {
     pub location: Location,
     pub severity: Severity,

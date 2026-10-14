@@ -10,7 +10,7 @@ pub mod progression;
 pub mod retirement;
 
 use rand::{Rng, RngExt};
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 
 use crate::ai::Action;
 use crate::combat::Vec2;
@@ -26,12 +26,12 @@ use crate::fighter::personality::Personality;
 pub struct FighterId(pub u32);
 
 /// Index of a class in the design data (`data/`).
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
 pub struct ClassId(pub u32);
 
 /// The six stats of the design plan; its French abbreviation is given for each.
 /// Read from `data/` as percentages (injury and illness maluses), where a missing stat is 0.
-#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Deserialize)]
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(default, deny_unknown_fields)]
 pub struct Stats {
     /// PV: max hit points.

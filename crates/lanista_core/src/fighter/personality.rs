@@ -2,12 +2,13 @@
 //! Determination sets the surrender threshold, which the player never controls.
 
 use rand::{Rng, RngExt};
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 
 use crate::fighter::percent_of;
 
 /// One personality trait, always within 0 to [`Personality::MAX`].
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
+#[serde(from = "u32", into = "u32")]
 pub struct TraitValue(u32);
 
 impl TraitValue {
@@ -23,7 +24,7 @@ impl TraitValue {
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Personality {
     pub aggression: TraitValue,
     pub caution: TraitValue,
@@ -82,6 +83,19 @@ pub struct PersonalityRules {
     /// Percentage of max HP at which a fighter with full determination gives up;
     /// 0 never gives up.
     pub surrender_percent_most_determined: u32,
+}
+
+// Saves go through `new`: an edited value stays within its bounds.
+impl From<u32> for TraitValue {
+    fn from(value: u32) -> Self {
+        Self::new(value)
+    }
+}
+
+impl From<TraitValue> for u32 {
+    fn from(value: TraitValue) -> Self {
+        value.0
+    }
 }
 
 #[cfg(test)]

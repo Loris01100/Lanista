@@ -1,9 +1,10 @@
 //! Physical form, from 0 (exhausted) to 100 (fresh), and the risk formula of the design plan.
 
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 
 /// Physical form of a fighter, always within 0 to [`Form::MAX`].
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
+#[serde(from = "u32", into = "u32")]
 pub struct Form(u32);
 
 impl Form {
@@ -69,6 +70,19 @@ pub struct FormRules {
     pub training: u32,
     /// Form recovered in a week of rest.
     pub rest: u32,
+}
+
+// Saves go through `new`: an edited value stays within its bounds.
+impl From<u32> for Form {
+    fn from(value: u32) -> Self {
+        Self::new(value)
+    }
+}
+
+impl From<Form> for u32 {
+    fn from(value: Form) -> Self {
+        value.0
+    }
 }
 
 #[cfg(test)]
