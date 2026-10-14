@@ -208,7 +208,9 @@ Le joueur ne peut jamais être bloqué. Le marché contient toujours des free ag
 
 Un club compte au plus 3 combattants en activité ; un combattant mort ou retraité libère sa place. Le marché permet l'achat et la vente, sans échange. Il contient les free agents toute l'année (dont les combattants libérés par les clubs) et une nouvelle promotion de rookies (20 ans) à chaque intersaison. Les combattants sont générés procéduralement : nom, classe, stats, potentiel caché, personnalité, main dominante.
 
-Le statut d'observation affiche les stats sous forme de fourchettes (par exemple AC entre 40 et 60). Observer un combattant une semaine resserre la fourchette ; le recruteur la resserre davantage et donne une estimation du potentiel.
+Le statut d'observation ne montre d'abord que quelques stats, sous forme de fourchettes (par exemple AC entre 40 et 60), les autres restant cachées. Chaque semaine d'observation en révèle d'autres, puis resserre les fourchettes ; le recruteur accélère et donne une estimation du potentiel.
+
+Le prix d'un combattant dépend de ses stats, de sa renommée et de son bilan (victoires, défaites, nuls). Acheter un combattant rival passe par une négociation : le joueur fait une offre, le club répond la semaine suivante (accord, contre-offre ou refus), puis le combattant accepte ou refuse de venir. Pour vendre, le joueur met un combattant sur la liste des transferts : il reste au club et continue de combattre jusqu'à ce que le joueur accepte une offre d'un club qui a une place. Un club rival a son propre effectif, avec un maximum ; plein, il n'achète personne. Un combattant qui quitte un club est vendu, libéré ou retraité.
 
 ### Personnel
 

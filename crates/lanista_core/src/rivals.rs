@@ -1,11 +1,11 @@
 //! Rival clubs: managers playing by simple weekly rules whose thresholds come from
-//! their profile (`data/world.ron`). The colosseums' residents are their fighters.
+//! their profile (`data/world.ron`), each with its own roster of fighters.
 
 use serde::{Deserialize, Serialize};
 
 use crate::colosseum::ColosseumId;
 use crate::design_data::DesignData;
-use crate::fighter::career::{Activity, CareerFighter, WeekPlan, badly_hurt_or_ill};
+use crate::fighter::career::{Activity, CareerFighter, Status, WeekPlan, badly_hurt_or_ill};
 
 /// How a rival manager plays.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize)]
@@ -22,19 +22,20 @@ pub enum Profile {
 pub struct ProfileRules {
     /// Below this form, a fighter rests.
     pub rest_form: u32,
-    /// Care is given only if the club keeps this much money after paying for it.
+    /// Care is given, and a fighter bought, only if the club keeps this much money
+    /// after paying.
     pub care_reserve: u32,
-    /// A fit fighter fights if Elo gives it at least this chance against the others
-    /// of its colosseum, and trains otherwise.
+    /// A fit fighter fights in the colosseum where Elo gives it the best chance
+    /// against the others, if at least this chance, and trains otherwise.
     pub fight_percent: u32,
     /// The club accepts the player's challenge if Elo gives its fighter at least this
     /// chance of winning.
     pub accept_percent: u32,
-    /// Each week, the chance a club's fighter ranked in the colosseum is challenged by
-    /// the resident closest in Elo.
+    /// Each week, the chance a club's fighter ranked in a colosseum is challenged by
+    /// the rival fighter closest in Elo.
     pub challenge_percent: u32,
     /// Price asked for one of its fighters, and offered for one of the player's, in
-    /// percent of its value (`market::value`); it buys only if it keeps `care_reserve`.
+    /// percent of its value (`market::value`).
     pub sell_percent: u32,
     pub buy_percent: u32,
 }
@@ -67,35 +68,54 @@ pub struct RivalData {
     pub profile: Profile,
 }
 
+/// The size of the rival clubs' rosters.
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct RosterRules {
+    /// A club below this many fighters in activity signs free agents.
+    pub wanted: u32,
+    /// Most fighters in activity a club may have: a full club buys no one.
+    pub max: u32,
+}
+
+/// A rival club's fighter: the club's index in `GameState::rivals`, and the fighter's
+/// in its roster.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
+pub struct RivalId {
+    pub club: usize,
+    pub fighter: usize,
+}
+
 /// A rival club in the game, in the order of `data/world.ron`.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct Rival {
     /// Below 0 when upkeep ran it into debt, like the player's.
     pub money: i64,
+    /// Its fighters; like the player's, one who leaves keeps its place here.
+    pub fighters: Vec<CareerFighter>,
 }
 
-/// The rival club resident `r` of colosseum `c` belongs to, out of `rivals`: the
-/// residents are shared out in turn.
-// ponytail: fixed by place: a place left is filled by the same club, from the market or
-// its own school; own rosters if clubs ever need to grow or shrink.
-#[must_use]
-pub fn owner(c: usize, r: usize, rivals: usize) -> usize {
-    (c + r) % rivals.max(1)
+impl Rival {
+    /// Fighters neither retired, dead nor gone.
+    #[must_use]
+    pub fn active(&self) -> usize {
+        self.fighters
+            .iter()
+            .filter(|f| f.status == Status::Active)
+            .count()
+    }
 }
 
-/// A rival manager's week for one fighter of colosseum `home`, with `money` left to
-/// spend this week, which the plan's costs come out of: rest below the profile's form
-/// or when badly hurt or ill, with care if the club keeps its reserve after paying;
-/// otherwise a fight there if Elo gives it `fight_percent` chances against the
-/// others (`chance`, from 0 to 1) and the club can pay the fee, else training if it
-/// can pay for it, else rest.
-// ponytail: fights in its own colosseum, the one it is ranked in, until the market
-// moves fighters; "where its chances are best" then picks among colosseums.
+/// A rival manager's week for one fighter, with `money` left to spend this week, which
+/// the plan's costs come out of: rest below the profile's form or when badly hurt or
+/// ill, with care if the club keeps its reserve after paying; otherwise a fight in the
+/// colosseum where Elo gives it the best chance against the others (`chances`, from 0
+/// to 1, in colosseum order) among those it can pay the fee of, if that chance reaches
+/// `fight_percent`; else training if it can pay for it, else rest.
 #[must_use]
 pub fn plan(
     fighter: &CareerFighter,
-    chance: f64,
-    home: ColosseumId,
+    chances: &[f64],
     money: &mut i64,
     rules: &ProfileRules,
     data: &DesignData,
@@ -106,18 +126,21 @@ pub fn plan(
     if care {
         *money -= care_cost;
     }
-    let fee = data
-        .world
-        .colosseum(home)
-        .map(|c| i64::from(c.purses.entry_fee));
+    let best = chances
+        .iter()
+        .zip(&data.world.colosseums)
+        .zip(0..)
+        .filter(|((_, c), _)| i64::from(c.purses.entry_fee) <= *money)
+        .map(|((&chance, c), id)| (chance, i64::from(c.purses.entry_fee), ColosseumId(id)))
+        .reduce(|best, next| if next.0 > best.0 { next } else { best });
     let training = i64::from(data.economy.training_cost);
     let activity = if hurt || fighter.form.value() < rules.rest_form {
         Activity::Rest
-    } else if chance * 100.0 >= f64::from(rules.fight_percent)
-        && let Some(fee) = fee.filter(|&fee| fee <= *money)
+    } else if let Some((_, fee, id)) =
+        best.filter(|&(chance, ..)| chance * 100.0 >= f64::from(rules.fight_percent))
     {
         *money -= fee;
-        Activity::Fight(home)
+        Activity::Fight(id)
     } else if training <= *money {
         *money -= training;
         Activity::Train
@@ -140,47 +163,51 @@ mod tests {
         let data = DesignData::load().unwrap();
         let profiles = &data.world.profiles;
         let mut fighter = CareerFighter::random(&mut ChaCha8Rng::seed_from_u64(1), &data);
-        let home = ColosseumId(1);
+        let rome = Activity::Fight(ColosseumId(1));
         let mut money = 1000;
-        let fight = Activity::Fight(home);
-        // Fit and even: everyone fights, and the fee is set aside.
+        // Fit, and better off in Rome: everyone fights there, and the fee is set aside.
         for profile in [Profile::Cautious, Profile::Aggressive, Profile::Merchant] {
             let plan = plan(
                 &fighter,
-                0.5,
-                home,
+                &[0.4, 0.5],
                 &mut money,
                 profiles.get(profile),
                 &data,
             );
-            assert_eq!(plan.activity, fight);
+            assert_eq!(plan.activity, rome);
         }
         assert_eq!(money, 1000 - 3 * 20);
         // Behind in Elo: the cautious club trains, the aggressive one still fights.
         let cautious = &profiles.cautious;
+        let behind = [0.3, 0.2];
         assert_eq!(
-            plan(&fighter, 0.3, home, &mut money, cautious, &data).activity,
+            plan(&fighter, &behind, &mut money, cautious, &data).activity,
             Activity::Train
         );
         let aggressive = &profiles.aggressive;
         assert_eq!(
-            plan(&fighter, 0.3, home, &mut money, aggressive, &data).activity,
-            fight
+            plan(&fighter, &behind, &mut money, aggressive, &data).activity,
+            Activity::Fight(ColosseumId(0))
         );
         // Tired: only the aggressive club sends it in.
         fighter.form = Form::new(50);
         assert_eq!(
-            plan(&fighter, 0.5, home, &mut money, cautious, &data).activity,
+            plan(&fighter, &[0.5, 0.5], &mut money, cautious, &data).activity,
             Activity::Rest
         );
         assert_eq!(
-            plan(&fighter, 0.5, home, &mut money, aggressive, &data).activity,
-            fight
+            plan(&fighter, &[0.5, 0.5], &mut money, aggressive, &data).activity,
+            Activity::Fight(ColosseumId(0))
         );
-        // No money: training only if paid for, else rest.
-        let mut broke = 5;
+        // Without the fee, the free colosseum; without money, training only if paid for.
+        let mut five = 5;
         assert_eq!(
-            plan(&fighter, 0.3, home, &mut broke, cautious, &data).activity,
+            plan(&fighter, &[0.4, 0.5], &mut five, aggressive, &data).activity,
+            Activity::Fight(ColosseumId(0))
+        );
+        let mut broke = 4;
+        assert_eq!(
+            plan(&fighter, &[0.1, 0.1], &mut broke, aggressive, &data).activity,
             Activity::Rest
         );
     }
@@ -197,15 +224,9 @@ mod tests {
         });
         let cost = i64::from(fighter.care_cost(&data.fighter));
         assert!(cost > 0);
+        let even = [0.5, 0.5];
         let mut money = cost + 100;
-        let cautious = plan(
-            &fighter,
-            0.5,
-            ColosseumId(0),
-            &mut money,
-            &profiles.cautious,
-            &data,
-        );
+        let cautious = plan(&fighter, &even, &mut money, &profiles.cautious, &data);
         assert_eq!(
             cautious,
             WeekPlan {
@@ -215,14 +236,7 @@ mod tests {
         );
         assert_eq!(money, 100);
         let mut money = cost + 100;
-        let merchant = plan(
-            &fighter,
-            0.5,
-            ColosseumId(0),
-            &mut money,
-            &profiles.merchant,
-            &data,
-        );
+        let merchant = plan(&fighter, &even, &mut money, &profiles.merchant, &data);
         assert_eq!(
             merchant,
             WeekPlan {
@@ -230,14 +244,5 @@ mod tests {
                 care: false
             }
         );
-    }
-
-    #[test]
-    fn residents_are_shared_out_in_turn() {
-        assert_eq!(
-            (0..4).map(|r| owner(1, r, 3)).collect::<Vec<_>>(),
-            [1, 2, 0, 1]
-        );
-        assert_eq!(owner(0, 5, 0), 0);
     }
 }

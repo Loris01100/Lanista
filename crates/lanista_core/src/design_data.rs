@@ -223,6 +223,17 @@ impl DesignData {
         if self.world.rivals.is_empty() {
             return Err(world("rivals", "no rival club to own the residents"));
         }
+        if self.world.roster.max < self.world.roster.wanted {
+            return Err(world("roster", "fewer places than fighters wanted"));
+        }
+        let market = &self.economy.market;
+        if market.max_free_agents < market.min_free_agents {
+            return Err(LoadError::Invalid {
+                file: ECONOMY_FILE,
+                field: "market",
+                problem: "fewer free agents at most than at least",
+            });
+        }
         if self.calendar.season_weeks() == 0 {
             return Err(LoadError::Invalid {
                 file: CALENDAR_FILE,

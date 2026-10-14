@@ -18,6 +18,7 @@ use crate::fighter::progression::{ProgressEvent, age_decline, progress, random_p
 use crate::fighter::retirement::decides_to_retire;
 use crate::fighter::{ClassId, Condition, Fighter, FighterId, Stats};
 use crate::log::Report;
+use crate::rivals::RivalId;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum Status {
@@ -25,9 +26,28 @@ pub enum Status {
     /// Decided to stop; only the fighter decides.
     Retired,
     Dead,
-    /// Sold or released by its club, or bought away from it: the fighter goes on
-    /// elsewhere, and this entry is its past there.
-    Left,
+    /// Sold to another club: the fighter goes on there, and this entry is its past here.
+    Sold,
+    /// Let go by its club: a free agent now.
+    Released,
+}
+
+/// Fights won, lost (given up included) and drawn.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub struct Record {
+    pub wins: u32,
+    pub losses: u32,
+    pub draws: u32,
+}
+
+impl Record {
+    fn add(&mut self, result: FightResult) {
+        match result {
+            FightResult::Won => self.wins += 1,
+            FightResult::Lost | FightResult::GaveUp => self.losses += 1,
+            FightResult::Unfinished => self.draws += 1,
+        }
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -51,10 +71,12 @@ pub struct CareerFighter {
     pub injuries: Vec<Injury>,
     pub illness: Option<Illness>,
     pub status: Status,
-    /// Observed by the player's club for a week: its stats are seen within narrower
-    /// ranges (`market::stat_ranges`).
     #[serde(default)]
-    pub observed: bool,
+    pub record: Record,
+    /// Weeks the player's club observed it: the more, the more of its stats are seen,
+    /// and the narrower (`market::stat_ranges`).
+    #[serde(default)]
+    pub observed_weeks: u32,
 }
 
 impl CareerFighter {
@@ -96,7 +118,8 @@ impl CareerFighter {
             injuries: Vec::new(),
             illness: None,
             status: Status::Active,
-            observed: false,
+            record: Record::default(),
+            observed_weeks: 0,
         }
     }
 
@@ -266,8 +289,9 @@ impl CareerFighter {
         total(self) > total(other)
     }
 
-    /// The fame and death the finished fight in `arena`, where this fighter was `id`,
-    /// brings: all a resident takes from a fight. Returns the outcome and the fame change.
+    /// The fame, record and death the finished fight in `arena`, where this fighter was
+    /// `id`, brings: all a title defense between rival fighters leaves. Returns the
+    /// outcome and the fame change.
     pub fn take_fame_and_death(
         &mut self,
         arena: &Arena,
@@ -278,6 +302,7 @@ impl CareerFighter {
         let outcome = FightOutcome::from_arena(arena, id, against_stronger, &rules.fame);
         let fame_change = outcome.fame_change(&rules.fame);
         self.fame = self.fame.changed_by(fame_change);
+        self.record.add(outcome.result);
         if arena.fighter(id).is_some_and(|f| !f.is_alive()) {
             self.status = Status::Dead;
         }
@@ -428,9 +453,9 @@ pub enum Activity {
     /// A duel for this colosseum's title, as its champion or as a challenger from
     /// the top of its ranking; costs the form of a title defense.
     TitleFight(ColosseumId),
-    /// A duel in this colosseum against the resident at this index, who challenged the
-    /// fighter or accepts its challenge.
-    Challenge(ColosseumId, usize),
+    /// A duel in this colosseum against this rival fighter, who challenged the fighter
+    /// or accepts its challenge.
+    Challenge(ColosseumId, RivalId),
 }
 
 /// Below this form, `suggested_plan` rests.

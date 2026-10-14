@@ -7,7 +7,7 @@
 use std::path::PathBuf;
 
 use lanista_core::design_data::DesignData;
-use lanista_core::market::{Deal, Target};
+use lanista_core::market::{Move, Target};
 use lanista_core::save::{VERSION, from_json, to_json};
 use lanista_core::state::{Decisions, GameState, next_week};
 use proptest::prelude::*;
@@ -72,7 +72,7 @@ fn the_current_version_writes_its_kept_save_unchanged() {
 }
 
 /// Writes the kept save of the current version: seed 7 observing and signing free
-/// agents from week 3, played past a birthday until a fighter is both hurt and ill
+/// agents from week 3 and listing its first fighter, played past a birthday until a fighter is both hurt and ill
 /// and a challenge is pending, so that every saved field has a value.
 #[test]
 #[ignore = "run once when `save::VERSION` goes up"]
@@ -82,9 +82,12 @@ fn keep_a_save_of_the_current_version() {
     let data = DesignData::load().unwrap();
     let mut state = played(7, 2, &data);
     let hire = Decisions {
-        deal: Some(Deal::Sign(0)),
-        observe: Some(Target::FreeAgent(0)),
-        ..Decisions::default()
+        plans: Vec::new(),
+        moves: vec![
+            Move::Observe(Target::FreeAgent(0)),
+            Move::Sign(0),
+            Move::List(0),
+        ],
     };
     next_week(&mut state, &hire, &data);
     while state.week <= 31

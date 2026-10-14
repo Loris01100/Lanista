@@ -17,7 +17,8 @@ use lanista_core::fighter::form::Form;
 use lanista_core::fighter::illness::IllnessLevel;
 use lanista_core::fighter::injury::{Injury, Severity, Side};
 use lanista_core::fighter::morale::Morale;
-use lanista_core::market::{Deal, Target};
+use lanista_core::market::{Move, Target, value};
+use lanista_core::rivals::RivalId;
 use lanista_core::state::{Decisions, GameState, next_week};
 use macroquad::prelude::*;
 use reesch::{Assets, Audio, Bindings, Screen, Transition, egui};
@@ -26,10 +27,10 @@ use crate::Action;
 use crate::combat_screen::CombatScreen;
 use crate::saves;
 use crate::texts::{
-    STAT_NAMES, activity_name, arena_name, challenger_text, change, class_name, colosseum_name,
-    condition_text, contender_name, deal_text, fight_text, fighter_name, free_agent_name,
-    illness_text, injury_text, money_line, profile_name, range_texts, rival_name, title_news_text,
-    week_lines,
+    STAT_NAMES, activity_name, arena_name, challenger_text, change, class_name, club_name,
+    colosseum_name, condition_text, contender_name, fight_text, fighter_name, free_agent_name,
+    illness_text, injury_text, market_news_text, money_line, move_text, profile_name, range_texts,
+    record_text, rival_fighter_name, title_news_text, week_lines,
 };
 
 /// Seed of the standard duel offered from the club.
@@ -86,6 +87,8 @@ pub struct ClubScreen {
     saves: Option<PathBuf>,
     /// The outcome of the last save or load, for the player.
     message: Option<String>,
+    /// The offer being written on the market: the rival fighter and the price.
+    offer_draft: Option<(RivalId, u32)>,
     bindings: Bindings<Action>,
 }
 
@@ -131,6 +134,7 @@ impl ClubScreen {
             to_watch: Vec::new(),
             saves,
             message: None,
+            offer_draft: None,
             bindings,
         }
     }
@@ -172,16 +176,17 @@ impl ClubScreen {
     fn next_week(&mut self) {
         let before = self.state.fighters.clone();
         let (week, money) = (self.state.week, self.state.money);
-        let deal = self
-            .decisions
-            .deal
-            .map(|d| deal_text(d, &self.state, &self.data));
         let summary = next_week(&mut self.state, &self.decisions, &self.data);
         let data = &self.data;
         self.histories
             .resize_with(self.state.fighters.len(), Vec::new);
         let mut overview = vec![money_line(money, self.state.money, &summary.ledger)];
-        overview.extend(deal.filter(|_| summary.deal.is_some()));
+        overview.extend(
+            summary
+                .market
+                .iter()
+                .map(|&news| market_news_text(news, &self.state, data)),
+        );
         self.fights.clear();
         for (i, report) in summary.reports.into_iter().enumerate() {
             let Some(report) = report else { continue };
@@ -224,9 +229,12 @@ impl ClubScreen {
                 });
             }
         }
-        overview.extend(summary.titles.iter().map(|&(c, news)| {
-            title_news_text(c, news, &self.state.colosseums, &self.state.fighters, data)
-        }));
+        overview.extend(
+            summary
+                .titles
+                .iter()
+                .map(|&(c, news)| title_news_text(c, news, &self.state, data)),
+        );
         let refusal = &data.world.challenges;
         overview.extend(summary.refusals.iter().map(|&ch| {
             let club = &self.state.fighters;
@@ -234,7 +242,7 @@ impl ClubScreen {
                 "{} refuse le défi de {} sans combattre : renommée -{}, Elo -{}",
                 club.get(ch.fighter)
                     .map_or_else(|| "?".into(), |f| fighter_name(ch.fighter, f, data)),
-                challenger_text(ch, &self.state.colosseums, club, data),
+                challenger_text(ch, &self.state, data),
                 refusal.refusal_fame,
                 refusal.refusal_elo
             )
@@ -308,10 +316,17 @@ impl ClubScreen {
             "{} / {max} combattants en activité",
             self.state.active_fighters()
         ));
-        if let Some(deal) = self.decisions.deal {
+        for &m in &self.decisions.moves {
             ui.label(format!(
                 "Marché : {}",
-                deal_text(deal, &self.state, &self.data)
+                move_text(m, &self.state, &self.data)
+            ));
+        }
+        if let Some((id, price)) = self.state.counter_offer {
+            ui.label(format!(
+                "Marché : {} demande {price} pour {}",
+                club_name(id.club, &self.data),
+                rival_fighter_name(id, &self.state, &self.data)
             ));
         }
         let play = ui.button("Semaine suivante (Espace)").clicked();
@@ -387,7 +402,7 @@ impl ClubScreen {
                 alerts.push(format!(
                     "{} : défi de {} (refus sans combattre : renommée -{}, Elo -{})",
                     fighter_name(ch.fighter, f, &self.data),
-                    challenger_text(ch, &self.state.colosseums, &self.state.fighters, &self.data),
+                    challenger_text(ch, &self.state, &self.data),
                     refusal.refusal_fame,
                     refusal.refusal_elo
                 ));
@@ -416,9 +431,9 @@ impl ClubScreen {
             .iter()
             .filter(|ch| ch.fighter == i)
             .map(|&ch| {
-                let name = challenger_text(ch, &self.state.colosseums, &self.state.fighters, data);
+                let name = challenger_text(ch, &self.state, data);
                 (
-                    Activity::Challenge(ch.colosseum, ch.resident),
+                    Activity::Challenge(ch.colosseum, ch.rival),
                     format!("Défi de {name}"),
                 )
             });
@@ -582,7 +597,6 @@ impl ClubScreen {
     /// The rival clubs, then each colosseum side by side.
     fn colosseums(&self, ui: &mut egui::Ui) {
         let data = &self.data;
-        let club = &self.state.fighters;
         let colosseums = self.state.colosseums.iter().zip(&data.world.colosseums);
         ui.heading("Clubs rivaux");
         for line in self.rival_lines() {
@@ -601,17 +615,16 @@ impl ClubScreen {
                     "Inscription {}, prime de victoire {}, bonus champion {}",
                     rules.purses.entry_fee, rules.purses.win_prize, rules.purses.champion_bonus
                 ));
-                let champion = colosseum.champion.map_or_else(
-                    || "aucun".into(),
-                    |c| contender_name(c, colosseum, club, data),
-                );
+                let champion = colosseum
+                    .champion
+                    .map_or_else(|| "aucun".into(), |c| contender_name(c, &self.state, data));
                 ui.colored_label(egui::Color32::GOLD, format!("Champion : {champion}"));
                 ui.label(format!(
                     "Titre défendu ou pris en semaine {}, à défendre au plus tard en semaine {}",
                     colosseum.title_since,
                     colosseum.defense_deadline(&data.world)
                 ));
-                let ranked = colosseum.active_ranking(club);
+                let ranked = colosseum.active_ranking(self.state.rosters());
                 egui::ScrollArea::vertical()
                     .id_salt(("ranking", n))
                     .show(ui, |ui| {
@@ -624,14 +637,9 @@ impl ClubScreen {
                                 ui.end_row();
                                 for (rank, rating) in ranked.take(RANKS_SHOWN).enumerate() {
                                     ui.label((rank + 1).to_string());
-                                    ui.label(contender_name(
-                                        rating.contender,
-                                        colosseum,
-                                        club,
-                                        data,
-                                    ));
+                                    ui.label(contender_name(rating.contender, &self.state, data));
                                     ui.label(match rating.contender {
-                                        Contender::Resident(r) => rival_name(n, r, data),
+                                        Contender::Rival(id) => club_name(id.club, data),
                                         Contender::Club(_) => "",
                                     });
                                     ui.label(rating.elo.to_string());
@@ -645,121 +653,89 @@ impl ClubScreen {
 }
 
 impl ClubScreen {
-    /// The market: this week's deal and observation, the free agents, the rival
-    /// fighters for sale with their price, and the club's fighters to sell or release.
-    /// Stats out of the club are ranges, narrower once observed.
+    /// The market: this week's moves, the answer to the last offer and the offer being
+    /// written, the free agents, the rival fighters to observe or negotiate for, and the
+    /// club's fighters to sell or release. Stats out of the club are hidden or seen as
+    /// ranges until observed.
     fn market(&mut self, ui: &mut egui::Ui) {
         let data = &self.data;
         let state = &self.state;
-        let decisions = &mut self.decisions;
+        let moves = &mut self.decisions.moves;
         ui.heading("Marché");
         ui.label(format!(
-            "{} / {} combattants en activité. Une opération et une observation par semaine, \
-             faites en début de semaine.",
+            "{} / {} combattants en activité. Une observation et une offre par semaine ; \
+             le club rival répond à une offre en fin de semaine, puis le combattant.",
             state.active_fighters(),
             data.economy.max_fighters
         ));
-        if let Some(deal) = decisions.deal {
+        if let Some((id, price)) = state.counter_offer {
             ui.horizontal(|ui| {
-                ui.strong(format!("Cette semaine : {}", deal_text(deal, state, data)));
-                if ui.button("Annuler").clicked() {
-                    decisions.deal = None;
+                ui.label(format!(
+                    "{} demande {price} pour {}",
+                    club_name(id.club, data),
+                    rival_fighter_name(id, state, data)
+                ));
+                if ui.button("Offrir ce prix").clicked() {
+                    set_offer(moves, id, price);
                 }
             });
         }
-        let header = |ui: &mut egui::Ui, first: &[&str], last: &[&str]| {
-            for title in first.iter().chain(&STAT_NAMES).chain(last) {
-                ui.strong(*title);
-            }
-            ui.end_row();
-        };
-        egui::ScrollArea::vertical().show(ui, |ui| {
-            // A fighter out of the club: `cells`, its ranges, then observe and `deal`.
-            let mut row =
-                |ui: &mut egui::Ui, cells: Vec<String>, f: &CareerFighter, target, deal| {
-                    let ranges = range_texts(f, data);
-                    let (first, last) = cells.split_at(cells.len().min(4));
-                    for cell in first.iter().chain(&ranges).chain(last) {
-                        ui.label(cell);
-                    }
-                    toggle(ui, &mut decisions.observe, target, observe_label(f), true);
-                    let label = if matches!(deal, Deal::Sign(_)) {
-                        "Recruter"
-                    } else {
-                        "Acheter"
-                    };
-                    toggle(
-                        ui,
-                        &mut decisions.deal,
-                        deal,
-                        label,
-                        state.may_deal(deal, data),
-                    );
-                    ui.end_row();
-                };
-            ui.add_space(6.0);
-            ui.strong("Free agents (gratuits)");
-            egui::Grid::new("free agents").striped(true).show(ui, |ui| {
-                header(ui, &["Combattant", "Âge"], &["", ""]);
-                for (a, f) in state.free_agents.iter().enumerate() {
-                    let cells = vec![free_agent_name(a, f, data), f.age.to_string()];
-                    row(ui, cells, f, Target::FreeAgent(a), Deal::Sign(a));
+        let mut close = false;
+        if let Some((id, price)) = &mut self.offer_draft {
+            ui.horizontal(|ui| {
+                ui.label(format!(
+                    "Offre pour {} :",
+                    rival_fighter_name(*id, state, data)
+                ));
+                ui.add(egui::DragValue::new(price).speed(5));
+                let allowed = state.may_move(Move::Offer(*id, *price), data);
+                if ui
+                    .add_enabled(allowed, egui::Button::new("Faire l'offre"))
+                    .clicked()
+                {
+                    set_offer(moves, *id, *price);
+                    close = true;
+                }
+                close |= ui.button("Annuler").clicked();
+            });
+        }
+        if close {
+            self.offer_draft = None;
+        }
+        let mut cancel = None;
+        for (n, &m) in moves.iter().enumerate() {
+            ui.horizontal(|ui| {
+                ui.strong(format!("Cette semaine : {}", move_text(m, state, data)));
+                if ui.button("Annuler").clicked() {
+                    cancel = Some(n);
                 }
             });
-            ui.add_space(6.0);
-            ui.strong("Combattants des clubs rivaux");
-            egui::Grid::new("rival fighters")
-                .striped(true)
-                .show(ui, |ui| {
-                    let first = ["Combattant", "Colisée", "Club", "Âge"];
-                    header(ui, &first, &["Prix", "", ""]);
-                    for (c, (colosseum, id)) in state.colosseums.iter().zip(0..).enumerate() {
-                        let id = ColosseumId(id);
-                        for (r, f) in colosseum.residents.iter().enumerate() {
-                            if f.status != Status::Active {
-                                continue;
-                            }
-                            let resident = Contender::Resident(r);
-                            let cells = vec![
-                                contender_name(resident, colosseum, &state.fighters, data),
-                                colosseum_name(id, data).to_owned(),
-                                rival_name(c, r, data).to_owned(),
-                                f.age.to_string(),
-                                state.asking_price(id, r, data).unwrap_or(0).to_string(),
-                            ];
-                            row(ui, cells, f, Target::Resident(id, r), Deal::Buy(id, r));
-                        }
-                    }
-                });
-            ui.add_space(6.0);
-            ui.strong("Vos combattants");
-            sale_grid(ui, state, &mut decisions.deal, data);
+        }
+        if let Some(n) = cancel {
+            moves.remove(n);
+        }
+        egui::ScrollArea::vertical().show(ui, |ui| {
+            free_agent_grid(ui, state, moves, data);
+            if let Some(draft) = rival_grid(ui, state, moves, data) {
+                self.offer_draft = Some(draft);
+            }
+            sale_grid(ui, state, moves, data);
         });
     }
 
     /// "Ludus Magnus, prudent : 10 combattants, argent 500" for each rival club.
     fn rival_lines(&self) -> Vec<String> {
-        let world = &self.data.world;
-        let colosseums = &self.state.colosseums;
-        world
+        self.data
+            .world
             .rivals
             .iter()
             .zip(&self.state.rivals)
-            .enumerate()
-            .map(|(i, (rules, rival))| {
-                let fighters: usize = colosseums
-                    .iter()
-                    .enumerate()
-                    .map(|(c, colosseum)| {
-                        (0..colosseum.residents.len())
-                            .filter(|&r| world.owner(c, r).is_some_and(|(o, _)| o == i))
-                            .count()
-                    })
-                    .sum();
+            .map(|(rules, rival)| {
                 format!(
-                    "{}, {} : {fighters} combattants, argent {}",
+                    "{}, {} : {} combattants, argent {}",
                     rules.name,
                     profile_name(rules.profile),
+                    rival.active(),
                     rival.money
                 )
             })
@@ -812,51 +788,150 @@ impl Screen for ClubScreen {
     }
 }
 
-/// The club's fighters in activity, each to sell to the best offer or release.
-fn sale_grid(ui: &mut egui::Ui, state: &GameState, slot: &mut Option<Deal>, data: &DesignData) {
+/// Replaces the week's offer with one of `price` for rival fighter `id`.
+fn set_offer(moves: &mut Vec<Move>, id: RivalId, price: u32) {
+    moves.retain(|m| !matches!(m, Move::Offer(..)));
+    moves.push(Move::Offer(id, price));
+}
+
+/// A button adding `m` to the week's moves, or taking it out when chosen already; only a
+/// chosen one may be clicked when not `enabled`. An observation replaces another.
+fn toggle(ui: &mut egui::Ui, moves: &mut Vec<Move>, m: Move, label: &str, enabled: bool) {
+    let chosen = moves.contains(&m);
+    let button = egui::SelectableLabel::new(chosen, label);
+    if ui.add_enabled(enabled || chosen, button).clicked() {
+        if chosen {
+            moves.retain(|&other| other != m);
+        } else {
+            if matches!(m, Move::Observe(_)) {
+                moves.retain(|other| !matches!(other, Move::Observe(_)));
+            }
+            moves.push(m);
+        }
+    }
+}
+
+fn observe_label(fighter: &CareerFighter) -> String {
+    match fighter.observed_weeks {
+        0 => "Observer".into(),
+        weeks => format!("Observer (déjà {weeks} sem.)"),
+    }
+}
+
+/// A grid's titles: `first`, the stats, then `last`.
+fn market_header(ui: &mut egui::Ui, first: &[&str], last: &[&str]) {
+    for title in first.iter().chain(&STAT_NAMES).chain(last) {
+        ui.strong(*title);
+    }
+    ui.end_row();
+}
+
+/// What the club sees of a fighter out of it: `name`, age, fame, record and the stats
+/// seen.
+fn outside_cells(ui: &mut egui::Ui, name: String, fighter: &CareerFighter, data: &DesignData) {
+    ui.label(name);
+    ui.label(fighter.age.to_string());
+    ui.label(fighter.fame.value().to_string());
+    ui.label(record_text(fighter.record));
+    for range in range_texts(fighter, data) {
+        ui.label(range);
+    }
+}
+
+const OUTSIDE: [&str; 4] = ["Combattant", "Âge", "Renommée", "Bilan"];
+
+fn free_agent_grid(ui: &mut egui::Ui, state: &GameState, moves: &mut Vec<Move>, data: &DesignData) {
+    ui.add_space(6.0);
+    ui.strong("Free agents (gratuits)");
+    egui::Grid::new("free agents").striped(true).show(ui, |ui| {
+        market_header(ui, &OUTSIDE, &["", ""]);
+        for (a, f) in state.free_agents.iter().enumerate() {
+            outside_cells(ui, free_agent_name(a, f, data), f, data);
+            let observe = Move::Observe(Target::FreeAgent(a));
+            toggle(ui, moves, observe, &observe_label(f), true);
+            let sign = Move::Sign(a);
+            toggle(ui, moves, sign, "Recruter", state.may_move(sign, data));
+            ui.end_row();
+        }
+    });
+}
+
+/// The rival clubs' fighters in activity; returns the one to negotiate for, with a
+/// first price.
+fn rival_grid(
+    ui: &mut egui::Ui,
+    state: &GameState,
+    moves: &mut Vec<Move>,
+    data: &DesignData,
+) -> Option<(RivalId, u32)> {
+    let mut draft = None;
+    ui.add_space(6.0);
+    ui.strong("Combattants des clubs rivaux");
+    egui::Grid::new("rival fighters")
+        .striped(true)
+        .show(ui, |ui| {
+            market_header(ui, &OUTSIDE, &["Valeur estimée", "", ""]);
+            for (club, rival) in state.rivals.iter().enumerate() {
+                for (fighter, f) in rival.fighters.iter().enumerate() {
+                    if f.status != Status::Active {
+                        continue;
+                    }
+                    let id = RivalId { club, fighter };
+                    outside_cells(ui, rival_fighter_name(id, state, data), f, data);
+                    // ponytail: the value rounded, until the recruiter estimates it.
+                    let estimate = value(f, &data.economy.market) / 10 * 10;
+                    ui.label(format!("≈ {estimate}"));
+                    let observe = Move::Observe(Target::Rival(id));
+                    toggle(ui, moves, observe, &observe_label(f), true);
+                    if ui.button("Négocier").clicked() {
+                        draft = Some((id, estimate));
+                    }
+                    ui.end_row();
+                }
+            }
+        });
+    draft
+}
+
+/// The club's fighters in activity, each to put on the transfer list or take off it,
+/// with the rival clubs' offers to accept, or to release.
+fn sale_grid(ui: &mut egui::Ui, state: &GameState, moves: &mut Vec<Move>, data: &DesignData) {
+    ui.add_space(6.0);
+    ui.strong("Vos combattants");
     egui::Grid::new("club market").striped(true).show(ui, |ui| {
         for (i, f) in state.fighters.iter().enumerate() {
             if f.status != Status::Active {
                 continue;
             }
             ui.label(fighter_name(i, f, data));
-            let offer = match state.best_offer(i, data) {
-                Some((k, price)) => {
-                    let buyer = data.world.rivals.get(k).map_or("?", |r| r.name.as_str());
-                    format!("Vendre à {buyer} pour {price}")
-                }
-                None => "Aucune offre".into(),
-            };
-            let sell = Deal::Sell(i);
-            toggle(ui, slot, sell, &offer, state.may_deal(sell, data));
-            toggle(ui, slot, Deal::Release(i), "Libérer", true);
+            if state.transfer_list.contains(&i) {
+                toggle(ui, moves, Move::Unlist(i), "Retirer de la vente", true);
+            } else {
+                let list = Move::List(i);
+                toggle(
+                    ui,
+                    moves,
+                    list,
+                    "Mettre en vente",
+                    state.may_move(list, data),
+                );
+            }
+            for offer in state.sale_offers.iter().filter(|o| o.fighter == i) {
+                let accept = Move::AcceptOffer {
+                    fighter: i,
+                    rival: offer.rival,
+                };
+                let label = format!(
+                    "Accepter {} : {}",
+                    club_name(offer.rival, data),
+                    offer.price
+                );
+                toggle(ui, moves, accept, &label, state.may_move(accept, data));
+            }
+            toggle(ui, moves, Move::Release(i), "Libérer", true);
             ui.end_row();
         }
     });
-}
-
-/// A button choosing `value` for `slot`, or clearing it when chosen already; only a
-/// chosen one may be clicked when not `enabled`.
-fn toggle<T: Copy + PartialEq>(
-    ui: &mut egui::Ui,
-    slot: &mut Option<T>,
-    value: T,
-    label: &str,
-    enabled: bool,
-) {
-    let chosen = *slot == Some(value);
-    let button = egui::SelectableLabel::new(chosen, label);
-    if ui.add_enabled(enabled || chosen, button).clicked() {
-        *slot = if chosen { None } else { Some(value) };
-    }
-}
-
-fn observe_label(fighter: &CareerFighter) -> &'static str {
-    if fighter.observed {
-        "Observé"
-    } else {
-        "Observer"
-    }
 }
 
 /// A seed for a new game: the game, unlike `lanista_core`, may read the clock.
@@ -940,14 +1015,13 @@ fn challenge_picker(
             let id = ColosseumId(c);
             let fee = data.world.colosseum(id).map_or(0, |r| r.purses.entry_fee);
             let chosen = match plan.activity {
-                Activity::Challenge(at, r) if at == id => challenger_text(
+                Activity::Challenge(at, rival) if at == id => challenger_text(
                     Challenge {
                         fighter: i,
                         colosseum: id,
-                        resident: r,
+                        rival,
                     },
-                    &state.colosseums,
-                    &state.fighters,
+                    state,
                     data,
                 ),
                 _ => colosseum_name(id, data).to_string(),
@@ -956,12 +1030,11 @@ fn challenge_picker(
                 egui::ComboBox::from_id_salt(("challenge", c))
                     .selected_text(chosen)
                     .show_ui(ui, |ui| {
-                        for rating in &colosseum.ranking {
-                            let Contender::Resident(r) = rating.contender else {
+                        for rating in colosseum.active_ranking(state.rosters()) {
+                            let Contender::Rival(r) = rating.contender else {
                                 continue;
                             };
-                            let name =
-                                contender_name(rating.contender, colosseum, &state.fighters, data);
+                            let name = contender_name(rating.contender, state, data);
                             let accepts = state.may_challenge(i, id, r, data);
                             let text = if accepts {
                                 format!("{name}, Elo {}", rating.elo)
@@ -999,8 +1072,11 @@ fn sheet(ui: &mut egui::Ui, index: usize, f: &CareerFighter, data: &DesignData) 
         Status::Dead => {
             ui.colored_label(egui::Color32::LIGHT_RED, "Mort au combat");
         }
-        Status::Left => {
-            ui.label("A quitté le club");
+        Status::Sold => {
+            ui.label("Vendu");
+        }
+        Status::Released => {
+            ui.label("Libéré");
         }
     }
     ui.add_space(8.0);
@@ -1112,25 +1188,26 @@ mod tests {
         // The summary tells the very fight that was watched.
         let report = &screen.fights[0];
         assert_eq!(report.fight.report, Report::new(&fight));
-        // A win in Capua: receipts and the winner's prize.
-        assert_eq!((report.money, report.form), (70, (100, 80)));
-        // A resident's club challenges it and the suggestion accepts: a fight against
-        // that resident.
+        // Given up in Capua: the receipts only.
+        assert_eq!((report.money, report.form), (20, (100, 80)));
+        // A rival fighter challenges it and the suggestion accepts: a fight against
+        // that fighter.
         while screen.state.challenges.is_empty() {
             assert!(screen.state.week < 30, "no challenge");
             screen.next_week();
         }
         let challenge = screen.state.challenges[0];
-        let resident = screen.state.colosseums[0].residents[challenge.resident].clone();
+        let resident = screen.state.rival_fighter(challenge.rival).unwrap().clone();
         assert_eq!(
             screen.decisions.plans[0].activity,
-            Activity::Challenge(ColosseumId(0), challenge.resident)
+            Activity::Challenge(challenge.colosseum, challenge.rival)
         );
+        let name = rival_fighter_name(challenge.rival, &screen.state, &screen.data);
         assert!(
-            screen.alerts().iter().any(|a| a.starts_with(&format!(
-                "Mirmillon n° 1 : défi de Résident n° {}",
-                challenge.resident + 1
-            ))),
+            screen
+                .alerts()
+                .iter()
+                .any(|a| a.starts_with(&format!("Mirmillon n° 1 : défi de {name}"))),
             "{:?}",
             screen.alerts()
         );
@@ -1153,22 +1230,19 @@ mod tests {
         let first = &screen.histories[0][2].1;
         assert_eq!(first[0], "Combat à Capoue");
         assert!(
-            first[1].starts_with("Contre un Mirmillon, plus fort : victoire"),
+            first[1].starts_with("Contre un Augure, plus fort : abandon"),
             "{first:?}"
         );
         assert!(
-            first.contains(&"Forme 80 (-20), moral 65 (+15), renommée 11 (+11)".to_owned()),
+            first.contains(&"Forme 80 (-20), moral 40 (-10), renommée 0".to_owned()),
             "{first:?}"
         );
         let (week, menu) = screen.last_week.as_ref().unwrap();
         assert_eq!(*week, 3);
-        assert_eq!(
-            menu[0],
-            "Argent 622 (+77) : recettes +37, prime de victoire +50, entretien -10"
-        );
+        assert_eq!(menu[0], "Argent 520 (+25) : recettes +35, entretien -10");
         assert_eq!(
             menu[1],
-            "Mirmillon n° 1 : Combat à Capoue, Contre un Mirmillon, plus fort : victoire, renommée +11"
+            "Mirmillon n° 1 : Combat à Capoue, Contre un Augure, plus fort : abandon, renommée -8"
         );
     }
 
@@ -1197,52 +1271,70 @@ mod tests {
         assert_eq!(screen.state.week, 2);
         assert_eq!(screen.histories[0], []);
         let signed = free_agent_name(0, &screen.state.free_agents[0], &screen.data);
-        screen.decisions.deal = Some(Deal::Sign(0));
+        screen.decisions.moves = vec![Move::Sign(0)];
         screen.next_week();
         assert_eq!(screen.state.fighters.len(), 2);
         assert_eq!(screen.decisions.plans.len(), 2);
         assert_eq!(screen.histories[1].len(), 1);
-        assert_eq!(screen.decisions.deal, None);
+        assert_eq!(screen.decisions.moves, []);
         let (_, overview) = screen.last_week.as_ref().unwrap();
-        assert_eq!(overview[1], format!("Recrute {signed}"));
+        let name = fighter_name(1, &screen.state.fighters[1], &screen.data);
+        assert_eq!(overview[1], format!("Recrute {name}"));
+        assert!(signed.starts_with("Free agent n° 1"));
     }
 
     #[test]
-    fn the_market_tells_deals_and_ranges() {
+    fn the_market_tells_moves_offers_and_what_is_seen() {
         let mut screen = screen(7);
         let data = Rc::clone(&screen.data);
+        let target = RivalId {
+            club: 2,
+            fighter: 1,
+        };
         let state = &screen.state;
-        let resident = &state.colosseums[0].residents[2];
-        let price = state.asking_price(ColosseumId(0), 2, &data).unwrap();
+        let wanted = state.rival_fighter(target).unwrap();
+        let class = class_name(wanted, &data);
         assert_eq!(
-            deal_text(Deal::Buy(ColosseumId(0), 2), state, &data),
-            format!(
-                "Achète Résident n° 3 ({}) de Capoue à Ludus Dacicus pour {price}",
-                class_name(resident, &data)
-            )
+            move_text(Move::Offer(target, 100), state, &data),
+            format!("Offrir 100 pour {class} n° 2 (Ludus Dacicus)")
         );
-        let (_, offer) = state.best_offer(0, &data).unwrap();
-        let name = fighter_name(0, &state.fighters[0], &data);
+        // Two stats seen at first, the others hidden.
+        let seen = range_texts(wanted, &data);
+        assert_eq!(seen.iter().filter(|r| *r == "?").count(), 4);
+        // A low offer is refused, and the week tells it.
+        screen.decisions.moves = vec![Move::Offer(target, 10), Move::List(0)];
+        screen.next_week();
+        let (_, overview) = screen.last_week.as_ref().unwrap();
         assert_eq!(
-            deal_text(Deal::Sell(0), state, &data),
-            format!("Vend {name} à Ludus Gallicus pour {offer}")
+            overview[1],
+            format!("Ludus Dacicus refuse l'offre pour {class} n° 2 (Ludus Dacicus)")
         );
-        assert_eq!(range_texts(resident, &data).len(), 6);
-        screen.decisions.deal = Some(Deal::Sell(0));
+        assert_eq!(screen.state.transfer_list, [0]);
+        // Offers came for the listed fighter.
+        let offer = screen.state.sale_offers[0];
+        let club = club_name(offer.rival, &data).to_owned();
+        let name = fighter_name(0, &screen.state.fighters[0], &data);
+        screen.decisions.moves = vec![Move::AcceptOffer {
+            fighter: 0,
+            rival: offer.rival,
+        }];
+        let money = screen.state.money;
         screen.next_week();
         let (_, overview) = screen.last_week.as_ref().unwrap();
         assert_eq!(
             overview[0],
             format!(
-                "Argent {} (+{offer}) : vente +{offer}",
-                500 + i64::from(offer)
+                "Argent {} (+{}) : vente +{}",
+                money + i64::from(offer.price),
+                offer.price,
+                offer.price
             )
         );
         assert_eq!(
             overview[1],
-            format!("Vend {name} à Ludus Gallicus pour {offer}")
+            format!("Vend {name} à {club} pour {}", offer.price)
         );
-        assert_eq!(condition_text(&screen.state.fighters[0]), "parti");
+        assert_eq!(condition_text(&screen.state.fighters[0]), "vendu");
     }
 
     #[test]
@@ -1302,15 +1394,14 @@ mod tests {
         assert_eq!(reloaded.state, screen.state);
         let next = screen.state.date(&data);
         assert_eq!((next.season, next.week), (2, 1));
-        // Seed 7's fighter dies in week 11; the residents who lived the whole season
-        // took a year.
+        // The rival fighters who lived the whole season took a year.
         let start = GameState::new(7, &data);
         let survivors: Vec<_> = start
-            .colosseums
+            .rivals
             .iter()
-            .zip(&screen.state.colosseums)
-            .flat_map(|(a, b)| a.residents.iter().zip(&b.residents))
-            .filter(|(a, b)| a.potential == b.potential)
+            .zip(&screen.state.rivals)
+            .flat_map(|(a, b)| a.fighters.iter().zip(&b.fighters))
+            .filter(|(_, b)| b.status == Status::Active)
             .collect();
         assert_ne!(survivors, []);
         assert!(survivors.iter().all(|(a, b)| b.age == a.age + 1));
@@ -1325,7 +1416,7 @@ mod tests {
             screen.alerts(),
             ["Mirmillon n° 1 : titre de Rome à défendre au plus tard en semaine 5"]
         );
-        // The resident champions of Capua defend in week 5, without the player.
+        // The rival champions defend in week 5, without the player.
         let mut screen = self::screen(7);
         for _ in 0..5 {
             screen.next_week();
@@ -1333,7 +1424,7 @@ mod tests {
         let (_, menu) = screen.last_week.as_ref().unwrap();
         assert!(
             menu.iter()
-                .any(|line| line.starts_with("Titre de Capoue : Résident n° ")),
+                .any(|line| line.starts_with("Titre de Capoue : ") && line.contains(" (Ludus ")),
             "{menu:?}"
         );
     }

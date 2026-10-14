@@ -17,20 +17,24 @@
     ),
     // The rival managers' weekly thresholds, by profile. A fighter rests below
     // `rest_form` or when badly hurt or ill, cared for if the club keeps `care_reserve`
-    // after paying; fit, it fights when Elo gives it `fight_percent` chances against the
-    // others of its colosseum, else trains. Each week, a club's fighter ranked there is
-    // challenged by the resident closest in Elo with `challenge_percent` chances; the
+    // after paying; fit, it fights in the colosseum where Elo gives it the best chances
+    // against the others, if at least `fight_percent`, else trains. Each week, a club's
+    // fighter ranked somewhere is challenged by the rival fighter closest in Elo with
+    // `challenge_percent` chances; the
     // club accepts the player's challenges when Elo gives it `accept_percent` chances.
     // On the market, it asks `sell_percent` of a fighter's value and offers `buy_percent`
-    // for the player's, if it keeps `care_reserve`.
+    // for the player's, if it keeps `care_reserve` and has a place.
     profiles: (
         cautious: (rest_form: 70, care_reserve: 0, fight_percent: 45, accept_percent: 50, challenge_percent: 10, sell_percent: 150, buy_percent: 60),
         aggressive: (rest_form: 35, care_reserve: 100, fight_percent: 20, accept_percent: 20, challenge_percent: 40, sell_percent: 130, buy_percent: 80),
         // Keeps its money, sells cheap and buys dear.
         merchant: (rest_form: 50, care_reserve: 300, fight_percent: 35, accept_percent: 35, challenge_percent: 20, sell_percent: 100, buy_percent: 90),
     ),
-    // The rival clubs, starting with the player's money; the colosseums' residents are
-    // shared out among them in turn. At least one.
+    // A rival club below `wanted` fighters in activity signs free agents; at `max`, it
+    // buys no one.
+    roster: (wanted: 10, max: 12),
+    // The rival clubs, starting with the player's money and the colosseums' first
+    // residents, shared out among them in turn. At least one.
     rivals: [
         (name: "Ludus Magnus", profile: Cautious),
         (name: "Ludus Gallicus", profile: Aggressive),
@@ -44,7 +48,7 @@
             arena: Sand,
             // 1 to 5.
             prestige: 1,
-            // Its fighters, all from rival clubs.
+            // Rival fighters ranked here at the opening, as strong as its prestige.
             residents: 15,
             purses: (
                 entry_fee: 0,

@@ -54,7 +54,8 @@ fn main() -> ExitCode {
         Status::Active => {}
         Status::Retired => println!("\nretired at {}", fighter.age),
         Status::Dead => println!("\ndied at {}", fighter.age),
-        Status::Left => println!("\nleft at {}", fighter.age),
+        Status::Sold => println!("\nsold at {}", fighter.age),
+        Status::Released => println!("\nreleased at {}", fighter.age),
     }
     ExitCode::SUCCESS
 }
@@ -137,9 +138,10 @@ fn week_text(
             "title fight in {}",
             data.world.colosseum(id).map_or("?", |c| c.name.as_str())
         ),
-        Activity::Challenge(id, resident) => format!(
-            "challenge to resident {} in {}",
-            resident + 1,
+        Activity::Challenge(id, rival) => format!(
+            "challenge to rival {} of club {} in {}",
+            rival.fighter + 1,
+            rival.club + 1,
             data.world.colosseum(id).map_or("?", |c| c.name.as_str())
         ),
     };

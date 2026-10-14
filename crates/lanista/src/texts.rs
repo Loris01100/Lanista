@@ -2,16 +2,18 @@
 //! weeks, money, colosseums and the market.
 
 use lanista_core::colosseum::{
-    ArenaKind, Challenge, Colosseum, ColosseumId, Contender, TitleNews, title_kept,
+    ArenaKind, Challenge, ColosseumId, Contender, TitleNews, title_kept,
 };
 use lanista_core::design_data::DesignData;
 use lanista_core::economy::{Flow, Transaction};
-use lanista_core::fighter::career::{Activity, CareerFighter, FightSummary, Status, WeekReport};
+use lanista_core::fighter::career::{
+    Activity, CareerFighter, FightSummary, Record, Status, WeekReport,
+};
 use lanista_core::fighter::fame::FightResult;
 use lanista_core::fighter::illness::{Illness, IllnessLevel};
 use lanista_core::fighter::injury::{Injury, Location, Severity, Side};
-use lanista_core::market::{Deal, stat_ranges};
-use lanista_core::rivals::Profile;
+use lanista_core::market::{MarketNews, Move, Target, stat_ranges};
+use lanista_core::rivals::{Profile, RivalId};
 use lanista_core::state::GameState;
 
 /// Stat names, in `Stats::to_array` order.
@@ -27,7 +29,8 @@ pub fn condition_text(fighter: &CareerFighter) -> &'static str {
     match fighter.status {
         Status::Dead => "mort",
         Status::Retired => "retraité",
-        Status::Left => "parti",
+        Status::Sold => "vendu",
+        Status::Released => "libéré",
         Status::Active if !fighter.injuries.iter().all(Injury::is_permanent) => "blessé",
         Status::Active if fighter.illness.is_some() => "malade",
         Status::Active => "en forme",
@@ -58,82 +61,138 @@ pub fn free_agent_name(index: usize, fighter: &CareerFighter, data: &DesignData)
     )
 }
 
-/// "40-60" for each trained stat of a fighter out of the club, as the market sees it.
+/// "Augure n° 3 (Ludus Magnus)": how the game names a rival club's fighter.
+pub fn rival_fighter_name(id: RivalId, state: &GameState, data: &DesignData) -> String {
+    let class = state
+        .rival_fighter(id)
+        .map_or_else(|| "?".into(), |f| class_name(f, data));
+    format!(
+        "{class} n° {} ({})",
+        id.fighter + 1,
+        club_name(id.club, data)
+    )
+}
+
+/// What the club sees of each trained stat of a fighter out of it: "40-60", or "?".
 pub fn range_texts(fighter: &CareerFighter, data: &DesignData) -> Vec<String> {
     stat_ranges(fighter, &data.economy.market)
         .iter()
-        .map(|(low, high)| format!("{low}-{high}"))
+        .map(|range| range.map_or_else(|| "?".into(), |(low, high)| format!("{low}-{high}")))
         .collect()
 }
 
-/// The market move `deal` in one line, from the game before it is made.
-pub fn deal_text(deal: Deal, state: &GameState, data: &DesignData) -> String {
-    let club = |i: usize| {
-        state
-            .fighters
-            .get(i)
-            .map_or_else(|| "?".into(), |f| fighter_name(i, f, data))
-    };
-    match deal {
-        Deal::Sign(a) => state.free_agents.get(a).map_or_else(
-            || "?".into(),
-            |f| format!("Recrute {}", free_agent_name(a, f, data)),
-        ),
-        Deal::Buy(id, r) => {
-            let colosseum = usize::try_from(id.0)
-                .ok()
-                .and_then(|c| state.colosseums.get(c));
-            let name = colosseum.map_or_else(
-                || "?".into(),
-                |c| contender_name(Contender::Resident(r), c, &state.fighters, data),
-            );
-            let seller = usize::try_from(id.0).map_or("?", |c| rival_name(c, r, data));
-            let price = state.asking_price(id, r, data).unwrap_or(0);
-            format!(
-                "Achète {name} de {} à {seller} pour {price}",
-                colosseum_name(id, data)
-            )
-        }
-        Deal::Sell(i) => match state.best_offer(i, data) {
-            Some((k, price)) => {
-                let buyer = data.world.rivals.get(k).map_or("?", |r| r.name.as_str());
-                format!("Vend {} à {buyer} pour {price}", club(i))
-            }
-            None => format!("Vend {}", club(i)),
-        },
-        Deal::Release(i) => format!("Libère {}", club(i)),
+/// "3 V, 1 D, 2 N".
+pub fn record_text(record: Record) -> String {
+    format!("{} V, {} D, {} N", record.wins, record.losses, record.draws)
+}
+
+/// The fighter out of the club `target` names.
+fn target_name(target: Target, state: &GameState, data: &DesignData) -> String {
+    match target {
+        Target::FreeAgent(a) => state
+            .free_agents
+            .get(a)
+            .map_or_else(|| "?".into(), |f| free_agent_name(a, f, data)),
+        Target::Rival(id) => rival_fighter_name(id, state, data),
     }
 }
 
-/// "Résident n° 3 (Augure) à Capoue": who sent or would receive the challenge, and where.
-pub fn challenger_text(
-    challenge: Challenge,
-    colosseums: &[Colosseum],
-    club: &[CareerFighter],
-    data: &DesignData,
-) -> String {
-    let resident = usize::try_from(challenge.colosseum.0)
-        .ok()
-        .and_then(|c| colosseums.get(c))
-        .map_or_else(
-            || "?".into(),
-            |c| contender_name(Contender::Resident(challenge.resident), c, club, data),
-        );
-    format!("{resident} à {}", colosseum_name(challenge.colosseum, data))
+fn club_fighter(i: usize, state: &GameState, data: &DesignData) -> String {
+    state
+        .fighters
+        .get(i)
+        .map_or_else(|| "?".into(), |f| fighter_name(i, f, data))
+}
+
+/// A market move chosen for the week, in one line.
+pub fn move_text(m: Move, state: &GameState, data: &DesignData) -> String {
+    let club = |i| club_fighter(i, state, data);
+    match m {
+        Move::Observe(target) => format!("Observer {}", target_name(target, state, data)),
+        Move::Sign(a) => format!(
+            "Recruter {}",
+            target_name(Target::FreeAgent(a), state, data)
+        ),
+        Move::Release(i) => format!("Libérer {}", club(i)),
+        Move::List(i) => format!("Mettre en vente {}", club(i)),
+        Move::Unlist(i) => format!("Retirer {} de la vente", club(i)),
+        Move::AcceptOffer { fighter, rival } => {
+            let price = state
+                .sale_offers
+                .iter()
+                .find(|o| o.fighter == fighter && o.rival == rival)
+                .map_or(0, |o| o.price);
+            format!(
+                "Vendre {} à {} pour {price}",
+                club(fighter),
+                club_name(rival, data)
+            )
+        }
+        Move::Offer(id, price) => format!(
+            "Offrir {price} pour {}",
+            rival_fighter_name(id, state, data)
+        ),
+    }
+}
+
+/// What happened on the market, in one line, from the game after the week.
+pub fn market_news_text(news: MarketNews, state: &GameState, data: &DesignData) -> String {
+    let club = |i| club_fighter(i, state, data);
+    let rival = |id| rival_fighter_name(id, state, data);
+    match news {
+        MarketNews::Signed(i) => format!("Recrute {}", club(i)),
+        MarketNews::Released(i) => format!("Libère {}", club(i)),
+        MarketNews::Sold(offer) => format!(
+            "Vend {} à {} pour {}",
+            club(offer.fighter),
+            club_name(offer.rival, data),
+            offer.price
+        ),
+        MarketNews::Bought {
+            from,
+            fighter,
+            price,
+        } => format!(
+            "Achète {} à {} pour {price}",
+            club(fighter),
+            club_name(from.club, data)
+        ),
+        MarketNews::Countered(id, price) => format!(
+            "{} demande {price} pour {} (offre possible cette semaine)",
+            club_name(id.club, data),
+            rival(id)
+        ),
+        MarketNews::ClubRefused(id) => format!(
+            "{} refuse l'offre pour {}",
+            club_name(id.club, data),
+            rival(id)
+        ),
+        MarketNews::FighterRefused(id) => {
+            format!("{} refuse de rejoindre le club", rival(id))
+        }
+        MarketNews::Failed(id) => format!(
+            "Transfert de {} impossible : pas de place, pas assez d'argent ou combattant parti",
+            rival(id)
+        ),
+    }
+}
+
+/// "Augure n° 3 (Ludus Magnus) à Capoue": who sent or would receive the challenge, and
+/// where.
+pub fn challenger_text(challenge: Challenge, state: &GameState, data: &DesignData) -> String {
+    format!(
+        "{} à {}",
+        rival_fighter_name(challenge.rival, state, data),
+        colosseum_name(challenge.colosseum, data)
+    )
 }
 
 /// What happened to the title of the colosseum at index `c`, in one line.
-pub fn title_news_text(
-    c: usize,
-    news: TitleNews,
-    colosseums: &[Colosseum],
-    club: &[CareerFighter],
-    data: &DesignData,
-) -> String {
-    let Some((colosseum, rules)) = colosseums.get(c).zip(data.world.colosseums.get(c)) else {
+pub fn title_news_text(c: usize, news: TitleNews, state: &GameState, data: &DesignData) -> String {
+    let Some(rules) = data.world.colosseums.get(c) else {
         return String::new();
     };
-    let name = |contender| contender_name(contender, colosseum, club, data);
+    let name = |contender| contender_name(contender, state, data);
     let to = |to: Option<Contender>| to.map_or_else(|| "personne".into(), name);
     let place = &rules.name;
     match news {
@@ -176,12 +235,9 @@ pub fn profile_name(profile: Profile) -> &'static str {
     }
 }
 
-/// The rival club of resident `r` of colosseum `c`.
-pub fn rival_name(c: usize, r: usize, data: &DesignData) -> &str {
-    data.world
-        .owner(c, r)
-        .and_then(|(i, _)| data.world.rivals.get(i))
-        .map_or("?", |rival| rival.name.as_str())
+/// The name of rival club `club`.
+pub fn club_name(club: usize, data: &DesignData) -> &str {
+    data.world.rivals.get(club).map_or("?", |r| r.name.as_str())
 }
 
 pub fn arena_name(arena: ArenaKind) -> &'static str {
@@ -193,21 +249,10 @@ pub fn arena_name(arena: ArenaKind) -> &'static str {
 }
 
 /// How a colosseum's ranking names `contender`; the club's fighters are marked.
-pub fn contender_name(
-    contender: Contender,
-    colosseum: &Colosseum,
-    club: &[CareerFighter],
-    data: &DesignData,
-) -> String {
+pub fn contender_name(contender: Contender, state: &GameState, data: &DesignData) -> String {
     match contender {
-        Contender::Club(i) => club.get(i).map_or_else(
-            || "?".into(),
-            |f| format!("{} (votre club)", fighter_name(i, f, data)),
-        ),
-        Contender::Resident(i) => colosseum.residents.get(i).map_or_else(
-            || "?".into(),
-            |f| format!("Résident n° {} ({})", i + 1, class_name(f, data)),
-        ),
+        Contender::Club(i) => format!("{} (votre club)", club_fighter(i, state, data)),
+        Contender::Rival(id) => rival_fighter_name(id, state, data),
     }
 }
 
@@ -369,7 +414,7 @@ pub fn week_lines(
         lines.push(format!("Stats : {}", stats.join(", ")));
     }
     match after.status {
-        Status::Active | Status::Dead | Status::Left => {}
+        Status::Active | Status::Dead | Status::Sold | Status::Released => {}
         Status::Retired => lines.push(format!("Prend sa retraite à {} ans", after.age)),
     }
     lines

@@ -15,18 +15,30 @@
         // Arriving at the start of each off-season.
         rookies: 8,
         rookie_age: 20,
-        // Value: price_per_point per point of trained stats, less age_discount_percent
-        // per year above prime_age, down to a tenth. The rival clubs ask and offer a
-        // percentage of it (data/world.ron).
+        // Value: so much per point of trained stats and of fame, per fight won and
+        // drawn, less per fight lost; never below a tenth of the stats' part. The rival
+        // clubs ask and offer a percentage of it (data/world.ron).
         price_per_point: 2,
-        prime_age: 30,
-        age_discount_percent: 10,
-        // The rival clubs release their fighters this old at the start of each off-season.
+        price_per_fame: 5,
+        price_per_win: 15,
+        price_per_draw: 5,
+        price_per_loss: 10,
+        // At the start of each off-season, a rival club releases its fighters this old
+        // worth less than its average fighter.
         release_age: 33,
-        // Stats of fighters out of the club are seen within a range this wide, in
-        // percent of the stat; narrower after a week of observation.
+        // A club counters an offer of at least this percentage of its asking price,
+        // and refuses a lower one.
+        counter_percent: 75,
+        // A fighter's chance of refusing to join, plus half its fame above the club's
+        // best, plus a fifth of its caution above 50.
+        refusal_percent: 20,
+        // Stats of fighters out of the club: so many seen at first, so many more each
+        // week of observation, then a further week narrows their ranges (in percent of
+        // the stat).
+        shown_stats: 2,
+        revealed_per_week: 2,
         range_percent: 40,
-        observed_range_percent: 20,
+        narrowed_range_percent: 20,
     ),
     // Colosseum purses are in data/world.ron.
 )
