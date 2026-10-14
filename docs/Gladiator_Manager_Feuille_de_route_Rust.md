@@ -181,6 +181,7 @@ Le développement se fait en onze phases, chacune terminée par un jalon vérifi
 | 3. Le combattant complet | Forme, blessures, maladies, personnalité, mort, progression | Un combattant enchaîne 10 semaines avec des effets visibles |
 | 4. Management | Calendrier, économie, écrans principaux, sauvegarde | Une saison entière jouable avec un seul club |
 | 5. Le monde | Colisées, Elo, rivaux, marché, personnel, modèle statistique | Plusieurs saisons où les classements vivent sans le joueur |
+| 5 bis. Précision | Précision en combat, blessures à la tête sur la précision | Une blessure à la tête fait rater des coups au lieu de baisser les dégâts |
 | 6. Formats et spectacle | Mêlée, King of the hill, équipement refusable, vue multi-combats | Regarder 4 combats du joueur en même temps |
 | 7. IA apprenante | PyO3, Gymnasium, PPO en self-play, export et inférence ONNX | Le modèle appris bat nettement l'IA scriptée |
 | 8. Grands événements | Championnat du monde, Inter-Coliseum, succès, tutoriel | Un cycle complet de 4 saisons avec les deux événements |
@@ -287,6 +288,14 @@ Ajouté après la vérification du jalon, sur les retours du jeu : un club compt
 - Écrans : colisées, marché, personnel.
 
 **Jalon :** plusieurs saisons s'enchaînent où les classements, les champions et les marchés évoluent sans intervention du joueur.
+
+### Phase 5 bis — Précision
+
+- Précision en combat : une attaque peut rater selon la précision de l'attaquant (formule et valeurs dans `data/`, à caler avec `batch`).
+- Blessures à la tête : leur malus (temporaire et séquelle) porte sur la précision et non plus sur AC et AL, comme le veut le plan de conception. Aujourd'hui, faute de précision en combat, `data/fighter.ron` les applique à AC et AL, donc aux dégâts.
+- L'étourdissement du plan reste à décider ici ou plus tard.
+
+**Jalon :** une blessure à la tête fait rater des coups au lieu de baisser les dégâts ; les instantanés de combat sont revus.
 
 ### Phase 6 — Formats et spectacle
 
