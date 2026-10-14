@@ -61,3 +61,18 @@ pub fn apply(ui: &egui::Context) {
         visuals.widgets.active.bg_stroke = Stroke::new(1.0_f32, BRONZE);
     });
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn the_theme_is_dark_parchment_on_wood() {
+        let ui = egui::Context::default();
+        apply(&ui);
+        let style = ui.style();
+        assert_eq!(style.visuals.override_text_color, Some(PARCHMENT));
+        assert_eq!(style.visuals.panel_fill, WOOD_DARK);
+        assert_eq!(style.text_styles[&TextStyle::Body].size, 18.0);
+    }
+}
