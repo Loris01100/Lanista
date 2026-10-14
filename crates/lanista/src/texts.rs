@@ -1,7 +1,9 @@
 //! What the player reads, in French: fighters, injuries, illnesses, fights,
 //! weeks, money and colosseums.
 
-use lanista_core::colosseum::{ArenaKind, Colosseum, ColosseumId, Contender};
+use lanista_core::colosseum::{
+    ArenaKind, Colosseum, ColosseumId, Contender, TitleNews, title_kept,
+};
 use lanista_core::design_data::DesignData;
 use lanista_core::economy::{Flow, Transaction};
 use lanista_core::fighter::career::{Activity, CareerFighter, FightSummary, Status, WeekReport};
@@ -38,6 +40,49 @@ pub fn activity_name(activity: Activity, data: &DesignData) -> String {
         Activity::Rest => "Repos".into(),
         Activity::Train => "Entraînement".into(),
         Activity::Fight(id) => format!("Combat à {}", colosseum_name(id, data)),
+        Activity::TitleFight(id) => format!("Combat pour le titre à {}", colosseum_name(id, data)),
+    }
+}
+
+/// What happened to the title of the colosseum at index `c`, in one line.
+pub fn title_news_text(
+    c: usize,
+    news: TitleNews,
+    colosseums: &[Colosseum],
+    club: &[CareerFighter],
+    data: &DesignData,
+) -> String {
+    let Some((colosseum, rules)) = colosseums.get(c).zip(data.world.colosseums.get(c)) else {
+        return String::new();
+    };
+    let name = |contender| contender_name(contender, colosseum, club, data);
+    let to = |to: Option<Contender>| to.map_or_else(|| "personne".into(), name);
+    let place = &rules.name;
+    match news {
+        TitleNews::Fight {
+            champion,
+            challenger,
+            result,
+        } => {
+            let outcome = if title_kept(result) {
+                "le garde"
+            } else {
+                "le perd"
+            };
+            format!(
+                "Titre de {place} : {} {outcome} face à {}",
+                name(champion),
+                name(challenger)
+            )
+        }
+        TitleNews::Stripped { former, to: holder } => format!(
+            "Titre de {place} : {} le perd faute de défense, il revient à {}",
+            name(former),
+            to(holder)
+        ),
+        TitleNews::Vacated { to: holder } => {
+            format!("Titre de {place} vacant : il revient à {}", to(holder))
+        }
     }
 }
 
@@ -165,6 +210,7 @@ pub fn money_line(before: i64, after: i64, ledger: &[Transaction]) -> String {
                 Flow::EntryFee => "inscription",
                 Flow::WinPrize => "prime de victoire",
                 Flow::Receipts => "recettes",
+                Flow::ChampionBonus => "bonus champion",
             };
             format!("{name} {:+}", t.amount)
         })

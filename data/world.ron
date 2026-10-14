@@ -5,6 +5,10 @@
     elo_k: 32,
     // Residents' stats grow by this percentage for each prestige level above 1.
     prestige_stats_percent: 10,
+    // A champion must defend the title at least once in this many weeks, against a
+    // challenger from the first `challengers` of the ranking.
+    title_defense_weeks: 4,
+    challengers: 5,
     // At least one must be free to enter: the safety net of a club without money.
     colosseums: [
         (
@@ -21,6 +25,8 @@
                 // Paid win or lose: base + per_fame × (fame of both fighters).
                 receipts_base: 20,
                 receipts_per_fame: 1,
+                // Paid for each title defense the club's champion survives.
+                champion_bonus: 30,
             ),
         ),
         (
@@ -33,6 +39,7 @@
                 win_prize: 150,
                 receipts_base: 40,
                 receipts_per_fame: 2,
+                champion_bonus: 100,
             ),
         ),
     ],

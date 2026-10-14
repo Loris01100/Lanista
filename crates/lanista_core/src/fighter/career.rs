@@ -171,7 +171,12 @@ impl CareerFighter {
                 self.form = self.form.after(FormEvent::Training, &rules.form);
                 self.progress(ProgressEvent::Training, rng, rules);
             }
-            Activity::Fight(_) => {
+            Activity::Fight(_) | Activity::TitleFight(_) => {
+                let form = if matches!(plan.activity, Activity::TitleFight(_)) {
+                    FormEvent::TitleDefense
+                } else {
+                    FormEvent::Fight
+                };
                 let mut stranger;
                 let opponent = if let Some(opponent) = opponent {
                     opponent
@@ -179,7 +184,7 @@ impl CareerFighter {
                     stranger = Self::random(rng, data);
                     &mut stranger
                 };
-                let (fight, injury) = self.fight(opponent, rng, data);
+                let (fight, injury) = self.fight(opponent, form, rng, data);
                 report.fight = Some(fight);
                 report.new_injury = injury;
                 if self.status == Status::Dead {
@@ -231,16 +236,14 @@ impl CareerFighter {
         );
     }
 
-    /// A duel against `opponent`, then its effects: fame, morale, form, illness
-    /// worsening, a possible injury and progression. The opponent only takes fame
-    /// and death. Returns the new injury.
-    fn fight<R: Rng + ?Sized>(
-        &mut self,
-        opponent: &mut Self,
+    /// A duel between this fighter, `FighterId(0)`, and `opponent`, `FighterId(1)`,
+    /// played to its end: its seed, and the arena before its first tick and after its last.
+    pub fn duel<R: Rng + ?Sized>(
+        &self,
+        opponent: &Self,
         rng: &mut R,
         data: &DesignData,
-    ) -> (FightSummary, Option<Injury>) {
-        let rules = &data.fighter;
+    ) -> (u64, Arena, Arena) {
         let seed = rng.random::<u64>();
         let middle = ARENA_SIZE / 2.0;
         let fighters = vec![
@@ -250,37 +253,68 @@ impl CareerFighter {
         let start = Arena::new(ARENA_SIZE, ARENA_SIZE, fighters, seed);
         let mut arena = start.clone();
         play(&mut arena);
-        let total = |stats: Stats| stats.to_array().iter().map(|&v| u64::from(v)).sum::<u64>();
-        let (mine, theirs) = (
-            total(self.fighting_stats(rules)),
-            total(opponent.fighting_stats(rules)),
-        );
-        let stronger = theirs > mine;
-        let outcome = FightOutcome::from_arena(&arena, FighterId(0), stronger, &rules.fame);
+        (seed, start, arena)
+    }
+
+    /// Whether this fighter's fighting stats add up to more than `other`'s.
+    #[must_use]
+    pub fn stronger_than(&self, other: &Self, rules: &FighterRules) -> bool {
+        let total = |f: &Self| {
+            let stats = f.fighting_stats(rules).to_array();
+            stats.iter().map(|&v| u64::from(v)).sum::<u64>()
+        };
+        total(self) > total(other)
+    }
+
+    /// The fame and death the finished fight in `arena`, where this fighter was `id`,
+    /// brings: all a resident takes from a fight. Returns the outcome and the fame change.
+    pub fn take_fame_and_death(
+        &mut self,
+        arena: &Arena,
+        id: FighterId,
+        against_stronger: bool,
+        rules: &FighterRules,
+    ) -> (FightOutcome, i32) {
+        let outcome = FightOutcome::from_arena(arena, id, against_stronger, &rules.fame);
         let fame_change = outcome.fame_change(&rules.fame);
-        let died = !arena.fighters[0].is_alive();
+        self.fame = self.fame.changed_by(fame_change);
+        if arena.fighter(id).is_some_and(|f| !f.is_alive()) {
+            self.status = Status::Dead;
+        }
+        (outcome, fame_change)
+    }
+
+    /// A duel against `opponent`, then its effects: fame, morale, form (`form`'s cost),
+    /// illness worsening, a possible injury and progression. The opponent only takes
+    /// fame and death. Returns the new injury.
+    fn fight<R: Rng + ?Sized>(
+        &mut self,
+        opponent: &mut Self,
+        form: FormEvent,
+        rng: &mut R,
+        data: &DesignData,
+    ) -> (FightSummary, Option<Injury>) {
+        let rules = &data.fighter;
+        let (seed, start, arena) = self.duel(opponent, rng, data);
+        let stronger = opponent.stronger_than(self, rules);
+        let weaker = self.stronger_than(opponent, rules);
+        let summary_opponent = opponent.clone();
+        opponent.take_fame_and_death(&arena, FighterId(1), weaker, rules);
+        let (outcome, fame_change) =
+            self.take_fame_and_death(&arena, FighterId(0), stronger, rules);
+        let died = self.status == Status::Dead;
         let summary = FightSummary {
             seed,
             start,
             report: Report::new(&arena),
-            opponent: opponent.clone(),
+            opponent: summary_opponent,
             against_stronger: stronger,
             result: outcome.result,
             died,
             fame_change,
             ticks: arena.tick,
         };
-        let their_outcome =
-            FightOutcome::from_arena(&arena, FighterId(1), mine > theirs, &rules.fame);
-        opponent.fame = opponent
-            .fame
-            .changed_by(their_outcome.fame_change(&rules.fame));
-        if !arena.fighters[1].is_alive() {
-            opponent.status = Status::Dead;
-        }
-        self.fame = self.fame.changed_by(fame_change);
         if died {
-            self.status = Status::Dead;
             return (summary, None);
         }
         match outcome.result {
@@ -303,7 +337,7 @@ impl CareerFighter {
             self.injuries.push(injury);
             self.morale = self.morale.after(MoraleEvent::Injury, &rules.morale);
         }
-        self.form = self.form.after(FormEvent::Fight, &rules.form);
+        self.form = self.form.after(form, &rules.form);
         self.illness = self
             .illness
             .map(|illness| illness.after_fight(rng, &rules.illness));
@@ -363,6 +397,9 @@ pub enum Activity {
     Train,
     /// A duel in this colosseum.
     Fight(ColosseumId),
+    /// A duel for this colosseum's title, as its champion or as a challenger from
+    /// the top of its ranking; costs the form of a title defense.
+    TitleFight(ColosseumId),
 }
 
 /// Below this form, `suggested_plan` rests.

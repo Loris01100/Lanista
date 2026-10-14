@@ -26,7 +26,8 @@ use crate::combat_screen::CombatScreen;
 use crate::saves;
 use crate::texts::{
     STAT_NAMES, activity_name, arena_name, change, class_name, colosseum_name, condition_text,
-    contender_name, fight_text, fighter_name, illness_text, injury_text, money_line, week_lines,
+    contender_name, fight_text, fighter_name, illness_text, injury_text, money_line,
+    title_news_text, week_lines,
 };
 
 /// Seed of the standard duel offered from the club.
@@ -116,7 +117,7 @@ impl ClubScreen {
         bindings: Bindings<Action>,
     ) -> Self {
         Self {
-            decisions: state.suggested_decisions(),
+            decisions: state.suggested_decisions(&data),
             histories: vec![Vec::new(); state.fighters.len()],
             data,
             state,
@@ -185,13 +186,19 @@ impl ClubScreen {
             }
             overview.push(line);
             self.histories[i].insert(0, (week, lines));
-            if let (Some(fight), Activity::Fight(colosseum)) = (report.fight, report.plan.activity)
+            if let (Some(fight), Activity::Fight(colosseum) | Activity::TitleFight(colosseum)) =
+                (report.fight, report.plan.activity)
             {
                 let money = summary
                     .ledger
                     .iter()
                     .filter(|t| t.fighter == i)
-                    .filter(|t| matches!(t.flow, Flow::EntryFee | Flow::Receipts | Flow::WinPrize))
+                    .filter(|t| {
+                        matches!(
+                            t.flow,
+                            Flow::EntryFee | Flow::Receipts | Flow::WinPrize | Flow::ChampionBonus
+                        )
+                    })
                     .map(|t| t.amount)
                     .sum();
                 self.fights.push(FightReport {
@@ -204,6 +211,9 @@ impl ClubScreen {
                 });
             }
         }
+        overview.extend(summary.titles.iter().map(|&(c, news)| {
+            title_news_text(c, news, &self.state.colosseums, &self.state.fighters, data)
+        }));
         self.last_week = Some((week, overview));
         self.to_watch = self
             .fights
@@ -214,7 +224,7 @@ impl ClubScreen {
         if !self.fights.is_empty() {
             self.view = View::Fights;
         }
-        self.decisions = self.state.suggested_decisions();
+        self.decisions = self.state.suggested_decisions(&self.data);
         // Saved before the fights are watched: quitting during one keeps its outcome.
         self.save(saves::AUTO, false);
     }
@@ -335,16 +345,44 @@ impl ClubScreen {
                 alerts.push(format!("{name} : fatigué (forme {})", f.form.value()));
             }
         }
+        for (colosseum, rules) in self
+            .state
+            .colosseums
+            .iter()
+            .zip(&self.data.world.colosseums)
+        {
+            if let Some(Contender::Club(i)) = colosseum.champion
+                && let Some(f) = self.state.fighters.get(i)
+            {
+                alerts.push(format!(
+                    "{} : titre de {} à défendre au plus tard en semaine {}",
+                    fighter_name(i, f, &self.data),
+                    rules.name,
+                    colosseum.defense_deadline(&self.data.world)
+                ));
+            }
+        }
         if self.state.active_fighters() == 0 {
             alerts.push("Plus aucun combattant : recrutez un free agent".into());
         }
         alerts
     }
 
+    /// The colosseums whose title the club's fighter `i` may fight for this week.
+    fn title_fights(&self, i: usize) -> Vec<ColosseumId> {
+        (0..self.data.world.colosseums.len())
+            .filter_map(|c| u32::try_from(c).ok().map(ColosseumId))
+            .filter(|&id| self.state.title_opponent(i, id, &self.data).is_some())
+            .collect()
+    }
+
     fn roster(&mut self, ui: &mut egui::Ui) {
         ui.heading("Combattants");
         let data = &self.data;
         let money = self.state.money;
+        let titles: Vec<_> = (0..self.state.fighters.len())
+            .map(|i| self.title_fights(i))
+            .collect();
         egui::ScrollArea::vertical().show(ui, |ui| {
             egui::Grid::new("roster").striped(true).show(ui, |ui| {
                 for title in [
@@ -375,7 +413,7 @@ impl ClubScreen {
                     ui.label(f.fame.value().to_string());
                     ui.label(condition_text(f));
                     if f.status == Status::Active {
-                        ui.horizontal(|ui| plan_editor(ui, plan, f, money, data));
+                        ui.horizontal(|ui| plan_editor(ui, plan, f, &titles[i], money, data));
                     } else {
                         ui.label("");
                     }
@@ -391,6 +429,7 @@ impl ClubScreen {
             self.view = View::Roster;
             return;
         };
+        let titles = self.title_fights(index);
         if ui.button("Retour à la liste").clicked() {
             self.view = View::Roster;
         }
@@ -401,7 +440,7 @@ impl ClubScreen {
             if f.status == Status::Active
                 && let Some(plan) = self.decisions.plans.get_mut(index)
             {
-                plan_editor(ui, plan, f, self.state.money, data);
+                plan_editor(ui, plan, f, &titles, self.state.money, data);
             } else {
                 ui.label("Carrière terminée");
             }
@@ -505,19 +544,20 @@ impl ClubScreen {
                     rules.prestige
                 ));
                 ui.label(format!(
-                    "Inscription {}, prime de victoire {}",
-                    rules.purses.entry_fee, rules.purses.win_prize
+                    "Inscription {}, prime de victoire {}, bonus champion {}",
+                    rules.purses.entry_fee, rules.purses.win_prize, rules.purses.champion_bonus
                 ));
                 let champion = colosseum.champion.map_or_else(
                     || "aucun".into(),
                     |c| contender_name(c, colosseum, club, data),
                 );
                 ui.colored_label(egui::Color32::GOLD, format!("Champion : {champion}"));
-                // The club's fighters no longer fighting leave the ranking.
-                let ranked = colosseum.ranking.iter().filter(|r| match r.contender {
-                    Contender::Club(i) => club.get(i).is_some_and(|f| f.status == Status::Active),
-                    Contender::Resident(_) => true,
-                });
+                ui.label(format!(
+                    "Titre défendu ou pris en semaine {}, à défendre au plus tard en semaine {}",
+                    colosseum.title_since,
+                    colosseum.defense_deadline(&data.world)
+                ));
+                let ranked = colosseum.active_ranking(club);
                 egui::ScrollArea::vertical()
                     .id_salt(("ranking", n))
                     .show(ui, |ui| {
@@ -599,11 +639,13 @@ fn new_seed() -> u64 {
         .map_or(0, |d| d.as_secs())
 }
 
-/// A fighter's week, in one line: rest, training or a fight, and care.
+/// A fighter's week, in one line: rest, training, a fight or a title fight (in
+/// `titles`), and care.
 fn plan_editor(
     ui: &mut egui::Ui,
     plan: &mut WeekPlan,
     fighter: &CareerFighter,
+    titles: &[ColosseumId],
     money: i64,
     data: &DesignData,
 ) {
@@ -626,6 +668,15 @@ fn plan_editor(
             ui.selectable_value(&mut plan.activity, activity, name);
         });
     }
+    if let Activity::TitleFight(id) = plan.activity
+        && !titles.contains(&id)
+    {
+        plan.activity = Activity::Rest;
+    }
+    for &id in titles {
+        let activity = Activity::TitleFight(id);
+        ui.selectable_value(&mut plan.activity, activity, activity_name(activity, data));
+    }
     let cost = fighter.care_cost(&data.fighter);
     if cost == 0 {
         plan.care = false;
@@ -637,7 +688,7 @@ fn plan_editor(
         ui.checkbox(&mut plan.care, format!("Soigner ({cost})"));
     }
     let ill = fighter.illness.is_some_and(|i| !i.fight_advised());
-    if ill && matches!(plan.activity, Activity::Fight(_)) {
+    if ill && matches!(plan.activity, Activity::Fight(_) | Activity::TitleFight(_)) {
         ui.colored_label(egui::Color32::LIGHT_RED, "Combat déconseillé");
     }
 }
@@ -892,6 +943,27 @@ mod tests {
         assert_eq!((next.season, next.week), (2, 1));
         assert_eq!(screen.state.fighters[0].age, age + 1);
         std::fs::remove_dir_all(folder).unwrap();
+    }
+
+    #[test]
+    fn titles_are_told_in_the_menu() {
+        let mut screen = screen(7);
+        screen.state.colosseums[1].champion = Some(Contender::Club(0));
+        assert_eq!(
+            screen.alerts(),
+            ["Mirmillon n° 1 : titre de Rome à défendre au plus tard en semaine 5"]
+        );
+        // The resident champions of Capua defend in week 5, without the player.
+        let mut screen = self::screen(7);
+        for _ in 0..5 {
+            screen.next_week();
+        }
+        let (_, menu) = screen.last_week.as_ref().unwrap();
+        assert!(
+            menu.iter()
+                .any(|line| line.starts_with("Titre de Capoue : Résident n° ")),
+            "{menu:?}"
+        );
     }
 
     #[test]

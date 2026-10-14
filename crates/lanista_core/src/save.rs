@@ -9,16 +9,27 @@ use crate::state::GameState;
 
 /// Version written in new saves. Raise it with any change to the saved types,
 /// and add the migration from the previous version to [`MIGRATIONS`].
-pub const VERSION: u64 = 2;
+pub const VERSION: u64 = 3;
 
 /// `MIGRATIONS[i]` turns a version `i + 1` save into a version `i + 2` one,
 /// working on the JSON so the old types need not be kept.
-const MIGRATIONS: [fn(&mut Value); 1] = [no_colosseums];
+const MIGRATIONS: [fn(&mut Value); 2] = [no_colosseums, title_since];
 const _: () = assert!(MIGRATIONS.len() as u64 == VERSION - 1);
 
 /// Version 2 adds the colosseums; [`from_json`] opens them.
 fn no_colosseums(save: &mut Value) {
     save["state"]["colosseums"] = Value::Array(Vec::new());
+}
+
+/// Version 3 dates each title: held since the week of the save, so every champion
+/// gets its full time to defend it.
+fn title_since(save: &mut Value) {
+    let week = save["state"]["week"].clone();
+    if let Some(colosseums) = save["state"]["colosseums"].as_array_mut() {
+        for colosseum in colosseums {
+            colosseum["title_since"] = week.clone();
+        }
+    }
 }
 
 #[derive(Serialize)]
@@ -140,12 +151,12 @@ mod tests {
     fn unknown_versions_are_refused() {
         let data = data();
         let save = to_json(&GameState::new(7, &data));
-        let newer = save.replacen("\"version\": 2", "\"version\": 3", 1);
+        let newer = save.replacen("\"version\": 3", "\"version\": 4", 1);
         assert!(matches!(
             from_json(&newer, &data),
-            Err(SaveError::Version(Some(3)))
+            Err(SaveError::Version(Some(4)))
         ));
-        let none = save.replacen("\"version\": 2", "\"versio\": 2", 1);
+        let none = save.replacen("\"version\": 3", "\"versio\": 3", 1);
         assert!(matches!(
             from_json(&none, &data),
             Err(SaveError::Version(None))

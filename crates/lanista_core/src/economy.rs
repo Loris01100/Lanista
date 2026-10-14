@@ -31,6 +31,8 @@ pub struct Purses {
     pub receipts_base: u32,
     /// Added to the receipts for each fame point of the two fighters.
     pub receipts_per_fame: u32,
+    /// Paid for each title defense the club's champion survives.
+    pub champion_bonus: u32,
 }
 
 impl Purses {
@@ -52,6 +54,7 @@ pub enum Flow {
     EntryFee,
     WinPrize,
     Receipts,
+    ChampionBonus,
 }
 
 /// Money in (positive) or out (negative) for one of the club's fighters.
@@ -74,6 +77,7 @@ mod tests {
             win_prize: 50,
             receipts_base: 20,
             receipts_per_fame: 1,
+            champion_bonus: 0,
         };
         assert_eq!(rules.receipts(Fame::default(), Fame::default()), 20);
         let famous = Fame::default().changed_by(30);

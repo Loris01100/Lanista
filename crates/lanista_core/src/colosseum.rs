@@ -10,7 +10,7 @@ use crate::design_data::DesignData;
 use crate::economy::Purses;
 use crate::fighter::career::{CareerFighter, Status};
 use crate::fighter::fame::FightResult;
-use crate::fighter::percent_of;
+use crate::fighter::{FighterId, percent_of};
 
 /// The world's rules, from `data/world.ron`.
 #[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
@@ -22,6 +22,10 @@ pub struct WorldRules {
     pub elo_k: u32,
     /// Residents' stats grow by this percentage for each prestige level above 1.
     pub prestige_stats_percent: u32,
+    /// A champion must defend the title at least once in this many weeks.
+    pub title_defense_weeks: u32,
+    /// How many of the first in a ranking may fight for the title.
+    pub challengers: u32,
     /// `ColosseumId(i)` is the colosseum at index `i`.
     pub colosseums: Vec<ColosseumData>,
 }
@@ -88,14 +92,46 @@ pub struct Colosseum {
     /// Everyone who fought here, best Elo first; ties keep their order. The club's
     /// fighters join with their first fight here.
     pub ranking: Vec<Rating>,
-    /// Holds the title, which is not the first rank: it is won by beating the champion.
+    /// Holds the title, which is not the first rank: it changes hands only in a
+    /// title fight the champion loses.
     pub champion: Option<Contender>,
+    /// Week the title was last won or defended.
+    pub title_since: u64,
+}
+
+/// What happened to a title in a week.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum TitleNews {
+    /// A title fight; `result` is the champion's, who keeps the title unless beaten.
+    Fight {
+        champion: Contender,
+        challenger: Contender,
+        result: FightResult,
+    },
+    /// The champion did not defend in time: the title went to `to`.
+    Stripped {
+        former: Contender,
+        to: Option<Contender>,
+    },
+    /// The champion died, retired or left: the title went to `to`.
+    Vacated { to: Option<Contender> },
+}
+
+/// Whether the champion keeps the title after a title fight with this result.
+#[must_use]
+pub fn title_kept(result: FightResult) -> bool {
+    matches!(result, FightResult::Won | FightResult::Unfinished)
 }
 
 impl Colosseum {
-    /// A colosseum's opening: residents as strong as its prestige, all at the starting
-    /// Elo, the strongest one champion.
-    pub fn open<R: Rng + ?Sized>(rng: &mut R, rules: &ColosseumData, data: &DesignData) -> Self {
+    /// A colosseum's opening in `week`: residents as strong as its prestige, all at the
+    /// starting Elo, the strongest one champion.
+    pub fn open<R: Rng + ?Sized>(
+        rng: &mut R,
+        rules: &ColosseumData,
+        data: &DesignData,
+        week: u64,
+    ) -> Self {
         let residents: Vec<_> = (0..rules.residents)
             .map(|_| resident(rng, rules, data))
             .collect();
@@ -112,7 +148,76 @@ impl Colosseum {
             residents,
             ranking,
             champion,
+            title_since: week,
         }
+    }
+
+    /// The ranking without the club's fighters who no longer fight.
+    pub fn active_ranking<'a>(
+        &'a self,
+        club: &'a [CareerFighter],
+    ) -> impl Iterator<Item = &'a Rating> + 'a {
+        self.ranking.iter().filter(|r| match r.contender {
+            Contender::Club(i) => club.get(i).is_some_and(|f| f.status == Status::Active),
+            Contender::Resident(_) => true,
+        })
+    }
+
+    /// Last week the champion may defend the title in before losing it.
+    #[must_use]
+    pub fn defense_deadline(&self, rules: &WorldRules) -> u64 {
+        self.title_since + u64::from(rules.title_defense_weeks)
+    }
+
+    /// The resident the club's fighter `i` meets if it fights for the title here: as
+    /// champion, the best-ranked resident; from the first `challengers` of the ranking,
+    /// a resident champion. `None` if it may not fight for the title.
+    // ponytail: a resident champion only meets residents in its own defenses; club
+    // fighters ask for their title fight, until challenges.
+    #[must_use]
+    pub fn title_opponent(
+        &self,
+        i: usize,
+        club: &[CareerFighter],
+        rules: &WorldRules,
+    ) -> Option<usize> {
+        let me = Contender::Club(i);
+        if self.champion == Some(me) {
+            return self.best_resident(None);
+        }
+        let Some(Contender::Resident(champion)) = self.champion else {
+            return None;
+        };
+        let top = usize::try_from(rules.challengers).unwrap_or(usize::MAX);
+        self.active_ranking(club)
+            .take(top)
+            .any(|r| r.contender == me)
+            .then_some(champion)
+    }
+
+    /// The best-ranked resident other than `except`.
+    fn best_resident(&self, except: Option<usize>) -> Option<usize> {
+        self.ranking.iter().find_map(|r| match r.contender {
+            Contender::Resident(i) if Some(i) != except => Some(i),
+            _ => None,
+        })
+    }
+
+    /// Records a title fight in `week`, `result` being the champion's: both Elo move,
+    /// the challenger takes the title by winning, and the title counts as defended.
+    pub fn record_title_fight(
+        &mut self,
+        champion: Contender,
+        challenger: Contender,
+        result: FightResult,
+        week: u64,
+        rules: &WorldRules,
+    ) {
+        self.record(champion, challenger, result, rules);
+        if !title_kept(result) {
+            self.champion = Some(challenger);
+        }
+        self.title_since = week;
     }
 
     /// Elo of `contender`, the starting one for a first fight here.
@@ -124,8 +229,7 @@ impl Colosseum {
             .map_or(rules.elo_start, |r| r.elo)
     }
 
-    /// Records a duel between `a` and `b`, `result` being `a`'s: both Elo move,
-    /// and beating the champion takes the title.
+    /// Records a duel between `a` and `b`, `result` being `a`'s: both Elo move.
     pub fn record(&mut self, a: Contender, b: Contender, result: FightResult, rules: &WorldRules) {
         let places = match result {
             FightResult::Won => [(a, 1), (b, 2)],
@@ -133,13 +237,6 @@ impl Colosseum {
             FightResult::Unfinished => [(a, 1), (b, 1)],
         };
         self.record_places(&places, rules);
-        match result {
-            FightResult::Won if self.champion == Some(b) => self.champion = Some(a),
-            FightResult::Lost | FightResult::GaveUp if self.champion == Some(a) => {
-                self.champion = Some(b);
-            }
-            _ => {}
-        }
     }
 
     /// Records a fight of any size from each contender's place (1 the best, from
@@ -190,15 +287,63 @@ impl Colosseum {
         }
     }
 
-    /// End of the week: dead residents give way to new ones, who start again at the
-    /// starting Elo, and a title whose holder is gone goes to the best ranked.
-    /// `club_active(i)` tells whether the club's fighter `i` still fights.
+    /// End of `week`: dead residents give way to new ones at the starting Elo, a title
+    /// whose holder is gone goes to the best ranked still fighting, then a resident
+    /// champion at its deadline defends the title against the best-ranked other
+    /// resident and a club champion past it loses the title. Returns what happened to
+    /// the title.
     pub fn end_week<R: Rng + ?Sized>(
         &mut self,
+        week: u64,
         rng: &mut R,
         rules: &ColosseumData,
         data: &DesignData,
-        club_active: impl Fn(usize) -> bool,
+        club: &[CareerFighter],
+    ) -> Vec<TitleNews> {
+        let mut news = Vec::new();
+        self.replace_the_gone(week, rng, rules, data, club, &mut news);
+        if week < self.defense_deadline(&data.world) {
+            return news;
+        }
+        match self.champion {
+            Some(Contender::Resident(c)) => {
+                if let Some(r) = self.best_resident(Some(c)) {
+                    let result = self.resident_duel(c, r, rng, data);
+                    let (champion, challenger) = (Contender::Resident(c), Contender::Resident(r));
+                    self.record_title_fight(champion, challenger, result, week, &data.world);
+                    news.push(TitleNews::Fight {
+                        champion,
+                        challenger,
+                        result,
+                    });
+                    // The duel may have killed one of them.
+                    self.replace_the_gone(week, rng, rules, data, club, &mut news);
+                }
+            }
+            Some(former @ Contender::Club(_)) => {
+                let to = self
+                    .active_ranking(club)
+                    .map(|r| r.contender)
+                    .find(|&c| c != former);
+                self.champion = to;
+                self.title_since = week;
+                news.push(TitleNews::Stripped { former, to });
+            }
+            None => {}
+        }
+        news
+    }
+
+    /// Replaces dead residents, and gives a title whose holder is gone to the best
+    /// ranked still fighting.
+    fn replace_the_gone<R: Rng + ?Sized>(
+        &mut self,
+        week: u64,
+        rng: &mut R,
+        rules: &ColosseumData,
+        data: &DesignData,
+        club: &[CareerFighter],
+        news: &mut Vec<TitleNews>,
     ) {
         for i in 0..self.residents.len() {
             if self.residents[i].status == Status::Active {
@@ -216,13 +361,38 @@ impl Colosseum {
             }
         }
         self.ranking.sort_by_key(|r| Reverse(r.elo));
-        let active = |c: &Contender| match *c {
-            Contender::Club(i) => club_active(i),
-            Contender::Resident(_) => true,
-        };
-        if !self.champion.as_ref().is_some_and(active) {
-            self.champion = self.ranking.iter().map(|r| r.contender).find(active);
+        let holder_fights = self
+            .champion
+            .is_some_and(|c| self.active_ranking(club).any(|r| r.contender == c));
+        if !holder_fights {
+            let to = self.active_ranking(club).map(|r| r.contender).next();
+            self.champion = to;
+            self.title_since = week;
+            news.push(TitleNews::Vacated { to });
         }
+    }
+
+    /// A duel between residents `a` and `b`, who take fame and death from it;
+    /// returns `a`'s result.
+    fn resident_duel<R: Rng + ?Sized>(
+        &mut self,
+        a: usize,
+        b: usize,
+        rng: &mut R,
+        data: &DesignData,
+    ) -> FightResult {
+        let rules = &data.fighter;
+        let (mut first, mut second) = (self.residents[a].clone(), self.residents[b].clone());
+        let (_, _, arena) = first.duel(&second, rng, data);
+        let (stronger, weaker) = (
+            second.stronger_than(&first, rules),
+            first.stronger_than(&second, rules),
+        );
+        let (outcome, _) = first.take_fame_and_death(&arena, FighterId(0), stronger, rules);
+        second.take_fame_and_death(&arena, FighterId(1), weaker, rules);
+        self.residents[a] = first;
+        self.residents[b] = second;
+        outcome.result
     }
 }
 
@@ -279,7 +449,16 @@ mod tests {
             &mut ChaCha8Rng::seed_from_u64(1),
             &data.world.colosseums[1],
             data,
+            1,
         )
+    }
+
+    /// A club of one active fighter.
+    fn club(data: &DesignData) -> Vec<CareerFighter> {
+        vec![CareerFighter::random(
+            &mut ChaCha8Rng::seed_from_u64(3),
+            data,
+        )]
     }
 
     /// Elo won by a fighter of Elo `a` placed `place_a` in a duel against one of Elo
@@ -347,6 +526,7 @@ mod tests {
             &mut ChaCha8Rng::seed_from_u64(1),
             &data.world.colosseums[0],
             &data,
+            1,
         );
         let rome = rome(&data);
         assert_eq!(rome.residents.len(), 15);
@@ -365,20 +545,15 @@ mod tests {
     }
 
     #[test]
-    fn beating_the_champion_takes_the_title_and_the_ranking_follows_elo() {
+    fn only_a_title_fight_moves_the_title() {
         let data = data();
         let rules = &data.world;
         let mut rome = rome(&data);
         let champion = rome.champion.unwrap();
         let club = Contender::Club(0);
-        // A draw changes neither Elo nor title.
-        rome.record(club, champion, FightResult::Unfinished, rules);
-        assert_eq!(
-            (rome.elo(club, rules), rome.champion),
-            (1000, Some(champion))
-        );
+        // Beating the champion in an ordinary fight wins Elo, not the title.
         rome.record(club, champion, FightResult::Won, rules);
-        assert_eq!(rome.champion, Some(club));
+        assert_eq!(rome.champion, Some(champion));
         assert_eq!(
             rome.ranking[0],
             Rating {
@@ -393,19 +568,163 @@ mod tests {
                 elo: 984
             }
         );
-        // Giving up against a resident loses the title to them.
-        rome.record(club, Contender::Resident(3), FightResult::GaveUp, rules);
-        assert_eq!(rome.champion, Some(Contender::Resident(3)));
+        // A draw in a title fight keeps it, but counts as a defense.
+        rome.record_title_fight(champion, club, FightResult::Unfinished, 3, rules);
+        assert_eq!((rome.champion, rome.title_since), (Some(champion), 3));
+        assert_eq!(
+            rome.defense_deadline(rules),
+            3 + u64::from(rules.title_defense_weeks)
+        );
+        // A champion giving up loses it.
+        rome.record_title_fight(champion, club, FightResult::GaveUp, 4, rules);
+        assert_eq!((rome.champion, rome.title_since), (Some(club), 4));
+    }
+
+    #[test]
+    fn the_champion_meets_the_best_resident_and_the_top_meets_the_champion() {
+        let data = data();
+        let rules = &data.world;
+        let mut club = club(&data);
+        let mut rome = rome(&data);
+        let Some(Contender::Resident(champion)) = rome.champion else {
+            panic!("a resident holds the title");
+        };
+        // Not ranked yet: no title fight.
+        assert_eq!(rome.title_opponent(0, &club, rules), None);
+        rome.record(
+            Contender::Club(0),
+            Contender::Resident(9),
+            FightResult::Won,
+            rules,
+        );
+        assert_eq!(rome.title_opponent(0, &club, rules), Some(champion));
+        // Out of the top five: no title fight either.
+        for r in 0..6 {
+            rome.record(
+                Contender::Resident(r),
+                Contender::Resident(14),
+                FightResult::Won,
+                rules,
+            );
+            rome.record(
+                Contender::Resident(r),
+                Contender::Resident(13),
+                FightResult::Won,
+                rules,
+            );
+        }
+        assert_eq!(rome.title_opponent(0, &club, rules), None);
+        // As champion, against the best-ranked resident.
+        rome.champion = Some(Contender::Club(0));
+        let Contender::Resident(best) = rome.ranking[0].contender else {
+            panic!("a resident leads");
+        };
+        assert_eq!(rome.title_opponent(0, &club, rules), Some(best));
+        assert_eq!(rome.title_opponent(1, &club, rules), None);
+        // A retired fighter fights no more.
+        club[0].status = Status::Retired;
+        rome.champion = Some(Contender::Resident(champion));
+        rome.ranking.retain(|r| r.contender != Contender::Club(0));
+        rome.ranking.insert(
+            0,
+            Rating {
+                contender: Contender::Club(0),
+                elo: 2000,
+            },
+        );
+        assert_eq!(rome.title_opponent(0, &club, rules), None);
+    }
+
+    #[test]
+    fn a_resident_champion_defends_at_its_deadline() {
+        let data = data();
+        let rules = &data.world;
+        let club = club(&data);
+        let mut rng = ChaCha8Rng::seed_from_u64(2);
+        let mut rome = rome(&data);
+        let deadline = rome.defense_deadline(rules);
+        let before = rome.clone();
+        assert_eq!(
+            rome.end_week(deadline - 1, &mut rng, &rules.colosseums[1], &data, &club),
+            []
+        );
+        assert_eq!(rome, before);
+        let news = rome.end_week(deadline, &mut rng, &rules.colosseums[1], &data, &club);
+        let Some(&TitleNews::Fight {
+            champion,
+            challenger,
+            result,
+        }) = news.first()
+        else {
+            panic!("a title fight, not {news:?}");
+        };
+        assert_eq!(Some(champion), before.champion);
+        assert_eq!(
+            challenger,
+            Contender::Resident(
+                before
+                    .best_resident(Some(match champion {
+                        Contender::Resident(c) => c,
+                        Contender::Club(_) => unreachable!(),
+                    }))
+                    .unwrap()
+            )
+        );
+        assert_eq!(rome.champion == Some(champion), title_kept(result));
+        assert!(rome.defense_deadline(rules) > deadline);
+    }
+
+    #[test]
+    fn a_club_champion_past_its_deadline_loses_the_title() {
+        let data = data();
+        let rules = &data.world;
+        let club = club(&data);
+        let mut rng = ChaCha8Rng::seed_from_u64(2);
+        let mut rome = rome(&data);
+        let club_champion = Contender::Club(0);
+        rome.record_title_fight(
+            rome.champion.unwrap(),
+            club_champion,
+            FightResult::Lost,
+            1,
+            rules,
+        );
+        let deadline = rome.defense_deadline(rules);
+        rome.end_week(deadline - 1, &mut rng, &rules.colosseums[1], &data, &club);
+        assert_eq!(rome.champion, Some(club_champion));
+        let news = rome.end_week(deadline, &mut rng, &rules.colosseums[1], &data, &club);
+        let to = Some(
+            rome.ranking
+                .iter()
+                .map(|r| r.contender)
+                .find(|&c| c != club_champion)
+                .unwrap(),
+        );
+        assert_eq!(
+            news,
+            [TitleNews::Stripped {
+                former: club_champion,
+                to
+            }]
+        );
+        assert_eq!((rome.champion, rome.title_since), (to, deadline));
     }
 
     #[test]
     fn the_dead_are_replaced_and_a_vacant_title_goes_to_the_best_ranked() {
         let data = data();
         let rules = &data.world;
+        let mut club = club(&data);
         let mut rng = ChaCha8Rng::seed_from_u64(2);
         let mut rome = rome(&data);
-        let club = Contender::Club(0);
-        rome.record(club, rome.champion.unwrap(), FightResult::Won, rules);
+        let champion = Contender::Club(0);
+        rome.record_title_fight(
+            rome.champion.unwrap(),
+            champion,
+            FightResult::Lost,
+            1,
+            rules,
+        );
         rome.record(
             Contender::Resident(5),
             Contender::Resident(6),
@@ -414,14 +733,20 @@ mod tests {
         );
         let dead = rome.residents[5].clone();
         rome.residents[5].status = Status::Dead;
-        rome.end_week(&mut rng, &rules.colosseums[1], &data, |_| true);
+        assert_eq!(
+            rome.end_week(2, &mut rng, &rules.colosseums[1], &data, &club),
+            []
+        );
         assert_ne!(rome.residents[5], dead);
         assert_eq!(rome.residents[5].status, Status::Active);
         assert_eq!(rome.elo(Contender::Resident(5), rules), rules.elo_start);
-        assert_eq!(rome.champion, Some(club));
-        // The club's champion retires: the title goes to the first rank.
-        rome.end_week(&mut rng, &rules.colosseums[1], &data, |_| false);
-        assert_eq!(rome.champion, Some(rome.ranking[1].contender));
-        assert_eq!(rome.ranking[0].contender, club);
+        assert_eq!(rome.champion, Some(champion));
+        // The club's champion retires: the title goes to the first rank still fighting.
+        club[0].status = Status::Retired;
+        let news = rome.end_week(3, &mut rng, &rules.colosseums[1], &data, &club);
+        let to = Some(rome.ranking[1].contender);
+        assert_eq!(rome.ranking[0].contender, champion);
+        assert_eq!(news, [TitleNews::Vacated { to }]);
+        assert_eq!((rome.champion, rome.title_since), (to, 3));
     }
 }
