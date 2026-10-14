@@ -4,6 +4,7 @@
 use serde::Deserialize;
 
 use crate::fighter::fame::Fame;
+use crate::market::MarketRules;
 
 /// Prices and purses, from `data/economy.ron`.
 #[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
@@ -17,6 +18,7 @@ pub struct EconomyRules {
     pub upkeep: u32,
     /// Paid for each training session.
     pub training_cost: u32,
+    pub market: MarketRules,
 }
 
 /// A colosseum's fee and purses.
@@ -55,6 +57,10 @@ pub enum Flow {
     WinPrize,
     Receipts,
     ChampionBonus,
+    /// A rival's fighter bought.
+    Purchase,
+    /// The club's fighter sold to a rival.
+    Sale,
 }
 
 /// Money in (positive) or out (negative) for one of the club's fighters.

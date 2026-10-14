@@ -9,11 +9,17 @@ use crate::state::GameState;
 
 /// Version written in new saves. Raise it with any change to the saved types,
 /// and add the migration from the previous version to [`MIGRATIONS`].
-pub const VERSION: u64 = 5;
+pub const VERSION: u64 = 6;
 
 /// `MIGRATIONS[i]` turns a version `i + 1` save into a version `i + 2` one,
 /// working on the JSON so the old types need not be kept.
-const MIGRATIONS: [fn(&mut Value); 4] = [no_colosseums, title_since, no_challenges, no_rivals];
+const MIGRATIONS: [fn(&mut Value); 5] = [
+    no_colosseums,
+    title_since,
+    no_challenges,
+    no_rivals,
+    no_market,
+];
 const _: () = assert!(MIGRATIONS.len() as u64 == VERSION - 1);
 
 /// Version 2 adds the colosseums; [`from_json`] opens them.
@@ -40,6 +46,12 @@ fn no_challenges(save: &mut Value) {
 /// Version 5 adds the rival clubs; [`from_json`] opens them with the starting money.
 fn no_rivals(save: &mut Value) {
     save["state"]["rivals"] = Value::Array(Vec::new());
+}
+
+/// Version 6 adds the free agents, which [`from_json`] brings to their fewest, and
+/// whether a fighter was observed, false when missing.
+fn no_market(save: &mut Value) {
+    save["state"]["free_agents"] = Value::Array(Vec::new());
 }
 
 #[derive(Serialize)]
@@ -161,12 +173,12 @@ mod tests {
     fn unknown_versions_are_refused() {
         let data = data();
         let save = to_json(&GameState::new(7, &data));
-        let newer = save.replacen("\"version\": 5", "\"version\": 6", 1);
+        let newer = save.replacen("\"version\": 6", "\"version\": 7", 1);
         assert!(matches!(
             from_json(&newer, &data),
-            Err(SaveError::Version(Some(6)))
+            Err(SaveError::Version(Some(7)))
         ));
-        let none = save.replacen("\"version\": 5", "\"versio\": 5", 1);
+        let none = save.replacen("\"version\": 6", "\"versio\": 6", 1);
         assert!(matches!(
             from_json(&none, &data),
             Err(SaveError::Version(None))

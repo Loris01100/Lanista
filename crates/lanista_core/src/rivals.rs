@@ -12,8 +12,7 @@ use crate::fighter::career::{Activity, CareerFighter, WeekPlan, badly_hurt_or_il
 pub enum Profile {
     Cautious,
     Aggressive,
-    /// Keeps its money.
-    // ponytail: thresholds only; buying and selling come with the market.
+    /// Keeps its money, sells cheap and buys dear.
     Merchant,
 }
 
@@ -34,6 +33,10 @@ pub struct ProfileRules {
     /// Each week, the chance a club's fighter ranked in the colosseum is challenged by
     /// the resident closest in Elo.
     pub challenge_percent: u32,
+    /// Price asked for one of its fighters, and offered for one of the player's, in
+    /// percent of its value (`market::value`); it buys only if it keeps `care_reserve`.
+    pub sell_percent: u32,
+    pub buy_percent: u32,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
@@ -73,8 +76,8 @@ pub struct Rival {
 
 /// The rival club resident `r` of colosseum `c` belongs to, out of `rivals`: the
 /// residents are shared out in turn.
-// ponytail: fixed by place, a replaced resident joins the same club; the market
-// gives clubs their own rosters.
+// ponytail: fixed by place: a place left is filled by the same club, from the market or
+// its own school; own rosters if clubs ever need to grow or shrink.
 #[must_use]
 pub fn owner(c: usize, r: usize, rivals: usize) -> usize {
     (c + r) % rivals.max(1)

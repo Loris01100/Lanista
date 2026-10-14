@@ -54,6 +54,7 @@ fn main() -> ExitCode {
         Status::Active => {}
         Status::Retired => println!("\nretired at {}", fighter.age),
         Status::Dead => println!("\ndied at {}", fighter.age),
+        Status::Left => println!("\nleft at {}", fighter.age),
     }
     ExitCode::SUCCESS
 }

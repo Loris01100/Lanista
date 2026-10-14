@@ -25,6 +25,9 @@ pub enum Status {
     /// Decided to stop; only the fighter decides.
     Retired,
     Dead,
+    /// Sold or released by its club, or bought away from it: the fighter goes on
+    /// elsewhere, and this entry is its past there.
+    Left,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -48,6 +51,10 @@ pub struct CareerFighter {
     pub injuries: Vec<Injury>,
     pub illness: Option<Illness>,
     pub status: Status,
+    /// Observed by the player's club for a week: its stats are seen within narrower
+    /// ranges (`market::stat_ranges`).
+    #[serde(default)]
+    pub observed: bool,
 }
 
 impl CareerFighter {
@@ -89,6 +96,7 @@ impl CareerFighter {
             injuries: Vec::new(),
             illness: None,
             status: Status::Active,
+            observed: false,
         }
     }
 

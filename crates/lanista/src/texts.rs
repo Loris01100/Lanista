@@ -1,5 +1,5 @@
 //! What the player reads, in French: fighters, injuries, illnesses, fights,
-//! weeks, money and colosseums.
+//! weeks, money, colosseums and the market.
 
 use lanista_core::colosseum::{
     ArenaKind, Challenge, Colosseum, ColosseumId, Contender, TitleNews, title_kept,
@@ -10,7 +10,9 @@ use lanista_core::fighter::career::{Activity, CareerFighter, FightSummary, Statu
 use lanista_core::fighter::fame::FightResult;
 use lanista_core::fighter::illness::{Illness, IllnessLevel};
 use lanista_core::fighter::injury::{Injury, Location, Severity, Side};
+use lanista_core::market::{Deal, stat_ranges};
 use lanista_core::rivals::Profile;
+use lanista_core::state::GameState;
 
 /// Stat names, in `Stats::to_array` order.
 pub const STAT_NAMES: [&str; 6] = ["PV", "AC", "AL", "VIT", "DC", "DL"];
@@ -25,6 +27,7 @@ pub fn condition_text(fighter: &CareerFighter) -> &'static str {
     match fighter.status {
         Status::Dead => "mort",
         Status::Retired => "retraité",
+        Status::Left => "parti",
         Status::Active if !fighter.injuries.iter().all(Injury::is_permanent) => "blessé",
         Status::Active if fighter.illness.is_some() => "malade",
         Status::Active => "en forme",
@@ -43,6 +46,62 @@ pub fn activity_name(activity: Activity, data: &DesignData) -> String {
         Activity::Fight(id) => format!("Combat à {}", colosseum_name(id, data)),
         Activity::TitleFight(id) => format!("Combat pour le titre à {}", colosseum_name(id, data)),
         Activity::Challenge(id, _) => format!("Défi à {}", colosseum_name(id, data)),
+    }
+}
+
+/// How the market names the free agent at `index`.
+pub fn free_agent_name(index: usize, fighter: &CareerFighter, data: &DesignData) -> String {
+    format!(
+        "Free agent n° {} ({})",
+        index + 1,
+        class_name(fighter, data)
+    )
+}
+
+/// "40-60" for each trained stat of a fighter out of the club, as the market sees it.
+pub fn range_texts(fighter: &CareerFighter, data: &DesignData) -> Vec<String> {
+    stat_ranges(fighter, &data.economy.market)
+        .iter()
+        .map(|(low, high)| format!("{low}-{high}"))
+        .collect()
+}
+
+/// The market move `deal` in one line, from the game before it is made.
+pub fn deal_text(deal: Deal, state: &GameState, data: &DesignData) -> String {
+    let club = |i: usize| {
+        state
+            .fighters
+            .get(i)
+            .map_or_else(|| "?".into(), |f| fighter_name(i, f, data))
+    };
+    match deal {
+        Deal::Sign(a) => state.free_agents.get(a).map_or_else(
+            || "?".into(),
+            |f| format!("Recrute {}", free_agent_name(a, f, data)),
+        ),
+        Deal::Buy(id, r) => {
+            let colosseum = usize::try_from(id.0)
+                .ok()
+                .and_then(|c| state.colosseums.get(c));
+            let name = colosseum.map_or_else(
+                || "?".into(),
+                |c| contender_name(Contender::Resident(r), c, &state.fighters, data),
+            );
+            let seller = usize::try_from(id.0).map_or("?", |c| rival_name(c, r, data));
+            let price = state.asking_price(id, r, data).unwrap_or(0);
+            format!(
+                "Achète {name} de {} à {seller} pour {price}",
+                colosseum_name(id, data)
+            )
+        }
+        Deal::Sell(i) => match state.best_offer(i, data) {
+            Some((k, price)) => {
+                let buyer = data.world.rivals.get(k).map_or("?", |r| r.name.as_str());
+                format!("Vend {} à {buyer} pour {price}", club(i))
+            }
+            None => format!("Vend {}", club(i)),
+        },
+        Deal::Release(i) => format!("Libère {}", club(i)),
     }
 }
 
@@ -246,6 +305,8 @@ pub fn money_line(before: i64, after: i64, ledger: &[Transaction]) -> String {
                 Flow::WinPrize => "prime de victoire",
                 Flow::Receipts => "recettes",
                 Flow::ChampionBonus => "bonus champion",
+                Flow::Purchase => "achat",
+                Flow::Sale => "vente",
             };
             format!("{name} {:+}", t.amount)
         })
@@ -308,7 +369,7 @@ pub fn week_lines(
         lines.push(format!("Stats : {}", stats.join(", ")));
     }
     match after.status {
-        Status::Active | Status::Dead => {}
+        Status::Active | Status::Dead | Status::Left => {}
         Status::Retired => lines.push(format!("Prend sa retraite à {} ans", after.age)),
     }
     lines
