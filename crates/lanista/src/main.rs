@@ -5,6 +5,8 @@ mod career_screen;
 mod combat_screen;
 mod theme;
 
+use std::rc::Rc;
+
 use career_screen::CareerScreen;
 use combat_screen::{DEATH_SOUND, FIGHTER_SHEET, HIT_SOUND, MUSIC};
 use lanista_core::design_data::DesignData;
@@ -49,7 +51,7 @@ async fn main() {
     for sound in [HIT_SOUND, DEATH_SOUND, MUSIC] {
         assets.load_sound(sound).await.expect("load a sound");
     }
-    let data = DesignData::load().expect("load the design data");
+    let data = Rc::new(DesignData::load().expect("load the design data"));
     let bindings = Bindings::new(vec![
         (Action::Quit, Button::Key(KeyCode::Escape)),
         (Action::SlowSpeed, Button::Key(KeyCode::Key1)),

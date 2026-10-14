@@ -415,11 +415,7 @@ mod tests {
     use rand_chacha::ChaCha8Rng;
 
     fn data() -> DesignData {
-        DesignData::from_ron(
-            include_str!("../../../../data/classes.ron"),
-            include_str!("../../../../data/fighter.ron"),
-        )
-        .unwrap()
+        DesignData::load().unwrap()
     }
 
     fn fighter(seed: u64) -> CareerFighter {

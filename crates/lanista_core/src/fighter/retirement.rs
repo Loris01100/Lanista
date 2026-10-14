@@ -24,7 +24,7 @@ pub fn retirement_chance(
     let base = years * i64::from(rules.per_year)
         + i64::from(permanent_injuries) * i64::from(rules.per_permanent_injury);
     let half = i64::from(Personality::MAX / 2);
-    let offset = half - i64::from(personality.determination.min(Personality::MAX));
+    let offset = half - i64::from(personality.determination.value());
     let scaled = base * (100 + offset * i64::from(rules.determination_percent) / half) / 100;
     u32::try_from(scaled.clamp(0, 100)).unwrap_or(0)
 }
@@ -57,6 +57,7 @@ pub struct RetirementRules {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::fighter::personality::TraitValue;
     use proptest::prelude::*;
     use rand::SeedableRng;
     use rand_chacha::ChaCha8Rng;
@@ -70,10 +71,8 @@ mod tests {
 
     fn determined(determination: u32) -> Personality {
         Personality {
-            aggression: 50,
-            caution: 50,
-            showmanship: 50,
-            determination,
+            determination: TraitValue::new(determination),
+            ..Personality::neutral()
         }
     }
 

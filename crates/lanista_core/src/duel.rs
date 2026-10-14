@@ -66,11 +66,7 @@ mod tests {
 
     #[test]
     fn same_seed_same_duel() {
-        let data = DesignData::from_ron(
-            include_str!("../../../data/classes.ron"),
-            include_str!("../../../data/fighter.ron"),
-        )
-        .unwrap();
+        let data = DesignData::load().unwrap();
         assert_eq!(random_duel(&data, 3), random_duel(&data, 3));
         assert_ne!(random_duel(&data, 3), random_duel(&data, 4));
     }

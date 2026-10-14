@@ -72,9 +72,9 @@ pub fn fear(condition: &Condition) -> f64 {
         IllnessLevel::Severe => 0.3,
     });
     let injuries = u32::try_from(condition.injuries.len()).unwrap_or(u32::MAX);
-    let fear = 0.5 * offset(p.caution, Personality::NEUTRAL)
-        - 0.25 * offset(p.aggression, Personality::NEUTRAL)
-        - 0.25 * offset(p.determination, Personality::NEUTRAL)
+    let fear = 0.5 * offset(p.caution.value(), Personality::NEUTRAL)
+        - 0.25 * offset(p.aggression.value(), Personality::NEUTRAL)
+        - 0.25 * offset(p.determination.value(), Personality::NEUTRAL)
         - 0.2 * offset(condition.morale.value(), Morale::NEUTRAL)
         + 0.2 * (1.0 - f64::from(condition.form.value()) / f64::from(Form::MAX))
         + 0.15 * f64::from(injuries)
@@ -123,7 +123,10 @@ pub fn score_actions(arena: &Arena, me: FighterId) -> Vec<(Action, f64)> {
     } else if distance > longest_reach(me) {
         scored.push((Action::Move(toward), MOVE_SCORE));
     } else if !can_cast && distance > PRESS_MIN_DISTANCE {
-        let press = offset(me.condition.personality.aggression, Personality::NEUTRAL);
+        let press = offset(
+            me.condition.personality.aggression.value(),
+            Personality::NEUTRAL,
+        );
         if press > 0.0 {
             scored.push((Action::Move(toward), press * PRESS_SCORE));
         }
@@ -148,7 +151,10 @@ fn cast_value(me: &Fighter, target: &Fighter, spell: &SpellData) -> f64 {
 /// What waiting is worth to a showman: a share of its strongest spell's value when
 /// that spell reaches the target, is affordable and will be ready soon; 0 otherwise.
 fn show_wait_value(me: &Fighter, target: &Fighter, distance: f64) -> f64 {
-    let flair = offset(me.condition.personality.showmanship, Personality::NEUTRAL);
+    let flair = offset(
+        me.condition.personality.showmanship.value(),
+        Personality::NEUTRAL,
+    );
     if flair <= 0.0 {
         return 0.0;
     }
@@ -214,6 +220,7 @@ mod tests {
     use crate::combat::tick;
     use crate::design_data::DesignData;
     use crate::duel::STATS;
+    use crate::fighter::personality::TraitValue;
     use crate::fighter::{ClassId, test_fighter};
 
     #[test]
@@ -254,11 +261,7 @@ mod tests {
     }
 
     fn shipped_classes() -> DesignData {
-        DesignData::from_ron(
-            include_str!("../../../data/classes.ron"),
-            include_str!("../../../data/fighter.ron"),
-        )
-        .unwrap()
+        DesignData::load().unwrap()
     }
 
     #[test]
@@ -304,8 +307,8 @@ mod tests {
     fn fearful() -> Condition {
         Condition {
             personality: Personality {
-                caution: 100,
-                determination: 0,
+                caution: TraitValue::new(100),
+                determination: TraitValue::new(0),
                 ..Personality::neutral()
             },
             ..Condition::default()
@@ -327,8 +330,8 @@ mod tests {
         assert!(fear(&Condition::default()).abs() < f64::EPSILON);
         assert!((fear(&fearful()) - 0.75).abs() < 1e-9);
         let bold = Personality {
-            aggression: 100,
-            determination: 100,
+            aggression: TraitValue::new(100),
+            determination: TraitValue::new(100),
             ..Personality::neutral()
         };
         let worn = Condition {
@@ -411,7 +414,7 @@ mod tests {
     fn an_aggressive_fighter_steps_in_while_its_spells_cool_down() {
         let aggressive = Condition {
             personality: Personality {
-                aggression: 100,
+                aggression: TraitValue::new(100),
                 ..Personality::neutral()
             },
             ..Condition::default()
@@ -444,7 +447,7 @@ mod tests {
             target: FighterId(1),
         };
         assert_eq!(UtilityAi.decide(&arena, FighterId(0)), cast(1));
-        arena.fighters[0].condition.personality.showmanship = 100;
+        arena.fighters[0].condition.personality.showmanship = TraitValue::new(100);
         assert_eq!(UtilityAi.decide(&arena, FighterId(0)), Action::Wait);
         // Too long to wait for: the showman hits now.
         arena.fighters[0].cooldowns[2] = 100;

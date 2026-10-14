@@ -10,11 +10,7 @@ use lanista_core::log::{Report, log_text};
 
 /// A duel between utility AIs on a 20 × 20 m floor, starting 14 m apart.
 fn duel(classes: [u32; 2], seed: u64) -> String {
-    let data = DesignData::from_ron(
-        include_str!("../../../data/classes.ron"),
-        include_str!("../../../data/fighter.ron"),
-    )
-    .unwrap();
+    let data = DesignData::load().unwrap();
     let fighter = |id: u32, x: f64| {
         let class = ClassId(classes[usize::try_from(id).unwrap()]);
         let class_data = data.class(class).unwrap();

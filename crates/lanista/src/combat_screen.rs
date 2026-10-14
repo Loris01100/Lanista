@@ -2,6 +2,8 @@
 //! fixed tick rate, fighters are drawn as animated sprites at positions
 //! interpolated between the last two ticks.
 
+use std::rc::Rc;
+
 use lanista_core::ai::{self, CombatAi};
 use lanista_core::combat::{self, Arena};
 use lanista_core::design_data::DesignData;
@@ -97,7 +99,7 @@ enum Mode {
 }
 
 pub struct CombatScreen {
-    data: DesignData,
+    data: Rc<DesignData>,
     mode: Mode,
     arena: Arena,
     ais: Vec<Box<dyn CombatAi>>,
@@ -116,18 +118,18 @@ pub struct CombatScreen {
 impl CombatScreen {
     /// The standard duel of `seed`, the same as `simulate --seed <seed>`; another
     /// seed can be picked on screen.
-    pub fn new(data: DesignData, seed: u64, bindings: Bindings<Action>) -> Self {
+    pub fn new(data: Rc<DesignData>, seed: u64, bindings: Bindings<Action>) -> Self {
         let arena = random_duel(&data, seed);
         Self::with(data, arena, Mode::Free { next_seed: seed }, bindings)
     }
 
     /// Watches the fight `arena`, from its first tick: a career fight, fighter 0
     /// being the player's. Once it is over, « Continuer » goes back.
-    pub fn watch(data: DesignData, arena: Arena, bindings: Bindings<Action>) -> Self {
+    pub fn watch(data: Rc<DesignData>, arena: Arena, bindings: Bindings<Action>) -> Self {
         Self::with(data, arena, Mode::Watch, bindings)
     }
 
-    fn with(data: DesignData, arena: Arena, mode: Mode, bindings: Bindings<Action>) -> Self {
+    fn with(data: Rc<DesignData>, arena: Arena, mode: Mode, bindings: Bindings<Action>) -> Self {
         let animation = |row: u16, frame_time, looping| Animation {
             first: row * SHEET.columns,
             frames: 4,
@@ -507,7 +509,11 @@ mod tests {
             .unwrap()
             .fight
             .unwrap();
-        let mut screen = CombatScreen::watch(data, fight.start.clone(), Bindings::new(Vec::new()));
+        let mut screen = CombatScreen::watch(
+            Rc::new(data),
+            fight.start.clone(),
+            Bindings::new(Vec::new()),
+        );
         // Past the one-minute limit.
         for _ in 0..60 * 70 {
             screen.advance(1.0 / 60.0);
@@ -558,7 +564,11 @@ mod tests {
     }
 
     fn screen(seed: u64) -> CombatScreen {
-        CombatScreen::new(DesignData::load().unwrap(), seed, Bindings::new(Vec::new()))
+        CombatScreen::new(
+            Rc::new(DesignData::load().unwrap()),
+            seed,
+            Bindings::new(Vec::new()),
+        )
     }
 
     /// What `simulate --seed <seed>` plays and prints.

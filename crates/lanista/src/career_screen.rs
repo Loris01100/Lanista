@@ -2,6 +2,8 @@
 //! (activity, care) and what each week changed. Fight weeks are watched in the
 //! combat screen; the same seed and decisions give the same career as the `career` tool.
 
+use std::rc::Rc;
+
 use lanista_core::combat::Arena;
 use lanista_core::design_data::DesignData;
 use lanista_core::fighter::career::{
@@ -27,7 +29,7 @@ const BACKGROUND: Color = Color::new(0.16, 0.13, 0.11, 1.0);
 const STAT_NAMES: [&str; 6] = ["PV", "AC", "AL", "VIT", "DC", "DL"];
 
 pub struct CareerScreen {
-    data: DesignData,
+    data: Rc<DesignData>,
     seed: u64,
     rng: ChaCha8Rng,
     fighter: CareerFighter,
@@ -42,7 +44,7 @@ pub struct CareerScreen {
 
 impl CareerScreen {
     /// The career of the fighter generated from `seed`, as `career --seed <seed>`.
-    pub fn new(data: DesignData, seed: u64, bindings: Bindings<Action>) -> Self {
+    pub fn new(data: Rc<DesignData>, seed: u64, bindings: Bindings<Action>) -> Self {
         let mut rng = ChaCha8Rng::seed_from_u64(seed);
         let fighter = CareerFighter::random(&mut rng, &data);
         let plan = suggested_plan(&fighter, 1);
@@ -126,7 +128,10 @@ impl CareerScreen {
         let p = &f.personality;
         ui.label(format!(
             "Agressivité {}, prudence {}, goût du spectacle {}, détermination {}",
-            p.aggression, p.caution, p.showmanship, p.determination
+            p.aggression.value(),
+            p.caution.value(),
+            p.showmanship.value(),
+            p.determination.value()
         ));
         ui.add_space(8.0);
         ui.strong("Blessures");
@@ -202,11 +207,12 @@ impl Screen for CareerScreen {
             free_duel = ui.button("Duel standard").clicked();
         });
         if free_duel {
-            let duel = CombatScreen::new(self.data.clone(), FREE_DUEL_SEED, self.bindings.clone());
+            let duel =
+                CombatScreen::new(Rc::clone(&self.data), FREE_DUEL_SEED, self.bindings.clone());
             return Transition::Push(Box::new(duel));
         }
         if play && let Some(fight) = self.next_week() {
-            let screen = CombatScreen::watch(self.data.clone(), fight, self.bindings.clone());
+            let screen = CombatScreen::watch(Rc::clone(&self.data), fight, self.bindings.clone());
             return Transition::Push(Box::new(screen));
         }
         Transition::None
@@ -382,7 +388,11 @@ mod tests {
     use super::*;
 
     fn screen(seed: u64) -> CareerScreen {
-        CareerScreen::new(DesignData::load().unwrap(), seed, Bindings::new(Vec::new()))
+        CareerScreen::new(
+            Rc::new(DesignData::load().unwrap()),
+            seed,
+            Bindings::new(Vec::new()),
+        )
     }
 
     /// What `career --seed <seed> --weeks <weeks>` plays.
