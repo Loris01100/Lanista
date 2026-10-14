@@ -13,7 +13,8 @@ use crate::fighter::fame::{Fame, FightOutcome, FightResult};
 use crate::fighter::form::{Form, FormEvent};
 use crate::fighter::illness::{Illness, IllnessLevel, roll_illness};
 use crate::fighter::injury::{
-    Injury, Severity, Side, heal_week, injured_stats, roll_injury, spare_after_effect,
+    Injury, Severity, Side, fatal_blow_wound, heal_week, injured_stats, roll_injury,
+    spare_after_effect,
 };
 use crate::fighter::morale::{Morale, MoraleEvent};
 use crate::fighter::personality::Personality;
@@ -300,28 +301,33 @@ impl CareerFighter {
     }
 
     /// The fame, record and death the finished fight in `arena`, where this fighter was
-    /// `id`, brings. Returns the outcome and the fame change.
-    fn take_fame_and_death(
+    /// `id`, brings (see `take_side`).
+    fn take_fame_and_death<R: Rng + ?Sized>(
         &mut self,
         arena: &Arena,
         id: FighterId,
         against_stronger: bool,
+        rng: &mut R,
         rules: &FighterRules,
-    ) -> (FightOutcome, i32) {
+    ) -> Taken {
         self.take_side(
             Ending::from_arena(arena, id, &rules.fame),
             against_stronger,
+            rng,
             rules,
         )
     }
 
-    /// The fame, record and death `side` brings. Returns the outcome and the fame change.
-    fn take_side(
+    /// The fame, record and death `side` brings: a fighter brought to 0 HP survives
+    /// with a chance of `InjuryRules::fatal_blow_survival`, and a severe wound, returned
+    /// with the outcome and the fame change, not yet taken.
+    fn take_side<R: Rng + ?Sized>(
         &mut self,
         side: Ending,
         against_stronger: bool,
+        rng: &mut R,
         rules: &FighterRules,
-    ) -> (FightOutcome, i32) {
+    ) -> Taken {
         let outcome = FightOutcome {
             result: side.result,
             against_stronger,
@@ -330,10 +336,24 @@ impl CareerFighter {
         let fame_change = outcome.fame_change(&rules.fame);
         self.fame = self.fame.changed_by(fame_change);
         self.record.add(outcome.result);
+        let mut wound = None;
         if side.died {
-            self.status = Status::Dead;
+            if rng.random_bool(rules.injury.fatal_blow_survival) {
+                wound = Some(fatal_blow_wound(rng, &rules.injury));
+            } else {
+                self.status = Status::Dead;
+            }
         }
-        (outcome, fame_change)
+        Taken {
+            outcome,
+            fame_change,
+            wound,
+        }
+    }
+
+    fn take_injury(&mut self, injury: Injury, rules: &FighterRules) {
+        self.injuries.push(injury);
+        self.morale = self.morale.after(MoraleEvent::Injury, &rules.morale);
     }
 
     /// A fight against `opponent` that the statistical model resolves instead of a
@@ -347,6 +367,27 @@ impl CareerFighter {
         data: &DesignData,
     ) -> [(FightOutcome, i32); 2] {
         let rules = &data.fighter;
+        let [mine, theirs] = self.modelled_sides(opponent, rng, data);
+        for (fighter, taken) in [(&mut *self, mine), (&mut *opponent, theirs)] {
+            if let Some(wound) = taken.wound {
+                fighter.take_injury(wound, rules);
+            }
+        }
+        [
+            (mine.outcome, mine.fame_change),
+            (theirs.outcome, theirs.fame_change),
+        ]
+    }
+
+    /// The fight against `opponent` as the statistical model resolves it, taken by both
+    /// (see `take_side`), this fighter's first.
+    fn modelled_sides<R: Rng + ?Sized>(
+        &mut self,
+        opponent: &mut Self,
+        rng: &mut R,
+        data: &DesignData,
+    ) -> [Taken; 2] {
+        let rules = &data.fighter;
         let origin = Vec2::new(0.0, 0.0);
         let [mine, theirs] = data.stat_model.resolve(
             &self.combat_fighter(FighterId(0), data, origin),
@@ -356,8 +397,8 @@ impl CareerFighter {
         let stronger = opponent.stronger_than(self, rules);
         let weaker = self.stronger_than(opponent, rules);
         [
-            self.take_side(mine, stronger, rules),
-            opponent.take_side(theirs, weaker, rules),
+            self.take_side(mine, stronger, rng, rules),
+            opponent.take_side(theirs, weaker, rng, rules),
         ]
     }
 
@@ -371,13 +412,12 @@ impl CareerFighter {
         rng: &mut R,
         data: &DesignData,
     ) -> FightResult {
-        let [(mine, my_fame), (theirs, their_fame)] =
-            self.modelled_fame_and_death(opponent, rng, data);
+        let [mine, theirs] = self.modelled_sides(opponent, rng, data);
         let rules = &data.fighter;
         let alone = Medicine::default();
-        self.after_fight(mine.result, my_fame, form, alone, rng, rules);
-        opponent.after_fight(theirs.result, their_fame, form, alone, rng, rules);
-        mine.result
+        self.after_fight(mine, form, alone, rng, rules);
+        opponent.after_fight(theirs, form, alone, rng, rules);
+        mine.outcome.result
     }
 
     /// The same as [`CareerFighter::modelled_fight`], but played as a real duel: what
@@ -410,10 +450,8 @@ impl CareerFighter {
         let stronger = opponent.stronger_than(self, rules);
         let weaker = self.stronger_than(opponent, rules);
         let summary_opponent = opponent.clone();
-        let (theirs, their_fame) =
-            opponent.take_fame_and_death(&arena, FighterId(1), weaker, rules);
-        let (outcome, fame_change) =
-            self.take_fame_and_death(&arena, FighterId(0), stronger, rules);
+        let theirs = opponent.take_fame_and_death(&arena, FighterId(1), weaker, rng, rules);
+        let mine = self.take_fame_and_death(&arena, FighterId(0), stronger, rng, rules);
         let died = self.status == Status::Dead;
         let summary = FightSummary {
             seed,
@@ -421,25 +459,24 @@ impl CareerFighter {
             report: Report::new(&arena),
             opponent: summary_opponent,
             against_stronger: stronger,
-            result: outcome.result,
+            result: mine.outcome.result,
             died,
-            fame_change,
+            fame_change: mine.fame_change,
             ticks: arena.tick,
         };
-        let (injury, spared) =
-            self.after_fight(outcome.result, fame_change, form, medicine, rng, rules);
+        let (injury, spared) = self.after_fight(mine, form, medicine, rng, rules);
         let alone = Medicine::default();
-        opponent.after_fight(theirs.result, their_fame, form, alone, rng, rules);
+        opponent.after_fight(theirs, form, alone, rng, rules);
         (summary, injury, spared)
     }
 
-    /// What a fight leaves a survivor: morale, a possible injury (returned, with
-    /// whether `medicine` kept it from leaving an after-effect), form (`form`'s cost),
-    /// illness worsening and progression.
+    /// What a fight `taken` leaves a survivor: morale, an injury (returned, with whether
+    /// `medicine` kept it from leaving an after-effect): the wound of a fatal blow
+    /// survived, else a possible one; form (`form`'s cost), illness worsening and
+    /// progression.
     fn after_fight<R: Rng + ?Sized>(
         &mut self,
-        result: FightResult,
-        fame_change: i32,
+        taken: Taken,
         form: FormEvent,
         medicine: Medicine,
         rng: &mut R,
@@ -448,7 +485,7 @@ impl CareerFighter {
         if self.status == Status::Dead {
             return (None, false);
         }
-        match result {
+        match taken.outcome.result {
             FightResult::Won => {
                 self.morale = self.morale.after(MoraleEvent::Victory, &rules.morale);
             }
@@ -457,19 +494,25 @@ impl CareerFighter {
             }
             FightResult::Unfinished => {}
         }
-        if let Ok(gained @ 1..) = u32::try_from(fame_change) {
+        if let Ok(gained @ 1..) = u32::try_from(taken.fame_change) {
             self.morale = self
                 .morale
                 .after(MoraleEvent::FameGained(gained), &rules.morale);
         }
-        // The risk follows the form the fighter went in with.
-        let rolled = roll_injury(rng, self.form, &rules.injury, &rules.form);
-        let spared_percent = medicine.after_effect_spared_percent;
-        let injury = rolled.map(|i| spare_after_effect(rng, i, spared_percent, &rules.injury));
-        let spared = rolled.is_some_and(|i| i.is_permanent()) && injury != rolled;
+        let (injury, spared) = if taken.wound.is_some() {
+            (taken.wound, false)
+        } else {
+            // The risk follows the form the fighter went in with.
+            let rolled = roll_injury(rng, self.form, &rules.injury, &rules.form);
+            let spared_percent = medicine.after_effect_spared_percent;
+            let injury = rolled.map(|i| spare_after_effect(rng, i, spared_percent, &rules.injury));
+            (
+                injury,
+                rolled.is_some_and(|i| i.is_permanent()) && injury != rolled,
+            )
+        };
         if let Some(injury) = injury {
-            self.injuries.push(injury);
-            self.morale = self.morale.after(MoraleEvent::Injury, &rules.morale);
+            self.take_injury(injury, rules);
         }
         self.form = self.form.after(form, &rules.form);
         self.illness = self
@@ -659,6 +702,15 @@ pub struct CareerRules {
     pub stats_spread_percent: u32,
     /// Chance, in percent, that a generated fighter is right-handed.
     pub right_handed_percent: u32,
+}
+
+/// What a fight brings a fighter before its after-effects (see `CareerFighter::take_side`).
+#[derive(Debug, Clone, Copy)]
+struct Taken {
+    outcome: FightOutcome,
+    fame_change: i32,
+    /// The severe wound of a fatal blow survived.
+    wound: Option<Injury>,
 }
 
 #[cfg(test)]
@@ -896,6 +948,39 @@ mod tests {
             );
             assert_eq!(f, before);
         }
+    }
+
+    #[test]
+    fn a_fatal_blow_kills_or_leaves_a_severe_wound() {
+        let mut data = data();
+        let fallen = Ending {
+            result: FightResult::Lost,
+            died: true,
+            spectacular_hits: 0,
+        };
+        let mut rng = ChaCha8Rng::seed_from_u64(1);
+        let rules = &mut data.fighter;
+        rules.injury.fatal_blow_survival = 0.0;
+        let mut dead = fighter(1);
+        dead.take_side(fallen, false, &mut rng, rules);
+        assert_eq!(dead.status, Status::Dead);
+        rules.injury.fatal_blow_survival = 1.0;
+        let mut survivor = fighter(1);
+        let taken = survivor.take_side(fallen, false, &mut rng, rules);
+        assert_eq!(survivor.status, Status::Active);
+        let wound = taken.wound.unwrap();
+        assert_eq!(wound.severity, Severity::Severe);
+        // The wound replaces the usual injury draw, and is the one reported.
+        let (injury, _) = survivor.after_fight(
+            taken,
+            FormEvent::Fight,
+            Medicine::default(),
+            &mut rng,
+            rules,
+        );
+        assert_eq!(injury, Some(wound));
+        assert_eq!(survivor.injuries, [wound]);
+        assert_eq!(survivor.record.losses, 1);
     }
 
     #[test]

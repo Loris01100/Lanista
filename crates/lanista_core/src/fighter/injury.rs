@@ -82,21 +82,7 @@ pub fn roll_injury<R: Rng + ?Sized>(
     if !rng.random_bool(form.risk(rules.chance_per_fight, form_rules)) {
         return None;
     }
-    let side = if rng.random_bool(0.5) {
-        Side::Left
-    } else {
-        Side::Right
-    };
-    let weights = &rules.location_weights;
-    let location = pick(
-        rng,
-        &[
-            (weights.head, Location::Head),
-            (weights.body, Location::Body),
-            (weights.arm, Location::Arm(side)),
-            (weights.leg, Location::Leg(side)),
-        ],
-    );
+    let location = roll_location(rng, rules);
     let weights = &rules.severity_weights;
     let severity = pick(
         rng,
@@ -118,6 +104,36 @@ pub fn roll_injury<R: Rng + ?Sized>(
         severity,
         weeks_left: rng.random_range(weeks.0..=weeks.1),
     })
+}
+
+/// The severe injury of a fighter who survives a fatal blow, at a drawn location.
+pub fn fatal_blow_wound<R: Rng + ?Sized>(rng: &mut R, rules: &InjuryRules) -> Injury {
+    let location = roll_location(rng, rules);
+    let (low, high) = rules.healing_weeks.severe;
+    Injury {
+        location,
+        severity: Severity::Severe,
+        weeks_left: rng.random_range(low..=high),
+    }
+}
+
+/// Where an injury lands, by `rules.location_weights`.
+fn roll_location<R: Rng + ?Sized>(rng: &mut R, rules: &InjuryRules) -> Location {
+    let side = if rng.random_bool(0.5) {
+        Side::Left
+    } else {
+        Side::Right
+    };
+    let weights = &rules.location_weights;
+    pick(
+        rng,
+        &[
+            (weights.head, Location::Head),
+            (weights.body, Location::Body),
+            (weights.arm, Location::Arm(side)),
+            (weights.leg, Location::Leg(side)),
+        ],
+    )
 }
 
 /// `injury` as a doctor leaves it: one that would leave an after-effect is only severe
@@ -186,6 +202,8 @@ pub struct InjuryRules {
     pub permanent: LocationMaluses,
     /// Highest percentage of a stat all injuries together can take off.
     pub max_malus: u32,
+    /// Chance that a fighter brought to 0 HP survives, with a severe injury.
+    pub fatal_blow_survival: f64,
 }
 
 /// Relative chances of each location; the side of an arm or leg is drawn 50/50.
@@ -278,6 +296,7 @@ mod tests {
                 ..maluses
             },
             max_malus: 80,
+            fatal_blow_survival: 0.5,
         }
     }
 

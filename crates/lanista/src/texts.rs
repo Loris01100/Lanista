@@ -428,8 +428,11 @@ pub fn illness_text(illness: Illness) -> String {
 }
 
 pub fn fight_text(fight: &FightSummary, data: &DesignData) -> String {
+    // Brought to 0 HP, it may still have survived the fatal blow.
+    let fell = fight.report.fighters.first().is_some_and(|f| f.hp == 0);
     let result = match (fight.result, fight.died) {
         (_, true) => "mort au combat",
+        (FightResult::Lost, false) if fell => "laissé pour mort, survit grièvement blessé",
         (FightResult::Won, _) => "victoire",
         (FightResult::Lost, _) => "défaite",
         (FightResult::GaveUp, _) => "abandon",

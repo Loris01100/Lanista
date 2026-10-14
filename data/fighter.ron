@@ -39,6 +39,8 @@
         ),
         // Highest percentage of a stat all injuries together can take off.
         max_malus: 80,
+        // Chance that a fighter brought to 0 HP survives, with a severe injury.
+        fatal_blow_survival: 0.5,
     ),
     illness: (
         // Chance of falling ill per week at form 100, raised by the risk formula.
@@ -67,7 +69,7 @@
         // Surrender threshold, as a percentage of max HP, from determination 0 to 100:
         // a fearful fighter gives up early, a fully determined one fights to the death.
         surrender_percent_least_determined: 50,
-        surrender_percent_most_determined: 0,
+        surrender_percent_most_determined: 10,
     ),
     morale: (
         // Morale goes from 0 to 100, neutral at 50.

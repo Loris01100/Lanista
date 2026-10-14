@@ -348,12 +348,14 @@ mod tests {
     }
 
     #[test]
-    fn the_determined_die_more_than_they_give_up() {
+    fn the_determined_fall_far_more_often_than_the_timid() {
         let model = data().stat_model;
         let f = fighter(&data(), 0, STATS);
         let (bold, timid) = (determined(f.clone(), 100), determined(f, 0));
-        assert!(model.death_chance(&bold) > 0.5);
+        // The most determined still give up, at 10 % of their HP.
+        assert!(model.death_chance(&bold) > 0.3);
         assert!(model.death_chance(&timid) < 0.05);
+        assert!(model.death_chance(&bold) > 10.0 * model.death_chance(&timid));
     }
 
     #[test]
