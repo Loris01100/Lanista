@@ -7,7 +7,7 @@ use std::path::PathBuf;
 use std::rc::Rc;
 
 use lanista_core::calendar::SeasonPhase;
-use lanista_core::colosseum::{ColosseumId, Contender};
+use lanista_core::colosseum::{Challenge, ColosseumId, Contender};
 use lanista_core::combat::Arena;
 use lanista_core::design_data::DesignData;
 use lanista_core::economy::Flow;
@@ -25,9 +25,9 @@ use crate::Action;
 use crate::combat_screen::CombatScreen;
 use crate::saves;
 use crate::texts::{
-    STAT_NAMES, activity_name, arena_name, change, class_name, colosseum_name, condition_text,
-    contender_name, fight_text, fighter_name, illness_text, injury_text, money_line,
-    title_news_text, week_lines,
+    STAT_NAMES, activity_name, arena_name, challenger_text, change, class_name, colosseum_name,
+    condition_text, contender_name, fight_text, fighter_name, illness_text, injury_text,
+    money_line, title_news_text, week_lines,
 };
 
 /// Seed of the standard duel offered from the club.
@@ -186,8 +186,12 @@ impl ClubScreen {
             }
             overview.push(line);
             self.histories[i].insert(0, (week, lines));
-            if let (Some(fight), Activity::Fight(colosseum) | Activity::TitleFight(colosseum)) =
-                (report.fight, report.plan.activity)
+            if let (
+                Some(fight),
+                Activity::Fight(colosseum)
+                | Activity::TitleFight(colosseum)
+                | Activity::Challenge(colosseum, _),
+            ) = (report.fight, report.plan.activity)
             {
                 let money = summary
                     .ledger
@@ -213,6 +217,18 @@ impl ClubScreen {
         }
         overview.extend(summary.titles.iter().map(|&(c, news)| {
             title_news_text(c, news, &self.state.colosseums, &self.state.fighters, data)
+        }));
+        let refusal = &data.world.challenges;
+        overview.extend(summary.refusals.iter().map(|&ch| {
+            let club = &self.state.fighters;
+            format!(
+                "{} refuse le défi de {} sans combattre : renommée -{}, Elo -{}",
+                club.get(ch.fighter)
+                    .map_or_else(|| "?".into(), |f| fighter_name(ch.fighter, f, data)),
+                challenger_text(ch, &self.state.colosseums, club, data),
+                refusal.refusal_fame,
+                refusal.refusal_elo
+            )
         }));
         self.last_week = Some((week, overview));
         self.to_watch = self
@@ -362,26 +378,56 @@ impl ClubScreen {
                 ));
             }
         }
+        let refusal = &self.data.world.challenges;
+        for &ch in &self.state.challenges {
+            if let Some(f) = self.state.fighters.get(ch.fighter) {
+                alerts.push(format!(
+                    "{} : défi de {} (refus sans combattre : renommée -{}, Elo -{})",
+                    fighter_name(ch.fighter, f, &self.data),
+                    challenger_text(ch, &self.state.colosseums, &self.state.fighters, &self.data),
+                    refusal.refusal_fame,
+                    refusal.refusal_elo
+                ));
+            }
+        }
         if self.state.active_fighters() == 0 {
             alerts.push("Plus aucun combattant : recrutez un free agent".into());
         }
         alerts
     }
 
-    /// The colosseums whose title the club's fighter `i` may fight for this week.
-    fn title_fights(&self, i: usize) -> Vec<ColosseumId> {
-        (0..self.data.world.colosseums.len())
+    /// The title fights the club's fighter `i` may have this week and the challenges
+    /// it received, with their names.
+    fn special_fights(&self, i: usize) -> Vec<(Activity, String)> {
+        let data = &self.data;
+        let titles = (0..data.world.colosseums.len())
             .filter_map(|c| u32::try_from(c).ok().map(ColosseumId))
-            .filter(|&id| self.state.title_opponent(i, id, &self.data).is_some())
-            .collect()
+            .filter(|&id| self.state.title_opponent(i, id, data).is_some())
+            .map(|id| {
+                let activity = Activity::TitleFight(id);
+                (activity, activity_name(activity, data))
+            });
+        let challenges = self
+            .state
+            .challenges
+            .iter()
+            .filter(|ch| ch.fighter == i)
+            .map(|&ch| {
+                let name = challenger_text(ch, &self.state.colosseums, &self.state.fighters, data);
+                (
+                    Activity::Challenge(ch.colosseum, ch.resident),
+                    format!("Défi de {name}"),
+                )
+            });
+        titles.chain(challenges).collect()
     }
 
     fn roster(&mut self, ui: &mut egui::Ui) {
         ui.heading("Combattants");
         let data = &self.data;
         let money = self.state.money;
-        let titles: Vec<_> = (0..self.state.fighters.len())
-            .map(|i| self.title_fights(i))
+        let special: Vec<_> = (0..self.state.fighters.len())
+            .map(|i| self.special_fights(i))
             .collect();
         egui::ScrollArea::vertical().show(ui, |ui| {
             egui::Grid::new("roster").striped(true).show(ui, |ui| {
@@ -413,7 +459,7 @@ impl ClubScreen {
                     ui.label(f.fame.value().to_string());
                     ui.label(condition_text(f));
                     if f.status == Status::Active {
-                        ui.horizontal(|ui| plan_editor(ui, plan, f, &titles[i], money, data));
+                        ui.horizontal(|ui| plan_editor(ui, plan, f, &special[i], money, data));
                     } else {
                         ui.label("");
                     }
@@ -429,7 +475,7 @@ impl ClubScreen {
             self.view = View::Roster;
             return;
         };
-        let titles = self.title_fights(index);
+        let special = self.special_fights(index);
         if ui.button("Retour à la liste").clicked() {
             self.view = View::Roster;
         }
@@ -440,7 +486,8 @@ impl ClubScreen {
             if f.status == Status::Active
                 && let Some(plan) = self.decisions.plans.get_mut(index)
             {
-                plan_editor(ui, plan, f, &titles, self.state.money, data);
+                plan_editor(ui, plan, f, &special, self.state.money, data);
+                challenge_picker(ui, plan, index, &self.state, data);
             } else {
                 ui.label("Carrière terminée");
             }
@@ -639,13 +686,13 @@ fn new_seed() -> u64 {
         .map_or(0, |d| d.as_secs())
 }
 
-/// A fighter's week, in one line: rest, training, a fight or a title fight (in
-/// `titles`), and care.
+/// A fighter's week, in one line: rest, training, a fight, a title fight or a received
+/// challenge (in `special`, with their names), and care.
 fn plan_editor(
     ui: &mut egui::Ui,
     plan: &mut WeekPlan,
     fighter: &CareerFighter,
-    titles: &[ColosseumId],
+    special: &[(Activity, String)],
     money: i64,
     data: &DesignData,
 ) {
@@ -668,14 +715,14 @@ fn plan_editor(
             ui.selectable_value(&mut plan.activity, activity, name);
         });
     }
-    if let Activity::TitleFight(id) = plan.activity
-        && !titles.contains(&id)
+    // A challenge the fighter sent is chosen in its sheet.
+    if matches!(plan.activity, Activity::TitleFight(_))
+        && !special.iter().any(|(a, _)| *a == plan.activity)
     {
         plan.activity = Activity::Rest;
     }
-    for &id in titles {
-        let activity = Activity::TitleFight(id);
-        ui.selectable_value(&mut plan.activity, activity, activity_name(activity, data));
+    for (activity, name) in special {
+        ui.selectable_value(&mut plan.activity, *activity, name);
     }
     let cost = fighter.care_cost(&data.fighter);
     if cost == 0 {
@@ -688,9 +735,71 @@ fn plan_editor(
         ui.checkbox(&mut plan.care, format!("Soigner ({cost})"));
     }
     let ill = fighter.illness.is_some_and(|i| !i.fight_advised());
-    if ill && matches!(plan.activity, Activity::Fight(_) | Activity::TitleFight(_)) {
+    if ill
+        && matches!(
+            plan.activity,
+            Activity::Fight(_) | Activity::TitleFight(_) | Activity::Challenge(..)
+        )
+    {
         ui.colored_label(egui::Color32::LIGHT_RED, "Combat déconseillé");
     }
+}
+
+/// The challenges the club's fighter `i` may send, one list per colosseum: the
+/// residents, best ranked first, those who would refuse greyed.
+fn challenge_picker(
+    ui: &mut egui::Ui,
+    plan: &mut WeekPlan,
+    i: usize,
+    state: &GameState,
+    data: &DesignData,
+) {
+    ui.horizontal(|ui| {
+        ui.label("Défier :");
+        for (c, colosseum) in (0..).zip(&state.colosseums) {
+            let id = ColosseumId(c);
+            let fee = data.world.colosseum(id).map_or(0, |r| r.purses.entry_fee);
+            let chosen = match plan.activity {
+                Activity::Challenge(at, r) if at == id => challenger_text(
+                    Challenge {
+                        fighter: i,
+                        colosseum: id,
+                        resident: r,
+                    },
+                    &state.colosseums,
+                    &state.fighters,
+                    data,
+                ),
+                _ => colosseum_name(id, data).to_string(),
+            };
+            ui.add_enabled_ui(i64::from(fee) <= state.money, |ui| {
+                egui::ComboBox::from_id_salt(("challenge", c))
+                    .selected_text(chosen)
+                    .show_ui(ui, |ui| {
+                        for rating in &colosseum.ranking {
+                            let Contender::Resident(r) = rating.contender else {
+                                continue;
+                            };
+                            let name =
+                                contender_name(rating.contender, colosseum, &state.fighters, data);
+                            let accepts = state.may_challenge(i, id, r, data);
+                            let text = if accepts {
+                                format!("{name}, Elo {}", rating.elo)
+                            } else {
+                                format!("{name}, Elo {} : refuse", rating.elo)
+                            };
+                            ui.add_enabled_ui(accepts, |ui| {
+                                ui.selectable_value(
+                                    &mut plan.activity,
+                                    Activity::Challenge(id, r),
+                                    text,
+                                );
+                            });
+                        }
+                    });
+            });
+        }
+    });
 }
 
 /// A fighter's sheet: identity, gauges, stats, personality and health.
@@ -822,8 +931,25 @@ mod tests {
         assert_eq!(report.fight.report, Report::new(&fight));
         // A win in Capua: receipts and the winner's prize.
         assert_eq!((report.money, report.form), (70, (100, 80)));
-        // Week 2 is training: nothing to watch, nothing to sum up.
-        assert_eq!(screen.decisions.plans[0].activity, Activity::Train);
+        // Week 2 would be training, but resident n° 1 challenges it and the suggestion
+        // accepts: a fight against that resident.
+        let resident = screen.state.colosseums[0].residents[0].clone();
+        assert_eq!(
+            screen.decisions.plans[0].activity,
+            Activity::Challenge(ColosseumId(0), 0)
+        );
+        assert!(
+            screen
+                .alerts()
+                .iter()
+                .any(|a| a.starts_with("Mirmillon n° 1 : défi de Résident n° 1 (Augure) à Capoue")),
+            "{:?}",
+            screen.alerts()
+        );
+        screen.next_week();
+        assert_eq!(screen.fights[0].fight.opponent, resident);
+        // A week of rest: nothing to watch, nothing to sum up.
+        screen.decisions.plans[0].activity = Activity::Rest;
         screen.next_week();
         assert!(screen.to_watch.is_empty() && screen.fights.is_empty());
     }
@@ -847,8 +973,11 @@ mod tests {
         );
         let (week, menu) = screen.last_week.as_ref().unwrap();
         assert_eq!(*week, 2);
-        assert_eq!(menu[0], "Argent 545 (-15) : entraînement -5, entretien -10");
-        assert_eq!(menu[1], "Mirmillon n° 1 : Entraînement");
+        assert_eq!(menu[0], "Argent 581 (+21) : recettes +31, entretien -10");
+        assert_eq!(
+            menu[1],
+            "Mirmillon n° 1 : Défi à Capoue, Contre un Augure, plus fort : abandon, renommée -7"
+        );
     }
 
     #[test]

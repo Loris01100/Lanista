@@ -9,11 +9,11 @@ use crate::state::GameState;
 
 /// Version written in new saves. Raise it with any change to the saved types,
 /// and add the migration from the previous version to [`MIGRATIONS`].
-pub const VERSION: u64 = 3;
+pub const VERSION: u64 = 4;
 
 /// `MIGRATIONS[i]` turns a version `i + 1` save into a version `i + 2` one,
 /// working on the JSON so the old types need not be kept.
-const MIGRATIONS: [fn(&mut Value); 2] = [no_colosseums, title_since];
+const MIGRATIONS: [fn(&mut Value); 3] = [no_colosseums, title_since, no_challenges];
 const _: () = assert!(MIGRATIONS.len() as u64 == VERSION - 1);
 
 /// Version 2 adds the colosseums; [`from_json`] opens them.
@@ -30,6 +30,11 @@ fn title_since(save: &mut Value) {
             colosseum["title_since"] = week.clone();
         }
     }
+}
+
+/// Version 4 adds the residents' challenges, none pending.
+fn no_challenges(save: &mut Value) {
+    save["state"]["challenges"] = Value::Array(Vec::new());
 }
 
 #[derive(Serialize)]
@@ -151,12 +156,12 @@ mod tests {
     fn unknown_versions_are_refused() {
         let data = data();
         let save = to_json(&GameState::new(7, &data));
-        let newer = save.replacen("\"version\": 3", "\"version\": 4", 1);
+        let newer = save.replacen("\"version\": 4", "\"version\": 5", 1);
         assert!(matches!(
             from_json(&newer, &data),
-            Err(SaveError::Version(Some(4)))
+            Err(SaveError::Version(Some(5)))
         ));
-        let none = save.replacen("\"version\": 3", "\"versio\": 3", 1);
+        let none = save.replacen("\"version\": 4", "\"versio\": 4", 1);
         assert!(matches!(
             from_json(&none, &data),
             Err(SaveError::Version(None))

@@ -9,6 +9,17 @@
     // challenger from the first `challengers` of the ranking.
     title_defense_weeks: 4,
     challengers: 5,
+    challenges: (
+        // Each week, the chance a club's fighter fit to fight is challenged in each
+        // colosseum where it is ranked, by the resident closest in Elo.
+        received_percent: 25,
+        // A resident accepts a challenge if Elo gives it at least this chance of winning.
+        accept_percent: 30,
+        // Lost by a fighter who refuses a challenge and does not fight that week; the
+        // Elo in the challenger's colosseum.
+        refusal_fame: 2,
+        refusal_elo: 8,
+    ),
     // At least one must be free to enter: the safety net of a club without money.
     colosseums: [
         (

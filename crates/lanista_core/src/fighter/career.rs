@@ -171,7 +171,7 @@ impl CareerFighter {
                 self.form = self.form.after(FormEvent::Training, &rules.form);
                 self.progress(ProgressEvent::Training, rng, rules);
             }
-            Activity::Fight(_) | Activity::TitleFight(_) => {
+            Activity::Fight(_) | Activity::TitleFight(_) | Activity::Challenge(..) => {
                 let form = if matches!(plan.activity, Activity::TitleFight(_)) {
                     FormEvent::TitleDefense
                 } else {
@@ -400,6 +400,9 @@ pub enum Activity {
     /// A duel for this colosseum's title, as its champion or as a challenger from
     /// the top of its ranking; costs the form of a title defense.
     TitleFight(ColosseumId),
+    /// A duel in this colosseum against the resident at this index, who challenged the
+    /// fighter or accepts its challenge.
+    Challenge(ColosseumId, usize),
 }
 
 /// Below this form, `suggested_plan` rests.

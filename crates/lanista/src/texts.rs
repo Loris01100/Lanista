@@ -2,7 +2,7 @@
 //! weeks, money and colosseums.
 
 use lanista_core::colosseum::{
-    ArenaKind, Colosseum, ColosseumId, Contender, TitleNews, title_kept,
+    ArenaKind, Challenge, Colosseum, ColosseumId, Contender, TitleNews, title_kept,
 };
 use lanista_core::design_data::DesignData;
 use lanista_core::economy::{Flow, Transaction};
@@ -41,7 +41,25 @@ pub fn activity_name(activity: Activity, data: &DesignData) -> String {
         Activity::Train => "Entraînement".into(),
         Activity::Fight(id) => format!("Combat à {}", colosseum_name(id, data)),
         Activity::TitleFight(id) => format!("Combat pour le titre à {}", colosseum_name(id, data)),
+        Activity::Challenge(id, _) => format!("Défi à {}", colosseum_name(id, data)),
     }
+}
+
+/// "Résident n° 3 (Augure) à Capoue": who sent or would receive the challenge, and where.
+pub fn challenger_text(
+    challenge: Challenge,
+    colosseums: &[Colosseum],
+    club: &[CareerFighter],
+    data: &DesignData,
+) -> String {
+    let resident = usize::try_from(challenge.colosseum.0)
+        .ok()
+        .and_then(|c| colosseums.get(c))
+        .map_or_else(
+            || "?".into(),
+            |c| contender_name(Contender::Resident(challenge.resident), c, club, data),
+        );
+    format!("{resident} à {}", colosseum_name(challenge.colosseum, data))
 }
 
 /// What happened to the title of the colosseum at index `c`, in one line.

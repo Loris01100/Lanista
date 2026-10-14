@@ -136,6 +136,11 @@ fn week_text(
             "title fight in {}",
             data.world.colosseum(id).map_or("?", |c| c.name.as_str())
         ),
+        Activity::Challenge(id, resident) => format!(
+            "challenge to resident {} in {}",
+            resident + 1,
+            data.world.colosseum(id).map_or("?", |c| c.name.as_str())
+        ),
     };
     let _ = writeln!(text, "week {week} (age {}): {activity}", before.age);
     if let Some(fight) = &report.fight {

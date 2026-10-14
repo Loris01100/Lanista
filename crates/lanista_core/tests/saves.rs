@@ -70,9 +70,9 @@ fn the_current_version_writes_its_kept_save_unchanged() {
     assert_eq!(to_json(&from_json(&text, &data).unwrap()), text.trim_end());
 }
 
-/// Writes the kept save of the current version: seed 7 with a free agent signed
-/// in week 3, played past a birthday until a fighter is both hurt and ill, so that every
-/// saved field has a value.
+/// Writes the kept save of the current version: seed 7 signing free agents from week
+/// 3, played past a birthday until a fighter is both hurt and ill and a challenge is
+/// pending, so that every saved field has a value.
 #[test]
 #[ignore = "run once when `save::VERSION` goes up"]
 fn keep_a_save_of_the_current_version() {
@@ -90,9 +90,13 @@ fn keep_a_save_of_the_current_version() {
             .fighters
             .iter()
             .any(|f| !f.injuries.is_empty() && f.illness.is_some())
+        || state.challenges.is_empty()
     {
-        assert!(state.week < 1000, "no fighter both hurt and ill");
-        next_week(&mut state, &Decisions::default(), &data);
+        assert!(
+            state.week < 1000,
+            "no fighter both hurt and ill with a challenge pending"
+        );
+        next_week(&mut state, &hire, &data);
     }
     std::fs::create_dir_all(saves()).unwrap();
     std::fs::write(path, to_json(&state)).unwrap();

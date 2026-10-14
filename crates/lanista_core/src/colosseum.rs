@@ -26,6 +26,7 @@ pub struct WorldRules {
     pub title_defense_weeks: u32,
     /// How many of the first in a ranking may fight for the title.
     pub challengers: u32,
+    pub challenges: ChallengeRules,
     /// `ColosseumId(i)` is the colosseum at index `i`.
     pub colosseums: Vec<ColosseumData>,
 }
@@ -35,6 +36,21 @@ impl WorldRules {
     pub fn colosseum(&self, id: ColosseumId) -> Option<&ColosseumData> {
         self.colosseums.get(usize::try_from(id.0).ok()?)
     }
+}
+
+/// Challenges between the club's fighters and the residents.
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct ChallengeRules {
+    /// Each week, the chance a club's fighter fit to fight gets a challenge in each
+    /// colosseum where it is ranked, from the resident closest in Elo.
+    pub received_percent: u32,
+    /// A resident accepts a challenge if Elo gives it at least this chance of winning.
+    pub accept_percent: u32,
+    /// What a fighter who refuses a challenge and does not fight that week loses: fame,
+    /// and Elo in the challenger's colosseum.
+    pub refusal_fame: u32,
+    pub refusal_elo: u32,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
@@ -63,8 +79,17 @@ pub enum ArenaKind {
 }
 
 /// Index of a colosseum in `WorldRules::colosseums` and `GameState::colosseums`.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
 pub struct ColosseumId(pub u32);
+
+/// A resident's challenge to a club's fighter, to accept or refuse this week.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub struct Challenge {
+    /// The club's fighter at this index.
+    pub fighter: usize,
+    pub colosseum: ColosseumId,
+    pub resident: usize,
+}
 
 /// A fighter with an Elo in a colosseum.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -173,7 +198,7 @@ impl Colosseum {
     /// champion, the best-ranked resident; from the first `challengers` of the ranking,
     /// a resident champion. `None` if it may not fight for the title.
     // ponytail: a resident champion only meets residents in its own defenses; club
-    // fighters ask for their title fight, until challenges.
+    // fighters ask for their title fight.
     #[must_use]
     pub fn title_opponent(
         &self,
@@ -193,6 +218,40 @@ impl Colosseum {
             .take(top)
             .any(|r| r.contender == me)
             .then_some(champion)
+    }
+
+    /// Whether `resident` accepts the challenge of the club's fighter `i`: Elo gives it
+    /// at least `accept_percent` chances of winning.
+    #[must_use]
+    pub fn accepts_challenge(&self, resident: usize, i: usize, rules: &WorldRules) -> bool {
+        let theirs = self.elo(Contender::Resident(resident), rules);
+        let mine = self.elo(Contender::Club(i), rules);
+        resident < self.residents.len()
+            && expected(theirs, mine) * 100.0 >= f64::from(rules.challenges.accept_percent)
+    }
+
+    /// The resident closest in Elo to the club's fighter `i`, who challenges it; `None`
+    /// if it has never fought here.
+    #[must_use]
+    pub fn challenger(&self, i: usize) -> Option<usize> {
+        let mine = self
+            .ranking
+            .iter()
+            .find(|r| r.contender == Contender::Club(i))?;
+        self.ranking
+            .iter()
+            .filter_map(|r| match r.contender {
+                Contender::Resident(j) => Some((j, r.elo.abs_diff(mine.elo))),
+                Contender::Club(_) => None,
+            })
+            .min_by_key(|&(_, gap)| gap)
+            .map(|(j, _)| j)
+    }
+
+    /// Takes `points` of Elo from `contender`, a fighter who refused a challenge.
+    pub fn lose_elo(&mut self, contender: Contender, points: u32, rules: &WorldRules) {
+        self.add_elo(contender, -i32::try_from(points).unwrap_or(i32::MAX), rules);
+        self.ranking.sort_by_key(|r| Reverse(r.elo));
     }
 
     /// The best-ranked resident other than `except`.
@@ -429,7 +488,7 @@ fn rounded(points: f64) -> i32 {
 }
 
 /// Picks the resident a club's fighter meets.
-// ponytail: anyone at random; matchmaking by Elo comes with challenges.
+// ponytail: anyone at random; a chosen opponent is a challenge.
 pub fn pick_opponent<R: Rng + ?Sized>(rng: &mut R, colosseum: &Colosseum) -> Option<usize> {
     (!colosseum.residents.is_empty()).then(|| rng.random_range(0..colosseum.residents.len()))
 }
@@ -708,6 +767,29 @@ mod tests {
             }]
         );
         assert_eq!((rome.champion, rome.title_since), (to, deadline));
+    }
+
+    #[test]
+    fn the_closest_resident_challenges_and_only_those_with_a_chance_accept() {
+        let data = data();
+        let rules = &data.world;
+        let mut rome = rome(&data);
+        // Never fought here: no challenge, and everyone accepts the newcomer's.
+        assert_eq!(rome.challenger(0), None);
+        assert!(rome.accepts_challenge(0, 0, rules));
+        assert!(!rome.accepts_challenge(99, 0, rules));
+        rome.add_elo(Contender::Club(0), 100, rules);
+        rome.add_elo(Contender::Resident(3), 90, rules);
+        rome.ranking.sort_by_key(|r| Reverse(r.elo));
+        assert_eq!(rome.challenger(0), Some(3));
+        // 100 points behind still leaves a resident 36 % of chances.
+        assert!(rome.accepts_challenge(0, 0, rules));
+        rome.add_elo(Contender::Club(0), 200, rules);
+        assert!(!rome.accepts_challenge(0, 0, rules));
+        assert!(!rome.accepts_challenge(3, 0, rules));
+        rome.lose_elo(Contender::Club(0), 8, rules);
+        assert_eq!(rome.elo(Contender::Club(0), rules), 1292);
+        assert_eq!(rome.ranking[0].contender, Contender::Club(0));
     }
 
     #[test]
