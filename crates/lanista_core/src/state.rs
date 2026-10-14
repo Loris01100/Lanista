@@ -671,9 +671,9 @@ fn free_agent_weeks(state: &mut GameState, data: &DesignData) {
 
 /// The rival clubs' market. At the start of the off-season, each releases its
 /// fighters of `release_age` and more worth less than its average fighter, and the
-/// rookies arrive. Each club below `roster.wanted` fighters signs the most valuable
-/// free agents; then each club with a place, keeping its `care_reserve`, offers its
-/// `buy_percent` of their value for the player's listed fighters.
+/// rookies arrive. Each club below `roster.wanted` fighters recruits (see
+/// `rival_signings`); then each club with a place, keeping its `care_reserve`, offers
+/// its `buy_percent` of their value for the player's listed fighters.
 fn rival_market(state: &mut GameState, data: &DesignData) {
     let market = &data.economy.market;
     if off_season_starts(state, data) {
@@ -701,14 +701,7 @@ fn rival_market(state: &mut GameState, data: &DesignData) {
             state.free_agents.push(rookie);
         }
     }
-    let wanted = usize::try_from(data.world.roster.wanted).unwrap_or(0);
-    for rival in &mut state.rivals {
-        while rival.active() < wanted
-            && let Some(best) = most_valuable(&state.free_agents, data)
-        {
-            rival.fighters.push(state.free_agents.remove(best));
-        }
-    }
+    rival_signings(state, data);
     state.sale_offers.clear();
     for &i in &state.transfer_list {
         let Some(fighter) = state.fighters.get(i).filter(|f| f.status == Status::Active) else {
@@ -730,6 +723,84 @@ fn rival_market(state: &mut GameState, data: &DesignData) {
             }
         }
     }
+}
+
+/// Each rival club below `roster.wanted` fighters in activity recruits until it has
+/// them: the most valuable free agent if worth at least its weakest fighter; if not, it
+/// first tries, once a week, to buy the most valuable fighter of another club worth
+/// that much that it can pay at the seller's `sell_percent` keeping its own
+/// `care_reserve`, if the fighter agrees (`market::refuses_to_join`, against the
+/// buyer's best fame); failing that, it signs the free agent anyway.
+fn rival_signings(state: &mut GameState, data: &DesignData) {
+    let market = &data.economy.market;
+    let wanted = usize::try_from(data.world.roster.wanted).unwrap_or(0);
+    for buyer in 0..state.rivals.len() {
+        let mut tried = false;
+        while state.rivals[buyer].active() < wanted {
+            let active = || {
+                state.rivals[buyer]
+                    .fighters
+                    .iter()
+                    .filter(|f| f.status == Status::Active)
+            };
+            let weakest = active().map(|f| value(f, market)).min().unwrap_or(0);
+            let agent = most_valuable(&state.free_agents, data);
+            let suits = agent.is_some_and(|a| value(&state.free_agents[a], market) >= weakest);
+            if !suits && !tried {
+                tried = true;
+                if buy_from_rival(state, buyer, weakest, data) {
+                    continue;
+                }
+            }
+            let Some(agent) = agent else { break };
+            let signed = state.free_agents.remove(agent);
+            state.rivals[buyer].fighters.push(signed);
+        }
+    }
+}
+
+/// Rival club `buyer` buys the most valuable fighter of another club worth at least
+/// `floor` that it can pay, if the fighter agrees; returns whether it did.
+fn buy_from_rival(state: &mut GameState, buyer: usize, floor: u32, data: &DesignData) -> bool {
+    let market = &data.economy.market;
+    let Some(reserve) = data.world.profile(buyer).map(|p| i64::from(p.care_reserve)) else {
+        return false;
+    };
+    let money = state.rivals[buyer].money;
+    let best = state
+        .rivals
+        .iter()
+        .enumerate()
+        .filter(|&(club, _)| club != buyer)
+        .flat_map(|(club, rival)| {
+            (0..rival.fighters.len()).map(move |fighter| RivalId { club, fighter })
+        })
+        .filter_map(|id| {
+            let worth = value(state.rival_fighter(id)?, market);
+            let price = state.asking_price(id, data)?;
+            (worth >= floor && money - i64::from(price) >= reserve).then_some((worth, id, price))
+        })
+        .max_by_key(|&(worth, id, _)| (worth, Reverse(id)));
+    let Some((_, id, price)) = best else {
+        return false;
+    };
+    let fame = state.rivals[buyer]
+        .fighters
+        .iter()
+        .filter(|f| f.status == Status::Active)
+        .map(|f| f.fame)
+        .max_by_key(|f| f.value())
+        .unwrap_or_default();
+    let fighter = &state.rivals[id.club].fighters[id.fighter];
+    if market::refuses_to_join(&mut state.rng, fighter, fame, market) {
+        return false;
+    }
+    let bought = fighter.clone();
+    state.rivals[id.club].fighters[id.fighter].status = Status::Sold;
+    state.rivals[id.club].money += i64::from(price);
+    state.rivals[buyer].money -= i64::from(price);
+    state.rivals[buyer].fighters.push(bought);
+    true
 }
 
 /// Index of the most valuable of `fighters`, the first of equals.
@@ -1855,6 +1926,67 @@ mod tests {
             .count();
         assert!(rookies >= 8, "{rookies} rookies");
         assert!(state.free_agents.len() <= usize::try_from(market.max_free_agents).unwrap());
+    }
+
+    #[test]
+    fn a_rival_club_buys_from_another_when_no_free_agent_suits_it() {
+        let data = data();
+        let market = &data.economy.market;
+        let mut state = GameState::new(7, &data);
+        // Only weak free agents, and the cautious club rich and one fighter short.
+        for agent in &mut state.free_agents {
+            agent.stats = agent.stats.map(|_| 1);
+        }
+        state.rivals[0].money = 100_000;
+        state.rivals[0].fighters[0].status = Status::Dead;
+        let mut bought = None;
+        for _ in 0..20 {
+            let before = state.clone();
+            rival_signings(&mut state, &data);
+            let newcomer = state.rivals[0].fighters.last().unwrap().potential;
+            let from = (1..state.rivals.len())
+                .flat_map(|club| {
+                    let fighters = &state.rivals[club].fighters;
+                    (0..fighters.len()).map(move |fighter| RivalId { club, fighter })
+                })
+                .find(|&id| {
+                    let f = state.rival_fighter(id).unwrap();
+                    f.status == Status::Sold && f.potential == newcomer
+                });
+            if let Some(id) = from {
+                bought = Some((before, id));
+                break;
+            }
+            // The fighter refused: again, with other draws.
+            state = before;
+            state.rng = ChaCha8Rng::seed_from_u64(state.rng.random());
+        }
+        let (before, id) = bought.expect("a purchase in 20 tries");
+        let price = before.asking_price(id, &data).unwrap();
+        let fighter = before.rival_fighter(id).unwrap();
+        // The most valuable of the other clubs, paid at its club's price.
+        let best = (1..before.rivals.len())
+            .flat_map(|club| before.rivals[club].fighters.iter())
+            .filter(|f| f.status == Status::Active)
+            .map(|f| value(f, market))
+            .max()
+            .unwrap();
+        assert_eq!(value(fighter, market), best);
+        assert_eq!(state.rivals[0].money, 100_000 - i64::from(price));
+        assert_eq!(state.rivals[0].active(), 10);
+        // The seller fills its place again.
+        assert_eq!(state.rivals[id.club].active(), 10);
+        // A club that cannot pay signs the free agent anyway.
+        let mut poor = GameState::new(7, &data);
+        for agent in &mut poor.free_agents {
+            agent.stats = agent.stats.map(|_| 1);
+        }
+        poor.rivals[0].money = 0;
+        poor.rivals[0].fighters[0].status = Status::Dead;
+        let agents = poor.free_agents.len();
+        rival_signings(&mut poor, &data);
+        assert_eq!(poor.free_agents.len(), agents - 1);
+        assert_eq!(poor.rivals[0].active(), 10);
     }
 
     #[test]
