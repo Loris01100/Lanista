@@ -83,6 +83,7 @@ Tests: `proptest` for invariants (HP never above max, a combat always ends), `in
 
 ## Git
 
+- Never commit: the developer reviews and commits every change. After changing files, end the reply with a proposed commit message in a code block.
 - Commit messages: lowercase type, a space before the colon, short summary: `feat : …`, `fix : …`, `chore : …`, `docs : …`, `test : …`.
 - Never tag, push or publish without an explicit request.
 - `Cargo.lock` is committed (binary project).
