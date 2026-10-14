@@ -8,7 +8,9 @@ use serde::{Deserialize, Serialize};
 use crate::calendar::Date;
 use crate::design_data::DesignData;
 use crate::economy::{Flow, Transaction};
-use crate::fighter::career::{Activity, CareerFighter, WeekPlan, WeekReport, suggested_plan};
+use crate::fighter::career::{
+    Activity, CareerFighter, Status, WeekPlan, WeekReport, suggested_plan,
+};
 use crate::fighter::fame::FightResult;
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -45,6 +47,21 @@ impl GameState {
         Date::of(self.week, &data.calendar)
     }
 
+    /// Fighters neither retired nor dead.
+    #[must_use]
+    pub fn active_fighters(&self) -> usize {
+        self.fighters
+            .iter()
+            .filter(|f| f.status == Status::Active)
+            .count()
+    }
+
+    /// Whether the club has a place for one more fighter in activity.
+    #[must_use]
+    pub fn can_hire(&self, data: &DesignData) -> bool {
+        u32::try_from(self.active_fighters()).is_ok_and(|n| n < data.economy.max_fighters)
+    }
+
     /// The decisions `suggested_plan` would take for every fighter this week.
     #[must_use]
     pub fn suggested_decisions(&self) -> Decisions {
@@ -65,7 +82,8 @@ pub struct Decisions {
     /// One plan per fighter, in club order; a fighter without one follows `suggested_plan`.
     pub plans: Vec<WeekPlan>,
     /// Sign a free agent before the week, for nothing: with the free colosseum, the
-    /// safety net that lets a club without money or fighters start again.
+    /// safety net that lets a club without money or fighters start again. Ignored
+    /// when the club is full (`GameState::can_hire`).
     // ponytail: a generated fighter, no choice; the market of phase 5 lists them.
     pub hire_free_agent: bool,
 }
@@ -79,14 +97,14 @@ pub struct WeekSummary {
     pub ledger: Vec<Transaction>,
 }
 
-/// Plays one week for the whole club: signs a free agent if asked, then plays each
+/// Plays one week for the whole club: signs a free agent if asked and there is room, then plays each
 /// fighter's week in club order and pays for it, then moves to the next week.
 ///
 /// A choice the club cannot pay for at its turn is dropped: no care, and rest instead
 /// of training or of a fight with an entry fee. Upkeep is always paid, even into debt.
 pub fn next_week(state: &mut GameState, decisions: &Decisions, data: &DesignData) -> WeekSummary {
     let week = state.week;
-    if decisions.hire_free_agent {
+    if decisions.hire_free_agent && state.can_hire(data) {
         let agent = CareerFighter::random(&mut state.rng, data);
         state.fighters.push(agent);
     }
@@ -166,7 +184,6 @@ fn affordable(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::fighter::career::Status;
     use crate::fighter::injury::{Injury, Location, Severity};
 
     fn data() -> DesignData {
@@ -319,6 +336,27 @@ mod tests {
         assert_eq!(state.fighters.len(), 2);
         assert!(summary.reports[1].is_some());
         assert_eq!(state.fighters[1].status, Status::Active);
+    }
+
+    #[test]
+    fn a_full_club_signs_no_one() {
+        let data = data();
+        let mut state = GameState::new(7, &data);
+        let hire = Decisions {
+            plans: Vec::new(),
+            hire_free_agent: true,
+        };
+        let max = usize::try_from(data.economy.max_fighters).unwrap();
+        for _ in 0..max + 2 {
+            next_week(&mut state, &hire, &data);
+        }
+        assert_eq!(state.active_fighters(), max);
+        assert!(!state.can_hire(&data));
+        // A fighter gone leaves a place.
+        state.fighters[0].status = Status::Retired;
+        assert!(state.can_hire(&data));
+        next_week(&mut state, &hire, &data);
+        assert_eq!(state.active_fighters(), max);
     }
 
     #[test]

@@ -11,6 +11,8 @@ use crate::fighter::fame::Fame;
 pub struct EconomyRules {
     /// The club's money at the start of a game.
     pub starting_money: u32,
+    /// Most fighters in activity a club may have.
+    pub max_fighters: u32,
     /// Paid each week for each active fighter, even into debt.
     pub upkeep: u32,
     /// Paid for each training session.

@@ -188,6 +188,13 @@ impl DesignData {
                 problem: "no class",
             });
         }
+        if self.economy.max_fighters == 0 {
+            return Err(LoadError::Invalid {
+                file: ECONOMY_FILE,
+                field: "max_fighters",
+                problem: "a club of no fighter",
+            });
+        }
         if self.calendar.season_weeks() == 0 {
             return Err(LoadError::Invalid {
                 file: CALENDAR_FILE,

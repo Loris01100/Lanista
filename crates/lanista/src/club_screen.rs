@@ -258,17 +258,24 @@ impl ClubScreen {
             }
         }
         ui.add_space(6.0);
-        let active = self
-            .state
-            .fighters
-            .iter()
-            .filter(|f| f.status == Status::Active)
-            .count();
-        ui.label(format!("{active} combattant(s) en activité"));
-        ui.checkbox(
-            &mut self.decisions.hire_free_agent,
-            "Recruter un free agent (gratuit) en début de semaine",
-        );
+        let max = self.data.economy.max_fighters;
+        ui.label(format!(
+            "{} / {max} combattants en activité",
+            self.state.active_fighters()
+        ));
+        if self.state.can_hire(&self.data) {
+            ui.checkbox(
+                &mut self.decisions.hire_free_agent,
+                "Recruter un free agent (gratuit) en début de semaine",
+            );
+        } else {
+            self.decisions.hire_free_agent = false;
+            let full = format!("Effectif complet : {max} combattants en activité au plus");
+            ui.add_enabled(
+                false,
+                egui::Checkbox::new(&mut self.decisions.hire_free_agent, full),
+            );
+        }
         let play = ui.button("Semaine suivante (Espace)").clicked();
         if self.saves.is_some() {
             ui.horizontal(|ui| {
@@ -301,27 +308,25 @@ impl ClubScreen {
         if self.state.money < 0 {
             alerts.push(format!("Dettes : {}", self.state.money));
         }
-        let mut active = 0;
         for (i, f) in self.state.fighters.iter().enumerate() {
             if f.status != Status::Active {
                 continue;
             }
-            active += 1;
             let name = fighter_name(i, f, &self.data);
-            if f.injuries
-                .iter()
-                .any(|i| matches!(i.severity, Severity::Medium | Severity::Severe))
-            {
-                alerts.push(format!("{name} : blessé"));
+            for injury in &f.injuries {
+                if matches!(injury.severity, Severity::Medium | Severity::Severe) {
+                    let injury = injury_text(*injury, f.dominant_hand);
+                    alerts.push(format!("{name} : blessure, {injury}"));
+                }
             }
-            if f.illness.is_some_and(|i| i.level != IllnessLevel::Mild) {
-                alerts.push(format!("{name} : malade"));
+            if let Some(illness) = f.illness.filter(|i| i.level != IllnessLevel::Mild) {
+                alerts.push(format!("{name} : {}", illness_text(illness)));
             }
             if f.form.value() < lanista_core::fighter::career::REST_BELOW_FORM {
                 alerts.push(format!("{name} : fatigué (forme {})", f.form.value()));
             }
         }
-        if active == 0 {
+        if self.state.active_fighters() == 0 {
             alerts.push("Plus aucun combattant : recrutez un free agent".into());
         }
         alerts
@@ -807,5 +812,22 @@ mod tests {
         assert_eq!((next.season, next.week), (2, 1));
         assert_eq!(screen.state.fighters[0].age, age + 1);
         std::fs::remove_dir_all(folder).unwrap();
+    }
+
+    #[test]
+    fn alerts_tell_where_a_fighter_is_hurt() {
+        let mut screen = screen(7);
+        screen.state.fighters[0].injuries.push(Injury {
+            location: lanista_core::fighter::injury::Location::Arm(Side::Right),
+            severity: Severity::Medium,
+            weeks_left: 3,
+        });
+        let hand = screen.state.fighters[0].dominant_hand;
+        let arm = injury_text(screen.state.fighters[0].injuries[0], hand);
+        assert_eq!(
+            screen.alerts(),
+            [format!("Mirmillon n° 1 : blessure, {arm}")]
+        );
+        assert!(arm.starts_with("Bras droit"), "{arm}");
     }
 }

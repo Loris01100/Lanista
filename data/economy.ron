@@ -1,6 +1,8 @@
 // Prices and purses: placeholder values, to tune while balancing.
 (
     starting_money: 500,
+    // Most fighters in activity a club may have; the dead and retired leave a place.
+    max_fighters: 3,
     // Each week, for each active fighter, even into debt.
     upkeep: 10,
     // Each training session.
