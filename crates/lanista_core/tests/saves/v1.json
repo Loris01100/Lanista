@@ -1,0 +1,126 @@
+{
+  "version": 1,
+  "state": {
+    "week": 196,
+    "money": 7395,
+    "fighters": [
+      {
+        "class": 0,
+        "stats": {
+          "hp": 108,
+          "melee_attack": 21,
+          "ranged_attack": 26,
+          "speed": 44,
+          "melee_defense": 14,
+          "ranged_defense": 10
+        },
+        "potential": {
+          "hp": 141,
+          "melee_attack": 21,
+          "ranged_attack": 26,
+          "speed": 45,
+          "melee_defense": 14,
+          "ranged_defense": 10
+        },
+        "dominant_hand": "Right",
+        "age": 28,
+        "weeks_this_year": 15,
+        "personality": {
+          "aggression": 85,
+          "caution": 36,
+          "showmanship": 36,
+          "determination": 49
+        },
+        "morale": 23,
+        "fame": 19,
+        "form": 64,
+        "injuries": [],
+        "illness": null,
+        "status": "Active"
+      },
+      {
+        "class": 1,
+        "stats": {
+          "hp": 152,
+          "melee_attack": 24,
+          "ranged_attack": 29,
+          "speed": 37,
+          "melee_defense": 13,
+          "ranged_defense": 15
+        },
+        "potential": {
+          "hp": 184,
+          "melee_attack": 24,
+          "ranged_attack": 29,
+          "speed": 37,
+          "melee_defense": 13,
+          "ranged_defense": 15
+        },
+        "dominant_hand": "Right",
+        "age": 31,
+        "weeks_this_year": 13,
+        "personality": {
+          "aggression": 23,
+          "caution": 22,
+          "showmanship": 3,
+          "determination": 86
+        },
+        "morale": 87,
+        "fame": 100,
+        "form": 33,
+        "injuries": [
+          {
+            "location": {
+              "Arm": "Right"
+            },
+            "severity": "Medium",
+            "weeks_left": 4
+          }
+        ],
+        "illness": {
+          "level": "Mild",
+          "weeks_left": 2
+        },
+        "status": "Active"
+      }
+    ],
+    "rng": {
+      "seed": [
+        200,
+        12,
+        64,
+        59,
+        208,
+        32,
+        108,
+        9,
+        55,
+        166,
+        59,
+        111,
+        242,
+        79,
+        37,
+        30,
+        60,
+        187,
+        47,
+        27,
+        179,
+        132,
+        86,
+        90,
+        154,
+        160,
+        102,
+        21,
+        13,
+        27,
+        32,
+        63
+      ],
+      "stream": 0,
+      "word_pos": 4938
+    }
+  }
+}
