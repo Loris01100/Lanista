@@ -150,16 +150,8 @@ impl CareerFighter {
             return None;
         }
         let rules = &data.fighter;
-        let mut report = WeekReport {
-            plan,
-            care_cost: if plan.care { self.care(rules) } else { 0 },
-            fight: None,
-            new_injury: None,
-            healed_injuries: Vec::new(),
-            new_illness: None,
-            illness_healed: false,
-            birthday: false,
-        };
+        let care_cost = if plan.care { self.care(rules) } else { 0 };
+        let mut report = WeekReport::new(plan, care_cost);
         match plan.activity {
             Activity::Rest => {
                 self.form = match &self.illness {
@@ -284,9 +276,9 @@ impl CareerFighter {
         (outcome, fame_change)
     }
 
-    /// A duel against `opponent`, then its effects: fame, morale, form (`form`'s cost),
-    /// illness worsening, a possible injury and progression. The opponent only takes
-    /// fame and death. Returns the new injury.
+    /// A duel against `opponent`, then its effects on both: fame, death, morale, form
+    /// (`form`'s cost), illness worsening, a possible injury and progression. Returns
+    /// this fighter's new injury.
     fn fight<R: Rng + ?Sized>(
         &mut self,
         opponent: &mut Self,
@@ -299,7 +291,8 @@ impl CareerFighter {
         let stronger = opponent.stronger_than(self, rules);
         let weaker = self.stronger_than(opponent, rules);
         let summary_opponent = opponent.clone();
-        opponent.take_fame_and_death(&arena, FighterId(1), weaker, rules);
+        let (theirs, their_fame) =
+            opponent.take_fame_and_death(&arena, FighterId(1), weaker, rules);
         let (outcome, fame_change) =
             self.take_fame_and_death(&arena, FighterId(0), stronger, rules);
         let died = self.status == Status::Dead;
@@ -314,10 +307,25 @@ impl CareerFighter {
             fame_change,
             ticks: arena.tick,
         };
-        if died {
-            return (summary, None);
+        let injury = self.after_fight(outcome.result, fame_change, form, rng, rules);
+        opponent.after_fight(theirs.result, their_fame, form, rng, rules);
+        (summary, injury)
+    }
+
+    /// What a fight leaves a survivor: morale, a possible injury (returned), form
+    /// (`form`'s cost), illness worsening and progression.
+    fn after_fight<R: Rng + ?Sized>(
+        &mut self,
+        result: FightResult,
+        fame_change: i32,
+        form: FormEvent,
+        rng: &mut R,
+        rules: &FighterRules,
+    ) -> Option<Injury> {
+        if self.status == Status::Dead {
+            return None;
         }
-        match outcome.result {
+        match result {
             FightResult::Won => {
                 self.morale = self.morale.after(MoraleEvent::Victory, &rules.morale);
             }
@@ -342,7 +350,19 @@ impl CareerFighter {
             .illness
             .map(|illness| illness.after_fight(rng, &rules.illness));
         self.progress(ProgressEvent::Fight, rng, rules);
-        (summary, injury)
+        injury
+    }
+
+    /// The end of a week whose fight was played as someone's opponent: healing, the
+    /// illness draw and the yearly birthday.
+    pub fn end_fought_week<R: Rng + ?Sized>(&mut self, rng: &mut R, data: &DesignData) {
+        if self.status == Status::Active {
+            let plan = WeekPlan {
+                activity: Activity::Rest,
+                care: false,
+            };
+            self.end_week(&mut WeekReport::new(plan, 0), rng, data);
+        }
     }
 
     /// Healing, the illness draw for a healthy fighter, and the yearly birthday.
@@ -412,17 +432,11 @@ pub const REST_BELOW_FORM: u32 = 50;
 /// game's default choice: care for anything medium or worse, rest when tired, badly
 /// hurt or ill, otherwise fight on odd weeks, in the first colosseum (free to enter),
 /// and train on even ones.
-// ponytail: the rival managers' rules of phase 4 will replace it.
+// ponytail: fixed rules; the rival managers' (`rivals::plan`) could suggest instead.
 #[must_use]
 pub fn suggested_plan(fighter: &CareerFighter, week: u64) -> WeekPlan {
-    let badly_hurt = fighter
-        .injuries
-        .iter()
-        .any(|i| matches!(i.severity, Severity::Medium | Severity::Severe));
-    let ill = fighter
-        .illness
-        .is_some_and(|i| i.level != IllnessLevel::Mild);
-    let activity = if badly_hurt || ill || fighter.form.value() < REST_BELOW_FORM {
+    let hurt = badly_hurt_or_ill(fighter);
+    let activity = if hurt || fighter.form.value() < REST_BELOW_FORM {
         Activity::Rest
     } else if week % 2 == 1 {
         Activity::Fight(ColosseumId(0))
@@ -431,8 +445,21 @@ pub fn suggested_plan(fighter: &CareerFighter, week: u64) -> WeekPlan {
     };
     WeekPlan {
         activity,
-        care: badly_hurt || ill,
+        care: hurt,
     }
+}
+
+/// A medium or severe injury, or an illness worse than mild: time to rest and care.
+#[must_use]
+pub fn badly_hurt_or_ill(fighter: &CareerFighter) -> bool {
+    let badly_hurt = fighter
+        .injuries
+        .iter()
+        .any(|i| matches!(i.severity, Severity::Medium | Severity::Severe));
+    badly_hurt
+        || fighter
+            .illness
+            .is_some_and(|i| i.level != IllnessLevel::Mild)
 }
 
 /// The player's decisions for one fighter and one week.
@@ -458,6 +485,21 @@ pub struct WeekReport {
     pub illness_healed: bool,
     /// A year went by: one year older, decline from 40, retirement decision.
     pub birthday: bool,
+}
+
+impl WeekReport {
+    fn new(plan: WeekPlan, care_cost: u32) -> Self {
+        Self {
+            plan,
+            care_cost,
+            fight: None,
+            new_injury: None,
+            healed_injuries: Vec::new(),
+            new_illness: None,
+            illness_healed: false,
+            birthday: false,
+        }
+    }
 }
 
 #[derive(Debug, Clone, PartialEq)]

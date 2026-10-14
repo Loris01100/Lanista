@@ -27,7 +27,7 @@ use crate::saves;
 use crate::texts::{
     STAT_NAMES, activity_name, arena_name, challenger_text, change, class_name, colosseum_name,
     condition_text, contender_name, fight_text, fighter_name, illness_text, injury_text,
-    money_line, title_news_text, week_lines,
+    money_line, profile_name, rival_name, title_news_text, week_lines,
 };
 
 /// Seed of the standard duel offered from the club.
@@ -576,11 +576,15 @@ impl ClubScreen {
         again
     }
 
-    /// Each colosseum side by side.
+    /// The rival clubs, then each colosseum side by side.
     fn colosseums(&self, ui: &mut egui::Ui) {
         let data = &self.data;
         let club = &self.state.fighters;
         let colosseums = self.state.colosseums.iter().zip(&data.world.colosseums);
+        ui.heading("Clubs rivaux");
+        for line in self.rival_lines() {
+            ui.label(line);
+        }
         ui.heading("Colisées");
         ui.columns(data.world.colosseums.len().max(1), |columns| {
             for (n, ((colosseum, rules), ui)) in colosseums.zip(columns).enumerate() {
@@ -611,7 +615,7 @@ impl ClubScreen {
                         egui::Grid::new(("ranking", n))
                             .striped(true)
                             .show(ui, |ui| {
-                                for title in ["Rang", "Combattant", "Elo"] {
+                                for title in ["Rang", "Combattant", "Club", "Elo"] {
                                     ui.strong(title);
                                 }
                                 ui.end_row();
@@ -623,6 +627,10 @@ impl ClubScreen {
                                         club,
                                         data,
                                     ));
+                                    ui.label(match rating.contender {
+                                        Contender::Resident(r) => rival_name(n, r, data),
+                                        Contender::Club(_) => "",
+                                    });
                                     ui.label(rating.elo.to_string());
                                     ui.end_row();
                                 }
@@ -634,6 +642,35 @@ impl ClubScreen {
 }
 
 impl ClubScreen {
+    /// "Ludus Magnus, prudent : 10 combattants, argent 500" for each rival club.
+    fn rival_lines(&self) -> Vec<String> {
+        let world = &self.data.world;
+        let colosseums = &self.state.colosseums;
+        world
+            .rivals
+            .iter()
+            .zip(&self.state.rivals)
+            .enumerate()
+            .map(|(i, (rules, rival))| {
+                let fighters: usize = colosseums
+                    .iter()
+                    .enumerate()
+                    .map(|(c, colosseum)| {
+                        (0..colosseum.residents.len())
+                            .filter(|&r| world.owner(c, r).is_some_and(|(o, _)| o == i))
+                            .count()
+                    })
+                    .sum();
+                format!(
+                    "{}, {} : {fighters} combattants, argent {}",
+                    rules.name,
+                    profile_name(rules.profile),
+                    rival.money
+                )
+            })
+            .collect()
+    }
+
     fn watch(&self, arena: Arena) -> Transition {
         let screen = CombatScreen::watch(Rc::clone(&self.data), arena, self.bindings.clone());
         Transition::Push(Box::new(screen))
@@ -931,18 +968,23 @@ mod tests {
         assert_eq!(report.fight.report, Report::new(&fight));
         // A win in Capua: receipts and the winner's prize.
         assert_eq!((report.money, report.form), (70, (100, 80)));
-        // Week 2 would be training, but resident n° 1 challenges it and the suggestion
-        // accepts: a fight against that resident.
-        let resident = screen.state.colosseums[0].residents[0].clone();
+        // A resident's club challenges it and the suggestion accepts: a fight against
+        // that resident.
+        while screen.state.challenges.is_empty() {
+            assert!(screen.state.week < 10, "no challenge");
+            screen.next_week();
+        }
+        let challenge = screen.state.challenges[0];
+        let resident = screen.state.colosseums[0].residents[challenge.resident].clone();
         assert_eq!(
             screen.decisions.plans[0].activity,
-            Activity::Challenge(ColosseumId(0), 0)
+            Activity::Challenge(ColosseumId(0), challenge.resident)
         );
         assert!(
-            screen
-                .alerts()
-                .iter()
-                .any(|a| a.starts_with("Mirmillon n° 1 : défi de Résident n° 1 (Augure) à Capoue")),
+            screen.alerts().iter().any(|a| a.starts_with(&format!(
+                "Mirmillon n° 1 : défi de Résident n° {}",
+                challenge.resident + 1
+            ))),
             "{:?}",
             screen.alerts()
         );
@@ -957,11 +999,12 @@ mod tests {
     #[test]
     fn the_week_is_told_in_the_menu_and_on_the_sheet() {
         let mut screen = screen(7);
-        screen.next_week();
-        screen.next_week();
+        for _ in 0..3 {
+            screen.next_week();
+        }
         let weeks: Vec<u64> = screen.histories[0].iter().map(|(week, _)| *week).collect();
-        assert_eq!(weeks, [2, 1]);
-        let first = &screen.histories[0][1].1;
+        assert_eq!(weeks, [3, 2, 1]);
+        let first = &screen.histories[0][2].1;
         assert_eq!(first[0], "Combat à Capoue");
         assert!(
             first[1].starts_with("Contre un Mirmillon, plus fort : victoire"),
@@ -972,11 +1015,11 @@ mod tests {
             "{first:?}"
         );
         let (week, menu) = screen.last_week.as_ref().unwrap();
-        assert_eq!(*week, 2);
-        assert_eq!(menu[0], "Argent 581 (+21) : recettes +31, entretien -10");
+        assert_eq!(*week, 3);
+        assert_eq!(menu[0], "Argent 571 (+26) : recettes +36, entretien -10");
         assert_eq!(
             menu[1],
-            "Mirmillon n° 1 : Défi à Capoue, Contre un Augure, plus fort : abandon, renommée -7"
+            "Mirmillon n° 1 : Combat à Capoue, Contre un Augure, plus fort : abandon, renommée -8"
         );
     }
 
@@ -1056,7 +1099,6 @@ mod tests {
             )
         };
         let mut screen = open();
-        let age = screen.state.fighters[0].age;
         let half = u64::from(data.calendar.season_weeks() / 2);
         for _ in 0..half {
             screen.next_week();
@@ -1070,7 +1112,18 @@ mod tests {
         assert_eq!(reloaded.state, screen.state);
         let next = screen.state.date(&data);
         assert_eq!((next.season, next.week), (2, 1));
-        assert_eq!(screen.state.fighters[0].age, age + 1);
+        // Seed 7's fighter dies in week 11; the residents who lived the whole season
+        // took a year.
+        let start = GameState::new(7, &data);
+        let survivors: Vec<_> = start
+            .colosseums
+            .iter()
+            .zip(&screen.state.colosseums)
+            .flat_map(|(a, b)| a.residents.iter().zip(&b.residents))
+            .filter(|(a, b)| a.potential == b.potential)
+            .collect();
+        assert_ne!(survivors, []);
+        assert!(survivors.iter().all(|(a, b)| b.age == a.age + 1));
         std::fs::remove_dir_all(folder).unwrap();
     }
 
@@ -1092,6 +1145,19 @@ mod tests {
             menu.iter()
                 .any(|line| line.starts_with("Titre de Capoue : Résident n° ")),
             "{menu:?}"
+        );
+    }
+
+    #[test]
+    fn the_rival_clubs_are_listed() {
+        let screen = screen(7);
+        assert_eq!(
+            screen.rival_lines(),
+            [
+                "Ludus Magnus, prudent : 10 combattants, argent 500",
+                "Ludus Gallicus, agressif : 10 combattants, argent 500",
+                "Ludus Dacicus, marchand : 10 combattants, argent 500",
+            ]
         );
     }
 

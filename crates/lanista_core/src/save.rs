@@ -9,11 +9,11 @@ use crate::state::GameState;
 
 /// Version written in new saves. Raise it with any change to the saved types,
 /// and add the migration from the previous version to [`MIGRATIONS`].
-pub const VERSION: u64 = 4;
+pub const VERSION: u64 = 5;
 
 /// `MIGRATIONS[i]` turns a version `i + 1` save into a version `i + 2` one,
 /// working on the JSON so the old types need not be kept.
-const MIGRATIONS: [fn(&mut Value); 3] = [no_colosseums, title_since, no_challenges];
+const MIGRATIONS: [fn(&mut Value); 4] = [no_colosseums, title_since, no_challenges, no_rivals];
 const _: () = assert!(MIGRATIONS.len() as u64 == VERSION - 1);
 
 /// Version 2 adds the colosseums; [`from_json`] opens them.
@@ -35,6 +35,11 @@ fn title_since(save: &mut Value) {
 /// Version 4 adds the residents' challenges, none pending.
 fn no_challenges(save: &mut Value) {
     save["state"]["challenges"] = Value::Array(Vec::new());
+}
+
+/// Version 5 adds the rival clubs; [`from_json`] opens them with the starting money.
+fn no_rivals(save: &mut Value) {
+    save["state"]["rivals"] = Value::Array(Vec::new());
 }
 
 #[derive(Serialize)]
@@ -88,7 +93,7 @@ pub fn to_json(state: &GameState) -> String {
 }
 
 /// Reads a save of any known version, migrating it first, and opens the colosseums
-/// of `data` it does not have.
+/// and rival clubs of `data` it does not have.
 ///
 /// # Errors
 /// If the text is not a save, its version is unknown, or a fighter's class is not in `data`.
@@ -114,7 +119,7 @@ pub fn from_json(text: &str, data: &DesignData) -> Result<GameState, SaveError> 
     {
         return Err(SaveError::UnknownClass(f.class.0));
     }
-    state.open_colosseums(data);
+    state.open_world(data);
     Ok(state)
 }
 
@@ -156,12 +161,12 @@ mod tests {
     fn unknown_versions_are_refused() {
         let data = data();
         let save = to_json(&GameState::new(7, &data));
-        let newer = save.replacen("\"version\": 4", "\"version\": 5", 1);
+        let newer = save.replacen("\"version\": 5", "\"version\": 6", 1);
         assert!(matches!(
             from_json(&newer, &data),
-            Err(SaveError::Version(Some(5)))
+            Err(SaveError::Version(Some(6)))
         ));
-        let none = save.replacen("\"version\": 4", "\"versio\": 4", 1);
+        let none = save.replacen("\"version\": 5", "\"versio\": 5", 1);
         assert!(matches!(
             from_json(&none, &data),
             Err(SaveError::Version(None))

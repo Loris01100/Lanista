@@ -10,6 +10,7 @@ use lanista_core::fighter::career::{Activity, CareerFighter, FightSummary, Statu
 use lanista_core::fighter::fame::FightResult;
 use lanista_core::fighter::illness::{Illness, IllnessLevel};
 use lanista_core::fighter::injury::{Injury, Location, Severity, Side};
+use lanista_core::rivals::Profile;
 
 /// Stat names, in `Stats::to_array` order.
 pub const STAT_NAMES: [&str; 6] = ["PV", "AC", "AL", "VIT", "DC", "DL"];
@@ -106,6 +107,22 @@ pub fn title_news_text(
 
 pub fn colosseum_name(id: ColosseumId, data: &DesignData) -> &str {
     data.world.colosseum(id).map_or("?", |c| c.name.as_str())
+}
+
+pub fn profile_name(profile: Profile) -> &'static str {
+    match profile {
+        Profile::Cautious => "prudent",
+        Profile::Aggressive => "agressif",
+        Profile::Merchant => "marchand",
+    }
+}
+
+/// The rival club of resident `r` of colosseum `c`.
+pub fn rival_name(c: usize, r: usize, data: &DesignData) -> &str {
+    data.world
+        .owner(c, r)
+        .and_then(|(i, _)| data.world.rivals.get(i))
+        .map_or("?", |rival| rival.name.as_str())
 }
 
 pub fn arena_name(arena: ArenaKind) -> &'static str {

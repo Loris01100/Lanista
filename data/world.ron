@@ -10,16 +10,30 @@
     title_defense_weeks: 4,
     challengers: 5,
     challenges: (
-        // Each week, the chance a club's fighter fit to fight is challenged in each
-        // colosseum where it is ranked, by the resident closest in Elo.
-        received_percent: 25,
-        // A resident accepts a challenge if Elo gives it at least this chance of winning.
-        accept_percent: 30,
         // Lost by a fighter who refuses a challenge and does not fight that week; the
         // Elo in the challenger's colosseum.
         refusal_fame: 2,
         refusal_elo: 8,
     ),
+    // The rival managers' weekly thresholds, by profile. A fighter rests below
+    // `rest_form` or when badly hurt or ill, cared for if the club keeps `care_reserve`
+    // after paying; fit, it fights when Elo gives it `fight_percent` chances against the
+    // others of its colosseum, else trains. Each week, a club's fighter ranked there is
+    // challenged by the resident closest in Elo with `challenge_percent` chances; the
+    // club accepts the player's challenges when Elo gives it `accept_percent` chances.
+    profiles: (
+        cautious: (rest_form: 70, care_reserve: 0, fight_percent: 45, accept_percent: 50, challenge_percent: 10),
+        aggressive: (rest_form: 35, care_reserve: 100, fight_percent: 20, accept_percent: 20, challenge_percent: 40),
+        // Keeps its money; buys and sells once the market opens.
+        merchant: (rest_form: 50, care_reserve: 300, fight_percent: 35, accept_percent: 35, challenge_percent: 20),
+    ),
+    // The rival clubs, starting with the player's money; the colosseums' residents are
+    // shared out among them in turn. At least one.
+    rivals: [
+        (name: "Ludus Magnus", profile: Cautious),
+        (name: "Ludus Gallicus", profile: Aggressive),
+        (name: "Ludus Dacicus", profile: Merchant),
+    ],
     // At least one must be free to enter: the safety net of a club without money.
     colosseums: [
         (
@@ -28,7 +42,7 @@
             arena: Sand,
             // 1 to 5.
             prestige: 1,
-            // Regular fighters, the opponents of its fights.
+            // Its fighters, all from rival clubs.
             residents: 15,
             purses: (
                 entry_fee: 0,

@@ -220,6 +220,9 @@ impl DesignData {
         if self.world.colosseums.iter().any(|c| c.residents == 0) {
             return Err(world("residents", "a colosseum without opponents"));
         }
+        if self.world.rivals.is_empty() {
+            return Err(world("rivals", "no rival club to own the residents"));
+        }
         if self.calendar.season_weeks() == 0 {
             return Err(LoadError::Invalid {
                 file: CALENDAR_FILE,
