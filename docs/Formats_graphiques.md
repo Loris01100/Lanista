@@ -65,6 +65,14 @@ assets/fighters/<calque>/<variante>_detail.png   non teinté, facultatif
 
 Exemples : `assets/fighters/head/bald.png`, `assets/fighters/head/bald_detail.png`, `assets/fighters/body/average.png`.
 
+### Personnages uniques
+
+Un personnage unique est dessiné à la main, sans calques générés ni teintes :
+
+- Même case (32 × 32 px), même orientation, mêmes 4 animations, même feuille de 128 × 128 px que les autres. Il peut ajouter ses propres animations en lignes supplémentaires, une fois que le jeu lira les animations depuis `data/`.
+- Fichiers : `art/uniques/<nom>.aseprite` et `assets/uniques/<nom>.png`, une seule feuille exportée avec tous les calques visibles.
+- Dans `lanista_core`, son `Appearance` vaut `Unique(<nom>)` au lieu des indices de forme et de teinte ; `lanista` dessine alors cette feuille seule. Blessures et équipement restent des calques par-dessus, comme pour les autres.
+
 ## Arènes
 
 - Sol : 20 × 20 m, soit **400 × 400 px**, une image par type d'arène. La taille des arènes de mêlée sera fixée en phase 6, toujours à 20 px/m.
