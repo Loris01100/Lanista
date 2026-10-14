@@ -191,7 +191,8 @@ impl CombatScreen {
     }
 
     /// Speed buttons, then the result once the fight is over; the seed of the
-    /// next fight, or « Continuer » for a watched fight. Returns whether to go back.
+    /// next fight and « Retour » in the standard duel, or « Continuer » for a watched
+    /// fight. Returns whether to go back.
     fn controls(&mut self, ui: &egui::Context) -> bool {
         let mut start = None;
         let mut done = false;
@@ -219,6 +220,8 @@ impl CombatScreen {
                             if ui.button("Lancer").clicked() {
                                 start = Some(*next_seed);
                             }
+                            ui.separator();
+                            done = ui.button("Retour (Échap)").clicked();
                         }
                         Mode::Watch => {
                             let finished = !self.running();
