@@ -211,6 +211,12 @@
       "skillPath": "skills/rust-skill-creator/SKILL.md",
       "computedHash": "c9ea80eb2e0f84b6af172f4260960ded66485a7aaf2725a23b12c3671fa0eac5"
     },
+    "rust-skills": {
+      "source": "leonardomso/rust-skills",
+      "sourceType": "github",
+      "skillPath": "SKILL.md",
+      "computedHash": "9251cf53b34b0921f8216cf444ffaf714096aaa1dce17ba438f8e7421485d8e8"
+    },
     "rust-symbol-analyzer": {
       "source": "actionbook/rust-skills",
       "sourceType": "github",

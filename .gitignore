@@ -14,3 +14,6 @@ __pycache__/
 .sonar/
 # Coverage report for SonarQube Cloud.
 lcov.info
+# Agent skills, restored from skills-lock.json with `npx skills experimental_install`.
+.agents/
+.claude/skills/
