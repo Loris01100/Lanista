@@ -19,7 +19,8 @@ use crate::fighter::career::{
     Activity, CareerFighter, Status, WeekPlan, WeekReport, suggested_plan,
 };
 use crate::fighter::fame::{Fame, FightResult};
-use crate::fighter::{FighterId, percent_of};
+use crate::fighter::form::FormEvent;
+use crate::fighter::percent_of;
 use crate::market::{self, MarketNews, Move, SaleOffer, Target, value};
 use crate::rivals::{self, Rival, RivalId};
 use crate::staff::{
@@ -1013,8 +1014,9 @@ fn end_colosseum_weeks(
     titles
 }
 
-/// A title defense between rival fighters `a`, the champion, and `b`, who take only
-/// fame, record and death from it; returns `a`'s result.
+/// A title defense between rival fighters `a`, the champion, and `b`, resolved by the
+/// statistical model; they take only fame, record and death from it. Returns `a`'s
+/// result.
 fn rival_duel(
     rivals: &mut [Rival],
     a: RivalId,
@@ -1022,16 +1024,9 @@ fn rival_duel(
     rng: &mut ChaCha8Rng,
     data: &DesignData,
 ) -> FightResult {
-    let rules = &data.fighter;
     let mut first = rivals[a.club].fighters[a.fighter].clone();
     let mut second = rivals[b.club].fighters[b.fighter].clone();
-    let (_, _, arena) = first.duel(&second, rng, data);
-    let (stronger, weaker) = (
-        second.stronger_than(&first, rules),
-        first.stronger_than(&second, rules),
-    );
-    let (outcome, _) = first.take_fame_and_death(&arena, FighterId(0), stronger, rules);
-    second.take_fame_and_death(&arena, FighterId(1), weaker, rules);
+    let [(outcome, _), _] = first.modelled_fame_and_death(&mut second, rng, data);
     rivals[a.club].fighters[a.fighter] = first;
     rivals[b.club].fighters[b.fighter] = second;
     outcome.result
@@ -1120,12 +1115,10 @@ fn receive_challenges(state: &mut GameState, data: &DesignData) {
 
 /// The rival clubs' week, after the club's fights. In each colosseum, the rival
 /// fighters registered there and not met by the club's fighters are paired in Elo
-/// order, each pair fighting a duel that moves both Elo; one left without an opponent
-/// trains instead. The others rest or train as planned, those met by the club's
+/// order, each pair fighting a fight the statistical model resolves, which moves both
+/// Elo; one left without an opponent trains instead. The others rest or train as planned, those met by the club's
 /// fighters end their week, and each club pays its fighters' costs and upkeep and
 /// takes their receipts and prizes.
-// ponytail: real duels until the statistical model of phase 5 resolves fights between
-// rivals.
 fn rival_weeks(
     state: &mut GameState,
     plans: &[Vec<WeekPlan>],
@@ -1175,28 +1168,14 @@ fn rival_weeks(
             let mut second = state.rivals[b.club].fighters[b.fighter].clone();
             let first = &mut state.rivals[a.club].fighters[a.fighter];
             let receipts = i64::from(purses.receipts(first.fame, second.fame));
-            let plan = plans[a.club][a.fighter];
-            let report = first.play_week(
-                plan,
-                Some(&mut second),
-                StaffEffects::default(),
-                &mut state.rng,
-                data,
-            );
+            let result = first.modelled_fight(&mut second, FormEvent::Fight, &mut state.rng, data);
+            first.end_fought_week(&mut state.rng, data);
             second.end_fought_week(&mut state.rng, data);
             state.rivals[b.club].fighters[b.fighter] = second;
             done[a.club][a.fighter] = true;
             done[b.club][b.fighter] = true;
-            let Some(fight) = report.and_then(|r| r.fight) else {
-                continue;
-            };
-            colosseum.record(
-                Contender::Rival(a),
-                Contender::Rival(b),
-                fight.result,
-                world,
-            );
-            for (id, result) in [(a, fight.result), (b, opposite(fight.result))] {
+            colosseum.record(Contender::Rival(a), Contender::Rival(b), result, world);
+            for (id, result) in [(a, result), (b, opposite(result))] {
                 let prize = if result == FightResult::Won {
                     purses.win_prize
                 } else {
@@ -1655,7 +1634,7 @@ mod tests {
         let data = data();
         let colosseum = &data.world.colosseums[0].purses;
         // Even a broke club can fight: the first colosseum is free.
-        let mut state = GameState::new(7, &data);
+        let mut state = GameState::new(1, &data);
         state.money = 0;
         let mut won = false;
         for _ in 0..20 {
@@ -1674,7 +1653,7 @@ mod tests {
             assert_eq!(flows.contains(&prize), fight.result == FightResult::Won);
             won |= fight.result == FightResult::Won;
         }
-        assert!(won, "seed 7 wins a fight in 20 weeks");
+        assert!(won, "seed 1 wins a fight in 20 weeks");
     }
 
     #[test]
@@ -2094,10 +2073,10 @@ mod tests {
         let aggressive = data.world.profiles.get(Profile::Aggressive);
         let offer = *state.sale_offers.iter().find(|o| o.rival == 1).unwrap();
         assert_eq!(offer.price, percent_of(worth, aggressive.buy_percent));
-        // A full club makes none.
+        // A full club makes none, even if some of its fighters die this week.
         let mut full = state.clone();
         let extra = full.rivals[1].fighters[0].clone();
-        full.rivals[1].fighters.extend([extra.clone(), extra]);
+        full.rivals[1].fighters.extend(vec![extra; 4]);
         full.sale_offers.clear();
         next_week(&mut full, &Decisions::default(), &data);
         assert!(full.sale_offers.iter().all(|o| o.rival != 1));

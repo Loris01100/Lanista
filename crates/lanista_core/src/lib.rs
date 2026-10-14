@@ -11,4 +11,5 @@ pub mod market;
 pub mod rivals;
 pub mod save;
 pub mod staff;
+pub mod stat_model;
 pub mod state;

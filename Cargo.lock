@@ -2343,6 +2343,8 @@ name = "tools"
 version = "0.1.0"
 dependencies = [
  "lanista_core",
+ "rand",
+ "rand_chacha",
  "rayon",
 ]
 

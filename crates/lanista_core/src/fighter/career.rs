@@ -23,6 +23,7 @@ use crate::fighter::{ClassId, Condition, Fighter, FighterId, Stats};
 use crate::log::Report;
 use crate::rivals::RivalId;
 use crate::staff::{Medicine, StaffEffects};
+use crate::stat_model::Ending;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum Status {
@@ -299,23 +300,84 @@ impl CareerFighter {
     }
 
     /// The fame, record and death the finished fight in `arena`, where this fighter was
-    /// `id`, brings: all a title defense between rival fighters leaves. Returns the
-    /// outcome and the fame change.
-    pub fn take_fame_and_death(
+    /// `id`, brings. Returns the outcome and the fame change.
+    fn take_fame_and_death(
         &mut self,
         arena: &Arena,
         id: FighterId,
         against_stronger: bool,
         rules: &FighterRules,
     ) -> (FightOutcome, i32) {
-        let outcome = FightOutcome::from_arena(arena, id, against_stronger, &rules.fame);
+        self.take_side(
+            Ending::from_arena(arena, id, &rules.fame),
+            against_stronger,
+            rules,
+        )
+    }
+
+    /// The fame, record and death `side` brings. Returns the outcome and the fame change.
+    fn take_side(
+        &mut self,
+        side: Ending,
+        against_stronger: bool,
+        rules: &FighterRules,
+    ) -> (FightOutcome, i32) {
+        let outcome = FightOutcome {
+            result: side.result,
+            against_stronger,
+            spectacular_hits: side.spectacular_hits,
+        };
         let fame_change = outcome.fame_change(&rules.fame);
         self.fame = self.fame.changed_by(fame_change);
         self.record.add(outcome.result);
-        if arena.fighter(id).is_some_and(|f| !f.is_alive()) {
+        if side.died {
             self.status = Status::Dead;
         }
         (outcome, fame_change)
+    }
+
+    /// A fight against `opponent` that the statistical model resolves instead of a
+    /// duel, taking only fame, record and death to both: all a title defense between
+    /// rival fighters leaves. Returns the outcome and fame change of each, this
+    /// fighter's first.
+    pub fn modelled_fame_and_death<R: Rng + ?Sized>(
+        &mut self,
+        opponent: &mut Self,
+        rng: &mut R,
+        data: &DesignData,
+    ) -> [(FightOutcome, i32); 2] {
+        let rules = &data.fighter;
+        let origin = Vec2::new(0.0, 0.0);
+        let [mine, theirs] = data.stat_model.resolve(
+            &self.combat_fighter(FighterId(0), data, origin),
+            &opponent.combat_fighter(FighterId(1), data, origin),
+            rng,
+        );
+        let stronger = opponent.stronger_than(self, rules);
+        let weaker = self.stronger_than(opponent, rules);
+        [
+            self.take_side(mine, stronger, rules),
+            opponent.take_side(theirs, weaker, rules),
+        ]
+    }
+
+    /// A fight between rival fighters against `opponent`, resolved by the statistical
+    /// model: fame, record and death, then what the fight leaves both (`after_fight`,
+    /// with `form`'s cost). Neither ends its week. Returns this fighter's result.
+    pub fn modelled_fight<R: Rng + ?Sized>(
+        &mut self,
+        opponent: &mut Self,
+        form: FormEvent,
+        rng: &mut R,
+        data: &DesignData,
+    ) -> FightResult {
+        let [(mine, my_fame), (theirs, their_fame)] =
+            self.modelled_fame_and_death(opponent, rng, data);
+        let rules = &data.fighter;
+        let alone = Medicine::default();
+        self.after_fight(mine.result, my_fame, form, alone, rng, rules);
+        opponent.after_fight(theirs.result, their_fame, form, alone, rng, rules);
+        mine.result
     }
 
     /// A duel against `opponent`, then its effects on both: fame, death, morale, form

@@ -1,5 +1,8 @@
-//! Shared by the command-line tools: argument parsing and number formatting.
-//! The duel setup itself lives in `lanista_core::duel`, shared with the game.
+//! Shared by the command-line tools: argument parsing, number formatting and the
+//! calibration of the statistical model. The duel setup itself lives in
+//! `lanista_core::duel`, shared with the game.
+
+pub mod calibration;
 
 /// Value of the `--name value` option among `args` (program name excluded), or `default`.
 ///
