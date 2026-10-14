@@ -1,0 +1,9 @@
+// Lengths of a season's phases, in weeks: a season is a year of the game.
+(
+    // The Classic in each colosseum, challenges between clubs.
+    competition_weeks: 22,
+    // World championship or Inter-Coliseum.
+    great_event_weeks: 4,
+    // Ageing, retirements, rookies, open market.
+    off_season_weeks: 4,
+)

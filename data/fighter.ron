@@ -123,7 +123,5 @@
         start_age: (20, 30),
         stats_spread_percent: 20,
         right_handed_percent: 85,
-        // Weeks between two birthdays: a season.
-        weeks_per_year: 33,
     ),
 )

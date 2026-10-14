@@ -1,4 +1,5 @@
 pub mod ai;
+pub mod calendar;
 pub mod combat;
 pub mod design_data;
 pub mod duel;

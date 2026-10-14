@@ -44,11 +44,11 @@ La fin de semaine applique tout ce qui ne dépend pas du joueur : récupération
 
 ### Structure d'une saison
 
-Une saison correspond à une année de jeu, soit 33 semaines au total.
+Une saison correspond à une année de jeu, soit 30 semaines au total.
 
 | Phase | Durée | Contenu |
 | --- | --- | --- |
-| Compétition | 25 semaines | La Classique dans chaque colisée, défis entre clubs |
+| Compétition | 22 semaines | La Classique dans chaque colisée, défis entre clubs |
 | Grand événement | 4 semaines | Championnat du monde ou Inter-Coliseum selon l'année |
 | Intersaison | 4 semaines | Vieillissement, retraites, arrivée des rookies, marché ouvert |
 

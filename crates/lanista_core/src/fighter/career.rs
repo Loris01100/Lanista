@@ -35,7 +35,9 @@ pub struct CareerFighter {
     pub dominant_hand: Side,
     /// In years.
     pub age: u32,
-    /// Weeks played since the last birthday.
+    /// Weeks played since the last birthday; a year is a season of `data/calendar.ron`.
+    // ponytail: own count, in step with the calendar for fighters there from week 1;
+    // age everyone in the off-season once the market brings fighters mid-season.
     pub weeks_this_year: u32,
     pub personality: Personality,
     pub morale: Morale,
@@ -174,7 +176,7 @@ impl CareerFighter {
                 }
             }
         }
-        self.end_week(&mut report, rng, rules);
+        self.end_week(&mut report, rng, data);
         Some(report)
     }
 
@@ -278,8 +280,9 @@ impl CareerFighter {
         &mut self,
         report: &mut WeekReport,
         rng: &mut R,
-        rules: &FighterRules,
+        data: &DesignData,
     ) {
+        let rules = &data.fighter;
         report.healed_injuries = self
             .injuries
             .iter()
@@ -298,7 +301,7 @@ impl CareerFighter {
             }
         }
         self.weeks_this_year += 1;
-        if self.weeks_this_year >= rules.career.weeks_per_year {
+        if self.weeks_this_year >= data.calendar.season_weeks() {
             self.weeks_this_year = 0;
             self.age += 1;
             report.birthday = true;
@@ -394,7 +397,7 @@ pub struct FightSummary {
     pub ticks: u32,
 }
 
-/// Starting values of generated fighters and the length of a year, from `data/fighter.ron`.
+/// Starting values of generated fighters, from `data/fighter.ron`.
 #[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct CareerRules {
@@ -404,8 +407,6 @@ pub struct CareerRules {
     pub stats_spread_percent: u32,
     /// Chance, in percent, that a generated fighter is right-handed.
     pub right_handed_percent: u32,
-    /// Weeks between two birthdays: a season.
-    pub weeks_per_year: u32,
 }
 
 #[cfg(test)]
@@ -513,7 +514,7 @@ mod tests {
         let mut f = fighter(7);
         let age = f.age;
         let mut birthdays = 0;
-        for _ in 0..data.fighter.career.weeks_per_year {
+        for _ in 0..data.calendar.season_weeks() {
             let report = f.play_week(plan(Activity::Rest), &mut rng, &data).unwrap();
             birthdays += u32::from(report.birthday);
         }

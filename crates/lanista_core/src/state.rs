@@ -4,6 +4,7 @@
 use rand::SeedableRng;
 use rand_chacha::ChaCha8Rng;
 
+use crate::calendar::Date;
 use crate::design_data::DesignData;
 use crate::fighter::career::{CareerFighter, WeekPlan, WeekReport, suggested_plan};
 
@@ -30,6 +31,12 @@ impl GameState {
             fighters,
             rng,
         }
+    }
+
+    /// Season, week of the season and so phase of the week to play.
+    #[must_use]
+    pub fn date(&self, data: &DesignData) -> Date {
+        Date::of(self.week, &data.calendar)
     }
 
     /// The decisions `suggested_plan` would take for every fighter this week.
@@ -91,6 +98,7 @@ mod tests {
         let data = data();
         let state = GameState::new(7, &data);
         assert_eq!(state.week, 1);
+        assert_eq!(state.date(&data), Date { season: 1, week: 1 });
         let fighter = CareerFighter::random(&mut ChaCha8Rng::seed_from_u64(7), &data);
         assert_eq!(state.fighters, [fighter]);
     }

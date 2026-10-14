@@ -4,6 +4,7 @@
 
 use std::rc::Rc;
 
+use lanista_core::calendar::SeasonPhase;
 use lanista_core::combat::Arena;
 use lanista_core::design_data::DesignData;
 use lanista_core::fighter::career::{
@@ -151,7 +152,16 @@ impl CareerScreen {
 
     /// The week's decisions; returns whether to play the week.
     fn decisions(&mut self, ui: &mut egui::Ui) -> bool {
-        ui.heading(format!("Semaine {}", self.state.week));
+        let date = self.state.date(&self.data);
+        let phase = match date.phase(&self.data.calendar) {
+            SeasonPhase::Competition => "compétition",
+            SeasonPhase::GreatEvent => "grand événement",
+            SeasonPhase::OffSeason => "intersaison",
+        };
+        ui.heading(format!(
+            "Saison {}, semaine {} : {phase}",
+            date.season, date.week
+        ));
         if self.fighter().status != Status::Active {
             ui.label("La carrière est terminée.");
             return false;
