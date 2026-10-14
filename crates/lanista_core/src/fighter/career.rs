@@ -380,6 +380,19 @@ impl CareerFighter {
         mine.result
     }
 
+    /// The same as [`CareerFighter::modelled_fight`], but played as a real duel: what
+    /// the `compare` tool sets the model against. Returns this fighter's result.
+    pub fn dueled_fight<R: Rng + ?Sized>(
+        &mut self,
+        opponent: &mut Self,
+        form: FormEvent,
+        rng: &mut R,
+        data: &DesignData,
+    ) -> FightResult {
+        let (summary, _, _) = self.fight(opponent, form, Medicine::default(), rng, data);
+        summary.result
+    }
+
     /// A duel against `opponent`, then its effects on both: fame, death, morale, form
     /// (`form`'s cost), illness worsening, a possible injury and progression. Returns
     /// this fighter's new injury, and whether its doctor's `medicine` spared it an

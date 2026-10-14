@@ -134,7 +134,7 @@ pub fn fit(samples: &[Sample], classes: usize) -> StatModel {
 }
 
 /// `part / whole`, or `otherwise` for nothing.
-fn share(part: u64, whole: u64, otherwise: f64) -> f64 {
+pub(crate) fn share(part: u64, whole: u64, otherwise: f64) -> f64 {
     if whole == 0 {
         return otherwise;
     }
