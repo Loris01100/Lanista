@@ -1,7 +1,7 @@
 //! Colosseums: each has its arena type, prestige and purses (from `data/world.ron`),
 //! and in the game its residents, its Elo ranking and its champion.
 
-use std::cmp::Reverse;
+use std::cmp::{Ordering, Reverse};
 
 use rand::{Rng, RngExt};
 use serde::{Deserialize, Serialize};
@@ -127,15 +127,12 @@ impl Colosseum {
     /// Records a duel between `a` and `b`, `result` being `a`'s: both Elo move,
     /// and beating the champion takes the title.
     pub fn record(&mut self, a: Contender, b: Contender, result: FightResult, rules: &WorldRules) {
-        let score = match result {
-            FightResult::Won => 1.0,
-            FightResult::Lost | FightResult::GaveUp => 0.0,
-            FightResult::Unfinished => 0.5,
+        let places = match result {
+            FightResult::Won => [(a, 1), (b, 2)],
+            FightResult::Lost | FightResult::GaveUp => [(a, 2), (b, 1)],
+            FightResult::Unfinished => [(a, 1), (b, 1)],
         };
-        let change = elo_change(self.elo(a, rules), self.elo(b, rules), score, rules.elo_k);
-        self.add_elo(a, change, rules);
-        self.add_elo(b, -change, rules);
-        self.ranking.sort_by_key(|r| Reverse(r.elo));
+        self.record_places(&places, rules);
         match result {
             FightResult::Won if self.champion == Some(b) => self.champion = Some(a),
             FightResult::Lost | FightResult::GaveUp if self.champion == Some(a) => {
@@ -143,6 +140,44 @@ impl Colosseum {
             }
             _ => {}
         }
+    }
+
+    /// Records a fight of any size from each contender's place (1 the best, from
+    /// `log::places`; a shared place is a draw). Everyone is compared with everyone
+    /// else, a duel being the case of two, and each comparison weighs K / (n - 1), so
+    /// a melee moves one's Elo no more than a duel. Titles only change hands in duels.
+    pub fn record_places(&mut self, places: &[(Contender, u32)], rules: &WorldRules) {
+        let Some(others) = places.len().checked_sub(1).filter(|&n| n > 0) else {
+            return;
+        };
+        let k = f64::from(rules.elo_k) / f64::from(u32::try_from(others).unwrap_or(u32::MAX));
+        let elos: Vec<i32> = places.iter().map(|&(c, _)| self.elo(c, rules)).collect();
+        let changes: Vec<i32> = places
+            .iter()
+            .zip(&elos)
+            .enumerate()
+            .map(|(i, (&(_, place), &elo))| {
+                let points: f64 = places
+                    .iter()
+                    .zip(&elos)
+                    .enumerate()
+                    .filter(|&(j, _)| j != i)
+                    .map(|(_, (&(_, other), &theirs))| {
+                        let score = match place.cmp(&other) {
+                            Ordering::Less => 1.0,
+                            Ordering::Equal => 0.5,
+                            Ordering::Greater => 0.0,
+                        };
+                        score - expected(elo, theirs)
+                    })
+                    .sum();
+                rounded(k * points)
+            })
+            .collect();
+        for (&(contender, _), change) in places.iter().zip(changes) {
+            self.add_elo(contender, change, rules);
+        }
+        self.ranking.sort_by_key(|r| Reverse(r.elo));
     }
 
     fn add_elo(&mut self, contender: Contender, change: i32, rules: &WorldRules) {
@@ -208,16 +243,19 @@ fn total(fighter: &CareerFighter) -> u32 {
     fighter.stats.to_array().iter().sum()
 }
 
-/// Elo points won by a player of Elo `a` scoring `score` (1 won, 0.5 draw, 0 lost)
-/// against one of Elo `b`; the other loses as many.
-fn elo_change(a: i32, b: i32, score: f64, k: u32) -> i32 {
-    let expected = 1.0 / (1.0 + libm::pow(10.0, f64::from(b - a) / 400.0));
+/// Expected score of a player of Elo `a` against one of Elo `b`, from 0 to 1.
+fn expected(a: i32, b: i32) -> f64 {
+    1.0 / (1.0 + libm::pow(10.0, f64::from(b - a) / 400.0))
+}
+
+/// Elo points, rounded.
+fn rounded(points: f64) -> i32 {
     #[expect(
         clippy::cast_possible_truncation,
-        reason = "within ±k, a u32 turned into f64"
+        reason = "within K, a u32 turned into f64"
     )]
-    let change = libm::round(f64::from(k) * (score - expected)) as i32;
-    change
+    let points = libm::round(points) as i32;
+    points
 }
 
 /// Picks the resident a club's fighter meets.
@@ -244,13 +282,62 @@ mod tests {
         )
     }
 
+    /// Elo won by a fighter of Elo `a` placed `place_a` in a duel against one of Elo
+    /// `b` placed `place_b`; the other loses as many.
+    fn duel(a: i32, b: i32, place_a: u32, place_b: u32) -> i32 {
+        let data = data();
+        let rules = &data.world;
+        let mut colosseum = rome(&data);
+        let (x, y) = (Contender::Club(0), Contender::Club(1));
+        colosseum.ranking = vec![
+            Rating {
+                contender: x,
+                elo: a,
+            },
+            Rating {
+                contender: y,
+                elo: b,
+            },
+        ];
+        colosseum.record_places(&[(x, place_a), (y, place_b)], rules);
+        let won = colosseum.elo(x, rules) - a;
+        assert_eq!(won, b - colosseum.elo(y, rules));
+        won
+    }
+
     #[test]
     fn elo_moves_more_for_an_upset() {
-        assert_eq!(elo_change(1000, 1000, 1.0, 32), 16);
-        assert_eq!(elo_change(1000, 1000, 0.5, 32), 0);
-        assert_eq!(elo_change(1000, 1000, 0.0, 32), -16);
-        assert!(elo_change(1000, 1400, 1.0, 32) > 16);
-        assert!(elo_change(1400, 1000, 1.0, 32) < 16);
+        assert_eq!(duel(1000, 1000, 1, 2), 16);
+        assert_eq!(duel(1000, 1000, 1, 1), 0);
+        assert_eq!(duel(1000, 1000, 2, 1), -16);
+        assert!(duel(1000, 1400, 1, 2) > 16);
+        assert!(duel(1400, 1000, 1, 2) < 16);
+    }
+
+    #[test]
+    fn a_melee_compares_everyone_by_elimination_order() {
+        let data = data();
+        let rules = &data.world;
+        let opened = rome(&data);
+        let mut melee = opened.clone();
+        // Twenty at the starting Elo, out in order: 0 is the last standing.
+        let contenders: Vec<_> = (0..20).map(Contender::Resident).collect();
+        let places: Vec<_> = contenders.iter().copied().zip(1..).collect();
+        melee.record_places(&places, rules);
+        let change = |i: usize| melee.elo(contenders[i], rules) - rules.elo_start;
+        // The winner beats 19 and gains as much as a duel won, the first out loses as
+        // much as a duel lost, the middle hardly moves, and the later out, the better.
+        assert_eq!((change(0), change(19)), (16, -16));
+        assert!(change(9).abs() <= 2 && change(10).abs() <= 2);
+        assert!((1..20).all(|i| change(i) < change(i - 1)));
+        // A melee leaves the title alone.
+        assert_eq!(melee.champion, opened.champion);
+        // Two out together draw with each other.
+        let mut tie = opened;
+        let three = [(contenders[0], 1), (contenders[1], 2), (contenders[2], 2)];
+        tie.record_places(&three, rules);
+        let change = |i: usize| tie.elo(contenders[i], rules) - rules.elo_start;
+        assert_eq!((change(0), change(1), change(2)), (16, -8, -8));
     }
 
     #[test]

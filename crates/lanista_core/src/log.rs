@@ -167,6 +167,37 @@ pub fn log_text(arena: &Arena) -> String {
     text
 }
 
+/// Each fighter's place in a fight, in the arena's order, from the elimination order:
+/// 1 for those still fighting at the end, then the later a fighter died or gave up,
+/// the better. Fighters out on the same tick, or still fighting together when time
+/// ran out, share a place.
+#[must_use]
+pub fn places(arena: &Arena) -> Vec<u32> {
+    // The tick a fighter was out on; still fighting comes last, so best.
+    let out: Vec<u64> = arena
+        .fighters
+        .iter()
+        .map(|f| {
+            arena
+                .log
+                .iter()
+                .find(|e| match e.kind {
+                    EventKind::Death { fighter } | EventKind::Surrender { fighter } => {
+                        fighter == f.id
+                    }
+                    EventKind::Cast { .. } => false,
+                })
+                .map_or(u64::MAX, |e| u64::from(e.tick))
+        })
+        .collect();
+    out.iter()
+        .map(|&mine| {
+            let ahead = out.iter().filter(|&&other| other > mine).count();
+            u32::try_from(ahead).map_or(u32::MAX, |n| n.saturating_add(1))
+        })
+        .collect()
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -185,6 +216,38 @@ mod tests {
     /// Fighter 0 hits fighter 1, which fights to the death.
     fn one_sided() -> Arena {
         one_sided_with_threshold(0)
+    }
+
+    #[test]
+    fn places_follow_the_elimination_order() {
+        let fighters = (0..4).map(|i| test_fighter(i, 2.0 + f64::from(i) * 3.0, 5.0));
+        let mut arena = Arena::new(20.0, 20.0, fighters.collect(), 0);
+        let out = |tick, kind| Event { tick, kind };
+        arena.log = vec![
+            out(
+                5,
+                EventKind::Death {
+                    fighter: FighterId(3),
+                },
+            ),
+            out(
+                10,
+                EventKind::Surrender {
+                    fighter: FighterId(2),
+                },
+            ),
+            out(
+                10,
+                EventKind::Death {
+                    fighter: FighterId(1),
+                },
+            ),
+        ];
+        // Fighter 0 is still fighting: first. 1 and 2 went out together: second.
+        assert_eq!(places(&arena), [1, 2, 2, 4]);
+        arena.log.clear();
+        // Time ran out on everyone still fighting: all first.
+        assert_eq!(places(&arena), [1, 1, 1, 1]);
     }
 
     #[test]
