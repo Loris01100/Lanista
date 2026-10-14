@@ -1,6 +1,7 @@
 //! What the player reads, in French: fighters, injuries, illnesses, fights,
-//! weeks and money.
+//! weeks, money and colosseums.
 
+use lanista_core::colosseum::{ArenaKind, Colosseum, ColosseumId, Contender};
 use lanista_core::design_data::DesignData;
 use lanista_core::economy::{Flow, Transaction};
 use lanista_core::fighter::career::{Activity, CareerFighter, FightSummary, Status, WeekReport};
@@ -32,11 +33,42 @@ pub fn class_name(fighter: &CareerFighter, data: &DesignData) -> String {
         .map_or_else(|| "?".into(), |c| c.name.clone())
 }
 
-pub fn activity_name(activity: Activity) -> &'static str {
+pub fn activity_name(activity: Activity, data: &DesignData) -> String {
     match activity {
-        Activity::Rest => "Repos",
-        Activity::Train => "Entraînement",
-        Activity::Fight => "Combat",
+        Activity::Rest => "Repos".into(),
+        Activity::Train => "Entraînement".into(),
+        Activity::Fight(id) => format!("Combat à {}", colosseum_name(id, data)),
+    }
+}
+
+pub fn colosseum_name(id: ColosseumId, data: &DesignData) -> &str {
+    data.world.colosseum(id).map_or("?", |c| c.name.as_str())
+}
+
+pub fn arena_name(arena: ArenaKind) -> &'static str {
+    match arena {
+        ArenaKind::Sand => "sable",
+        ArenaKind::Pillars => "piliers",
+        ArenaKind::Narrow => "étroite",
+    }
+}
+
+/// How a colosseum's ranking names `contender`; the club's fighters are marked.
+pub fn contender_name(
+    contender: Contender,
+    colosseum: &Colosseum,
+    club: &[CareerFighter],
+    data: &DesignData,
+) -> String {
+    match contender {
+        Contender::Club(i) => club.get(i).map_or_else(
+            || "?".into(),
+            |f| format!("{} (votre club)", fighter_name(i, f, data)),
+        ),
+        Contender::Resident(i) => colosseum.residents.get(i).map_or_else(
+            || "?".into(),
+            |f| format!("Résident n° {} ({})", i + 1, class_name(f, data)),
+        ),
     }
 }
 
@@ -151,7 +183,7 @@ pub fn week_lines(
     data: &DesignData,
 ) -> Vec<String> {
     let dominant = after.dominant_hand;
-    let mut lines = vec![activity_name(report.plan.activity).to_owned()];
+    let mut lines = vec![activity_name(report.plan.activity, data)];
     if let Some(fight) = &report.fight {
         lines.push(fight_text(fight, data));
     }

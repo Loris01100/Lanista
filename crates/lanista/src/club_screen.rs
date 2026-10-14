@@ -1,5 +1,5 @@
 //! The player's club, week after week: the general menu, the fighter list, a
-//! fighter's sheet and the summary of the week's fights. Fights are watched in the
+//! fighter's sheet, the summary of the week's fights and the colosseums. Fights are watched in the
 //! combat screen; the same seed and decisions give the same game as the `career` tool.
 //! The game is saved after every week, and when the player asks.
 
@@ -7,6 +7,7 @@ use std::path::PathBuf;
 use std::rc::Rc;
 
 use lanista_core::calendar::SeasonPhase;
+use lanista_core::colosseum::{ColosseumId, Contender};
 use lanista_core::combat::Arena;
 use lanista_core::design_data::DesignData;
 use lanista_core::economy::Flow;
@@ -24,13 +25,15 @@ use crate::Action;
 use crate::combat_screen::CombatScreen;
 use crate::saves;
 use crate::texts::{
-    STAT_NAMES, activity_name, change, class_name, condition_text, fight_text, fighter_name,
-    illness_text, injury_text, money_line, week_lines,
+    STAT_NAMES, activity_name, arena_name, change, class_name, colosseum_name, condition_text,
+    contender_name, fight_text, fighter_name, illness_text, injury_text, money_line, week_lines,
 };
 
 /// Seed of the standard duel offered from the club.
 const FREE_DUEL_SEED: u64 = 42;
 const BACKGROUND: Color = Color::new(0.16, 0.13, 0.11, 1.0);
+/// Ranks shown in a colosseum's ranking; the others are unranked.
+const RANKS_SHOWN: usize = 50;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum View {
@@ -42,6 +45,8 @@ enum View {
     Sheet(usize),
     /// The summary of last week's fights.
     Fights,
+    /// Each colosseum: arena, prestige, purses, champion and ranking.
+    Colosseums,
 }
 
 /// One of the club's fights, as the fight summary shows it.
@@ -49,6 +54,7 @@ enum View {
 struct FightReport {
     /// Index of the club's fighter.
     fighter: usize,
+    colosseum: ColosseumId,
     fight: FightSummary,
     /// Entry fee, receipts and prize.
     money: i64,
@@ -179,7 +185,8 @@ impl ClubScreen {
             }
             overview.push(line);
             self.histories[i].insert(0, (week, lines));
-            if let Some(fight) = report.fight {
+            if let (Some(fight), Activity::Fight(colosseum)) = (report.fight, report.plan.activity)
+            {
                 let money = summary
                     .ledger
                     .iter()
@@ -189,6 +196,7 @@ impl ClubScreen {
                     .sum();
                 self.fights.push(FightReport {
                     fighter: i,
+                    colosseum,
                     fight,
                     money,
                     form: (before.form.value(), after.form.value()),
@@ -236,6 +244,7 @@ impl ClubScreen {
             ui.add_enabled_ui(!self.fights.is_empty(), |ui| {
                 ui.selectable_value(&mut self.view, View::Fights, "Résumé des combats");
             });
+            ui.selectable_value(&mut self.view, View::Colosseums, "Colisées");
             ui.separator();
             if ui.button("Duel standard").clicked() {
                 let duel =
@@ -422,7 +431,11 @@ impl ClubScreen {
                 let fight = &report.fight;
                 let fighter = &self.state.fighters[report.fighter];
                 ui.add_space(8.0);
-                ui.strong(fighter_name(report.fighter, fighter, data));
+                ui.strong(format!(
+                    "{}, à {}",
+                    fighter_name(report.fighter, fighter, data),
+                    colosseum_name(report.colosseum, data)
+                ));
                 ui.label(fight_text(fight, data));
                 ui.label(format!(
                     "Durée {} s, graine {}",
@@ -476,6 +489,61 @@ impl ClubScreen {
         });
         again
     }
+
+    /// Each colosseum side by side.
+    fn colosseums(&self, ui: &mut egui::Ui) {
+        let data = &self.data;
+        let club = &self.state.fighters;
+        let colosseums = self.state.colosseums.iter().zip(&data.world.colosseums);
+        ui.heading("Colisées");
+        ui.columns(data.world.colosseums.len().max(1), |columns| {
+            for (n, ((colosseum, rules), ui)) in colosseums.zip(columns).enumerate() {
+                ui.strong(&rules.name);
+                ui.label(format!(
+                    "Arène : {}, prestige {} / 5",
+                    arena_name(rules.arena),
+                    rules.prestige
+                ));
+                ui.label(format!(
+                    "Inscription {}, prime de victoire {}",
+                    rules.purses.entry_fee, rules.purses.win_prize
+                ));
+                let champion = colosseum.champion.map_or_else(
+                    || "aucun".into(),
+                    |c| contender_name(c, colosseum, club, data),
+                );
+                ui.colored_label(egui::Color32::GOLD, format!("Champion : {champion}"));
+                // The club's fighters no longer fighting leave the ranking.
+                let ranked = colosseum.ranking.iter().filter(|r| match r.contender {
+                    Contender::Club(i) => club.get(i).is_some_and(|f| f.status == Status::Active),
+                    Contender::Resident(_) => true,
+                });
+                egui::ScrollArea::vertical()
+                    .id_salt(("ranking", n))
+                    .show(ui, |ui| {
+                        egui::Grid::new(("ranking", n))
+                            .striped(true)
+                            .show(ui, |ui| {
+                                for title in ["Rang", "Combattant", "Elo"] {
+                                    ui.strong(title);
+                                }
+                                ui.end_row();
+                                for (rank, rating) in ranked.take(RANKS_SHOWN).enumerate() {
+                                    ui.label((rank + 1).to_string());
+                                    ui.label(contender_name(
+                                        rating.contender,
+                                        colosseum,
+                                        club,
+                                        data,
+                                    ));
+                                    ui.label(rating.elo.to_string());
+                                    ui.end_row();
+                                }
+                            });
+                    });
+            }
+        });
+    }
 }
 
 impl ClubScreen {
@@ -505,6 +573,7 @@ impl Screen for ClubScreen {
             View::Roster => self.roster(ui),
             View::Sheet(i) => self.sheet(ui, i),
             View::Fights => again = self.fight_summary(ui),
+            View::Colosseums => self.colosseums(ui),
         });
         if let Some(transition) = transition {
             return transition;
@@ -538,8 +607,24 @@ fn plan_editor(
     money: i64,
     data: &DesignData,
 ) {
-    for activity in [Activity::Rest, Activity::Train, Activity::Fight] {
-        ui.selectable_value(&mut plan.activity, activity, activity_name(activity));
+    for activity in [Activity::Rest, Activity::Train] {
+        ui.selectable_value(&mut plan.activity, activity, activity_name(activity, data));
+    }
+    for (i, rules) in data.world.colosseums.iter().enumerate() {
+        let activity = Activity::Fight(ColosseumId(u32::try_from(i).unwrap_or(u32::MAX)));
+        let fee = rules.purses.entry_fee;
+        let mut name = activity_name(activity, data);
+        if fee > 0 {
+            name = format!("{name} ({fee})");
+        }
+        // The week would turn into rest: `next_week` drops what the club cannot pay.
+        let affordable = i64::from(fee) <= money;
+        if !affordable && plan.activity == activity {
+            plan.activity = Activity::Rest;
+        }
+        ui.add_enabled_ui(affordable, |ui| {
+            ui.selectable_value(&mut plan.activity, activity, name);
+        });
     }
     let cost = fighter.care_cost(&data.fighter);
     if cost == 0 {
@@ -552,7 +637,7 @@ fn plan_editor(
         ui.checkbox(&mut plan.care, format!("Soigner ({cost})"));
     }
     let ill = fighter.illness.is_some_and(|i| !i.fight_advised());
-    if ill && plan.activity == Activity::Fight {
+    if ill && matches!(plan.activity, Activity::Fight(_)) {
         ui.colored_label(egui::Color32::LIGHT_RED, "Combat déconseillé");
     }
 }
@@ -627,7 +712,6 @@ mod tests {
     use lanista_core::combat::Vec2;
     use lanista_core::duel::play;
     use lanista_core::fighter::FighterId;
-    use lanista_core::fighter::career::suggested_plan;
     use lanista_core::log::Report;
     use rand_chacha::ChaCha8Rng;
     use rand_chacha::rand_core::SeedableRng;
@@ -640,18 +724,14 @@ mod tests {
         ClubScreen::new(data, state, None, Bindings::new(Vec::new()))
     }
 
-    /// What `career --seed <seed> --weeks <weeks>` plays.
-    fn tool_career(seed: u64, weeks: u64) -> CareerFighter {
+    /// What `career --seed <seed> --weeks <weeks>` plays: the suggested decisions.
+    fn tool_career(seed: u64, weeks: u64) -> GameState {
         let data = DesignData::load().unwrap();
-        let mut rng = ChaCha8Rng::seed_from_u64(seed);
-        let mut fighter = CareerFighter::random(&mut rng, &data);
-        for week in 1..=weeks {
-            let plan = suggested_plan(&fighter, week);
-            if fighter.play_week(plan, &mut rng, &data).is_none() {
-                break;
-            }
+        let mut state = GameState::new(seed, &data);
+        for _ in 0..weeks {
+            next_week(&mut state, &Decisions::default(), &data);
         }
-        fighter
+        state
     }
 
     #[test]
@@ -661,11 +741,7 @@ mod tests {
             for _ in 0..10 {
                 screen.next_week();
             }
-            assert_eq!(
-                screen.state.fighters,
-                [tool_career(seed, 10)],
-                "seed {seed}"
-            );
+            assert_eq!(screen.state, tool_career(seed, 10), "seed {seed}");
             assert_eq!(screen.state.week, 11);
         }
     }
@@ -674,7 +750,10 @@ mod tests {
     fn a_fight_week_queues_the_fight_and_sums_it_up() {
         let mut screen = screen(7);
         // Seed 7's first week is a fight.
-        assert_eq!(screen.decisions.plans[0].activity, Activity::Fight);
+        assert_eq!(
+            screen.decisions.plans[0].activity,
+            Activity::Fight(ColosseumId(0))
+        );
         screen.next_week();
         assert_eq!(screen.view, View::Fights);
         let mut fight = screen.to_watch.pop().unwrap();
@@ -690,7 +769,8 @@ mod tests {
         // The summary tells the very fight that was watched.
         let report = &screen.fights[0];
         assert_eq!(report.fight.report, Report::new(&fight));
-        assert_eq!((report.money, report.form), (20, (100, 80)));
+        // A win in Capua: receipts and the winner's prize.
+        assert_eq!((report.money, report.form), (70, (100, 80)));
         // Week 2 is training: nothing to watch, nothing to sum up.
         assert_eq!(screen.decisions.plans[0].activity, Activity::Train);
         screen.next_week();
@@ -705,18 +785,18 @@ mod tests {
         let weeks: Vec<u64> = screen.histories[0].iter().map(|(week, _)| *week).collect();
         assert_eq!(weeks, [2, 1]);
         let first = &screen.histories[0][1].1;
-        assert_eq!(first[0], "Combat");
+        assert_eq!(first[0], "Combat à Capoue");
         assert!(
-            first[1].starts_with("Contre un Augure, plus fort : abandon"),
+            first[1].starts_with("Contre un Mirmillon, plus fort : victoire"),
             "{first:?}"
         );
         assert!(
-            first.contains(&"Forme 80 (-20), moral 40 (-10), renommée 0".to_owned()),
+            first.contains(&"Forme 80 (-20), moral 60 (+10), renommée 11 (+11)".to_owned()),
             "{first:?}"
         );
         let (week, menu) = screen.last_week.as_ref().unwrap();
         assert_eq!(*week, 2);
-        assert_eq!(menu[0], "Argent 495 (-15) : entraînement -5, entretien -10");
+        assert_eq!(menu[0], "Argent 545 (-15) : entraînement -5, entretien -10");
         assert_eq!(menu[1], "Mirmillon n° 1 : Entraînement");
     }
 

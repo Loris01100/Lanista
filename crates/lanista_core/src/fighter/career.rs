@@ -4,6 +4,7 @@
 use rand::{Rng, RngExt};
 use serde::{Deserialize, Serialize};
 
+use crate::colosseum::ColosseumId;
 use crate::combat::{Arena, Vec2};
 use crate::design_data::{DesignData, FighterRules};
 use crate::duel::{ARENA_SIZE, STATS, play};
@@ -137,9 +138,11 @@ impl CareerFighter {
     /// Plays one week following `plan`; `None`, and nothing changes, if the fighter
     /// is retired or dead. In order: care, the week's activity, then healing,
     /// the illness draw and, once a year, ageing and the retirement decision.
+    /// A fight is against `opponent`, or a new random fighter without one.
     pub fn play_week<R: Rng + ?Sized>(
         &mut self,
         plan: WeekPlan,
+        opponent: Option<&mut Self>,
         rng: &mut R,
         data: &DesignData,
     ) -> Option<WeekReport> {
@@ -168,8 +171,15 @@ impl CareerFighter {
                 self.form = self.form.after(FormEvent::Training, &rules.form);
                 self.progress(ProgressEvent::Training, rng, rules);
             }
-            Activity::Fight => {
-                let (fight, injury) = self.fight(rng, data);
+            Activity::Fight(_) => {
+                let mut stranger;
+                let opponent = if let Some(opponent) = opponent {
+                    opponent
+                } else {
+                    stranger = Self::random(rng, data);
+                    &mut stranger
+                };
+                let (fight, injury) = self.fight(opponent, rng, data);
                 report.fight = Some(fight);
                 report.new_injury = injury;
                 if self.status == Status::Dead {
@@ -221,15 +231,16 @@ impl CareerFighter {
         );
     }
 
-    /// A duel against a new random fighter, then its effects: fame, morale, form,
-    /// illness worsening, a possible injury and progression. Returns the new injury.
+    /// A duel against `opponent`, then its effects: fame, morale, form, illness
+    /// worsening, a possible injury and progression. The opponent only takes fame
+    /// and death. Returns the new injury.
     fn fight<R: Rng + ?Sized>(
         &mut self,
+        opponent: &mut Self,
         rng: &mut R,
         data: &DesignData,
     ) -> (FightSummary, Option<Injury>) {
         let rules = &data.fighter;
-        let opponent = Self::random(rng, data);
         let seed = rng.random::<u64>();
         let middle = ARENA_SIZE / 2.0;
         let fighters = vec![
@@ -240,7 +251,11 @@ impl CareerFighter {
         let mut arena = start.clone();
         play(&mut arena);
         let total = |stats: Stats| stats.to_array().iter().map(|&v| u64::from(v)).sum::<u64>();
-        let stronger = total(opponent.fighting_stats(rules)) > total(self.fighting_stats(rules));
+        let (mine, theirs) = (
+            total(self.fighting_stats(rules)),
+            total(opponent.fighting_stats(rules)),
+        );
+        let stronger = theirs > mine;
         let outcome = FightOutcome::from_arena(&arena, FighterId(0), stronger, &rules.fame);
         let fame_change = outcome.fame_change(&rules.fame);
         let died = !arena.fighters[0].is_alive();
@@ -248,13 +263,21 @@ impl CareerFighter {
             seed,
             start,
             report: Report::new(&arena),
-            opponent,
+            opponent: opponent.clone(),
             against_stronger: stronger,
             result: outcome.result,
             died,
             fame_change,
             ticks: arena.tick,
         };
+        let their_outcome =
+            FightOutcome::from_arena(&arena, FighterId(1), mine > theirs, &rules.fame);
+        opponent.fame = opponent
+            .fame
+            .changed_by(their_outcome.fame_change(&rules.fame));
+        if !arena.fighters[1].is_alive() {
+            opponent.status = Status::Dead;
+        }
         self.fame = self.fame.changed_by(fame_change);
         if died {
             self.status = Status::Dead;
@@ -338,7 +361,8 @@ impl CareerFighter {
 pub enum Activity {
     Rest,
     Train,
-    Fight,
+    /// A duel in this colosseum.
+    Fight(ColosseumId),
 }
 
 /// Below this form, `suggested_plan` rests.
@@ -346,7 +370,8 @@ pub const REST_BELOW_FORM: u32 = 50;
 
 /// A simple stand-in for the player's decisions, shared by the `career` tool and the
 /// game's default choice: care for anything medium or worse, rest when tired, badly
-/// hurt or ill, otherwise fight on odd weeks and train on even ones.
+/// hurt or ill, otherwise fight on odd weeks, in the first colosseum (free to enter),
+/// and train on even ones.
 // ponytail: the rival managers' rules of phase 4 will replace it.
 #[must_use]
 pub fn suggested_plan(fighter: &CareerFighter, week: u64) -> WeekPlan {
@@ -360,7 +385,7 @@ pub fn suggested_plan(fighter: &CareerFighter, week: u64) -> WeekPlan {
     let activity = if badly_hurt || ill || fighter.form.value() < REST_BELOW_FORM {
         Activity::Rest
     } else if week % 2 == 1 {
-        Activity::Fight
+        Activity::Fight(ColosseumId(0))
     } else {
         Activity::Train
     };
@@ -404,6 +429,7 @@ pub struct FightSummary {
     pub start: Arena,
     /// Damage dealt and taken and spells cast by each side, the career fighter first.
     pub report: Report,
+    /// The opponent before the fight.
     pub opponent: CareerFighter,
     pub against_stronger: bool,
     pub result: FightResult,
@@ -469,9 +495,11 @@ mod tests {
         let mut rng = ChaCha8Rng::seed_from_u64(0);
         let mut f = fighter(7);
         f.form = Form::new(50);
-        f.play_week(plan(Activity::Rest), &mut rng, &data).unwrap();
+        f.play_week(plan(Activity::Rest), None, &mut rng, &data)
+            .unwrap();
         assert_eq!(f.form.value(), 65);
-        f.play_week(plan(Activity::Train), &mut rng, &data).unwrap();
+        f.play_week(plan(Activity::Train), None, &mut rng, &data)
+            .unwrap();
         assert_eq!(f.form.value(), 60);
         assert_eq!(f.weeks_this_year, 2);
     }
@@ -481,7 +509,9 @@ mod tests {
         let data = data();
         let mut rng = ChaCha8Rng::seed_from_u64(1);
         let mut f = fighter(7);
-        let report = f.play_week(plan(Activity::Fight), &mut rng, &data).unwrap();
+        let report = f
+            .play_week(plan(Activity::Fight(ColosseumId(0))), None, &mut rng, &data)
+            .unwrap();
         let fight = report.fight.unwrap();
         if f.status == Status::Active {
             assert_eq!(f.form.value(), 80);
@@ -500,7 +530,9 @@ mod tests {
             weeks_left: 1,
         };
         f.injuries.push(injury);
-        let report = f.play_week(plan(Activity::Rest), &mut rng, &data).unwrap();
+        let report = f
+            .play_week(plan(Activity::Rest), None, &mut rng, &data)
+            .unwrap();
         assert_eq!(report.healed_injuries, vec![injury]);
         assert_eq!(f.injuries, []);
     }
@@ -530,7 +562,9 @@ mod tests {
         let age = f.age;
         let mut birthdays = 0;
         for _ in 0..data.calendar.season_weeks() {
-            let report = f.play_week(plan(Activity::Rest), &mut rng, &data).unwrap();
+            let report = f
+                .play_week(plan(Activity::Rest), None, &mut rng, &data)
+                .unwrap();
             birthdays += u32::from(report.birthday);
         }
         assert_eq!((birthdays, f.age, f.weeks_this_year), (1, age + 1, 0));
@@ -544,7 +578,10 @@ mod tests {
             let mut f = fighter(7);
             f.status = status;
             let before = f.clone();
-            assert_eq!(f.play_week(plan(Activity::Fight), &mut rng, &data), None);
+            assert_eq!(
+                f.play_week(plan(Activity::Fight(ColosseumId(0))), None, &mut rng, &data),
+                None
+            );
             assert_eq!(f, before);
         }
     }
@@ -554,7 +591,9 @@ mod tests {
         let data = data();
         let mut rng = ChaCha8Rng::seed_from_u64(5);
         let mut f = fighter(7);
-        let report = f.play_week(plan(Activity::Fight), &mut rng, &data).unwrap();
+        let report = f
+            .play_week(plan(Activity::Fight(ColosseumId(0))), None, &mut rng, &data)
+            .unwrap();
         let fight = report.fight.unwrap();
         let mut replay = fight.start.clone();
         assert_eq!(replay.tick, 0);
@@ -565,9 +604,32 @@ mod tests {
     }
 
     #[test]
+    fn the_opponent_given_is_the_one_met_and_can_die() {
+        let data = data();
+        let fight = Activity::Fight(ColosseumId(0));
+        for seed in 0..20 {
+            let mut rng = ChaCha8Rng::seed_from_u64(seed);
+            let mut f = fighter(7);
+            let mut opponent = fighter(seed + 100);
+            let report = f
+                .play_week(plan(fight), Some(&mut opponent), &mut rng, &data)
+                .unwrap();
+            let summary = report.fight.unwrap();
+            assert_eq!(summary.opponent, fighter(seed + 100));
+            let mut replay = summary.start.clone();
+            play(&mut replay);
+            let died = !replay.fighters[1].is_alive();
+            assert_eq!(opponent.status == Status::Dead, died, "seed {seed}");
+        }
+    }
+
+    #[test]
     fn the_suggested_plan_rests_the_tired_and_the_hurt() {
         let mut f = fighter(7);
-        assert_eq!(suggested_plan(&f, 1).activity, Activity::Fight);
+        assert_eq!(
+            suggested_plan(&f, 1).activity,
+            Activity::Fight(ColosseumId(0))
+        );
         assert_eq!(suggested_plan(&f, 2).activity, Activity::Train);
         f.form = Form::new(REST_BELOW_FORM - 1);
         assert_eq!(suggested_plan(&f, 1).activity, Activity::Rest);
@@ -593,7 +655,9 @@ mod tests {
             let mut rng = ChaCha8Rng::seed_from_u64(9);
             let mut f = CareerFighter::random(&mut rng, &data);
             let reports: Vec<_> = (0..10)
-                .filter_map(|_| f.play_week(plan(Activity::Fight), &mut rng, &data))
+                .filter_map(|_| {
+                    f.play_week(plan(Activity::Fight(ColosseumId(0))), None, &mut rng, &data)
+                })
                 .collect();
             (f, reports)
         };

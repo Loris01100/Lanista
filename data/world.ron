@@ -1,0 +1,39 @@
+// The world's colosseums: placeholder values, to tune while balancing.
+(
+    // Elo of a fighter's first fight in a colosseum, and how far one fight moves it.
+    elo_start: 1000,
+    elo_k: 32,
+    // Residents' stats grow by this percentage for each prestige level above 1.
+    prestige_stats_percent: 10,
+    // At least one must be free to enter: the safety net of a club without money.
+    colosseums: [
+        (
+            name: "Capoue",
+            // Effects come with phase 6: sand slows, pillars block shots, narrow favours melee.
+            arena: Sand,
+            // 1 to 5.
+            prestige: 1,
+            // Regular fighters, the opponents of its fights.
+            residents: 15,
+            purses: (
+                entry_fee: 0,
+                win_prize: 50,
+                // Paid win or lose: base + per_fame × (fame of both fighters).
+                receipts_base: 20,
+                receipts_per_fame: 1,
+            ),
+        ),
+        (
+            name: "Rome",
+            arena: Pillars,
+            prestige: 3,
+            residents: 15,
+            purses: (
+                entry_fee: 20,
+                win_prize: 150,
+                receipts_base: 40,
+                receipts_per_fame: 2,
+            ),
+        ),
+    ],
+)

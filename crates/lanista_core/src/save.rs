@@ -9,12 +9,17 @@ use crate::state::GameState;
 
 /// Version written in new saves. Raise it with any change to the saved types,
 /// and add the migration from the previous version to [`MIGRATIONS`].
-pub const VERSION: u64 = 1;
+pub const VERSION: u64 = 2;
 
 /// `MIGRATIONS[i]` turns a version `i + 1` save into a version `i + 2` one,
 /// working on the JSON so the old types need not be kept.
-const MIGRATIONS: [fn(&mut Value); 0] = [];
+const MIGRATIONS: [fn(&mut Value); 1] = [no_colosseums];
 const _: () = assert!(MIGRATIONS.len() as u64 == VERSION - 1);
+
+/// Version 2 adds the colosseums; [`from_json`] opens them.
+fn no_colosseums(save: &mut Value) {
+    save["state"]["colosseums"] = Value::Array(Vec::new());
+}
 
 #[derive(Serialize)]
 struct Save<'a> {
@@ -66,7 +71,8 @@ pub fn to_json(state: &GameState) -> String {
     serde_json::to_string_pretty(&save).expect("a game state serializes to JSON")
 }
 
-/// Reads a save of any known version, migrating it first.
+/// Reads a save of any known version, migrating it first, and opens the colosseums
+/// of `data` it does not have.
 ///
 /// # Errors
 /// If the text is not a save, its version is unknown, or a fighter's class is not in `data`.
@@ -80,15 +86,19 @@ pub fn from_json(text: &str, data: &DesignData) -> Result<GameState, SaveError> 
     for migrate in &MIGRATIONS[from..] {
         migrate(&mut save);
     }
-    let state: GameState = serde_json::from_value(save["state"].take()).map_err(SaveError::Json)?;
+    let mut state: GameState =
+        serde_json::from_value(save["state"].take()).map_err(SaveError::Json)?;
     // A fighter of an unknown class would panic when sent to fight.
+    let residents = state.colosseums.iter().flat_map(|c| &c.residents);
     if let Some(f) = state
         .fighters
         .iter()
+        .chain(residents)
         .find(|f| data.class(f.class).is_none())
     {
         return Err(SaveError::UnknownClass(f.class.0));
     }
+    state.open_colosseums(data);
     Ok(state)
 }
 
@@ -130,12 +140,12 @@ mod tests {
     fn unknown_versions_are_refused() {
         let data = data();
         let save = to_json(&GameState::new(7, &data));
-        let newer = save.replacen("\"version\": 1", "\"version\": 2", 1);
+        let newer = save.replacen("\"version\": 2", "\"version\": 3", 1);
         assert!(matches!(
             from_json(&newer, &data),
-            Err(SaveError::Version(Some(2)))
+            Err(SaveError::Version(Some(3)))
         ));
-        let none = save.replacen("\"version\": 1", "\"versio\": 1", 1);
+        let none = save.replacen("\"version\": 2", "\"versio\": 2", 1);
         assert!(matches!(
             from_json(&none, &data),
             Err(SaveError::Version(None))
@@ -151,6 +161,12 @@ mod tests {
         assert!(matches!(
             from_json(&to_json(&state), &data),
             Err(SaveError::UnknownClass(99))
+        ));
+        let mut state = GameState::new(7, &data);
+        state.colosseums[1].residents[0].class = ClassId(98);
+        assert!(matches!(
+            from_json(&to_json(&state), &data),
+            Err(SaveError::UnknownClass(98))
         ));
         let state = GameState::new(7, &data);
         let form = format!("\"form\": {}", state.fighters[0].form.value());

@@ -17,14 +17,12 @@ pub struct EconomyRules {
     pub upkeep: u32,
     /// Paid for each training session.
     pub training_cost: u32,
-    /// The only colosseum until phase 5.
-    pub colosseum: ColosseumRules,
 }
 
 /// A colosseum's fee and purses.
 #[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
 #[serde(deny_unknown_fields)]
-pub struct ColosseumRules {
+pub struct Purses {
     /// Paid to register a fighter; 0 for the free colosseum, the safety net.
     pub entry_fee: u32,
     /// Paid to the winner's club.
@@ -35,7 +33,7 @@ pub struct ColosseumRules {
     pub receipts_per_fame: u32,
 }
 
-impl ColosseumRules {
+impl Purses {
     /// Gate receipts of a fight: famous fighters draw a crowd.
     #[must_use]
     pub fn receipts(&self, fighter: Fame, opponent: Fame) -> u32 {
@@ -71,7 +69,7 @@ mod tests {
 
     #[test]
     fn receipts_grow_with_both_fighters_fame() {
-        let rules = ColosseumRules {
+        let rules = Purses {
             entry_fee: 0,
             win_prize: 50,
             receipts_base: 20,

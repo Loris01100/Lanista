@@ -1,4 +1,4 @@
-//! The whole game: the player's club and the week to play. One week is one call
+//! The whole game: the player's club, the colosseums and the week to play. One week is one call
 //! to [`next_week`]; the interface only builds [`Decisions`] and reads the state.
 
 use rand::SeedableRng;
@@ -6,6 +6,7 @@ use rand_chacha::ChaCha8Rng;
 use serde::{Deserialize, Serialize};
 
 use crate::calendar::Date;
+use crate::colosseum::{Colosseum, Contender, pick_opponent};
 use crate::design_data::DesignData;
 use crate::economy::{Flow, Transaction};
 use crate::fighter::career::{
@@ -21,23 +22,38 @@ pub struct GameState {
     pub money: i64,
     /// The player's club; a fighter's index is its place here.
     pub fighters: Vec<CareerFighter>,
+    /// In the order of `data/world.ron`.
+    pub colosseums: Vec<Colosseum>,
     /// The only source of chance after the start: same seed and decisions, same game.
     pub rng: ChaCha8Rng,
 }
 
 impl GameState {
     /// A new game from `seed`: a club of one generated fighter, the same one
-    /// `CareerFighter::random` draws first from that seed, and the starting money.
+    /// `CareerFighter::random` draws first from that seed, the starting money, and
+    /// the colosseums with their residents.
     // ponytail: one fighter until the fighter list screen and the market give a roster.
     #[must_use]
     pub fn new(seed: u64, data: &DesignData) -> Self {
         let mut rng = ChaCha8Rng::seed_from_u64(seed);
         let fighters = vec![CareerFighter::random(&mut rng, data)];
-        Self {
+        let mut state = Self {
             week: 1,
             money: i64::from(data.economy.starting_money),
             fighters,
+            colosseums: Vec::new(),
             rng,
+        };
+        state.open_colosseums(data);
+        state
+    }
+
+    /// Opens the colosseums of `data` the game does not have yet: all of them in a
+    /// new game, those added to `data/world.ron` since an older save.
+    pub fn open_colosseums(&mut self, data: &DesignData) {
+        for rules in data.world.colosseums.iter().skip(self.colosseums.len()) {
+            let colosseum = Colosseum::open(&mut self.rng, rules, data);
+            self.colosseums.push(colosseum);
         }
     }
 
@@ -98,7 +114,8 @@ pub struct WeekSummary {
 }
 
 /// Plays one week for the whole club: signs a free agent if asked and there is room, then plays each
-/// fighter's week in club order and pays for it, then moves to the next week.
+/// fighter's week in club order and pays for it, then ends the colosseums' week and moves to
+/// the next week. A fight is against one of the colosseum's residents and moves both Elo.
 ///
 /// A choice the club cannot pay for at its turn is dropped: no care, and rest instead
 /// of training or of a fight with an entry fee. Upkeep is always paid, even into debt.
@@ -109,7 +126,6 @@ pub fn next_week(state: &mut GameState, decisions: &Decisions, data: &DesignData
         state.fighters.push(agent);
     }
     let economy = &data.economy;
-    let colosseum = &economy.colosseum;
     let mut ledger = Vec::new();
     let mut reports = Vec::with_capacity(state.fighters.len());
     for (i, fighter) in state.fighters.iter_mut().enumerate() {
@@ -120,7 +136,15 @@ pub fn next_week(state: &mut GameState, decisions: &Decisions, data: &DesignData
             .unwrap_or_else(|| suggested_plan(fighter, week));
         let plan = affordable(wanted, fighter, state.money, data);
         let fame = fighter.fame;
-        let report = fighter.play_week(plan, &mut state.rng, data);
+        // The colosseum and the resident met there.
+        let meeting = match plan.activity {
+            Activity::Fight(id) => usize::try_from(id.0)
+                .ok()
+                .and_then(|c| Some((c, pick_opponent(&mut state.rng, state.colosseums.get(c)?)?))),
+            Activity::Rest | Activity::Train => None,
+        };
+        let opponent = meeting.and_then(|(c, r)| state.colosseums.get_mut(c)?.residents.get_mut(r));
+        let report = fighter.play_week(plan, opponent, &mut state.rng, data);
         if let Some(report) = &report {
             let mut pay = |flow, amount: i64| {
                 if amount != 0 {
@@ -136,19 +160,32 @@ pub fn next_week(state: &mut GameState, decisions: &Decisions, data: &DesignData
             if report.plan.activity == Activity::Train {
                 pay(Flow::Training, -i64::from(economy.training_cost));
             }
-            if let Some(fight) = &report.fight {
-                pay(Flow::EntryFee, -i64::from(colosseum.entry_fee));
+            if let (Some(fight), Activity::Fight(id)) = (&report.fight, report.plan.activity)
+                && let Some(rules) = data.world.colosseum(id)
+            {
+                let purses = &rules.purses;
+                pay(Flow::EntryFee, -i64::from(purses.entry_fee));
                 pay(
                     Flow::Receipts,
-                    i64::from(colosseum.receipts(fame, fight.opponent.fame)),
+                    i64::from(purses.receipts(fame, fight.opponent.fame)),
                 );
                 if fight.result == FightResult::Won {
-                    pay(Flow::WinPrize, i64::from(colosseum.win_prize));
+                    pay(Flow::WinPrize, i64::from(purses.win_prize));
+                }
+                if let Some((c, r)) = meeting {
+                    let (club, resident) = (Contender::Club(i), Contender::Resident(r));
+                    state.colosseums[c].record(club, resident, fight.result, &data.world);
                 }
             }
             pay(Flow::Upkeep, -i64::from(economy.upkeep));
         }
         reports.push(report);
+    }
+    let fighters = &state.fighters;
+    for (colosseum, rules) in state.colosseums.iter_mut().zip(&data.world.colosseums) {
+        colosseum.end_week(&mut state.rng, rules, data, |i| {
+            fighters.get(i).is_some_and(|f| f.status == Status::Active)
+        });
     }
     state.week += 1;
     WeekSummary { reports, ledger }
@@ -171,11 +208,12 @@ fn affordable(
         }
     }
     let cost = match plan.activity {
-        Activity::Rest => 0,
-        Activity::Train => data.economy.training_cost,
-        Activity::Fight => data.economy.colosseum.entry_fee,
+        Activity::Rest => Some(0),
+        Activity::Train => Some(data.economy.training_cost),
+        Activity::Fight(id) => data.world.colosseum(id).map(|c| c.purses.entry_fee),
     };
-    if i64::from(cost) > left {
+    // A colosseum missing from the data cannot be entered.
+    if cost.is_none_or(|cost| i64::from(cost) > left) {
         plan.activity = Activity::Rest;
     }
     plan
@@ -184,6 +222,7 @@ fn affordable(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::colosseum::ColosseumId;
     use crate::fighter::injury::{Injury, Location, Severity};
 
     fn data() -> DesignData {
@@ -302,13 +341,17 @@ mod tests {
     #[test]
     fn a_fight_brings_receipts_and_the_winner_s_prize() {
         let data = data();
-        let colosseum = &data.economy.colosseum;
-        // Even a broke club can fight: the colosseum is free.
+        let colosseum = &data.world.colosseums[0].purses;
+        // Even a broke club can fight: the first colosseum is free.
         let mut state = GameState::new(7, &data);
         state.money = 0;
         let mut won = false;
         for _ in 0..20 {
-            let summary = next_week(&mut state, &plan(Activity::Fight, false), &data);
+            let summary = next_week(
+                &mut state,
+                &plan(Activity::Fight(ColosseumId(0)), false),
+                &data,
+            );
             let Some(fight) = summary.reports[0].as_ref().and_then(|r| r.fight.as_ref()) else {
                 break;
             };
@@ -320,6 +363,57 @@ mod tests {
             won |= fight.result == FightResult::Won;
         }
         assert!(won, "seed 7 wins a fight in 20 weeks");
+    }
+
+    #[test]
+    fn a_fight_meets_a_resident_and_moves_both_elo() {
+        let data = data();
+        let rules = &data.world;
+        let mut state = GameState::new(7, &data);
+        assert_eq!(state.colosseums.len(), 2);
+        let rome = ColosseumId(1);
+        let summary = next_week(&mut state, &plan(Activity::Fight(rome), false), &data);
+        let fight = summary.reports[0].as_ref().unwrap().fight.as_ref().unwrap();
+        let fee = i64::from(rules.colosseums[1].purses.entry_fee);
+        assert_eq!(flows(&summary)[0], (Flow::EntryFee, -fee));
+        let rome = &state.colosseums[1];
+        let club = rome.elo(Contender::Club(0), rules);
+        assert_eq!(rome.ranking.len(), 16);
+        let resident = rome
+            .ranking
+            .iter()
+            .find(|r| r.elo != rules.elo_start && r.contender != Contender::Club(0))
+            .unwrap();
+        // Zero-sum: what one wins, the other loses.
+        assert_eq!(club - rules.elo_start, rules.elo_start - resident.elo);
+        assert_eq!(club > rules.elo_start, fight.result == FightResult::Won);
+        assert_eq!(state.colosseums[0].ranking.len(), 15);
+    }
+
+    #[test]
+    fn a_club_that_cannot_pay_rome_rests() {
+        let data = data();
+        let mut state = GameState::new(7, &data);
+        state.money = 0;
+        let summary = next_week(
+            &mut state,
+            &plan(Activity::Fight(ColosseumId(1)), false),
+            &data,
+        );
+        assert_eq!(
+            summary.reports[0].as_ref().unwrap().plan.activity,
+            Activity::Rest
+        );
+        // Nor can it fight in a colosseum missing from the data.
+        let summary = next_week(
+            &mut state,
+            &plan(Activity::Fight(ColosseumId(9)), false),
+            &data,
+        );
+        assert_eq!(
+            summary.reports[0].as_ref().unwrap().plan.activity,
+            Activity::Rest
+        );
     }
 
     #[test]

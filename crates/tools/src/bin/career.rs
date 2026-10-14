@@ -126,9 +126,12 @@ fn week_text(
 ) -> String {
     let mut text = String::new();
     let activity = match report.plan.activity {
-        Activity::Rest => "rest",
-        Activity::Train => "training",
-        Activity::Fight => "fight",
+        Activity::Rest => "rest".to_owned(),
+        Activity::Train => "training".to_owned(),
+        Activity::Fight(id) => format!(
+            "fight in {}",
+            data.world.colosseum(id).map_or("?", |c| c.name.as_str())
+        ),
     };
     let _ = writeln!(text, "week {week} (age {}): {activity}", before.age);
     if let Some(fight) = &report.fight {

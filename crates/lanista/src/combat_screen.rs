@@ -496,6 +496,7 @@ mod tests {
     /// by frame, it is the very fight the career played.
     #[test]
     fn a_watched_career_fight_is_the_one_the_career_played() {
+        use lanista_core::colosseum::ColosseumId;
         use lanista_core::fighter::career::{Activity, CareerFighter, WeekPlan};
         use rand_chacha::ChaCha8Rng;
         use rand_chacha::rand_core::SeedableRng;
@@ -504,11 +505,11 @@ mod tests {
         let mut rng = ChaCha8Rng::seed_from_u64(7);
         let mut fighter = CareerFighter::random(&mut rng, &data);
         let plan = WeekPlan {
-            activity: Activity::Fight,
+            activity: Activity::Fight(ColosseumId(0)),
             care: false,
         };
         let fight = fighter
-            .play_week(plan, &mut rng, &data)
+            .play_week(plan, None, &mut rng, &data)
             .unwrap()
             .fight
             .unwrap();
