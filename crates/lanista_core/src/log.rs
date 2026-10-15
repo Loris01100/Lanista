@@ -15,12 +15,14 @@ pub struct Event {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum EventKind {
     /// `caster` hit `target` with spell `spell` (index in the caster's `spells`).
-    /// `damage` is the hit points actually lost, so a killing blow counts only what was left.
+    /// `damage` is the hit points actually lost, so a killing blow counts only what was left,
+    /// and a missed spell (`missed`) none.
     Cast {
         caster: FighterId,
         target: FighterId,
         spell: usize,
         damage: u32,
+        missed: bool,
     },
     Death {
         fighter: FighterId,
@@ -51,7 +53,9 @@ pub struct FighterReport {
     pub max_hp: u32,
     pub damage_dealt: u32,
     pub damage_taken: u32,
+    /// Missed spells included.
     pub spells_cast: u32,
+    pub misses: u32,
     pub surrendered: bool,
 }
 
@@ -68,6 +72,7 @@ impl Report {
                 damage_dealt: 0,
                 damage_taken: 0,
                 spells_cast: 0,
+                misses: 0,
                 surrendered: f.surrendered,
             })
             .collect();
@@ -77,12 +82,14 @@ impl Report {
                 caster,
                 target,
                 damage,
+                missed,
                 ..
             } = event.kind
             {
                 if let Some(c) = index(caster).and_then(|i| fighters.get_mut(i)) {
                     c.damage_dealt = c.damage_dealt.saturating_add(damage);
                     c.spells_cast += 1;
+                    c.misses += u32::from(missed);
                 }
                 if let Some(t) = index(target).and_then(|i| fighters.get_mut(i)) {
                     t.damage_taken = t.damage_taken.saturating_add(damage);
@@ -124,8 +131,8 @@ impl fmt::Display for Report {
         for r in &self.fighters {
             write!(
                 f,
-                "fighter {}: {}/{} HP, dealt {}, taken {}, {} spells cast",
-                r.id.0, r.hp, r.max_hp, r.damage_dealt, r.damage_taken, r.spells_cast
+                "fighter {}: {}/{} HP, dealt {}, taken {}, {} spells cast, {} missed",
+                r.id.0, r.hp, r.max_hp, r.damage_dealt, r.damage_taken, r.spells_cast, r.misses
             )?;
             writeln!(f, "{}", if r.surrendered { ", gave up" } else { "" })?;
         }
@@ -145,15 +152,21 @@ pub fn log_text(arena: &Arena) -> String {
                 target,
                 spell,
                 damage,
+                missed,
             } => {
                 let name = arena
                     .fighter(caster)
                     .and_then(|c| c.spells.get(spell))
                     .map_or("?", |s| s.name.as_str());
+                let result = if missed {
+                    "missed".to_owned()
+                } else {
+                    format!("{damage} damage")
+                };
                 writeln!(
                     text,
-                    "[{:>5}] fighter {} casts {} on fighter {}: {} damage",
-                    event.tick, caster.0, name, target.0, damage
+                    "[{:>5}] fighter {} casts {} on fighter {}: {result}",
+                    event.tick, caster.0, name, target.0
                 )
             }
             EventKind::Death { fighter } => {
@@ -304,9 +317,9 @@ mod tests {
         assert_eq!(report.winner, Some(FighterId(0)));
         assert!(report.fighters[1].surrendered);
         assert!(
-            report
-                .to_string()
-                .contains("fighter 1: 15/100 HP, dealt 0, taken 10, 0 spells cast, gave up")
+            report.to_string().contains(
+                "fighter 1: 15/100 HP, dealt 0, taken 10, 0 spells cast, 0 missed, gave up"
+            )
         );
         assert!(log_text(&arena).ends_with(
             "fighter 1 gives up

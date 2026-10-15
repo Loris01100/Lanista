@@ -1,7 +1,7 @@
 //! Invariants checked on random duels between utility AIs.
 
 use lanista_core::ai::{CombatAi, UtilityAi};
-use lanista_core::combat::{Arena, RADIUS, Vec2, run, tick};
+use lanista_core::combat::{AccuracyRules, Arena, RADIUS, Vec2, run, tick};
 use lanista_core::design_data::DesignData;
 use lanista_core::duel::{ARENA_SIZE, MAX_TICKS, STATS};
 use lanista_core::fighter::personality::Personality;
@@ -16,17 +16,21 @@ fn stats() -> impl Strategy<Value = Stats> {
         0..100u32,
         0..100u32,
         0..60u32,
+        0..60u32,
         0..200u32,
         0..200u32,
     )
         .prop_map(
-            |(hp, melee_attack, ranged_attack, speed, melee_defense, ranged_defense)| Stats {
-                hp,
-                melee_attack,
-                ranged_attack,
-                speed,
-                melee_defense,
-                ranged_defense,
+            |(hp, melee_attack, ranged_attack, accuracy, speed, melee_defense, ranged_defense)| {
+                Stats {
+                    hp,
+                    melee_attack,
+                    ranged_attack,
+                    accuracy,
+                    speed,
+                    melee_defense,
+                    ranged_defense,
+                }
             },
         )
 }
@@ -52,7 +56,9 @@ fn duel(setup: Setup, stats: [Stats; 2], seed: u64) -> (Arena, Vec<Box<dyn Comba
         })
         .collect();
     let ais: Vec<Box<dyn CombatAi>> = vec![Box::new(UtilityAi), Box::new(UtilityAi)];
-    (Arena::new(ARENA_SIZE, ARENA_SIZE, fighters, seed), ais)
+    let arena =
+        Arena::new(ARENA_SIZE, ARENA_SIZE, fighters, seed).with_accuracy(data.combat.accuracy);
+    (arena, ais)
 }
 
 proptest! {
@@ -79,11 +85,12 @@ proptest! {
         }
     }
 
-    // ponytail: equal stats only; with random ones two fighters can run out of
-    // resources without a kill, as nothing regenerates yet.
+    // ponytail: equal stats only and every attack hitting; with random stats or misses
+    // two fighters can run out of resources without a kill, as nothing regenerates yet.
     #[test]
-    fn a_fight_between_equals_always_ends(setup in setup(), seed: u64) {
-        let (mut arena, mut ais) = duel(setup, [STATS; 2], seed);
+    fn a_fight_between_equals_who_never_miss_always_ends(setup in setup(), seed: u64) {
+        let (arena, mut ais) = duel(setup, [STATS; 2], seed);
+        let mut arena = arena.with_accuracy(AccuracyRules::ALWAYS);
         run(&mut arena, &mut ais, MAX_TICKS);
         prop_assert!(arena.is_over(), "still going after {} ticks", arena.tick);
     }
@@ -110,6 +117,5 @@ proptest! {
                 }
             }
         }
-        prop_assert!(arena.is_over());
     }
 }

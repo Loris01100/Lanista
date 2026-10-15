@@ -6,6 +6,7 @@ use lanista_core::colosseum::{
 };
 use lanista_core::design_data::DesignData;
 use lanista_core::economy::{Flow, Transaction};
+use lanista_core::fighter::STAT_COUNT;
 use lanista_core::fighter::care::CareRules;
 use lanista_core::fighter::career::{
     Activity, CareerFighter, FightSummary, Record, Status, WeekReport,
@@ -22,7 +23,7 @@ use lanista_core::staff::{DoctorRules, RecruiterRules, Role, Scouting, StaffMove
 use lanista_core::state::GameState;
 
 /// Stat names, in `Stats::to_array` order.
-pub const STAT_NAMES: [&str; 6] = ["PV", "AC", "AL", "VIT", "DC", "DL"];
+pub const STAT_NAMES: [&str; STAT_COUNT] = ["PV", "AC", "AL", "PRÉ", "VIT", "DC", "DL"];
 
 /// How the game names the fighter at `index` in the club, until fighters have names.
 pub fn fighter_name(index: usize, fighter: &CareerFighter, data: &DesignData) -> String {

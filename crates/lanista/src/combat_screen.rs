@@ -75,6 +75,8 @@ struct Look {
     player: AnimationPlayer,
     /// Seconds since the death was shown, for the blood stain; `None` while alive.
     dead_for: Option<f32>,
+    /// The cast being shown missed: no hit sound at its impact.
+    missed: bool,
 }
 
 impl Look {
@@ -178,6 +180,7 @@ impl CombatScreen {
                 pose: Pose::Idle,
                 player: AnimationPlayer::default(),
                 dead_for: None,
+                missed: false,
             })
             .collect();
     }
@@ -288,16 +291,18 @@ impl CombatScreen {
         self.animate(dt)
     }
 
-    /// Returns the sounds to play: a hit at each impact frame, a cry at each death.
+    /// Returns the sounds to play: a hit at each impact frame of a cast that hit,
+    /// a cry at each death.
     fn animate(&mut self, dt: f32) -> Vec<&'static str> {
         let mut sounds = Vec::new();
         // A cast resolves within one tick: the log, not `action`, shows it.
         for event in &self.arena.log[self.seen_events..] {
-            if let EventKind::Cast { caster, .. } = event.kind
+            if let EventKind::Cast { caster, missed, .. } = event.kind
                 && let Some(look) = index(caster.0).and_then(|i| self.looks.get_mut(i))
             {
                 look.pose = Pose::Cast;
                 look.player = AnimationPlayer::default();
+                look.missed = missed;
             }
         }
         self.seen_events = self.arena.log.len();
@@ -321,7 +326,7 @@ impl CombatScreen {
             }
             look.show(pose);
             let events = look.player.advance(&self.animations[pose as usize], dt);
-            if events.contains(&AnimationEvent::Marker("impact")) {
+            if events.contains(&AnimationEvent::Marker("impact")) && !look.missed {
                 sounds.push(HIT_SOUND);
             }
         }
@@ -610,8 +615,8 @@ mod tests {
         }
     }
 
-    /// One cry per death, one hit per cast whose impact frame is shown: all
-    /// the winner's casts, maybe not the loser's last one.
+    /// One cry per death, one hit per cast that hit whose impact frame is shown:
+    /// all the winner's hits, maybe not the loser's last one.
     #[test]
     fn sounds_follow_hits_and_deaths() {
         let mut screen = screen(42);
@@ -627,9 +632,10 @@ mod tests {
                 .log
                 .iter()
                 .filter(|e| match e.kind {
-                    EventKind::Cast { caster, .. } => {
-                        !winner_only
-                            || screen.arena.fighters[index(caster.0).unwrap()].is_fighting()
+                    EventKind::Cast { caster, missed, .. } => {
+                        !missed
+                            && (!winner_only
+                                || screen.arena.fighters[index(caster.0).unwrap()].is_fighting())
                     }
                     EventKind::Death { .. } | EventKind::Surrender { .. } => false,
                 })

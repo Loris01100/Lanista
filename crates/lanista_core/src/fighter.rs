@@ -29,7 +29,10 @@ pub struct FighterId(pub u32);
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
 pub struct ClassId(pub u32);
 
-/// The six stats of the design plan; its French abbreviation is given for each.
+/// Number of stats in [`Stats`].
+pub const STAT_COUNT: usize = 7;
+
+/// The stats of the design plan; its French abbreviation is given for each.
 /// Read from `data/` as percentages (injury and illness maluses), where a missing stat is 0.
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(default, deny_unknown_fields)]
@@ -40,7 +43,9 @@ pub struct Stats {
     pub melee_attack: u32,
     /// AL: ranged damage (weapons and spells).
     pub ranged_attack: u32,
-    /// VIT: movement speed and attack rate.
+    /// PRÉ: chance to hit, against the target's speed (see `combat::hit_percent`).
+    pub accuracy: u32,
+    /// VIT: movement speed, attack rate and dodging.
     pub speed: u32,
     /// DC: melee damage reduction.
     pub melee_defense: u32,
@@ -49,14 +54,15 @@ pub struct Stats {
 }
 
 impl Stats {
-    /// The stats in declaration order: hp, melee attack, ranged attack, speed,
+    /// The stats in declaration order: hp, melee attack, ranged attack, accuracy, speed,
     /// melee defense, ranged defense.
     #[must_use]
-    pub fn to_array(self) -> [u32; 6] {
+    pub fn to_array(self) -> [u32; STAT_COUNT] {
         [
             self.hp,
             self.melee_attack,
             self.ranged_attack,
+            self.accuracy,
             self.speed,
             self.melee_defense,
             self.ranged_defense,
@@ -70,15 +76,17 @@ impl Stats {
             hp,
             melee_attack,
             ranged_attack,
+            accuracy,
             speed,
             melee_defense,
             ranged_defense,
-        ]: [u32; 6],
+        ]: [u32; STAT_COUNT],
     ) -> Self {
         Self {
             hp,
             melee_attack,
             ranged_attack,
+            accuracy,
             speed,
             melee_defense,
             ranged_defense,
@@ -98,6 +106,7 @@ impl Stats {
             hp: f(self.hp, other.hp),
             melee_attack: f(self.melee_attack, other.melee_attack),
             ranged_attack: f(self.ranged_attack, other.ranged_attack),
+            accuracy: f(self.accuracy, other.accuracy),
             speed: f(self.speed, other.speed),
             melee_defense: f(self.melee_defense, other.melee_defense),
             ranged_defense: f(self.ranged_defense, other.ranged_defense),
@@ -275,7 +284,7 @@ impl Fighter {
     }
 }
 
-/// A fighter for tests: 100 HP, 10 in every other stat but speed 30,
+/// A fighter for tests: 100 HP, 10 in every other stat but accuracy and speed 30,
 /// and one melee spell (reach 1 m, power 100, cooldown 30, 10 endurance out of 50).
 #[cfg(test)]
 pub(crate) fn test_fighter(id: u32, x: f64, y: f64) -> Fighter {
@@ -298,6 +307,7 @@ pub(crate) fn test_fighter(id: u32, x: f64, y: f64) -> Fighter {
         hp: 100,
         melee_attack: 10,
         ranged_attack: 10,
+        accuracy: 30,
         speed: 30,
         melee_defense: 10,
         ranged_defense: 10,

@@ -857,12 +857,15 @@ fn rival_market(state: &mut GameState, data: &DesignData) {
 /// first tries, once a week, to buy the most valuable fighter of another club worth
 /// that much that it can pay at the seller's `sell_percent` keeping its own
 /// `care_reserve`, if the fighter agrees (`market::refuses_to_join`, against the
-/// buyer's best fame); failing that, it signs the free agent anyway.
+/// buyer's best fame); failing that, it signs the free agent anyway. A club that just
+/// sold a fighter this way fills its place from the free agents only, so that it never
+/// buys back the fighter it sold.
 fn rival_signings(state: &mut GameState, data: &DesignData) {
     let market = &data.economy.market;
     let wanted = usize::try_from(data.world.roster.wanted).unwrap_or(0);
+    let mut sold = vec![false; state.rivals.len()];
     for buyer in 0..state.rivals.len() {
-        let mut tried = false;
+        let mut tried = sold[buyer];
         while state.rivals[buyer].active() < wanted {
             let active = || {
                 state.rivals[buyer]
@@ -875,7 +878,8 @@ fn rival_signings(state: &mut GameState, data: &DesignData) {
             let suits = agent.is_some_and(|a| value(&state.free_agents[a], market) >= weakest);
             if !suits && !tried {
                 tried = true;
-                if buy_from_rival(state, buyer, weakest, data) {
+                if let Some(seller) = buy_from_rival(state, buyer, weakest, data) {
+                    sold[seller] = true;
                     continue;
                 }
             }
@@ -887,12 +891,18 @@ fn rival_signings(state: &mut GameState, data: &DesignData) {
 }
 
 /// Rival club `buyer` buys the most valuable fighter of another club worth at least
-/// `floor` that it can pay, if the fighter agrees; returns whether it did.
-fn buy_from_rival(state: &mut GameState, buyer: usize, floor: u32, data: &DesignData) -> bool {
+/// `floor` that it can pay, if the fighter agrees; returns the seller if it did.
+fn buy_from_rival(
+    state: &mut GameState,
+    buyer: usize,
+    floor: u32,
+    data: &DesignData,
+) -> Option<usize> {
     let market = &data.economy.market;
-    let Some(reserve) = data.world.profile(buyer).map(|p| i64::from(p.care_reserve)) else {
-        return false;
-    };
+    let reserve = data
+        .world
+        .profile(buyer)
+        .map(|p| i64::from(p.care_reserve))?;
     let money = state.rivals[buyer].money;
     let best = state
         .rivals
@@ -908,9 +918,7 @@ fn buy_from_rival(state: &mut GameState, buyer: usize, floor: u32, data: &Design
             (worth >= floor && money - i64::from(price) >= reserve).then_some((worth, id, price))
         })
         .max_by_key(|&(worth, id, _)| (worth, Reverse(id)));
-    let Some((_, id, price)) = best else {
-        return false;
-    };
+    let (_, id, price) = best?;
     let fame = state.rivals[buyer]
         .fighters
         .iter()
@@ -920,14 +928,14 @@ fn buy_from_rival(state: &mut GameState, buyer: usize, floor: u32, data: &Design
         .unwrap_or_default();
     let fighter = &state.rivals[id.club].fighters[id.fighter];
     if market::refuses_to_join(&mut state.rng, fighter, fame, market) {
-        return false;
+        return None;
     }
     let bought = fighter.clone();
     state.rivals[id.club].fighters[id.fighter].status = Status::Sold;
     state.rivals[id.club].money += i64::from(price);
     state.rivals[buyer].money -= i64::from(price);
     state.rivals[buyer].fighters.push(bought);
-    true
+    Some(id.club)
 }
 
 /// Index of the most valuable of `fighters`, the first of equals.
@@ -2216,8 +2224,12 @@ mod tests {
         assert_eq!(value(fighter, market), best);
         assert_eq!(state.rivals[0].money, 100_000 - i64::from(price));
         assert_eq!(state.rivals[0].active(), 10);
-        // The seller fills its place again.
+        // The seller fills its place again, from the free agents: it does not buy back.
         assert_eq!(state.rivals[id.club].active(), 10);
+        assert_eq!(
+            state.rivals[id.club].money,
+            before.rivals[id.club].money + i64::from(price)
+        );
         // A club that cannot pay signs the free agent anyway.
         let mut poor = GameState::new(7, &data);
         for agent in &mut poor.free_agents {

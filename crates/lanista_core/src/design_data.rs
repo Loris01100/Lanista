@@ -1,11 +1,11 @@
-//! Design data (classes, spells, fighter rules, calendar, economy, colosseums, statistical
+//! Design data (classes, spells, combat rules, fighter rules, calendar, economy, colosseums, statistical
 //! model) read from the RON files of `data/`.
 
 use serde::Deserialize;
 
 use crate::calendar::CalendarRules;
 use crate::colosseum::WorldRules;
-use crate::combat::Range;
+use crate::combat::{CombatRules, Range};
 use crate::economy::EconomyRules;
 use crate::fighter::ClassId;
 use crate::fighter::care::CareRules;
@@ -24,6 +24,7 @@ use crate::stat_model::StatModel;
 #[derive(Debug, Clone, PartialEq)]
 pub struct DesignData {
     pub classes: Vec<ClassData>,
+    pub combat: CombatRules,
     pub fighter: FighterRules,
     pub calendar: CalendarRules,
     pub economy: EconomyRules,
@@ -81,6 +82,7 @@ pub enum Cost {
 }
 
 const CLASSES_FILE: &str = "data/classes.ron";
+const COMBAT_FILE: &str = "data/combat.ron";
 const FIGHTER_FILE: &str = "data/fighter.ron";
 const CALENDAR_FILE: &str = "data/calendar.ron";
 const ECONOMY_FILE: &str = "data/economy.ron";
@@ -133,8 +135,8 @@ impl std::error::Error for LoadError {
 }
 
 impl DesignData {
-    /// Reads the content of `data/classes.ron`, `data/fighter.ron`, `data/calendar.ron`,
-    /// `data/economy.ron`, `data/world.ron` and `data/stat_model.ron`.
+    /// Reads the content of `data/classes.ron`, `data/combat.ron`, `data/fighter.ron`,
+    /// `data/calendar.ron`, `data/economy.ron`, `data/world.ron` and `data/stat_model.ron`.
     ///
     /// # Errors
     /// If a text is not valid RON or does not match the expected fields, or if a value
@@ -142,6 +144,7 @@ impl DesignData {
     /// a season of no week, no free colosseum, a model's chance outside 0 to 1).
     pub fn from_ron(
         classes: &str,
+        combat: &str,
         fighter: &str,
         calendar: &str,
         economy: &str,
@@ -151,6 +154,10 @@ impl DesignData {
         let data = Self {
             classes: ron::from_str(classes).map_err(|source| LoadError::Ron {
                 file: CLASSES_FILE,
+                source,
+            })?,
+            combat: ron::from_str(combat).map_err(|source| LoadError::Ron {
+                file: COMBAT_FILE,
                 source,
             })?,
             fighter: ron::from_str(fighter).map_err(|source| LoadError::Ron {
@@ -198,6 +205,7 @@ impl DesignData {
         };
         Self::from_ron(
             &read(CLASSES_FILE)?,
+            &read(COMBAT_FILE)?,
             &read(FIGHTER_FILE)?,
             &read(CALENDAR_FILE)?,
             &read(ECONOMY_FILE)?,
@@ -265,6 +273,7 @@ impl DesignData {
                 problem: "no week",
             });
         }
+        self.validate_combat()?;
         let rules = &self.fighter;
         let ranges = [
             ("career.start_age", rules.career.start_age),
@@ -315,6 +324,18 @@ impl DesignData {
         Ok(())
     }
 
+    fn validate_combat(&self) -> Result<(), LoadError> {
+        let accuracy = &self.combat.accuracy;
+        if accuracy.min_percent > accuracy.max_percent {
+            return Err(LoadError::Invalid {
+                file: COMBAT_FILE,
+                field: "accuracy",
+                problem: "lowest above highest",
+            });
+        }
+        Ok(())
+    }
+
     #[must_use]
     pub fn class(&self, id: ClassId) -> Option<&ClassData> {
         self.classes.get(usize::try_from(id.0).ok()?)
@@ -326,6 +347,7 @@ mod tests {
     use super::*;
 
     const CLASSES: &str = include_str!("../../../data/classes.ron");
+    const COMBAT: &str = include_str!("../../../data/combat.ron");
     const FIGHTER: &str = include_str!("../../../data/fighter.ron");
     const CALENDAR: &str = include_str!("../../../data/calendar.ron");
     const ECONOMY: &str = include_str!("../../../data/economy.ron");
@@ -334,8 +356,10 @@ mod tests {
 
     #[test]
     fn shipped_data_loads() {
-        let data =
-            DesignData::from_ron(CLASSES, FIGHTER, CALENDAR, ECONOMY, WORLD, STAT_MODEL).unwrap();
+        let data = DesignData::from_ron(
+            CLASSES, COMBAT, FIGHTER, CALENDAR, ECONOMY, WORLD, STAT_MODEL,
+        )
+        .unwrap();
         assert_eq!(data.classes.len(), 2);
         for class in &data.classes {
             assert_eq!(class.spells.len(), 3, "{}", class.name);
@@ -348,8 +372,10 @@ mod tests {
 
     #[test]
     fn finds_a_class_by_id() {
-        let data =
-            DesignData::from_ron(CLASSES, FIGHTER, CALENDAR, ECONOMY, WORLD, STAT_MODEL).unwrap();
+        let data = DesignData::from_ron(
+            CLASSES, COMBAT, FIGHTER, CALENDAR, ECONOMY, WORLD, STAT_MODEL,
+        )
+        .unwrap();
         assert_eq!(data.class(ClassId(1)), data.classes.get(1));
         assert_eq!(data.class(ClassId(2)), None);
     }
@@ -358,7 +384,7 @@ mod tests {
     fn rejects_unknown_fields() {
         let typo = r#"[(name: "X", max_mana: 0, max_endurance: 0, spels: [])]"#;
         assert!(matches!(
-            DesignData::from_ron(typo, FIGHTER, CALENDAR, ECONOMY, WORLD, STAT_MODEL),
+            DesignData::from_ron(typo, COMBAT, FIGHTER, CALENDAR, ECONOMY, WORLD, STAT_MODEL),
             Err(LoadError::Ron {
                 file: CLASSES_FILE,
                 ..
@@ -369,7 +395,7 @@ mod tests {
     #[test]
     fn rejects_values_the_game_would_panic_on() {
         let field = |classes: &str, fighter: &str| match DesignData::from_ron(
-            classes, fighter, CALENDAR, ECONOMY, WORLD, STAT_MODEL,
+            classes, COMBAT, fighter, CALENDAR, ECONOMY, WORLD, STAT_MODEL,
         ) {
             Err(LoadError::Invalid { field, .. }) => field,
             other => panic!("expected an invalid field, got {other:?}"),
@@ -381,15 +407,35 @@ mod tests {
         assert_eq!(field(CLASSES, &not_a_chance), "illness.worsening_chance");
         let no_week = "(competition_weeks: 0, great_event_weeks: 0, off_season_weeks: 0)";
         assert!(matches!(
-            DesignData::from_ron(CLASSES, FIGHTER, no_week, ECONOMY, WORLD, STAT_MODEL),
+            DesignData::from_ron(
+                CLASSES, COMBAT, FIGHTER, no_week, ECONOMY, WORLD, STAT_MODEL
+            ),
             Err(LoadError::Invalid {
                 field: "season",
                 ..
             })
         ));
+        let upside_down = COMBAT.replacen("min_percent: 25", "min_percent: 99", 1);
+        assert!(matches!(
+            DesignData::from_ron(
+                CLASSES,
+                &upside_down,
+                FIGHTER,
+                CALENDAR,
+                ECONOMY,
+                WORLD,
+                STAT_MODEL
+            ),
+            Err(LoadError::Invalid {
+                field: "accuracy",
+                ..
+            })
+        ));
         let not_free = WORLD.replacen("entry_fee: 0", "entry_fee: 5", 1);
         assert!(matches!(
-            DesignData::from_ron(CLASSES, FIGHTER, CALENDAR, ECONOMY, &not_free, STAT_MODEL),
+            DesignData::from_ron(
+                CLASSES, COMBAT, FIGHTER, CALENDAR, ECONOMY, &not_free, STAT_MODEL
+            ),
             Err(LoadError::Invalid {
                 field: "colosseums",
                 ..
@@ -399,8 +445,10 @@ mod tests {
 
     #[test]
     fn shipped_form_rules_triple_risk_at_form_0() {
-        let data =
-            DesignData::from_ron(CLASSES, FIGHTER, CALENDAR, ECONOMY, WORLD, STAT_MODEL).unwrap();
+        let data = DesignData::from_ron(
+            CLASSES, COMBAT, FIGHTER, CALENDAR, ECONOMY, WORLD, STAT_MODEL,
+        )
+        .unwrap();
         assert!((data.fighter.form.risk_factor - 2.0).abs() < f64::EPSILON);
     }
 }

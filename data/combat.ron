@@ -1,0 +1,12 @@
+// Combat rules: placeholder values, to balance with mass simulations (`batch`), then
+// recalibrate the statistical model (`calibrate`, `compare`).
+(
+    // Chance an attack hits: even_percent × 2 × accuracy / (accuracy + target's speed),
+    // in percent, kept between min_percent and max_percent. The standard duel's fighters
+    // have accuracy 30 against speed 30, so they hit at even_percent.
+    accuracy: (
+        even_percent: 85,
+        min_percent: 25,
+        max_percent: 95,
+    ),
+)

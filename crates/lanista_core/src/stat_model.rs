@@ -16,9 +16,9 @@ use crate::fighter::fame::{FameRules, FightOutcome, FightResult};
 use crate::fighter::personality::Personality;
 use crate::fighter::{Fighter, FighterId};
 
-/// Features of a fighter besides its class: the six stats, fear, surrender
+/// Features of a fighter besides its class: the seven stats, fear, surrender
 /// threshold, aggression and showmanship.
-pub const BASE_FEATURES: usize = 10;
+pub const BASE_FEATURES: usize = 11;
 
 /// Coefficients fitted by `calibrate`, read from `data/stat_model.ron`.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -46,6 +46,7 @@ pub struct Winner {
     pub hp: f64,
     pub melee_attack: f64,
     pub ranged_attack: f64,
+    pub accuracy: f64,
     pub speed: f64,
     pub melee_defense: f64,
     pub ranged_defense: f64,
@@ -128,6 +129,7 @@ impl Winner {
             self.hp,
             self.melee_attack,
             self.ranged_attack,
+            self.accuracy,
             self.speed,
             self.melee_defense,
             self.ranged_defense,
@@ -148,13 +150,14 @@ impl Winner {
             hp: w(0),
             melee_attack: w(1),
             ranged_attack: w(2),
-            speed: w(3),
-            melee_defense: w(4),
-            ranged_defense: w(5),
-            fear: w(6),
-            surrender: w(7),
-            aggression: w(8),
-            showmanship: w(9),
+            accuracy: w(3),
+            speed: w(4),
+            melee_defense: w(5),
+            ranged_defense: w(6),
+            fear: w(7),
+            surrender: w(8),
+            aggression: w(9),
+            showmanship: w(10),
             classes: weights.get(BASE_FEATURES..).unwrap_or_default().to_vec(),
         }
     }

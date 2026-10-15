@@ -5,7 +5,7 @@ expression: "duel([0, 1], 42)"
 [   18] fighter 1 casts Éclair on fighter 0: 35 damage
 [   36] fighter 1 casts Trait de feu on fighter 0: 19 damage
 [   84] fighter 1 casts Trait de feu on fighter 0: 19 damage
-[  108] fighter 0 casts Frappe brutale on fighter 1: 48 damage
+[  108] fighter 0 casts Frappe brutale on fighter 1: missed
 [  108] fighter 1 casts Coup de bâton on fighter 0: 12 damage
 [  114] fighter 0 casts Charge au bouclier on fighter 1: 29 damage
 [  120] fighter 0 casts Coup de glaive on fighter 1: 19 damage
@@ -13,5 +13,5 @@ expression: "duel([0, 1], 42)"
 [  132] fighter 0 dies
 
 over after 133 ticks, winner: fighter 1
-fighter 0: 0/100 HP, dealt 96, taken 100, 3 spells cast
-fighter 1: 4/100 HP, dealt 100, taken 96, 5 spells cast
+fighter 0: 0/100 HP, dealt 48, taken 100, 3 spells cast, 1 missed
+fighter 1: 52/100 HP, dealt 100, taken 48, 5 spells cast, 0 missed

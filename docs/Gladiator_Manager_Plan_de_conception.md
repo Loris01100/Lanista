@@ -58,7 +58,7 @@ Le championnat du monde a lieu aux saisons 4, 8, 12, etc. L'Inter-Coliseum a lie
 
 ## Les combattants
 
-Un combattant est défini par six stats, un état physique (forme, blessures, maladie), une personnalité, un moral, une renommée et un âge. Tous ces éléments sont aussi des entrées de l'IA de combat, pour qu'un combattant blessé ou peureux se batte différemment.
+Un combattant est défini par sept stats, un état physique (forme, blessures, maladie), une personnalité, un moral, une renommée et un âge. Tous ces éléments sont aussi des entrées de l'IA de combat, pour qu'un combattant blessé ou peureux se batte différemment.
 
 ### Stats
 
@@ -67,7 +67,8 @@ Un combattant est défini par six stats, un état physique (forme, blessures, ma
 | PV | Points de vie maximum |
 | AC | Dégâts au corps à corps |
 | AL | Dégâts à distance (armes et sorts) |
-| VIT | Vitesse de déplacement et fréquence d'attaque |
+| PRÉ | Précision : chance de toucher, contre la VIT de la cible |
+| VIT | Vitesse de déplacement, fréquence d'attaque et esquive |
 | DC | Réduction des dégâts au corps à corps |
 | DL | Réduction des dégâts à distance |
 
@@ -75,6 +76,12 @@ Formule de dégâts proposée (AC contre DC, AL contre DL) : la défense réduit
 
 ```latex
 \text{Dégâts} = \text{Attaque} \times \frac{100}{100 + \text{Défense}}
+```
+
+Une attaque peut rater. La chance de toucher oppose la précision de l'attaquant à la vitesse de la cible, bornée pour qu'un coup ne soit jamais sûr ni impossible : à précision égale à la vitesse adverse, on touche à un taux de base (85 % pour l'instant), et jusqu'à deux fois ce taux avec une bien meilleure précision.
+
+```latex
+\text{Toucher} = \text{Base} \times \frac{2 \times \text{PRÉ}}{\text{PRÉ} + \text{VIT}_\text{cible}}
 ```
 
 ### Forme

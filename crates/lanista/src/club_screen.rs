@@ -584,16 +584,23 @@ impl ClubScreen {
                     ));
                     ui.end_row();
                     let sides = &fight.report.fighters;
-                    let rows = sides
-                        .iter()
-                        .map(|f| [f.damage_dealt, f.damage_taken, f.spells_cast, f.hp]);
+                    let rows = sides.iter().map(|f| {
+                        [
+                            f.damage_dealt,
+                            f.damage_taken,
+                            f.spells_cast,
+                            f.misses,
+                            f.hp,
+                        ]
+                    });
                     let names = [
                         "Dégâts infligés",
                         "Dégâts reçus",
                         "Sorts lancés",
+                        "Coups ratés",
                         "PV restants",
                     ];
-                    let values: Vec<[u32; 4]> = rows.collect();
+                    let values: Vec<[u32; 5]> = rows.collect();
                     for (row, name) in names.into_iter().enumerate() {
                         ui.label(name);
                         for side in &values {
@@ -981,7 +988,7 @@ mod tests {
         let first = &screen.histories[0][2].1;
         assert_eq!(first[0], "Combat à Capoue");
         assert!(
-            first[1].starts_with("Contre un Augure, plus fort : abandon"),
+            first[1].starts_with("Contre un Mirmillon, plus fort : abandon"),
             "{first:?}"
         );
         assert!(
@@ -990,7 +997,7 @@ mod tests {
         );
         let (week, menu) = screen.last_week.as_ref().unwrap();
         assert_eq!(*week, 3);
-        assert_eq!(menu[0], "Argent 509 (+14) : recettes +24, entretien -10");
+        assert_eq!(menu[0], "Argent 528 (+33) : recettes +43, entretien -10");
         assert_eq!(
             menu[1],
             "Mirmillon n° 1 : Combat à Capoue, Contre un Augure, plus fort : abandon, renommée -8"
@@ -1091,7 +1098,7 @@ mod tests {
         );
         // Two stats seen at first, the others hidden.
         let seen = range_texts(wanted, &Scouting::default(), &data);
-        assert_eq!(seen.iter().filter(|r| *r == "?").count(), 4);
+        assert_eq!(seen.iter().filter(|r| *r == "?").count(), 5);
         // A low offer is refused, and the week tells it.
         screen.decisions.moves = vec![Move::Offer(target, 10), Move::List(0)];
         screen.next_week();

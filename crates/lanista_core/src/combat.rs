@@ -1,3 +1,4 @@
+use rand::RngExt;
 use rand_chacha::ChaCha8Rng;
 use rand_chacha::rand_core::SeedableRng;
 use serde::Deserialize;
@@ -51,6 +52,36 @@ pub struct Arena {
     pub rng: ChaCha8Rng,
     /// What happened, in order.
     pub log: Vec<Event>,
+    /// How often attacks hit; always, unless set with [`Arena::with_accuracy`].
+    pub accuracy: AccuracyRules,
+}
+
+/// Combat rules, from `data/combat.ron`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct CombatRules {
+    pub accuracy: AccuracyRules,
+}
+
+/// Chance that an attack hits, from the attacker's accuracy against the target's speed
+/// (see [`hit_percent`]).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct AccuracyRules {
+    /// Chance to hit, in percent, when the attacker's accuracy equals the target's speed.
+    pub even_percent: u32,
+    /// Lowest and highest chance to hit, in percent.
+    pub min_percent: u32,
+    pub max_percent: u32,
+}
+
+impl AccuracyRules {
+    /// Every attack hits.
+    pub const ALWAYS: Self = Self {
+        even_percent: 100,
+        min_percent: 100,
+        max_percent: 100,
+    };
 }
 
 impl Arena {
@@ -64,7 +95,15 @@ impl Arena {
             seed,
             rng: ChaCha8Rng::seed_from_u64(seed),
             log: Vec::new(),
+            accuracy: AccuracyRules::ALWAYS,
         }
+    }
+
+    /// This arena, where attacks hit following `rules`.
+    #[must_use]
+    pub fn with_accuracy(mut self, rules: AccuracyRules) -> Self {
+        self.accuracy = rules;
+        self
     }
 
     /// At most one fighter still fighting: the others are dead or gave up.
@@ -131,6 +170,22 @@ pub fn damage(attacker: &Stats, defender: &Stats, range: Range) -> u32 {
     u32::try_from(damage).unwrap_or(attack)
 }
 
+/// Chance in percent that an attack hits: `even_percent` × 2 × accuracy / (accuracy +
+/// target's speed), within `min_percent` and `max_percent`: `even_percent` when the
+/// attacker's accuracy equals the target's speed, up to twice that for a far better aim,
+/// down to 0 for none.
+#[must_use]
+pub fn hit_percent(attacker: &Stats, defender: &Stats, rules: &AccuracyRules) -> u32 {
+    let accuracy = u64::from(attacker.accuracy);
+    let even = u64::from(rules.even_percent);
+    let percent = (even * 2 * accuracy)
+        .checked_div(accuracy + u64::from(defender.speed))
+        .unwrap_or(even);
+    // At most twice `even_percent`, so it fits in a u32.
+    let percent = u32::try_from(percent).unwrap_or(u32::MAX);
+    percent.clamp(rules.min_percent, rules.max_percent.max(rules.min_percent))
+}
+
 /// Damage of a spell: the `damage` formula scaled by its power, in percent, rounded up.
 #[must_use]
 pub fn spell_damage(attacker: &Stats, defender: &Stats, spell: &SpellData) -> u32 {
@@ -156,7 +211,8 @@ fn cool_down(arena: &mut Arena) {
 
 /// Casts the spell each fighter still fighting chose, if it is ready, affordable and the
 /// target is still fighting and in reach; a cast fighter then waits for its next decision.
-/// The target dies at 0 HP, or gives up at its surrender threshold.
+/// The spell hits with `hit_percent`, drawn only when below 100; the target dies at 0 HP,
+/// or gives up at its surrender threshold.
 // ponytail: resolved in index order, so of two fighters killing each other on the
 // same tick, the lower index survives.
 fn cast_spells(arena: &mut Arena) {
@@ -177,7 +233,13 @@ fn cast_spells(arena: &mut Arena) {
         if !caster.can_cast(spell) || edge_distance(caster, defender) > caster.spells[spell].reach {
             continue;
         }
-        let amount = spell_damage(&caster.stats, &defender.stats, &caster.spells[spell]);
+        let chance = hit_percent(&caster.stats, &defender.stats, &arena.accuracy);
+        let missed = chance < 100 && arena.rng.random_range(0..100) >= chance;
+        let amount = if missed {
+            0
+        } else {
+            spell_damage(&caster.stats, &defender.stats, &caster.spells[spell])
+        };
         let caster = &mut arena.fighters[i];
         caster.spend(spell);
         caster.action = Action::Wait;
@@ -194,6 +256,7 @@ fn cast_spells(arena: &mut Arena) {
             target,
             spell,
             damage: hp_before - defender.hp,
+            missed,
         });
         let died = !defender.is_alive();
         let surrendered = defender.surrendered;
@@ -373,6 +436,7 @@ mod tests {
             hp: 100,
             melee_attack,
             ranged_attack,
+            accuracy: 30,
             speed: 30,
             melee_defense,
             ranged_defense,
@@ -410,6 +474,93 @@ mod tests {
             damage(&attacker, &stats(0, 0, 0, 0), Range::Melee),
             u32::MAX
         );
+    }
+
+    const ACCURACY: AccuracyRules = AccuracyRules {
+        even_percent: 80,
+        min_percent: 25,
+        max_percent: 95,
+    };
+
+    fn aim(accuracy: u32, speed: u32) -> u32 {
+        let attacker = Stats {
+            accuracy,
+            ..stats(0, 0, 0, 0)
+        };
+        let defender = Stats {
+            speed,
+            ..stats(0, 0, 0, 0)
+        };
+        hit_percent(&attacker, &defender, &ACCURACY)
+    }
+
+    #[test]
+    fn accuracy_against_speed_sets_the_chance_to_hit() {
+        assert_eq!(aim(30, 30), 80);
+        // 80 × 2 × 40 / 70, rounded down.
+        assert_eq!(aim(40, 30), 91);
+        assert_eq!(aim(20, 30), 64);
+        assert_eq!(aim(300, 30), 95);
+        assert_eq!(aim(0, 30), 25);
+        assert_eq!(aim(0, 0), 80);
+        assert_eq!(aim(u32::MAX, u32::MAX), 80);
+        assert_eq!(
+            hit_percent(
+                &stats(0, 0, 0, 0),
+                &stats(0, 0, 0, 0),
+                &AccuracyRules::ALWAYS
+            ),
+            100
+        );
+    }
+
+    #[test]
+    fn a_miss_spends_the_spell_and_deals_nothing() {
+        let mut arena = duel(0.5).with_accuracy(AccuracyRules {
+            even_percent: 50,
+            min_percent: 50,
+            max_percent: 50,
+        });
+        // 5 casts, each one tick after the last cooldown.
+        for _ in 0..5 {
+            play(&mut arena, &[HIT, Action::Wait], 30);
+        }
+        let missed = arena
+            .log
+            .iter()
+            .filter(|e| matches!(e.kind, EventKind::Cast { missed: true, .. }))
+            .count();
+        assert_eq!(arena.log.len(), 5);
+        assert!((1..5).contains(&missed), "{missed} missed");
+        let hits = u32::try_from(5 - missed).unwrap();
+        assert_eq!(arena.fighters[1].hp, 100 - hits * HIT_DAMAGE);
+        assert_eq!(arena.fighters[0].endurance.current, 0);
+        for event in &arena.log {
+            if let EventKind::Cast {
+                missed: true,
+                damage,
+                ..
+            } = event.kind
+            {
+                assert_eq!(damage, 0);
+            }
+        }
+    }
+
+    #[test]
+    fn misses_follow_the_seed() {
+        let rules = AccuracyRules {
+            even_percent: 50,
+            min_percent: 50,
+            max_percent: 50,
+        };
+        let fight = |seed| {
+            let fighters = vec![fighter(0, 5.0, 5.0), fighter(1, 6.5, 5.0)];
+            let mut arena = Arena::new(20.0, 20.0, fighters, seed).with_accuracy(rules);
+            play(&mut arena, &[HIT, Action::Wait], 150);
+            arena.log
+        };
+        assert_eq!(fight(1), fight(1));
     }
 
     #[test]

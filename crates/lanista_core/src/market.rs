@@ -8,7 +8,7 @@ use serde::{Deserialize, Serialize};
 use crate::design_data::DesignData;
 use crate::fighter::career::CareerFighter;
 use crate::fighter::fame::Fame;
-use crate::fighter::percent_of;
+use crate::fighter::{STAT_COUNT, percent_of};
 use crate::rivals::RivalId;
 use crate::staff::Scouting;
 
@@ -138,10 +138,10 @@ pub fn stat_ranges(
     fighter: &CareerFighter,
     rules: &MarketRules,
     scouting: &Scouting,
-) -> [Option<(u32, u32)>; 6] {
+) -> [Option<(u32, u32)>; STAT_COUNT] {
     let potential = fighter.potential.to_array();
     let mix = |i: usize| (potential[i] * 37 + 11 * u32::try_from(i).unwrap_or(0)) % 101;
-    let mut order: Vec<usize> = (0..6).collect();
+    let mut order: Vec<usize> = (0..STAT_COUNT).collect();
     order.sort_by_key(|&i| mix(i));
     let weeks = fighter.observed_weeks;
     let per_week = rules
@@ -150,7 +150,8 @@ pub fn stat_ranges(
     let shown = rules
         .shown_stats
         .saturating_add(per_week.saturating_mul(weeks));
-    let to_see_all = 6_u32
+    let to_see_all = u32::try_from(STAT_COUNT)
+        .unwrap_or(u32::MAX)
         .saturating_sub(rules.shown_stats)
         .div_ceil(per_week.max(1));
     let width = if weeks > to_see_all {
@@ -160,8 +161,11 @@ pub fn stat_ranges(
     };
     let width = percent_of(width, scouting.range_width_percent);
     let stats = fighter.stats.to_array();
-    let mut ranges = [None; 6];
-    for &i in order.iter().take(usize::try_from(shown).unwrap_or(6)) {
+    let mut ranges = [None; STAT_COUNT];
+    for &i in order
+        .iter()
+        .take(usize::try_from(shown).unwrap_or(STAT_COUNT))
+    {
         let wide = percent_of(stats[i], width);
         let low = stats[i] - percent_of(wide, mix(i));
         ranges[i] = Some((low, low + wide));
@@ -290,7 +294,7 @@ mod tests {
                 for (&stat, range) in stats.iter().zip(ranges) {
                     let Some((low, high)) = range else { continue };
                     assert!(low <= stat && stat <= high, "{stat} in {low}-{high}");
-                    let width = if weeks >= 3 {
+                    let width = if weeks >= 4 {
                         rules.narrowed_range_percent
                     } else {
                         rules.range_percent
@@ -298,8 +302,8 @@ mod tests {
                     assert_eq!(high - low, percent_of(stat, width));
                 }
             }
-            // Two at first, two more a week, then all of them, narrower from week 3.
-            assert_eq!(seen, [2, 4, 6, 6, 6]);
+            // Two at first, two more a week, then all of them, narrower from week 4.
+            assert_eq!(seen, [2, 4, 6, 7, 7]);
             // A stat once seen stays seen.
             fighter.observed_weeks = 0;
             let first = stat_ranges(&fighter, rules, &Scouting::default());
@@ -332,7 +336,7 @@ mod tests {
         assert_eq!((seen(&alone), seen(&scouting)), (4, 6));
         let stats = fighter.stats.to_array();
         for (&stat, range) in stats.iter().zip(stat_ranges(&fighter, rules, &scouting)) {
-            let (low, high) = range.unwrap();
+            let Some((low, high)) = range else { continue };
             assert!(low <= stat && stat <= high);
             let usual = percent_of(stat, rules.range_percent);
             assert_eq!(high - low, percent_of(usual, 50));

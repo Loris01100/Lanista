@@ -9,12 +9,12 @@ use crate::state::GameState;
 
 /// Version written in new saves. Raise it with any change to the saved types,
 /// and add the migration from the previous version to [`MIGRATIONS`].
-pub const VERSION: u64 = 9;
+pub const VERSION: u64 = 10;
 
 /// `MIGRATIONS[i]` turns a version `i + 1` save into a version `i + 2` one,
 /// working on the JSON so the old types need not be kept.
 type Migration = fn(&mut Value, &DesignData);
-const MIGRATIONS: [Migration; 8] = [
+const MIGRATIONS: [Migration; 9] = [
     no_colosseums,
     title_since,
     no_challenges,
@@ -23,6 +23,7 @@ const MIGRATIONS: [Migration; 8] = [
     rival_rosters,
     no_staff,
     no_doctor_or_recruiter,
+    accuracy_from_speed,
 ];
 const _: () = assert!(MIGRATIONS.len() as u64 == VERSION - 1);
 
@@ -162,6 +163,30 @@ fn no_doctor_or_recruiter(save: &mut Value, _: &DesignData) {
     staff["recruiter"] = Value::Null;
 }
 
+/// Version 10 adds accuracy to the stats: every fighter's trained and potential
+/// accuracy start at its speed, on the same scale (30 in the standard duel for both).
+fn accuracy_from_speed(save: &mut Value, _: &DesignData) {
+    let state = &mut save["state"];
+    for list in ["fighters", "free_agents"] {
+        for fighter in state[list].as_array_mut().into_iter().flatten() {
+            speed_as_accuracy(fighter);
+        }
+    }
+    for rival in state["rivals"].as_array_mut().into_iter().flatten() {
+        for fighter in rival["fighters"].as_array_mut().into_iter().flatten() {
+            speed_as_accuracy(fighter);
+        }
+    }
+}
+
+fn speed_as_accuracy(fighter: &mut Value) {
+    for stats in ["stats", "potential"] {
+        if fighter[stats].is_object() {
+            fighter[stats]["accuracy"] = fighter[stats]["speed"].clone();
+        }
+    }
+}
+
 #[derive(Serialize)]
 struct Save<'a> {
     version: u64,
@@ -282,12 +307,12 @@ mod tests {
     fn unknown_versions_are_refused() {
         let data = data();
         let save = to_json(&GameState::new(7, &data));
-        let newer = save.replacen("\"version\": 9", "\"version\": 10", 1);
+        let newer = save.replacen("\"version\": 10", "\"version\": 11", 1);
         assert!(matches!(
             from_json(&newer, &data),
-            Err(SaveError::Version(Some(10)))
+            Err(SaveError::Version(Some(11)))
         ));
-        let none = save.replacen("\"version\": 9", "\"versio\": 9", 1);
+        let none = save.replacen("\"version\": 10", "\"versio\": 10", 1);
         assert!(matches!(
             from_json(&none, &data),
             Err(SaveError::Version(None))

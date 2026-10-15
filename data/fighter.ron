@@ -21,7 +21,7 @@
         // Temporary maluses, as a percentage of `temporary` (written for a medium injury).
         severity_percent: (light: 50, medium: 100, severe: 200),
         // Percentage of each stat lost, by location; missing stats are 0.
-        // Head: the plan's precision malus, on both attacks until combat has accuracy.
+        // Head: the plan's precision malus, still on both attacks: to move to accuracy.
         temporary: (
             head: (melee_attack: 5, ranged_attack: 5),
             body: (hp: 10, melee_defense: 10),
@@ -99,16 +99,16 @@
         training_chance: 30,
         fight_chance: 20,
         // Points gained when a stat improves.
-        gain: (hp: 2, melee_attack: 1, ranged_attack: 1, speed: 1, melee_defense: 1, ranged_defense: 1),
+        gain: (hp: 2, melee_attack: 1, ranged_attack: 1, accuracy: 1, speed: 1, melee_defense: 1, ranged_defense: 1),
         // (last age, percent of the chance): fast to 27, plateau to 35, very low to 39, none after.
         age_brackets: [(27, 100), (35, 40), (39, 10)],
         // Chance bonus at morale 100, malus at 0, in percent of the chance.
         morale_percent: 20,
         // A generated hidden potential sits 20 to 80 % above each stat.
         potential_headroom_percent: (20, 80),
-        // From 40, stats lose these percentages every year, speed most.
+        // From 40, stats lose these percentages every year, speed most, then accuracy.
         decline_from_age: 40,
-        decline_percent: (hp: 2, melee_attack: 2, ranged_attack: 2, speed: 5, melee_defense: 2, ranged_defense: 2),
+        decline_percent: (hp: 2, melee_attack: 2, ranged_attack: 2, accuracy: 3, speed: 5, melee_defense: 2, ranged_defense: 2),
     ),
     retirement: (
         // Checked once a year; decided by the fighter only.

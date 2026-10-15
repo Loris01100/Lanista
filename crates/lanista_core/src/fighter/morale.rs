@@ -118,6 +118,7 @@ mod tests {
         hp: 100,
         melee_attack: 20,
         ranged_attack: 20,
+        accuracy: 30,
         speed: 30,
         melee_defense: 10,
         ranged_defense: 10,

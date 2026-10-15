@@ -284,7 +284,8 @@ impl CareerFighter {
             self.combat_fighter(FighterId(0), data, Vec2::new(3.0, middle)),
             opponent.combat_fighter(FighterId(1), data, Vec2::new(ARENA_SIZE - 3.0, middle)),
         ];
-        let start = Arena::new(ARENA_SIZE, ARENA_SIZE, fighters, seed);
+        let start =
+            Arena::new(ARENA_SIZE, ARENA_SIZE, fighters, seed).with_accuracy(data.combat.accuracy);
         let mut arena = start.clone();
         play(&mut arena);
         (seed, start, arena)

@@ -74,8 +74,8 @@ fn the_current_version_writes_its_kept_save_unchanged() {
 
 /// Writes the kept save of the current version: seed 7 observing and signing free
 /// agents from week 3, listing its first fighter and hiring a trainer, a doctor and a
-/// recruiter, played past a birthday until a fighter is both hurt and ill and a
-/// challenge is pending, so that every saved field has a value.
+/// recruiter with money to pay them, played past a birthday until a fighter is both
+/// hurt and ill and a challenge is pending, so that every saved field has a value.
 #[test]
 #[ignore = "run once when `save::VERSION` goes up"]
 fn keep_a_save_of_the_current_version() {
@@ -83,6 +83,8 @@ fn keep_a_save_of_the_current_version() {
     assert!(!path.exists(), "{} is kept already", path.display());
     let data = DesignData::load().unwrap();
     let mut state = played(7, 2, &data);
+    // Enough to keep fighting with the staff's salaries until it all happens.
+    state.money += 5_000;
     let hire = Decisions {
         plans: Vec::new(),
         moves: vec![

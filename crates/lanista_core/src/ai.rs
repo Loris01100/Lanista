@@ -1,4 +1,4 @@
-use crate::combat::{Arena, RADIUS, Vec2, edge_distance, spell_damage};
+use crate::combat::{AccuracyRules, Arena, RADIUS, Vec2, edge_distance, hit_percent, spell_damage};
 use crate::design_data::SpellData;
 use crate::fighter::form::Form;
 use crate::fighter::illness::IllnessLevel;
@@ -83,7 +83,8 @@ pub fn fear(condition: &Condition) -> f64 {
 }
 
 /// Every action worth considering for `me`, with its score; higher is better.
-/// A cast scores the share of the target's HP it takes; waiting scores 0, or the
+/// A cast scores the share of the target's HP it is expected to take, given its chance
+/// to hit; waiting scores 0, or the
 /// value a showman sees in its strongest spell about to be ready; closing in scores
 /// `MOVE_SCORE`; a fearful, hurt fighter scores backing away from a threatening enemy.
 #[must_use]
@@ -102,11 +103,11 @@ pub fn score_actions(arena: &Arena, me: FighterId) -> Vec<(Action, f64)> {
                 spell,
                 target: target.id,
             };
-            scored.push((cast, cast_value(me, target, data)));
+            scored.push((cast, cast_value(me, target, data, &arena.accuracy)));
         }
     }
     let can_cast = scored.len() > 1;
-    scored[0].1 = show_wait_value(me, target, distance);
+    scored[0].1 = show_wait_value(me, target, distance, &arena.accuracy);
 
     let retreat = fear(&me.condition) * (1.0 - share(me.hp, me.stats.hp)) * RETREAT_WEIGHT;
     let toward = Vec2::new(
@@ -143,14 +144,16 @@ fn share(part: u32, whole: u32) -> f64 {
     }
 }
 
-/// Share of the target's current HP a spell takes; above 1 for overkill.
-fn cast_value(me: &Fighter, target: &Fighter, spell: &SpellData) -> f64 {
-    share(spell_damage(&me.stats, &target.stats, spell), target.hp)
+/// Share of the target's current HP a spell is expected to take: what it takes on a hit,
+/// above 1 for overkill, times the chance to hit.
+fn cast_value(me: &Fighter, target: &Fighter, spell: &SpellData, rules: &AccuracyRules) -> f64 {
+    let hit = f64::from(hit_percent(&me.stats, &target.stats, rules)) / 100.0;
+    share(spell_damage(&me.stats, &target.stats, spell), target.hp) * hit
 }
 
 /// What waiting is worth to a showman: a share of its strongest spell's value when
 /// that spell reaches the target, is affordable and will be ready soon; 0 otherwise.
-fn show_wait_value(me: &Fighter, target: &Fighter, distance: f64) -> f64 {
+fn show_wait_value(me: &Fighter, target: &Fighter, distance: f64, rules: &AccuracyRules) -> f64 {
     let flair = offset(
         me.condition.personality.showmanship.value(),
         Personality::NEUTRAL,
@@ -169,7 +172,7 @@ fn show_wait_value(me: &Fighter, target: &Fighter, distance: f64) -> f64 {
     };
     let cooldown = f64::from(me.cooldowns[spell]);
     if cooldown > 0.0 && cooldown <= flair * SHOW_WAIT_TICKS && me.can_afford(spell) {
-        cast_value(me, target, data) * SHOW_WAIT_VALUE
+        cast_value(me, target, data, rules) * SHOW_WAIT_VALUE
     } else {
         0.0
     }
