@@ -951,7 +951,7 @@ mod tests {
         // A rival fighter challenges it and the suggestion accepts: a fight against
         // that fighter.
         while screen.state.challenges.is_empty() {
-            assert!(screen.state.week < 30, "no challenge");
+            assert!(screen.state.week < 60, "no challenge");
             screen.next_week();
         }
         let challenge = screen.state.challenges[0];

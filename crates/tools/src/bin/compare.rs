@@ -57,9 +57,7 @@ fn main() -> ExitCode {
     );
     let mut too_far = 0;
     for rate in &rates {
-        let flag = if !rate.checked {
-            "  not checked: the duel favours fighter 0"
-        } else if rate.gap() > tolerance {
+        let flag = if rate.gap() > tolerance {
             too_far += 1;
             "  too far"
         } else {
@@ -77,6 +75,6 @@ fn main() -> ExitCode {
         println!("{too_far} rate(s) more than {tolerance} points apart: rerun calibrate");
         return ExitCode::FAILURE;
     }
-    println!("every checked rate within {tolerance} points");
+    println!("every rate within {tolerance} points");
     ExitCode::SUCCESS
 }

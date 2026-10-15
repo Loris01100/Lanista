@@ -88,10 +88,6 @@ pub struct Rate {
     pub name: String,
     pub real: f64,
     pub model: f64,
-    /// Whether `compare` fails when the gap is too wide. The first fighter's wins are
-    /// only shown: the duel engine favours `FighterId(0)`, who casts first when both
-    /// strike in the same tick, and the model leaves out who starts.
-    pub checked: bool,
 }
 
 impl Rate {
@@ -106,7 +102,7 @@ impl Rate {
 /// fighter, of the stronger and of each class (named by `classes`), deaths and injuries.
 #[must_use]
 pub fn rates(pairs: &[Pair], classes: &[String]) -> Vec<Rate> {
-    let rate = |name: &str, checked, count: &dyn Fn(&Pair, &Outcome) -> (u64, u64)| {
+    let rate = |name: &str, count: &dyn Fn(&Pair, &Outcome) -> (u64, u64)| {
         let percent = |side: fn(&Pair) -> &Outcome| {
             let (part, whole) = pairs.iter().fold((0, 0), |(part, whole), pair| {
                 let (p, w) = count(pair, side(pair));
@@ -118,25 +114,24 @@ pub fn rates(pairs: &[Pair], classes: &[String]) -> Vec<Rate> {
             name: name.to_owned(),
             real: percent(|pair| &pair.real),
             model: percent(|pair| &pair.model),
-            checked,
         }
     };
     let flags = |flags: [bool; 2]| (flags.iter().map(|&f| u64::from(f)).sum(), 2);
     let mut rates = vec![
-        rate("unfinished fights", true, &|_, o| {
+        rate("unfinished fights", &|_, o| {
             (u64::from(o.winner.is_none()), 1)
         }),
-        rate("first fighter wins", false, &|_, o| {
+        rate("first fighter wins", &|_, o| {
             (u64::from(o.winner == Some(0)), 1)
         }),
-        rate("stronger wins, fights with a winner", true, &|p, o| {
+        rate("stronger wins, fights with a winner", &|p, o| {
             p.stronger
                 .zip(o.winner)
                 .map_or((0, 0), |(s, w)| (u64::from(s == w), 1))
         }),
     ];
     for (class, name) in classes.iter().enumerate() {
-        rates.push(rate(&format!("{name} wins"), true, &|p, o| {
+        rates.push(rate(&format!("{name} wins"), &|p, o| {
             (0..2)
                 .filter(|&i| p.classes[i] == class)
                 .fold((0, 0), |(won, fought), i| {
@@ -144,8 +139,8 @@ pub fn rates(pairs: &[Pair], classes: &[String]) -> Vec<Rate> {
                 })
         }));
     }
-    rates.push(rate("fighters killed", true, &|_, o| flags(o.died)));
-    rates.push(rate("fighters injured", true, &|_, o| flags(o.injured)));
+    rates.push(rate("fighters killed", &|_, o| flags(o.died)));
+    rates.push(rate("fighters injured", &|_, o| flags(o.injured)));
     rates
 }
 
@@ -179,7 +174,7 @@ mod tests {
         let rates = rates(&pairs, &names);
         assert_eq!(rates.len(), 5 + names.len());
         // A thousand fights leave a few points of chance on each side.
-        for rate in rates.iter().filter(|r| r.checked) {
+        for rate in &rates {
             assert!(rate.gap() < 4.0, "{rate:?}");
         }
     }

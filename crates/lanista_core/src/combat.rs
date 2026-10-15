@@ -209,14 +209,35 @@ fn cool_down(arena: &mut Arena) {
     }
 }
 
+/// Order in which the fighters casting this tick strike: the fastest first, so of two
+/// fighters killing each other on the same tick, the faster survives. Fighters of the
+/// same speed are shuffled on the arena's generator, drawn only for such a tie.
+fn cast_order(arena: &mut Arena) -> Vec<usize> {
+    let fighters = &arena.fighters;
+    let mut order: Vec<usize> = (0..fighters.len())
+        .filter(|&i| {
+            let f = &fighters[i];
+            f.is_fighting() && matches!(f.action, Action::Cast { spell, .. } if f.can_cast(spell))
+        })
+        .collect();
+    order.sort_by_key(|&i| std::cmp::Reverse(fighters[i].stats.speed));
+    for tie in order.chunk_by_mut(|&a, &b| fighters[a].stats.speed == fighters[b].stats.speed) {
+        // Fisher-Yates on u32 draws, the same on every platform.
+        for k in (1..tie.len()).rev() {
+            let Ok(top) = u32::try_from(k) else { continue };
+            let j = arena.rng.random_range(0..=top);
+            tie.swap(k, usize::try_from(j).unwrap_or(k));
+        }
+    }
+    order
+}
+
 /// Casts the spell each fighter still fighting chose, if it is ready, affordable and the
-/// target is still fighting and in reach; a cast fighter then waits for its next decision.
-/// The spell hits with `hit_percent`, drawn only when below 100; the target dies at 0 HP,
-/// or gives up at its surrender threshold.
-// ponytail: resolved in index order, so of two fighters killing each other on the
-// same tick, the lower index survives.
+/// target is still fighting and in reach, in `cast_order`; a cast fighter then waits for
+/// its next decision. The spell hits with `hit_percent`, drawn only when below 100; the
+/// target dies at 0 HP, or gives up at its surrender threshold.
 fn cast_spells(arena: &mut Arena) {
-    for i in 0..arena.fighters.len() {
+    for i in cast_order(arena) {
         let caster = &arena.fighters[i];
         let Action::Cast { spell, target } = caster.action else {
             continue;
@@ -561,6 +582,42 @@ mod tests {
             arena.log
         };
         assert_eq!(fight(1), fight(1));
+    }
+
+    const HIT_BACK: Action = Action::Cast {
+        spell: 0,
+        target: FighterId(0),
+    };
+
+    /// Two fighters one hit from death strike each other on the first tick, fighter 1 at
+    /// `speed_1`: the winner's index.
+    fn trade(speed_1: u32, seed: u64) -> usize {
+        let mut fighters = vec![fighter(0, 5.0, 5.0), fighter(1, 6.5, 5.0)];
+        fighters[1].stats.speed = speed_1;
+        for f in &mut fighters {
+            f.hp = HIT_DAMAGE;
+        }
+        let mut arena = Arena::new(20.0, 20.0, fighters, seed);
+        play(&mut arena, &[HIT, HIT_BACK], 1);
+        let alive: Vec<usize> = (0..2).filter(|&i| arena.fighters[i].is_alive()).collect();
+        assert_eq!(alive.len(), 1, "exactly one strikes first");
+        alive[0]
+    }
+
+    #[test]
+    fn the_faster_strikes_first_on_the_same_tick() {
+        assert_eq!(trade(31, 0), 1);
+        assert_eq!(trade(29, 0), 0);
+    }
+
+    #[test]
+    fn a_draw_decides_between_equal_speeds() {
+        let winners: Vec<usize> = (0..20).map(|seed| trade(30, seed)).collect();
+        assert!(winners.contains(&0) && winners.contains(&1), "{winners:?}");
+        assert_eq!(
+            winners,
+            (0..20).map(|seed| trade(30, seed)).collect::<Vec<_>>()
+        );
     }
 
     #[test]
