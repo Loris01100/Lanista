@@ -908,6 +908,29 @@ mod tests {
     }
 
     #[test]
+    fn a_head_wound_lowers_accuracy_not_attacks() {
+        let rules = data().fighter;
+        for severity in [
+            crate::fighter::injury::Severity::Medium,
+            crate::fighter::injury::Severity::Permanent,
+        ] {
+            let mut f = fighter(7);
+            let healthy = f.fighting_stats(&rules);
+            f.injuries.push(Injury {
+                location: crate::fighter::injury::Location::Head,
+                severity,
+                weeks_left: 3,
+            });
+            let hurt = f.fighting_stats(&rules);
+            assert!(hurt.accuracy < healthy.accuracy, "{severity:?}");
+            assert_eq!(
+                (hurt.melee_attack, hurt.ranged_attack),
+                (healthy.melee_attack, healthy.ranged_attack)
+            );
+        }
+    }
+
+    #[test]
     fn a_year_ages_the_fighter() {
         let data = data();
         let mut rng = ChaCha8Rng::seed_from_u64(3);

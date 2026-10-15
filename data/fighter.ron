@@ -21,17 +21,17 @@
         // Temporary maluses, as a percentage of `temporary` (written for a medium injury).
         severity_percent: (light: 50, medium: 100, severe: 200),
         // Percentage of each stat lost, by location; missing stats are 0.
-        // Head: the plan's precision malus, still on both attacks: to move to accuracy.
+        // Head: accuracy, so a head wound makes attacks miss rather than hurt less.
         temporary: (
-            head: (melee_attack: 5, ranged_attack: 5),
+            head: (accuracy: 10),
             body: (hp: 10, melee_defense: 10),
             dominant_arm: (melee_attack: 15, ranged_attack: 15),
             off_arm: (melee_defense: 15),
             leg: (speed: 15),
         ),
-        // After-effects: precision, lost HP, lost arm (dominant or shield), limp.
+        // After-effects: accuracy, lost HP, lost arm (dominant or shield), limp.
         permanent: (
-            head: (melee_attack: 10, ranged_attack: 10),
+            head: (accuracy: 20),
             body: (hp: 15),
             dominant_arm: (melee_attack: 50, ranged_attack: 50),
             off_arm: (melee_defense: 40),
