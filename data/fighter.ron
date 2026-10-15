@@ -41,6 +41,9 @@
         max_malus: 80,
         // Chance that a fighter brought to 0 HP survives, with a severe injury.
         fatal_blow_survival: 0.5,
+        // Chance that a fighter stunned in a fight, got up or knocked out, comes out of it
+        // with a severe head injury instead of the usual draw.
+        stun_wound_chance: 0.3,
     ),
     illness: (
         // Chance of falling ill per week at form 100, raised by the risk formula.

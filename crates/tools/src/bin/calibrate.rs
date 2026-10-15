@@ -45,6 +45,8 @@ fn main() -> ExitCode {
             .iter()
             .any(|d| d.died && d.result != FightResult::Won)
     });
+    let knock_outs = count(&|s| s.sides.iter().any(|d| d.knocked_out));
+    let stuns = count(&|s| s.sides.iter().any(|d| d.stunned));
     let foreseen = count(&|s| {
         let chance = model.winner.chance(&s.fighters[0], &s.fighters[1]);
         match (s.sides[0].result, s.sides[1].result) {
@@ -61,12 +63,19 @@ fn main() -> ExitCode {
         one_decimal(deaths * 100, fights),
     );
     println!(
+        "  a stun {} %, a knock-out {} %",
+        one_decimal(stuns * 100, fights),
+        one_decimal(knock_outs * 100, fights),
+    );
+    println!(
         "  the regression foresees the winner of {} % of the fights with one",
         one_decimal(foreseen * 100, with_winner),
     );
     println!("winner weights: {:?}", model.winner);
     println!("unfinished by classes: {:?}", model.unfinished);
+    println!("knocked out by the winner's class: {:?}", model.knocked_out);
     println!("death by determination: {:?}", model.death);
+    println!("stunned by the opponent's class: {:?}", model.stunned);
 
     let text = match model.to_ron() {
         Ok(text) => text,

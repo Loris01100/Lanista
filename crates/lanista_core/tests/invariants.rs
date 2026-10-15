@@ -4,8 +4,9 @@ use lanista_core::ai::{CombatAi, UtilityAi};
 use lanista_core::combat::{AccuracyRules, Arena, RADIUS, Vec2, run, tick};
 use lanista_core::design_data::DesignData;
 use lanista_core::duel::{ARENA_SIZE, MAX_TICKS, STATS};
-use lanista_core::fighter::personality::Personality;
+use lanista_core::fighter::personality::{Personality, TraitValue};
 use lanista_core::fighter::{ClassId, Fighter, FighterId, Stats};
+use lanista_core::log::EventKind;
 use proptest::prelude::*;
 use rand::SeedableRng;
 use rand_chacha::ChaCha8Rng;
@@ -56,8 +57,7 @@ fn duel(setup: Setup, stats: [Stats; 2], seed: u64) -> (Arena, Vec<Box<dyn Comba
         })
         .collect();
     let ais: Vec<Box<dyn CombatAi>> = vec![Box::new(UtilityAi), Box::new(UtilityAi)];
-    let arena =
-        Arena::new(ARENA_SIZE, ARENA_SIZE, fighters, seed).with_accuracy(data.combat.accuracy);
+    let arena = Arena::new(ARENA_SIZE, ARENA_SIZE, fighters, seed).with_rules(data.combat);
     (arena, ais)
 }
 
@@ -93,6 +93,39 @@ proptest! {
         let mut arena = arena.with_accuracy(AccuracyRules::ALWAYS);
         run(&mut arena, &mut ais, MAX_TICKS);
         prop_assert!(arena.is_over(), "still going after {} ticks", arena.tick);
+    }
+
+    #[test]
+    fn a_fighter_down_is_never_hit_and_never_acts(
+        setup in setup(),
+        determination in [0..=100u32, 0..=100u32],
+        seed: u64,
+    ) {
+        let (mut arena, mut ais) = duel(setup, [STATS; 2], seed);
+        // Stuns at every blunt hit, to see many of them.
+        arena.stun.blunt_percent = 10_000;
+        for (f, d) in arena.fighters.iter_mut().zip(determination) {
+            f.condition.personality.determination = TraitValue::new(d);
+        }
+        while !arena.is_over() && arena.tick < MAX_TICKS {
+            let before = arena.fighters.clone();
+            let logged = arena.log.len();
+            tick(&mut arena, &mut ais);
+            for (old, new) in before.iter().zip(&arena.fighters) {
+                // Down for the whole tick: it did not get up at its start.
+                if old.stunned_ticks > 1 {
+                    prop_assert_eq!(new.hp, old.hp);
+                    prop_assert_eq!(new.position, old.position);
+                    let cast = arena.log[logged..].iter().any(|e| {
+                        matches!(e.kind, EventKind::Cast { caster, .. } if caster == old.id)
+                    });
+                    prop_assert!(!cast);
+                }
+                if new.knocked_out {
+                    prop_assert!(new.is_alive() && new.stuns > 0);
+                }
+            }
+        }
     }
 
     #[test]

@@ -100,7 +100,8 @@ Chaque blessure a une localisation et une gravité (légère, moyenne, grave, pe
 
 | Localisation | Effet proposé | Cas permanent |
 | --- | --- | --- |
-| Tête | Baisse de précision, risque d'étourdissement | Séquelle : malus de précision définitif |
+| Tête | Baisse de précision, risque d'étourdissement accru | Séquelle : malus de précision définitif |
+
 | Corps | Baisse de PV max et de DC | Baisse de PV définitive |
 | Bras dominant | Baisse d'AC et d'AL | Perte du bras : le combattant doit changer de style |
 | Bras secondaire | Baisse de DC (bouclier) | Perte du bras |
@@ -158,6 +159,12 @@ L'équipement est fourni par le colisée et identique pour tous. Un combattant p
 | Armure | DC et DL fortement réduites | Moyen |
 | Arme | AC et AL fortement réduites | Élevé |
 | Tout l'équipement | Les deux malus cumulés | Très élevé |
+
+### Armes et étourdissement
+
+Chaque coup frappe avec un type de dégâts, qui vient de l'arme ou du sort. Une arme contondante (bouclier, bâton, et plus tard les mains nues) étourdit plus souvent. Une arme tranchante (glaive) étourdit rarement, mais favorisera la perte d'un membre et la mort (pas encore fait). Les sorts sans élément pour l'instant (feu, éclair) n'étourdissent pas.
+
+Plus le coup est fort, plus il risque d'étourdir, et une blessure à la tête augmente encore ce risque. Un combattant étourdi tombe : il ne fait plus rien et son adversaire attend qu'il se relève. Sa détermination décide s'il se relève, de moins en moins à chaque nouvel étourdissement du même combat. S'il se relève, le combat reprend et l'adversaire attaque de nouveau. Sinon, il est mis K.-O. : le combat s'arrête sur sa défaite, sans la honte d'un abandon, et il survit. Un combattant étourdi, relevé ou non, peut garder une blessure grave à la tête après le combat.
 
 ### Formats
 

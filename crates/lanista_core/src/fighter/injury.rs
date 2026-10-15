@@ -117,6 +117,16 @@ pub fn fatal_blow_wound<R: Rng + ?Sized>(rng: &mut R, rules: &InjuryRules) -> In
     }
 }
 
+/// The severe head injury a stun may leave (see `InjuryRules::stun_wound_chance`).
+pub fn stun_wound<R: Rng + ?Sized>(rng: &mut R, rules: &InjuryRules) -> Injury {
+    let (low, high) = rules.healing_weeks.severe;
+    Injury {
+        location: Location::Head,
+        severity: Severity::Severe,
+        weeks_left: rng.random_range(low..=high),
+    }
+}
+
 /// Where an injury lands, by `rules.location_weights`.
 fn roll_location<R: Rng + ?Sized>(rng: &mut R, rules: &InjuryRules) -> Location {
     let side = if rng.random_bool(0.5) {
@@ -204,6 +214,9 @@ pub struct InjuryRules {
     pub max_malus: u32,
     /// Chance that a fighter brought to 0 HP survives, with a severe injury.
     pub fatal_blow_survival: f64,
+    /// Chance that a fighter stunned in a fight comes out of it with a severe head
+    /// injury, instead of the usual draw.
+    pub stun_wound_chance: f64,
 }
 
 /// Relative chances of each location; the side of an arm or leg is drawn 50/50.
@@ -297,6 +310,7 @@ mod tests {
             },
             max_malus: 80,
             fatal_blow_survival: 0.5,
+            stun_wound_chance: 0.5,
         }
     }
 

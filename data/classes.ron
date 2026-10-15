@@ -2,6 +2,8 @@
 // ClassId(i) is the i-th class of this list.
 // reach: meters between the fighters' edges. power: % of the damage formula.
 // cooldown: ticks, 30 per second.
+// damage_kind: Blunt stuns more often than Cutting; Neutral (spells without an element
+// yet) never stuns. Cutting is meant to favor lost limbs and deaths too, not done yet.
 [
     (
         name: "Mirmillon",
@@ -15,6 +17,7 @@
                 power: 100,
                 cooldown: 30,
                 cost: Endurance(5),
+                damage_kind: Cutting,
             ),
             (
                 name: "Charge au bouclier",
@@ -23,6 +26,7 @@
                 power: 150,
                 cooldown: 150,
                 cost: Endurance(25),
+                damage_kind: Blunt,
             ),
             (
                 name: "Frappe brutale",
@@ -31,6 +35,7 @@
                 power: 250,
                 cooldown: 300,
                 cost: Endurance(40),
+                damage_kind: Cutting,
             ),
         ],
     ),
@@ -46,6 +51,7 @@
                 power: 60,
                 cooldown: 30,
                 cost: Endurance(5),
+                damage_kind: Blunt,
             ),
             (
                 name: "Trait de feu",
@@ -54,6 +60,7 @@
                 power: 100,
                 cooldown: 45,
                 cost: Mana(10),
+                damage_kind: Neutral,
             ),
             (
                 name: "Éclair",
@@ -62,6 +69,7 @@
                 power: 180,
                 cooldown: 180,
                 cost: Mana(30),
+                damage_kind: Neutral,
             ),
         ],
     ),

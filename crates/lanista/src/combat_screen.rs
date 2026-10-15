@@ -67,6 +67,8 @@ enum Pose {
     Move,
     Cast,
     Death,
+    /// Stunned or knocked out: lying down, alive.
+    Down,
 }
 
 /// What a fighter is showing: its pose and how far into its animation.
@@ -111,7 +113,7 @@ pub struct CombatScreen {
     /// Log events already turned into animations.
     seen_events: usize,
     looks: Vec<Look>,
-    animations: [Animation; 4],
+    animations: [Animation; 5],
     bindings: Bindings<Action>,
     /// Fight speed, a factor of real time: one of `SPEEDS`.
     speed: f32,
@@ -157,6 +159,8 @@ impl CombatScreen {
                     ..animation(2, 0.06, false)
                 },
                 animation(3, 0.15, false),
+                // ponytail: the death row until the real sprites bring a stunned pose.
+                animation(3, 0.1, false),
             ],
             bindings,
             speed: 1.0,
@@ -256,17 +260,27 @@ impl CombatScreen {
             Some(winner) => format!("Vainqueur : {}", self.name(winner.id)),
             None => "Aucun vainqueur".into(),
         };
-        let gave_up: Vec<String> = self
-            .arena
-            .fighters
-            .iter()
-            .filter(|f| f.surrendered)
-            .map(|f| self.name(f.id))
-            .collect();
-        if gave_up.is_empty() {
+        let out = |how: &str, out: fn(&lanista_core::fighter::Fighter) -> bool| {
+            let names: Vec<String> = self
+                .arena
+                .fighters
+                .iter()
+                .filter(|f| out(f))
+                .map(|f| self.name(f.id))
+                .collect();
+            (!names.is_empty()).then(|| format!("{how} : {}", names.join(", ")))
+        };
+        let reasons: Vec<String> = [
+            out("abandon", |f| f.surrendered),
+            out("K.-O.", |f| f.knocked_out),
+        ]
+        .into_iter()
+        .flatten()
+        .collect();
+        if reasons.is_empty() {
             winner
         } else {
-            format!("{winner} (abandon : {})", gave_up.join(", "))
+            format!("{winner} ({})", reasons.join(", "))
         }
     }
 
@@ -311,6 +325,8 @@ impl CombatScreen {
             let casting = look.pose == Pose::Cast && !look.player.is_finished(&self.animations[2]);
             let pose = if !fighter.is_alive() {
                 Pose::Death
+            } else if !fighter.is_standing() && !fighter.surrendered {
+                Pose::Down
             } else if casting {
                 Pose::Cast
             } else if matches!(fighter.action, ai::Action::Move(_)) {
@@ -495,7 +511,8 @@ mod tests {
 
     use super::*;
 
-    const SEEDS: [u64; 4] = [42, 0, 1, 7];
+    /// Seed 15 has stuns and a knock-out.
+    const SEEDS: [u64; 5] = [42, 0, 1, 7, 15];
 
     /// The first week of career 7 is a fight its fighter gives up: watched frame
     /// by frame, it is the very fight the career played.
@@ -573,6 +590,22 @@ mod tests {
         assert!(screen.looks[1 - dead].dead_for.is_none());
     }
 
+    /// In the standard duel of seed 15, fighter 0 is knocked out: it lies down, alive,
+    /// without blood.
+    #[test]
+    fn a_fighter_knocked_out_lies_down_without_bleeding() {
+        let mut screen = screen(15);
+        while screen.running() {
+            screen.advance(1.0 / 60.0);
+        }
+        assert_eq!(screen.looks[0].pose, Pose::Down);
+        assert!(screen.looks.iter().all(|look| look.dead_for.is_none()));
+        assert_eq!(
+            screen.result(),
+            "Vainqueur : combattant 1 (K.-O. : combattant 0)"
+        );
+    }
+
     fn screen(seed: u64) -> CombatScreen {
         CombatScreen::new(
             Rc::new(DesignData::load().unwrap()),
@@ -637,7 +670,7 @@ mod tests {
                             && (!winner_only
                                 || screen.arena.fighters[index(caster.0).unwrap()].is_fighting())
                     }
-                    EventKind::Death { .. } | EventKind::Surrender { .. } => false,
+                    _ => false,
                 })
                 .count()
         };

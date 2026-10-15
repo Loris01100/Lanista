@@ -4,6 +4,7 @@
 use lanista_core::design_data::DesignData;
 use lanista_core::fighter::career::{CareerFighter, Status};
 use lanista_core::fighter::form::FormEvent;
+use lanista_core::fighter::injury::Location;
 use rand::SeedableRng;
 use rand_chacha::ChaCha8Rng;
 
@@ -17,6 +18,8 @@ pub struct Outcome {
     pub died: [bool; 2],
     /// Whether each came out of the fight with a new injury.
     pub injured: [bool; 2],
+    /// Whether that injury is to the head, as the wound a stun leaves.
+    pub head_injured: [bool; 2],
 }
 
 /// The same fight played both ways.
@@ -75,10 +78,18 @@ fn outcome(
     let after = [a, b];
     let gained = |i: usize| after[i].record.wins > before[i].record.wins;
     let injured = |i: usize| after[i].injuries.len() > before[i].injuries.len();
+    let head_injured = |i: usize| {
+        injured(i)
+            && after[i]
+                .injuries
+                .last()
+                .is_some_and(|injury| injury.location == Location::Head)
+    };
     Outcome {
         winner: (0..2).find(|&i| gained(i)),
         died: [0, 1].map(|i| after[i].status == Status::Dead),
         injured: [0, 1].map(injured),
+        head_injured: [0, 1].map(head_injured),
     }
 }
 
@@ -99,7 +110,8 @@ impl Rate {
 }
 
 /// The rates `compare` shows over `pairs`: fights at the time limit, wins of the first
-/// fighter, of the stronger and of each class (named by `classes`), deaths and injuries.
+/// fighter, of the stronger and of each class (named by `classes`), deaths, injuries and
+/// head injuries.
 #[must_use]
 pub fn rates(pairs: &[Pair], classes: &[String]) -> Vec<Rate> {
     let rate = |name: &str, count: &dyn Fn(&Pair, &Outcome) -> (u64, u64)| {
@@ -141,6 +153,9 @@ pub fn rates(pairs: &[Pair], classes: &[String]) -> Vec<Rate> {
     }
     rates.push(rate("fighters killed", &|_, o| flags(o.died)));
     rates.push(rate("fighters injured", &|_, o| flags(o.injured)));
+    rates.push(rate("fighters injured at the head", &|_, o| {
+        flags(o.head_injured)
+    }));
     rates
 }
 
@@ -172,7 +187,7 @@ mod tests {
             .collect();
         let names: Vec<String> = data.classes.iter().map(|c| c.name.clone()).collect();
         let rates = rates(&pairs, &names);
-        assert_eq!(rates.len(), 5 + names.len());
+        assert_eq!(rates.len(), 6 + names.len());
         // A thousand fights leave a few points of chance on each side.
         for rate in &rates {
             assert!(rate.gap() < 4.0, "{rate:?}");
@@ -185,6 +200,7 @@ mod tests {
             winner,
             died,
             injured,
+            head_injured: [false; 2],
         };
         let pair = Pair {
             classes: [0, 1],

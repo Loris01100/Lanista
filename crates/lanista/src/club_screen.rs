@@ -590,6 +590,7 @@ impl ClubScreen {
                             f.damage_taken,
                             f.spells_cast,
                             f.misses,
+                            f.stuns,
                             f.hp,
                         ]
                     });
@@ -598,9 +599,10 @@ impl ClubScreen {
                         "Dégâts reçus",
                         "Sorts lancés",
                         "Coups ratés",
+                        "Étourdi",
                         "PV restants",
                     ];
-                    let values: Vec<[u32; 5]> = rows.collect();
+                    let values: Vec<[u32; 6]> = rows.collect();
                     for (row, name) in names.into_iter().enumerate() {
                         ui.label(name);
                         for side in &values {
@@ -997,7 +999,7 @@ mod tests {
         );
         let (week, menu) = screen.last_week.as_ref().unwrap();
         assert_eq!(*week, 3);
-        assert_eq!(menu[0], "Argent 528 (+33) : recettes +43, entretien -10");
+        assert_eq!(menu[0], "Argent 516 (+21) : recettes +31, entretien -10");
         assert_eq!(
             menu[1],
             "Mirmillon n° 1 : Combat à Capoue, Contre un Augure, plus fort : abandon, renommée -8"

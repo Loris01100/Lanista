@@ -221,8 +221,10 @@ fn week_text(
 }
 
 fn fight_text(fight: &FightSummary, data: &DesignData) -> String {
+    let knocked_out = fight.report.fighters.first().is_some_and(|f| f.knocked_out);
     let result = match (fight.result, fight.died) {
         (_, true) => "killed",
+        (FightResult::Lost, _) if knocked_out => "knocked out",
         (FightResult::Won, _) => "won",
         (FightResult::Lost, _) => "lost",
         (FightResult::GaveUp, _) => "gave up",

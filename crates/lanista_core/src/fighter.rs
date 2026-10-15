@@ -172,6 +172,12 @@ pub struct Fighter {
     pub surrender_hp: u32,
     /// Gave up: out of the fight, alive.
     pub surrendered: bool,
+    /// Ticks left down, stunned: still in the fight, but neither acting nor hit; 0 standing.
+    pub stunned_ticks: u32,
+    /// Times stunned in this fight.
+    pub stuns: u32,
+    /// Did not get up after a stun: out of the fight, alive.
+    pub knocked_out: bool,
     /// The fighter's state outside the fight, read by the AI so that an injured or
     /// fearful fighter fights differently. `stats` already include its effects.
     pub condition: Condition,
@@ -224,6 +230,9 @@ impl Fighter {
             action: Action::Wait,
             surrender_hp: 0,
             surrendered: false,
+            stunned_ticks: 0,
+            stuns: 0,
+            knocked_out: false,
             condition: Condition::default(),
         }
     }
@@ -233,10 +242,16 @@ impl Fighter {
         self.hp > 0
     }
 
-    /// Alive and has not given up.
+    /// Alive, has not given up and was not knocked out; maybe down for now.
     #[must_use]
     pub fn is_fighting(&self) -> bool {
-        self.is_alive() && !self.surrendered
+        self.is_alive() && !self.surrendered && !self.knocked_out
+    }
+
+    /// Fighting and not down: acts, and can be hit.
+    #[must_use]
+    pub fn is_standing(&self) -> bool {
+        self.is_fighting() && self.stunned_ticks == 0
     }
 
     /// Takes `damage` hit points off, stopping at 0: a blow that reaches 0 kills.
@@ -285,10 +300,10 @@ impl Fighter {
 }
 
 /// A fighter for tests: 100 HP, 10 in every other stat but accuracy and speed 30,
-/// and one melee spell (reach 1 m, power 100, cooldown 30, 10 endurance out of 50).
+/// and one blunt melee spell (reach 1 m, power 100, cooldown 30, 10 endurance out of 50).
 #[cfg(test)]
 pub(crate) fn test_fighter(id: u32, x: f64, y: f64) -> Fighter {
-    use crate::combat::Range;
+    use crate::combat::{DamageKind, Range};
 
     let class = ClassData {
         name: "Test".into(),
@@ -301,6 +316,7 @@ pub(crate) fn test_fighter(id: u32, x: f64, y: f64) -> Fighter {
             power: 100,
             cooldown: 30,
             cost: Cost::Endurance(10),
+            damage_kind: DamageKind::Blunt,
         }],
     };
     let stats = Stats {

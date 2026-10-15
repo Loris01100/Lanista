@@ -25,7 +25,7 @@ pub const STATS: Stats = Stats {
 };
 
 /// A duel set up from `seed`: random classes, fighter 0 starts in the left quarter,
-/// fighter 1 in the right quarter. The arena gets the same seed and `data`'s accuracy rules.
+/// fighter 1 in the right quarter. The arena gets the same seed and `data`'s combat rules.
 ///
 /// # Panics
 /// If `data` has no class, which [`DesignData::from_ron`] rejects: a bug, not a data error.
@@ -42,7 +42,7 @@ pub fn random_duel(data: &DesignData, seed: u64) -> Arena {
         Fighter::new(FighterId(id), class, class_data, STATS, Vec2::new(x, y))
     };
     let fighters = vec![fighter(0, 1.0), fighter(1, ARENA_SIZE * 3.0 / 4.0 - 1.0)];
-    Arena::new(ARENA_SIZE, ARENA_SIZE, fighters, seed).with_accuracy(data.combat.accuracy)
+    Arena::new(ARENA_SIZE, ARENA_SIZE, fighters, seed).with_rules(data.combat)
 }
 
 /// A utility AI for every fighter of `arena`.

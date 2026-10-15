@@ -5,6 +5,8 @@ use serde::Deserialize;
 
 use crate::ai::{Action, CombatAi};
 use crate::design_data::SpellData;
+use crate::fighter::injury::Location;
+use crate::fighter::personality::Personality;
 use crate::fighter::{Fighter, FighterId, Stats};
 use crate::log::{Event, EventKind};
 
@@ -54,6 +56,8 @@ pub struct Arena {
     pub log: Vec<Event>,
     /// How often attacks hit; always, unless set with [`Arena::with_accuracy`].
     pub accuracy: AccuracyRules,
+    /// How hits stun; never, unless set with [`Arena::with_rules`].
+    pub stun: StunRules,
 }
 
 /// Combat rules, from `data/combat.ron`.
@@ -61,6 +65,51 @@ pub struct Arena {
 #[serde(deny_unknown_fields)]
 pub struct CombatRules {
     pub accuracy: AccuracyRules,
+    pub stun: StunRules,
+}
+
+/// How a hit may stun its target (see [`stun_chance`]), and how a stunned fighter gets
+/// back up (see [`rise_percent`]).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct StunRules {
+    /// Chance a blunt hit stuns, in percent per tenth of the target's max HP it takes.
+    pub blunt_percent: u32,
+    /// The same for a cutting hit; a neutral one never stuns.
+    pub cutting_percent: u32,
+    /// Each injury to the target's head, after-effect included, raises the chance by
+    /// this percentage of it.
+    pub head_injury_percent: u32,
+    /// Ticks a stunned fighter stays down; its opponents wait for it.
+    pub ticks: u32,
+    /// Chance to get back up, in percent, from determination 0 to determination 100.
+    pub rise_percent_least_determined: u32,
+    pub rise_percent_most_determined: u32,
+    /// Taken off that chance for every stun after the first in the same fight.
+    pub rise_percent_lost_per_stun: u32,
+}
+
+impl StunRules {
+    /// No hit ever stuns.
+    pub const NEVER: Self = Self {
+        blunt_percent: 0,
+        cutting_percent: 0,
+        head_injury_percent: 0,
+        ticks: 0,
+        rise_percent_least_determined: 100,
+        rise_percent_most_determined: 100,
+        rise_percent_lost_per_stun: 0,
+    };
+}
+
+/// What a spell hits with: a blunt blow stuns more often than a cutting one, a neutral
+/// one (spells without an element yet) never.
+// ponytail: cutting is meant to favor lost limbs and deaths too (roadmap, phase 5 bis).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize)]
+pub enum DamageKind {
+    Blunt,
+    Cutting,
+    Neutral,
 }
 
 /// Chance that an attack hits, from the attacker's accuracy against the target's speed
@@ -96,6 +145,7 @@ impl Arena {
             rng: ChaCha8Rng::seed_from_u64(seed),
             log: Vec::new(),
             accuracy: AccuracyRules::ALWAYS,
+            stun: StunRules::NEVER,
         }
     }
 
@@ -106,7 +156,15 @@ impl Arena {
         self
     }
 
-    /// At most one fighter still fighting: the others are dead or gave up.
+    /// This arena, where attacks hit and stun following `rules`, as in real fights.
+    #[must_use]
+    pub fn with_rules(mut self, rules: CombatRules) -> Self {
+        self.accuracy = rules.accuracy;
+        self.stun = rules.stun;
+        self
+    }
+
+    /// At most one fighter still fighting: the others are dead, gave up or were knocked out.
     #[must_use]
     pub fn is_over(&self) -> bool {
         self.fighters.iter().filter(|f| f.is_fighting()).count() <= 1
@@ -124,10 +182,11 @@ impl Arena {
 /// If there is not exactly one AI per fighter.
 pub fn tick(arena: &mut Arena, ais: &mut [Box<dyn CombatAi>]) {
     assert_eq!(arena.fighters.len(), ais.len(), "one AI per fighter");
+    come_round(arena);
     if arena.tick.is_multiple_of(TICKS_PER_DECISION) {
         for (i, ai) in ais.iter_mut().enumerate() {
             let fighter = &arena.fighters[i];
-            if fighter.is_fighting() {
+            if fighter.is_standing() {
                 let action = ai.decide(arena, fighter.id);
                 arena.fighters[i].action = action;
             }
@@ -186,6 +245,48 @@ pub fn hit_percent(attacker: &Stats, defender: &Stats, rules: &AccuracyRules) ->
     percent.clamp(rules.min_percent, rules.max_percent.max(rules.min_percent))
 }
 
+/// Chance, in hundredths of a percent (10 000 for sure), that a hit taking `damage` HP
+/// with a `kind` weapon stuns `target`: the kind's percentage per tenth of the target's
+/// max HP the hit takes, raised by `head_injury_percent` of it per head injury.
+#[must_use]
+pub fn stun_chance(damage: u32, kind: DamageKind, target: &Fighter, rules: &StunRules) -> u32 {
+    let percent = match kind {
+        DamageKind::Blunt => rules.blunt_percent,
+        DamageKind::Cutting => rules.cutting_percent,
+        DamageKind::Neutral => 0,
+    };
+    let heads = target
+        .condition
+        .injuries
+        .iter()
+        .filter(|injury| injury.location == Location::Head)
+        .count();
+    let heads = u64::try_from(heads).unwrap_or(u64::MAX);
+    let raise = heads
+        .saturating_mul(u64::from(rules.head_injury_percent))
+        .saturating_add(100);
+    // percent × damage / (max HP / 10) × raise / 100, in hundredths of a percent.
+    let chance = (u64::from(percent) * u64::from(damage) * 10)
+        .saturating_mul(raise)
+        .checked_div(u64::from(target.stats.hp))
+        .unwrap_or(0);
+    u32::try_from(chance.min(10_000)).unwrap_or(10_000)
+}
+
+/// Chance, in percent, that `fighter`, down after its latest stun, gets back up: from
+/// `rise_percent_least_determined` at determination 0 to `rise_percent_most_determined`
+/// at 100, less `rise_percent_lost_per_stun` for each of its stuns after the first.
+#[must_use]
+pub fn rise_percent(fighter: &Fighter, rules: &StunRules) -> u32 {
+    let low = i64::from(rules.rise_percent_least_determined);
+    let high = i64::from(rules.rise_percent_most_determined);
+    let determination = i64::from(fighter.condition.personality.determination.value());
+    let percent = low + (high - low) * determination / i64::from(Personality::MAX);
+    let lost =
+        i64::from(rules.rise_percent_lost_per_stun) * i64::from(fighter.stuns.saturating_sub(1));
+    u32::try_from((percent - lost).clamp(0, 100)).unwrap_or(0)
+}
+
 /// Damage of a spell: the `damage` formula scaled by its power, in percent, rounded up.
 #[must_use]
 pub fn spell_damage(attacker: &Stats, defender: &Stats, spell: &SpellData) -> u32 {
@@ -199,6 +300,32 @@ pub fn spell_damage(attacker: &Stats, defender: &Stats, spell: &SpellData) -> u3
 pub fn edge_distance(a: &Fighter, b: &Fighter) -> f64 {
     let offset = Vec2::new(b.position.x - a.position.x, b.position.y - a.position.y);
     (offset.length() - 2.0 * RADIUS).max(0.0)
+}
+
+/// Counts down the ticks of every fighter down: at the last one, it gets back up with
+/// [`rise_percent`], drawn only below 100, or is knocked out of the fight.
+fn come_round(arena: &mut Arena) {
+    for f in &mut arena.fighters {
+        if !f.is_fighting() || f.stunned_ticks == 0 {
+            continue;
+        }
+        f.stunned_ticks -= 1;
+        if f.stunned_ticks > 0 {
+            continue;
+        }
+        let chance = rise_percent(f, &arena.stun);
+        let rises = chance >= 100 || arena.rng.random_range(0..100) < chance;
+        f.knocked_out = !rises;
+        let fighter = f.id;
+        arena.log.push(Event {
+            tick: arena.tick,
+            kind: if rises {
+                EventKind::Rise { fighter }
+            } else {
+                EventKind::KnockedOut { fighter }
+            },
+        });
+    }
 }
 
 fn cool_down(arena: &mut Arena) {
@@ -217,7 +344,7 @@ fn cast_order(arena: &mut Arena) -> Vec<usize> {
     let mut order: Vec<usize> = (0..fighters.len())
         .filter(|&i| {
             let f = &fighters[i];
-            f.is_fighting() && matches!(f.action, Action::Cast { spell, .. } if f.can_cast(spell))
+            f.is_standing() && matches!(f.action, Action::Cast { spell, .. } if f.can_cast(spell))
         })
         .collect();
     order.sort_by_key(|&i| std::cmp::Reverse(fighters[i].stats.speed));
@@ -232,10 +359,11 @@ fn cast_order(arena: &mut Arena) -> Vec<usize> {
     order
 }
 
-/// Casts the spell each fighter still fighting chose, if it is ready, affordable and the
-/// target is still fighting and in reach, in `cast_order`; a cast fighter then waits for
+/// Casts the spell each fighter standing chose, if it is ready, affordable and the
+/// target is standing and in reach, in `cast_order`; a cast fighter then waits for
 /// its next decision. The spell hits with `hit_percent`, drawn only when below 100; the
-/// target dies at 0 HP, or gives up at its surrender threshold.
+/// target dies at 0 HP, gives up at its surrender threshold, or else may be stunned with
+/// `stun_chance`, drawn only above 0, staying down for `StunRules::ticks`.
 fn cast_spells(arena: &mut Arena) {
     for i in cast_order(arena) {
         let caster = &arena.fighters[i];
@@ -248,7 +376,7 @@ fn cast_spells(arena: &mut Arena) {
         let Some(defender) = arena.fighters.get(t) else {
             continue;
         };
-        if !caster.is_fighting() || !defender.is_fighting() || caster.id == target {
+        if !caster.is_standing() || !defender.is_standing() || caster.id == target {
             continue;
         }
         if !caster.can_cast(spell) || edge_distance(caster, defender) > caster.spells[spell].reach {
@@ -261,6 +389,7 @@ fn cast_spells(arena: &mut Arena) {
         } else {
             spell_damage(&caster.stats, &defender.stats, &caster.spells[spell])
         };
+        let kind = caster.spells[spell].damage_kind;
         let caster = &mut arena.fighters[i];
         caster.spend(spell);
         caster.action = Action::Wait;
@@ -281,6 +410,17 @@ fn cast_spells(arena: &mut Arena) {
         });
         let died = !defender.is_alive();
         let surrendered = defender.surrendered;
+        let chance = if died || surrendered {
+            0
+        } else {
+            stun_chance(hp_before - defender.hp, kind, defender, &arena.stun)
+        };
+        let stunned = chance > 0 && arena.rng.random_range(0..10_000) < chance;
+        if stunned {
+            defender.stunned_ticks = arena.stun.ticks.max(1);
+            defender.stuns += 1;
+            defender.action = Action::Wait;
+        }
         arena.log.push(cast);
         if died {
             arena.log.push(event(EventKind::Death { fighter: target }));
@@ -288,12 +428,14 @@ fn cast_spells(arena: &mut Arena) {
             arena
                 .log
                 .push(event(EventKind::Surrender { fighter: target }));
+        } else if stunned {
+            arena.log.push(event(EventKind::Stun { fighter: target }));
         }
     }
 }
 
 fn move_fighters(arena: &mut Arena) {
-    for f in arena.fighters.iter_mut().filter(|f| f.is_fighting()) {
+    for f in arena.fighters.iter_mut().filter(|f| f.is_standing()) {
         if let Action::Move(direction) = f.action {
             let length = direction.length();
             if length > 0.0 {
@@ -618,6 +760,122 @@ mod tests {
             winners,
             (0..20).map(|seed| trade(30, seed)).collect::<Vec<_>>()
         );
+    }
+
+    const STUN: StunRules = StunRules {
+        blunt_percent: 5,
+        cutting_percent: 1,
+        head_injury_percent: 50,
+        ticks: 60,
+        rise_percent_least_determined: 30,
+        rise_percent_most_determined: 90,
+        rise_percent_lost_per_stun: 20,
+    };
+
+    #[test]
+    fn heavy_blunt_hits_stun_most_and_head_injuries_more_still() {
+        use crate::fighter::injury::{Injury, Severity};
+
+        // 100 HP: 10 damage is a tenth of them.
+        let mut target = fighter(1, 0.0, 0.0);
+        let chance = |damage, kind, target: &Fighter| stun_chance(damage, kind, target, &STUN);
+        assert_eq!(chance(10, DamageKind::Blunt, &target), 500);
+        assert_eq!(chance(20, DamageKind::Blunt, &target), 1000);
+        assert_eq!(chance(20, DamageKind::Cutting, &target), 200);
+        assert_eq!(chance(20, DamageKind::Neutral, &target), 0);
+        assert_eq!(chance(1000, DamageKind::Blunt, &target), 10_000);
+        let head = Injury {
+            location: Location::Head,
+            severity: Severity::Permanent,
+            weeks_left: 0,
+        };
+        target.condition.injuries = vec![head, head];
+        assert_eq!(chance(20, DamageKind::Blunt, &target), 2000);
+        target.stats.hp = 0;
+        assert_eq!(chance(20, DamageKind::Blunt, &target), 0);
+    }
+
+    #[test]
+    fn the_determined_get_up_more_often_and_every_stun_makes_it_harder() {
+        use crate::fighter::personality::TraitValue;
+
+        let mut f = fighter(0, 0.0, 0.0);
+        let rise = |f: &Fighter, determination| {
+            let mut f = f.clone();
+            f.condition.personality.determination = TraitValue::new(determination);
+            rise_percent(&f, &STUN)
+        };
+        f.stuns = 1;
+        assert_eq!((rise(&f, 0), rise(&f, 50), rise(&f, 100)), (30, 60, 90));
+        f.stuns = 3;
+        assert_eq!((rise(&f, 0), rise(&f, 100)), (0, 50));
+    }
+
+    /// `duel(0.5)` where fighter 0's first hit surely stuns, and a fighter gets up with
+    /// `rise_percent`.
+    fn stunning_duel(rise_percent: u32) -> Arena {
+        let mut arena = duel(0.5);
+        arena.stun = StunRules {
+            blunt_percent: 10_000,
+            rise_percent_least_determined: rise_percent,
+            rise_percent_most_determined: rise_percent,
+            ..STUN
+        };
+        arena
+    }
+
+    #[test]
+    fn a_stunned_fighter_stays_down_unhit_then_gets_up() {
+        let mut arena = stunning_duel(100);
+        play(&mut arena, &[HIT, Action::Wait], 1);
+        let down = &arena.fighters[1];
+        assert_eq!((down.hp, down.stuns, down.stunned_ticks), (90, 1, 60));
+        assert!(down.is_fighting() && !down.is_standing());
+        assert_eq!(
+            arena.log.last().map(|e| e.kind),
+            Some(EventKind::Stun {
+                fighter: FighterId(1)
+            })
+        );
+        // Fighter 0's cooldown ends at tick 30, but nobody hits a fighter down,
+        // and the fighter down neither hits back nor moves.
+        play(&mut arena, &[HIT, HIT_BACK], 59);
+        assert_eq!(arena.fighters[1].hp, 90);
+        assert_eq!(arena.fighters[0].hp, 100);
+        assert!(!arena.is_over());
+        // Tick 60: it gets up, and is hit again at once.
+        play(&mut arena, &[HIT, Action::Wait], 1);
+        let kinds: Vec<EventKind> = arena.log.iter().map(|e| e.kind).collect();
+        assert!(kinds.contains(&EventKind::Rise {
+            fighter: FighterId(1)
+        }));
+        assert_eq!(arena.fighters[1].hp, 80);
+    }
+
+    #[test]
+    fn a_fighter_who_does_not_get_up_is_knocked_out_alive() {
+        let mut arena = stunning_duel(0);
+        play(&mut arena, &[HIT, Action::Wait], 61);
+        let out = &arena.fighters[1];
+        assert!(out.knocked_out && out.is_alive() && !out.is_fighting());
+        assert!(arena.is_over());
+        assert_eq!(
+            arena.log.last().map(|e| e.kind),
+            Some(EventKind::KnockedOut {
+                fighter: FighterId(1)
+            })
+        );
+        let report = crate::log::Report::new(&arena);
+        assert_eq!(report.winner, Some(FighterId(0)));
+        assert!(report.fighters[1].knocked_out && report.fighters[1].stuns == 1);
+    }
+
+    #[test]
+    fn without_stun_rules_nobody_is_stunned() {
+        let mut arena = duel(0.5);
+        play(&mut arena, &[HIT, Action::Wait], 150);
+        assert_eq!(arena.fighters[1].stuns, 0);
+        assert_eq!(arena.fighters[1].hp, 100 - 5 * HIT_DAMAGE);
     }
 
     #[test]

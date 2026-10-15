@@ -31,6 +31,18 @@ pub enum EventKind {
     Surrender {
         fighter: FighterId,
     },
+    /// Stunned by the hit just logged: down, neither acting nor hit.
+    Stun {
+        fighter: FighterId,
+    },
+    /// Got back up after a stun: fighting again.
+    Rise {
+        fighter: FighterId,
+    },
+    /// Did not get up after a stun: out of the fight, alive.
+    KnockedOut {
+        fighter: FighterId,
+    },
 }
 
 /// Summary of a fight, built from its log.
@@ -56,7 +68,10 @@ pub struct FighterReport {
     /// Missed spells included.
     pub spells_cast: u32,
     pub misses: u32,
+    /// Times stunned.
+    pub stuns: u32,
     pub surrendered: bool,
+    pub knocked_out: bool,
 }
 
 impl Report {
@@ -73,27 +88,39 @@ impl Report {
                 damage_taken: 0,
                 spells_cast: 0,
                 misses: 0,
+                stuns: 0,
                 surrendered: f.surrendered,
+                knocked_out: f.knocked_out,
             })
             .collect();
         let index = |id: FighterId| usize::try_from(id.0).ok();
         for event in &arena.log {
-            if let EventKind::Cast {
-                caster,
-                target,
-                damage,
-                missed,
-                ..
-            } = event.kind
-            {
-                if let Some(c) = index(caster).and_then(|i| fighters.get_mut(i)) {
-                    c.damage_dealt = c.damage_dealt.saturating_add(damage);
-                    c.spells_cast += 1;
-                    c.misses += u32::from(missed);
+            match event.kind {
+                EventKind::Cast {
+                    caster,
+                    target,
+                    damage,
+                    missed,
+                    ..
+                } => {
+                    if let Some(c) = index(caster).and_then(|i| fighters.get_mut(i)) {
+                        c.damage_dealt = c.damage_dealt.saturating_add(damage);
+                        c.spells_cast += 1;
+                        c.misses += u32::from(missed);
+                    }
+                    if let Some(t) = index(target).and_then(|i| fighters.get_mut(i)) {
+                        t.damage_taken = t.damage_taken.saturating_add(damage);
+                    }
                 }
-                if let Some(t) = index(target).and_then(|i| fighters.get_mut(i)) {
-                    t.damage_taken = t.damage_taken.saturating_add(damage);
+                EventKind::Stun { fighter } => {
+                    if let Some(f) = index(fighter).and_then(|i| fighters.get_mut(i)) {
+                        f.stuns += 1;
+                    }
                 }
+                EventKind::Death { .. }
+                | EventKind::Surrender { .. }
+                | EventKind::Rise { .. }
+                | EventKind::KnockedOut { .. } => {}
             }
         }
         let over = arena.is_over();
@@ -134,7 +161,19 @@ impl fmt::Display for Report {
                 "fighter {}: {}/{} HP, dealt {}, taken {}, {} spells cast, {} missed",
                 r.id.0, r.hp, r.max_hp, r.damage_dealt, r.damage_taken, r.spells_cast, r.misses
             )?;
-            writeln!(f, "{}", if r.surrendered { ", gave up" } else { "" })?;
+            match r.stuns {
+                0 => {}
+                1 => write!(f, ", stunned once")?,
+                n => write!(f, ", stunned {n} times")?,
+            }
+            let out = if r.surrendered {
+                ", gave up"
+            } else if r.knocked_out {
+                ", knocked out"
+            } else {
+                ""
+            };
+            writeln!(f, "{out}")?;
         }
         Ok(())
     }
@@ -175,15 +214,28 @@ pub fn log_text(arena: &Arena) -> String {
             EventKind::Surrender { fighter } => {
                 writeln!(text, "[{:>5}] fighter {} gives up", event.tick, fighter.0)
             }
+            EventKind::Stun { fighter } => {
+                writeln!(text, "[{:>5}] fighter {} is stunned", event.tick, fighter.0)
+            }
+            EventKind::Rise { fighter } => {
+                writeln!(text, "[{:>5}] fighter {} gets up", event.tick, fighter.0)
+            }
+            EventKind::KnockedOut { fighter } => {
+                writeln!(
+                    text,
+                    "[{:>5}] fighter {} is knocked out",
+                    event.tick, fighter.0
+                )
+            }
         };
     }
     text
 }
 
 /// Each fighter's place in a fight, in the arena's order, from the elimination order:
-/// 1 for those still fighting at the end, then the later a fighter died or gave up,
-/// the better. Fighters out on the same tick, or still fighting together when time
-/// ran out, share a place.
+/// 1 for those still fighting at the end, then the later a fighter died, gave up or was
+/// knocked out, the better. Fighters out on the same tick, or still fighting together
+/// when time ran out, share a place.
 #[must_use]
 pub fn places(arena: &Arena) -> Vec<u32> {
     // The tick a fighter was out on; still fighting comes last, so best.
@@ -195,10 +247,12 @@ pub fn places(arena: &Arena) -> Vec<u32> {
                 .log
                 .iter()
                 .find(|e| match e.kind {
-                    EventKind::Death { fighter } | EventKind::Surrender { fighter } => {
-                        fighter == f.id
+                    EventKind::Death { fighter }
+                    | EventKind::Surrender { fighter }
+                    | EventKind::KnockedOut { fighter } => fighter == f.id,
+                    EventKind::Cast { .. } | EventKind::Stun { .. } | EventKind::Rise { .. } => {
+                        false
                     }
-                    EventKind::Cast { .. } => false,
                 })
                 .map_or(u64::MAX, |e| u64::from(e.tick))
         })
@@ -272,7 +326,7 @@ mod tests {
             .iter()
             .filter_map(|e| match e.kind {
                 EventKind::Cast { damage, .. } => Some(damage),
-                EventKind::Death { .. } | EventKind::Surrender { .. } => None,
+                _ => None,
             })
             .collect();
         assert_eq!(damages, [10, 10, 5]);

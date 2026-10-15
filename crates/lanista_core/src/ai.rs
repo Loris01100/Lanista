@@ -201,13 +201,14 @@ fn best(scored: &[(Action, f64)]) -> Action {
     best.0
 }
 
-/// The closest other fighter still fighting; on a tie, the lowest ID.
+/// The closest other fighter standing, so a fighter down is left alone; on a tie, the
+/// lowest ID.
 fn nearest_enemy<'a>(arena: &'a Arena, me: &Fighter) -> Option<&'a Fighter> {
     let mut nearest: Option<(&Fighter, f64)> = None;
     for f in arena
         .fighters
         .iter()
-        .filter(|f| f.is_fighting() && f.id != me.id)
+        .filter(|f| f.is_standing() && f.id != me.id)
     {
         let distance = edge_distance(me, f);
         if nearest.is_none_or(|(_, d)| distance < d) {
@@ -253,6 +254,14 @@ mod tests {
                 target: FighterId(1)
             }
         );
+    }
+
+    #[test]
+    fn leaves_a_fighter_down_alone() {
+        let fighters = vec![test_fighter(0, 5.0, 5.0), test_fighter(1, 6.5, 5.0)];
+        let mut arena = Arena::new(20.0, 20.0, fighters, 0);
+        arena.fighters[1].stunned_ticks = 10;
+        assert_eq!(UtilityAi.decide(&arena, FighterId(0)), Action::Wait);
     }
 
     #[test]

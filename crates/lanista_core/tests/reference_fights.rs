@@ -4,7 +4,7 @@
 use lanista_core::ai::{CombatAi, UtilityAi};
 use lanista_core::combat::{Arena, Vec2, run};
 use lanista_core::design_data::DesignData;
-use lanista_core::duel::{MAX_TICKS, STATS};
+use lanista_core::duel::{MAX_TICKS, STATS, play, random_duel};
 use lanista_core::fighter::{ClassId, Fighter, FighterId};
 use lanista_core::log::{Report, log_text};
 
@@ -17,7 +17,7 @@ fn duel(classes: [u32; 2], seed: u64) -> String {
         Fighter::new(FighterId(id), class, class_data, STATS, Vec2::new(x, 10.0))
     };
     let mut arena = Arena::new(20.0, 20.0, vec![fighter(0, 3.0), fighter(1, 17.0)], seed)
-        .with_accuracy(data.combat.accuracy);
+        .with_rules(data.combat);
     let mut ais: Vec<Box<dyn CombatAi>> = vec![Box::new(UtilityAi), Box::new(UtilityAi)];
     run(&mut arena, &mut ais, MAX_TICKS);
     format!("{}\n{}", log_text(&arena), Report::new(&arena))
@@ -31,4 +31,18 @@ fn murmillo_against_augur() {
 #[test]
 fn murmillo_against_murmillo() {
     insta::assert_snapshot!(duel([0, 0], 42));
+}
+
+/// The standard duel of seed 15: both fighters are stunned, the first gets up, the
+/// second is knocked out.
+#[test]
+fn a_standard_duel_with_a_knock_out() {
+    let mut arena = random_duel(&DesignData::load().unwrap(), 15);
+    play(&mut arena);
+    insta::assert_snapshot!(format!(
+        "{}
+{}",
+        log_text(&arena),
+        Report::new(&arena)
+    ));
 }

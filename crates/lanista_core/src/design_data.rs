@@ -5,7 +5,7 @@ use serde::Deserialize;
 
 use crate::calendar::CalendarRules;
 use crate::colosseum::WorldRules;
-use crate::combat::{CombatRules, Range};
+use crate::combat::{CombatRules, DamageKind, Range};
 use crate::economy::EconomyRules;
 use crate::fighter::ClassId;
 use crate::fighter::care::CareRules;
@@ -72,6 +72,8 @@ pub struct SpellData {
     /// Ticks before the spell can be cast again (30 ticks per second).
     pub cooldown: u32,
     pub cost: Cost,
+    /// What it hits with, which sets how often it stuns.
+    pub damage_kind: DamageKind,
 }
 
 /// Resource spent to cast a spell.
@@ -274,6 +276,10 @@ impl DesignData {
             });
         }
         self.validate_combat()?;
+        self.validate_fighter()
+    }
+
+    fn validate_fighter(&self) -> Result<(), LoadError> {
         let rules = &self.fighter;
         let ranges = [
             ("career.start_age", rules.career.start_age),
@@ -302,6 +308,11 @@ impl DesignData {
             ("injury.chance_per_fight", rules.injury.chance_per_fight),
             ("illness.chance_per_week", rules.illness.chance_per_week),
             ("illness.worsening_chance", rules.illness.worsening_chance),
+            (
+                "injury.fatal_blow_survival",
+                rules.injury.fatal_blow_survival,
+            ),
+            ("injury.stun_wound_chance", rules.injury.stun_wound_chance),
         ];
         let invalid = |field, problem| LoadError::Invalid {
             file: FIGHTER_FILE,

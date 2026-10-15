@@ -14,7 +14,7 @@ use crate::fighter::form::{Form, FormEvent};
 use crate::fighter::illness::{Illness, IllnessLevel, roll_illness};
 use crate::fighter::injury::{
     Injury, Severity, Side, fatal_blow_wound, heal_week, injured_stats, roll_injury,
-    spare_after_effect,
+    spare_after_effect, stun_wound,
 };
 use crate::fighter::morale::{Morale, MoraleEvent};
 use crate::fighter::personality::Personality;
@@ -284,8 +284,7 @@ impl CareerFighter {
             self.combat_fighter(FighterId(0), data, Vec2::new(3.0, middle)),
             opponent.combat_fighter(FighterId(1), data, Vec2::new(ARENA_SIZE - 3.0, middle)),
         ];
-        let start =
-            Arena::new(ARENA_SIZE, ARENA_SIZE, fighters, seed).with_accuracy(data.combat.accuracy);
+        let start = Arena::new(ARENA_SIZE, ARENA_SIZE, fighters, seed).with_rules(data.combat);
         let mut arena = start.clone();
         play(&mut arena);
         (seed, start, arena)
@@ -320,8 +319,9 @@ impl CareerFighter {
     }
 
     /// The fame, record and death `side` brings: a fighter brought to 0 HP survives
-    /// with a chance of `InjuryRules::fatal_blow_survival`, and a severe wound, returned
-    /// with the outcome and the fame change, not yet taken.
+    /// with a chance of `InjuryRules::fatal_blow_survival`, and a severe wound; a
+    /// stunned one keeps a severe head wound with `InjuryRules::stun_wound_chance`. The
+    /// wound is returned with the outcome and the fame change, not yet taken.
     fn take_side<R: Rng + ?Sized>(
         &mut self,
         side: Ending,
@@ -344,6 +344,8 @@ impl CareerFighter {
             } else {
                 self.status = Status::Dead;
             }
+        } else if side.stunned && rng.random_bool(rules.injury.stun_wound_chance) {
+            wound = Some(stun_wound(rng, &rules.injury));
         }
         Taken {
             outcome,
@@ -473,8 +475,8 @@ impl CareerFighter {
 
     /// What a fight `taken` leaves a survivor: morale, an injury (returned, with whether
     /// `medicine` kept it from leaving an after-effect): the wound of a fatal blow
-    /// survived, else a possible one; form (`form`'s cost), illness worsening and
-    /// progression.
+    /// survived or of a stun, else a possible one; form (`form`'s cost), illness
+    /// worsening and progression.
     fn after_fight<R: Rng + ?Sized>(
         &mut self,
         taken: Taken,
@@ -980,6 +982,8 @@ mod tests {
         let fallen = Ending {
             result: FightResult::Lost,
             died: true,
+            stunned: false,
+            knocked_out: false,
             spectacular_hits: 0,
         };
         let mut rng = ChaCha8Rng::seed_from_u64(1);
@@ -1005,6 +1009,34 @@ mod tests {
         assert_eq!(injury, Some(wound));
         assert_eq!(survivor.injuries, [wound]);
         assert_eq!(survivor.record.losses, 1);
+    }
+
+    #[test]
+    fn a_stun_may_leave_a_severe_head_wound() {
+        let mut data = data();
+        let knocked_out = Ending {
+            result: FightResult::Lost,
+            died: false,
+            stunned: true,
+            knocked_out: true,
+            spectacular_hits: 0,
+        };
+        let mut rng = ChaCha8Rng::seed_from_u64(1);
+        let rules = &mut data.fighter;
+        rules.injury.stun_wound_chance = 1.0;
+        let mut f = fighter(1);
+        let taken = f.take_side(knocked_out, false, &mut rng, rules);
+        assert_eq!(f.status, Status::Active);
+        let wound = taken.wound.unwrap();
+        assert_eq!(
+            (wound.location, wound.severity),
+            (Location::Head, Severity::Severe)
+        );
+        // A knock-out is a defeat, not a surrender: no fame lost.
+        assert_eq!(taken.fame_change, 0);
+        rules.injury.stun_wound_chance = 0.0;
+        let taken = fighter(1).take_side(knocked_out, false, &mut rng, rules);
+        assert_eq!(taken.wound, None);
     }
 
     #[test]
