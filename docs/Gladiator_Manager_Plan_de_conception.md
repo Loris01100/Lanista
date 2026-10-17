@@ -234,6 +234,8 @@ Le prix d'un combattant dépend de ses stats, de sa renommée et de son bilan (v
 | Médecin | Guérison plus rapide, moins de séquelles ; ne peut rien contre une blessure permanente (perte d'un bras) | Niveaux 1 à 5 |
 | Recruteur | Fourchettes plus précises, estimation du potentiel, détection de la personnalité | Niveaux 1 à 5 |
 
+Le personnel s'engage au marché parmi des candidats, les mêmes pour le joueur et les clubs rivaux, qui repartent au bout de quelques semaines. Chaque candidat a un niveau ; ses stats et son salaire varient autour de ceux de ce niveau. À niveau égal, l'un coûte moins cher, un autre soigne mieux mais coûte plus. Ses stats se voient sans observation.
+
 ## Colisées, classements et compétitions
 
 Chaque colisée a son type d'arène, son prestige, son classement et son champion. Un même combattant peut figurer dans plusieurs classements et détenir plusieurs titres, au prix de défenses plus fréquentes et donc de plus de fatigue.
@@ -274,7 +276,7 @@ Chaque club rival a un profil (prudent, agressif, marchand) qui règle ses seuil
 - Forme correcte : inscription au colisée où ses chances sont les meilleures, sinon entraînement.
 - Défis : en proposer à des adversaires d'Elo proche, accepter ceux du joueur si la chance de victoire estimée dépasse son seuil.
 - Marché : acheter si l'effectif est trop petit et le budget suffisant, libérer ou vendre les combattants âgés ou en déclin.
-- Personnel : engager le meilleur entraîneur puis le meilleur médecin dont il peut payer les salaires assez longtemps (plus ou moins selon son profil), et les garder tant qu'il peut encore les payer moitié moins longtemps. Leurs effets valent pour ses combattants comme pour ceux du joueur. Il n'engage pas de recruteur : un club rival connaît déjà la valeur de chaque combattant.
+- Personnel : engager parmi les candidats du marché le meilleur entraîneur puis le meilleur médecin (le moins cher à niveau égal) dont il peut payer les salaires assez longtemps (plus ou moins selon son profil), et les garder tant qu'il peut encore les payer moitié moins longtemps, sauf si un candidat d'un meilleur niveau se présente. Leurs effets valent pour ses combattants comme pour ceux du joueur. Il n'engage pas de recruteur : un club rival connaît déjà la valeur de chaque combattant.
 
 ### Simulation en arrière-plan
 

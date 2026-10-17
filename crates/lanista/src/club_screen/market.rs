@@ -125,7 +125,7 @@ impl ClubScreen {
         let (Some(f), Some(name)) = (fighter, name) else {
             return;
         };
-        let scouting = state.scouting(data);
+        let scouting = state.scouting();
         ui.heading(format!("{name}, {} ans", f.age));
         let mut goto = None;
         if let Target::Rival(id) = target
@@ -291,7 +291,7 @@ fn free_agent_grid(
         last.extend(data.world.colosseums.iter().map(|c| c.name.as_str()));
         last.extend(["", ""]);
         market_header(ui, &OUTSIDE, &last);
-        let scouting = state.scouting(data);
+        let scouting = state.scouting();
         for (a, f) in state.free_agents.iter().enumerate() {
             if f.status != Status::Active {
                 continue;
@@ -331,7 +331,7 @@ fn rival_grid(
                 &OUTSIDE,
                 &["Potentiel", "Personnalité", "Valeur estimée", "", ""],
             );
-            let scouting = state.scouting(data);
+            let scouting = state.scouting();
             for (club, rival) in state.rivals.iter().enumerate() {
                 for (fighter, f) in rival.fighters.iter().enumerate() {
                     if f.status != Status::Active {

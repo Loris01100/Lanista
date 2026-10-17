@@ -20,7 +20,8 @@ use lanista_core::market::{
 };
 use lanista_core::rivals::{Profile, RivalId};
 use lanista_core::staff::{
-    DoctorRules, RecruiterRules, Role, Scouting, Staff, StaffMove, TrainerRules,
+    Candidate, DoctorRules, RecruiterRules, Role, Scouting, Staff, StaffMove, StaffNews,
+    TrainerRules,
 };
 use lanista_core::state::GameState;
 
@@ -216,26 +217,43 @@ pub fn staff_text(staff: &Staff) -> String {
     }
 }
 
-/// A change of staff, as chosen for the week.
-pub fn staff_move_text(m: StaffMove) -> String {
+/// A change of staff, as chosen for the week among the candidates on `market`.
+pub fn staff_move_text(m: StaffMove, market: &[Candidate]) -> String {
     match m {
-        StaffMove::Hire(role, level) => {
-            format!("Engager un {} de niveau {level}", role_name(role))
-        }
+        StaffMove::Hire(c) => match market.get(c) {
+            Some(candidate) => {
+                let person = &candidate.person;
+                format!(
+                    "Engager un {} de niveau {}",
+                    role_name(person.role()),
+                    person.level()
+                )
+            }
+            None => "Engager un candidat parti".into(),
+        },
         StaffMove::Dismiss(Role::Trainer) => "Renvoyer l'entraîneur".into(),
         StaffMove::Dismiss(role) => format!("Renvoyer le {}", role_name(role)),
     }
 }
 
 /// A change of staff, once made.
-pub fn staff_news_text(m: StaffMove) -> String {
-    match m {
-        StaffMove::Hire(role, level) => format!("{} de niveau {level} engagé", role_title(role)),
-        StaffMove::Dismiss(role) => format!("{} renvoyé", role_title(role)),
+pub fn staff_news_text(news: StaffNews) -> String {
+    match news {
+        StaffNews::Hired(role, level) => format!("{} de niveau {level} engagé", role_title(role)),
+        StaffNews::Dismissed(role) => format!("{} renvoyé", role_title(role)),
     }
 }
 
-/// What a trainer level costs and brings: "salaire 20 par semaine, séance 6, progression
+/// How long a candidate stays on the market: "encore 3 semaines", or "dernière semaine".
+pub fn weeks_left_text(weeks: u32) -> String {
+    if weeks <= 1 {
+        "dernière semaine".into()
+    } else {
+        format!("encore {weeks} semaines")
+    }
+}
+
+/// What a trainer costs and brings: "salaire 20 par semaine, séance 6, progression
 /// +20 %, 1 de forme épargnée par séance".
 pub fn trainer_text(trainer: &TrainerRules) -> String {
     format!(
@@ -247,7 +265,7 @@ pub fn trainer_text(trainer: &TrainerRules) -> String {
     )
 }
 
-/// What a doctor level costs and brings: "salaire 20 par semaine, les soins laissent 40 %
+/// What a doctor costs and brings: "salaire 20 par semaine, les soins laissent 40 %
 /// des semaines (50 sans médecin), prix des soins 110 %, séquelle évitée 30 fois sur 100".
 pub fn doctor_text(doctor: &DoctorRules, care: &CareRules) -> String {
     let medicine = &doctor.medicine;
@@ -262,7 +280,7 @@ pub fn doctor_text(doctor: &DoctorRules, care: &CareRules) -> String {
     )
 }
 
-/// What a recruiter level costs and brings: "salaire 30 par semaine, 1 stat de plus
+/// What a recruiter costs and brings: "salaire 30 par semaine, 1 stat de plus
 /// révélée par semaine, fourchettes à 70 %, potentiel estimé à 40 % près, personnalité
 /// cachée".
 pub fn recruiter_text(recruiter: &RecruiterRules) -> String {

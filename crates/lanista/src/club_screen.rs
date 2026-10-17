@@ -345,7 +345,10 @@ impl ClubScreen {
             ));
         }
         for &m in &self.decisions.staff {
-            ui.label(format!("Personnel : {}", staff_move_text(m)));
+            ui.label(format!(
+                "Personnel : {}",
+                staff_move_text(m, &self.state.staff_market)
+            ));
         }
         if let Some((id, price)) = self.state.counter_offer {
             ui.label(format!(
@@ -890,13 +893,14 @@ mod tests {
     use lanista_core::fighter::FighterId;
     use lanista_core::log::Report;
     use lanista_core::market::Move;
-    use lanista_core::staff::{Role, Scouting, Staff, StaffMove};
+    use lanista_core::staff::{Candidate, Person, Role, Scouting, Staff, StaffMove};
     use rand_chacha::ChaCha8Rng;
     use rand_chacha::rand_core::SeedableRng;
 
     use super::*;
     use crate::texts::{
         free_agent_name, outside_personality_text, potential_text, range_texts, staff_text,
+        weeks_left_text,
     };
 
     fn screen(seed: u64) -> ClubScreen {
@@ -1001,21 +1005,33 @@ mod tests {
         );
         let (week, menu) = screen.last_week.as_ref().unwrap();
         assert_eq!(*week, 3);
-        assert_eq!(menu[0], "Argent 518 (+23) : recettes +33, entretien -10");
+        assert_eq!(menu[0], "Argent 505 (+10) : recettes +20, entretien -10");
         assert_eq!(
             menu[1],
-            "Mirmillon n° 1 : Combat à Capoue, Contre un Augure, plus fort : abandon, renommée -7"
+            "Mirmillon n° 1 : Combat à Capoue, Contre un Augure, plus fort : défaite, étourdi sans se relever, renommée +0"
         );
     }
 
     #[test]
     fn hired_staff_is_told_in_the_menu_and_paid() {
         let mut screen = screen(7);
-        screen.decisions.staff = vec![
-            StaffMove::Hire(Role::Trainer, 2),
-            StaffMove::Hire(Role::Doctor, 1),
-            StaffMove::Hire(Role::Recruiter, 5),
-        ];
+        // Candidates exactly as their levels are, at the end of the market.
+        let market = &mut screen.state.staff_market;
+        for (role, level) in [(Role::Trainer, 2), (Role::Doctor, 1), (Role::Recruiter, 5)] {
+            let person = Person::of_level(role, level, &screen.data.economy.staff).unwrap();
+            screen.decisions.staff.push(StaffMove::Hire(market.len()));
+            market.push(Candidate {
+                person,
+                weeks_left: 1,
+            });
+        }
+        let market = &screen.state.staff_market;
+        assert_eq!(
+            staff_move_text(StaffMove::Hire(market.len() - 1), market),
+            "Engager un recruteur de niveau 5"
+        );
+        assert_eq!(weeks_left_text(1), "dernière semaine");
+        assert_eq!(weeks_left_text(3), "encore 3 semaines");
         let id = RivalId {
             club: 0,
             fighter: 0,
@@ -1039,7 +1055,7 @@ mod tests {
         assert_eq!(screen.decisions.staff, []);
         // The recruiter sees the observed fighter's potential and personality.
         let state = &screen.state;
-        let scouting = state.scouting(&screen.data);
+        let scouting = state.scouting();
         let observed = state.rival_fighter(id).unwrap();
         assert_eq!(observed.observed_weeks, 1);
         assert_ne!(potential_text(observed, &scouting), "?");
@@ -1246,10 +1262,12 @@ mod tests {
 
     #[test]
     fn a_rival_club_s_staff_is_told() {
-        let mut staff = Staff::default();
-        assert_eq!(staff_text(&staff), "Personnel : aucun");
-        staff.trainer = Some(5);
-        staff.doctor = Some(2);
+        let data = DesignData::load().unwrap();
+        assert_eq!(staff_text(&Staff::default()), "Personnel : aucun");
+        let staff = Staff::of_levels(
+            &[(Role::Trainer, 5), (Role::Doctor, 2)],
+            &data.economy.staff,
+        );
         assert_eq!(
             staff_text(&staff),
             "Personnel : entraîneur de niveau 5, médecin de niveau 2"

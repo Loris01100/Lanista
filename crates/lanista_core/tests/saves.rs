@@ -98,14 +98,19 @@ fn keep_a_save_of_the_current_version() {
                 Move::Sign(agent),
                 Move::List(0),
             ],
-            staff: vec![
-                StaffMove::Hire(Role::Trainer, 1),
-                StaffMove::Hire(Role::Doctor, 1),
-                StaffMove::Hire(Role::Recruiter, 1),
-            ],
+            staff: Vec::new(),
         }
     };
-    let week = hire(&state);
+    // The first candidate for each post, hired once.
+    let mut week = hire(&state);
+    week.staff = Role::ALL
+        .into_iter()
+        .filter_map(|role| {
+            let market = &state.staff_market;
+            (0..market.len()).find(|&c| market[c].person.role() == role)
+        })
+        .map(StaffMove::Hire)
+        .collect();
     next_week(&mut state, &week, &data);
     while state.week <= 31
         || !state

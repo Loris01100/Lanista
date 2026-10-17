@@ -41,6 +41,18 @@
             (salary: 45, scouting: (revealed_per_week: 2, range_width_percent: 60, potential_range_percent: 30, personality: true)),
             (salary: 65, scouting: (revealed_per_week: 2, range_width_percent: 50, potential_range_percent: 20, personality: true)),
         ],
+        // The candidates on the market, for the player and the rival clubs alike: so
+        // many for each post at the start of a week, missing ones arriving at the end
+        // of the week; each stays between min_weeks and max_weeks unless hired. A new
+        // candidate's level is drawn by these weights, from level 1; each of its stats
+        // and its salary is its level's, give or take up to spread_percent.
+        market: (
+            candidates: 3,
+            min_weeks: 2,
+            max_weeks: 6,
+            level_weights: [30, 25, 20, 15, 10],
+            spread_percent: 20,
+        ),
     ),
     market: (
         // Free agents, signed for nothing: missing ones arrive at the end of the week,

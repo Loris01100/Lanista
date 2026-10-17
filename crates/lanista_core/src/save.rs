@@ -5,16 +5,17 @@ use serde::Serialize;
 use serde_json::{Value, json};
 
 use crate::design_data::DesignData;
+use crate::staff::{Person, Role};
 use crate::state::GameState;
 
 /// Version written in new saves. Raise it with any change to the saved types,
 /// and add the migration from the previous version to [`MIGRATIONS`].
-pub const VERSION: u64 = 12;
+pub const VERSION: u64 = 13;
 
 /// `MIGRATIONS[i]` turns a version `i + 1` save into a version `i + 2` one,
 /// working on the JSON so the old types need not be kept.
 type Migration = fn(&mut Value, &DesignData);
-const MIGRATIONS: [Migration; 11] = [
+const MIGRATIONS: [Migration; 12] = [
     no_colosseums,
     title_since,
     no_challenges,
@@ -26,6 +27,7 @@ const MIGRATIONS: [Migration; 11] = [
     accuracy_from_speed,
     free_agents_unranked,
     no_rival_staff,
+    staff_members,
 ];
 const _: () = assert!(MIGRATIONS.len() as u64 == VERSION - 1);
 
@@ -194,6 +196,42 @@ fn no_rival_staff(save: &mut Value, _: &DesignData) {
     }
 }
 
+/// Version 13 hires the staff among candidates with their own stats and salary: each
+/// club's staff keeps its levels, each one with that level's stats and salary from
+/// `data`, a level not on offer leaving the post empty; the market has no candidate
+/// yet, [`from_json`] brings them.
+fn staff_members(save: &mut Value, data: &DesignData) {
+    let rules = &data.economy.staff;
+    let members = |staff: &mut Value| {
+        for role in Role::ALL {
+            let post = match role {
+                Role::Trainer => "trainer",
+                Role::Doctor => "doctor",
+                Role::Recruiter => "recruiter",
+            };
+            let member = staff[post]
+                .as_u64()
+                .and_then(|level| u32::try_from(level).ok())
+                .and_then(|level| Person::of_level(role, level, rules))
+                .map_or(Value::Null, |person| {
+                    let member = match person {
+                        Person::Trainer(m) => serde_json::to_value(m),
+                        Person::Doctor(m) => serde_json::to_value(m),
+                        Person::Recruiter(m) => serde_json::to_value(m),
+                    };
+                    member.unwrap_or(Value::Null)
+                });
+            staff[post] = member;
+        }
+    };
+    let state = &mut save["state"];
+    members(&mut state["staff"]);
+    for rival in state["rivals"].as_array_mut().into_iter().flatten() {
+        members(&mut rival["staff"]);
+    }
+    state["staff_market"] = Value::Array(Vec::new());
+}
+
 fn speed_as_accuracy(fighter: &mut Value) {
     for stats in ["stats", "potential"] {
         if fighter[stats].is_object() {
@@ -322,12 +360,12 @@ mod tests {
     fn unknown_versions_are_refused() {
         let data = data();
         let save = to_json(&GameState::new(7, &data));
-        let newer = save.replacen("\"version\": 12", "\"version\": 13", 1);
+        let newer = save.replacen("\"version\": 13", "\"version\": 14", 1);
         assert!(matches!(
             from_json(&newer, &data),
-            Err(SaveError::Version(Some(13)))
+            Err(SaveError::Version(Some(14)))
         ));
-        let none = save.replacen("\"version\": 12", "\"versio\": 12", 1);
+        let none = save.replacen("\"version\": 13", "\"versio\": 13", 1);
         assert!(matches!(
             from_json(&none, &data),
             Err(SaveError::Version(None))
