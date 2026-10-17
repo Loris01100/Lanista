@@ -30,6 +30,9 @@ impl ClubScreen {
     /// club's fighters to sell or release. Stats out of the club are hidden or seen as
     /// ranges until observed; a name opens what the club sees of the fighter.
     pub(super) fn market(&mut self, ui: &mut egui::Ui) {
+        let free_standings: Vec<Vec<String>> = (0..self.state.free_agents.len())
+            .map(|a| self.standings(Contender::FreeAgent(a)))
+            .collect();
         let data = &self.data;
         let state = &self.state;
         let moves = &mut self.decisions.moves;
@@ -87,7 +90,7 @@ impl ClubScreen {
             moves.remove(n);
         }
         let pick = egui::ScrollArea::vertical().show(ui, |ui| {
-            let free = free_agent_grid(ui, state, moves, data);
+            let free = free_agent_grid(ui, state, &free_standings, moves, data);
             let rival = rival_grid(ui, state, moves, data);
             sale_grid(ui, state, moves, data);
             rival.or(free)
@@ -155,13 +158,15 @@ impl ClubScreen {
                 ui.label(outside_personality_text(f, &scouting));
                 ui.end_row();
             });
-        if let Target::Rival(id) = target {
-            ui.add_space(8.0);
-            ui.strong("Colisées");
-            for (c, standing) in (0..).zip(self.standings(Contender::Rival(id))) {
-                let place = colosseum_name(ColosseumId(c), data);
-                ui.label(format!("{place} : {standing}"));
-            }
+        let contender = match target {
+            Target::FreeAgent(a) => Contender::FreeAgent(a),
+            Target::Rival(id) => Contender::Rival(id),
+        };
+        ui.add_space(8.0);
+        ui.strong("Colisées");
+        for (c, standing) in (0..).zip(self.standings(contender)) {
+            let place = colosseum_name(ColosseumId(c), data);
+            ui.label(format!("{place} : {standing}"));
         }
         ui.add_space(8.0);
         let moves = &mut self.decisions.moves;
@@ -269,21 +274,33 @@ fn outside_cells(
 
 const OUTSIDE: [&str; 4] = ["Combattant", "Âge", "Renommée", "Bilan"];
 
+/// The free agents on the market, with their standing in each colosseum
+/// (`standings`, by index in `GameState::free_agents`); returns the one to open.
 fn free_agent_grid(
     ui: &mut egui::Ui,
     state: &GameState,
+    standings: &[Vec<String>],
     moves: &mut Vec<Move>,
     data: &DesignData,
 ) -> Option<Pick> {
     let mut pick = None;
     ui.add_space(6.0);
-    ui.strong("Free agents (gratuits)");
+    ui.strong("Free agents (gratuits ; ils combattent dans les colisées sans droit d'entrée)");
     egui::Grid::new("free agents").striped(true).show(ui, |ui| {
-        market_header(ui, &OUTSIDE, &["Potentiel", "Personnalité", "", ""]);
+        let mut last = vec!["Potentiel", "Personnalité"];
+        last.extend(data.world.colosseums.iter().map(|c| c.name.as_str()));
+        last.extend(["", ""]);
+        market_header(ui, &OUTSIDE, &last);
         let scouting = state.scouting(data);
         for (a, f) in state.free_agents.iter().enumerate() {
+            if f.status != Status::Active {
+                continue;
+            }
             if outside_cells(ui, free_agent_name(a, f, data), f, &scouting, data) {
                 pick = Some(Pick::Open(Target::FreeAgent(a)));
+            }
+            for standing in standings.get(a).into_iter().flatten() {
+                ui.label(standing);
             }
             let observe = Move::Observe(Target::FreeAgent(a));
             toggle(ui, moves, observe, &observe_label(f), true);

@@ -30,6 +30,10 @@
         // Keeps its money, sells cheap and buys dear.
         merchant: (rest_form: 50, care_reserve: 300, fight_percent: 35, accept_percent: 35, challenge_percent: 20, sell_percent: 100, buy_percent: 90),
     ),
+    // Free agents choose their fights by this profile's thresholds, to show their worth,
+    // as managers without money: only in colosseums free to enter, never trained nor
+    // cared for. They earn Elo, a record and fame, but no money.
+    free_agents: Aggressive,
     // A rival club below `wanted` fighters in activity signs free agents; at `max`, it
     // buys no one.
     roster: (wanted: 10, max: 12),

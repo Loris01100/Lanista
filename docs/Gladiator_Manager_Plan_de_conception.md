@@ -220,7 +220,7 @@ Le joueur ne peut jamais être bloqué. Le marché contient toujours des free ag
 
 ### Marché et recrutement
 
-Un club compte au plus 3 combattants en activité ; un combattant mort ou retraité libère sa place. Le marché permet l'achat et la vente, sans échange. Il contient les free agents toute l'année (dont les combattants libérés par les clubs) et une nouvelle promotion de rookies (20 ans) à chaque intersaison. Les combattants sont générés procéduralement : nom, classe, stats, potentiel caché, personnalité, main dominante.
+Un club compte au plus 3 combattants en activité ; un combattant mort ou retraité libère sa place. Le marché permet l'achat et la vente, sans échange. Il contient les free agents toute l'année (dont les combattants libérés par les clubs) et une nouvelle promotion de rookies (20 ans) à chaque intersaison. Les free agents combattent aussi dans les colisées à entrée gratuite pour montrer leur valeur : ils y gagnent un Elo, un bilan et de la renommée (pas d'argent), qu'ils gardent une fois recrutés. Les combattants sont générés procéduralement : nom, classe, stats, potentiel caché, personnalité, main dominante.
 
 Le statut d'observation ne montre d'abord que quelques stats, sous forme de fourchettes (par exemple AC entre 40 et 60), les autres restant cachées. Chaque semaine d'observation en révèle d'autres, puis resserre les fourchettes ; le recruteur accélère et donne une estimation du potentiel.
 

@@ -79,6 +79,9 @@ impl ClubScreen {
                                                 goto = Some(View::Rival(id.club));
                                             }
                                         }
+                                        Contender::FreeAgent(_) => {
+                                            ui.label("sans club");
+                                        }
                                         Contender::Club(_) => {
                                             ui.label("");
                                         }
@@ -221,11 +224,13 @@ impl ClubScreen {
     }
 }
 
-/// The page of a ranked fighter: the club's sheet, or what the club sees of a rival's.
+/// The page of a ranked fighter: the club's sheet, or what the club sees of an
+/// outsider.
 fn contender_view(contender: Contender) -> View {
     match contender {
         Contender::Club(i) => View::Sheet(i),
         Contender::Rival(id) => View::Outside(Target::Rival(id)),
+        Contender::FreeAgent(a) => View::Outside(Target::FreeAgent(a)),
     }
 }
 

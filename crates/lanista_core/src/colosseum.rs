@@ -1,5 +1,6 @@
 //! Colosseums: each has its arena type, prestige and purses (from `data/world.ron`),
-//! and in the game its Elo ranking and its champion. Its fighters come from the clubs.
+//! and in the game its Elo ranking and its champion. Its fighters come from the clubs
+//! and the market.
 
 use std::cmp::{Ordering, Reverse};
 
@@ -9,7 +10,7 @@ use serde::{Deserialize, Serialize};
 use crate::economy::Purses;
 use crate::fighter::career::{CareerFighter, Status};
 use crate::fighter::fame::FightResult;
-use crate::rivals::{ProfileRules, Profiles, Rival, RivalData, RivalId, RosterRules};
+use crate::rivals::{Profile, ProfileRules, Profiles, Rival, RivalData, RivalId, RosterRules};
 
 /// The world's rules, from `data/world.ron`.
 #[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
@@ -29,6 +30,9 @@ pub struct WorldRules {
     pub challenges: ChallengeRules,
     /// The rival managers' thresholds.
     pub profiles: Profiles,
+    /// The thresholds free agents choose their fights by, as managers without money:
+    /// only where entry is free, never trained nor cared for.
+    pub free_agents: Profile,
     pub roster: RosterRules,
     /// The rival clubs; at least one.
     pub rivals: Vec<RivalData>,
@@ -98,12 +102,24 @@ pub struct Challenge {
     pub rival: RivalId,
 }
 
-/// A fighter with an Elo in a colosseum.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+/// A fighter with an Elo in a colosseum. Its Elo and title follow it to another club
+/// or to the market (`Colosseum::transfer`).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
 pub enum Contender {
     /// The club's fighter at this index.
     Club(usize),
     Rival(RivalId),
+    /// The free agent at this index in `GameState::free_agents`.
+    FreeAgent(usize),
+}
+
+impl Contender {
+    /// Whether it is one of the player's fighters; the others, rival fighters and free
+    /// agents, are the outsiders.
+    #[must_use]
+    pub fn is_club(self) -> bool {
+        matches!(self, Self::Club(_))
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -112,11 +128,12 @@ pub struct Rating {
     pub elo: i32,
 }
 
-/// Every fighter in the game: the player's club and the rival clubs.
+/// Every fighter in the game: the player's club, the rival clubs and the market.
 #[derive(Debug, Clone, Copy)]
 pub struct Rosters<'a> {
     pub club: &'a [CareerFighter],
     pub rivals: &'a [Rival],
+    pub free_agents: &'a [CareerFighter],
 }
 
 impl<'a> Rosters<'a> {
@@ -125,6 +142,7 @@ impl<'a> Rosters<'a> {
         match contender {
             Contender::Club(i) => self.club.get(i),
             Contender::Rival(id) => self.rivals.get(id.club)?.fighters.get(id.fighter),
+            Contender::FreeAgent(a) => self.free_agents.get(a),
         }
     }
 
@@ -211,10 +229,10 @@ impl Colosseum {
         self.title_since + u64::from(rules.title_defense_weeks)
     }
 
-    /// The rival fighter the club's fighter `i` meets if it fights for the title here:
-    /// as champion, the best-ranked rival fighter; from the first `challengers` of the
-    /// ranking, a rival champion. `None` if it may not fight for the title.
-    // ponytail: a rival champion only meets rival fighters in its own defenses; club
+    /// The outsider the club's fighter `i` meets if it fights for the title here: as
+    /// champion, the best-ranked outsider; from the first `challengers` of the ranking,
+    /// an outsider champion. `None` if it may not fight for the title.
+    // ponytail: an outsider champion only meets outsiders in its own defenses; club
     // fighters ask for their title fight.
     #[must_use]
     pub fn title_opponent(
@@ -222,17 +240,15 @@ impl Colosseum {
         i: usize,
         rosters: Rosters,
         rules: &WorldRules,
-    ) -> Option<RivalId> {
+    ) -> Option<Contender> {
         let me = Contender::Club(i);
         if !rosters.active(me) {
             return None;
         }
         if self.champion == Some(me) {
-            return self.best_rival(rosters, None);
+            return self.best_outsider(rosters, None);
         }
-        let Some(Contender::Rival(champion)) = self.champion else {
-            return None;
-        };
+        let champion = self.champion.filter(|c| !c.is_club())?;
         let top = usize::try_from(rules.challengers).unwrap_or(usize::MAX);
         self.active_ranking(rosters)
             .take(top)
@@ -256,12 +272,12 @@ impl Colosseum {
     }
 
     /// The chance, from 0 to 1, Elo gives `contender` against the average of the other
-    /// rival fighters still fighting here; even when there is none.
+    /// outsiders still fighting here; even when there is none.
     #[must_use]
     pub fn chance(&self, contender: Contender, rosters: Rosters, rules: &WorldRules) -> f64 {
         let others: Vec<i64> = self
             .active_ranking(rosters)
-            .filter(|r| matches!(r.contender, Contender::Rival(_)) && r.contender != contender)
+            .filter(|r| !r.contender.is_club() && r.contender != contender)
             .map(|r| i64::from(r.elo))
             .collect();
         let Ok(n) = i64::try_from(others.len()) else {
@@ -286,20 +302,31 @@ impl Colosseum {
         self.active_ranking(rosters)
             .filter_map(|r| match r.contender {
                 Contender::Rival(id) => Some((id, r.elo.abs_diff(mine.elo))),
-                Contender::Club(_) => None,
+                Contender::Club(_) | Contender::FreeAgent(_) => None,
             })
             .min_by_key(|&(_, gap)| gap)
             .map(|(id, _)| id)
     }
 
-    /// The best-ranked rival fighter still fighting, other than `except`.
+    /// The best-ranked outsider still fighting, other than `except`.
     #[must_use]
-    pub fn best_rival(&self, rosters: Rosters, except: Option<RivalId>) -> Option<RivalId> {
+    pub fn best_outsider(&self, rosters: Rosters, except: Option<Contender>) -> Option<Contender> {
         self.active_ranking(rosters)
-            .find_map(|r| match r.contender {
-                Contender::Rival(id) if Some(id) != except => Some(id),
-                _ => None,
-            })
+            .map(|r| r.contender)
+            .find(|&c| !c.is_club() && Some(c) != except)
+    }
+
+    /// Gives the Elo and the title of `from` to `to`: the same fighter, gone to another
+    /// club or to the market.
+    pub fn transfer(&mut self, from: Contender, to: Contender) {
+        for rating in &mut self.ranking {
+            if rating.contender == from {
+                rating.contender = to;
+            }
+        }
+        if self.champion == Some(from) {
+            self.champion = Some(to);
+        }
     }
 
     /// Gives a title whose holder no longer fights to the best ranked still fighting,
@@ -441,9 +468,9 @@ fn rounded(points: f64) -> i32 {
     points
 }
 
-/// Picks the rival fighter a club's fighter meets among `candidates`.
+/// Picks the outsider a club's fighter meets among `candidates`.
 // ponytail: at random; a chosen opponent is a challenge.
-pub fn pick_opponent<R: Rng + ?Sized>(rng: &mut R, candidates: &[RivalId]) -> Option<RivalId> {
+pub fn pick_opponent<R: Rng + ?Sized>(rng: &mut R, candidates: &[Contender]) -> Option<Contender> {
     (!candidates.is_empty()).then(|| candidates[rng.random_range(0..candidates.len())])
 }
 
@@ -476,6 +503,7 @@ mod tests {
             Rosters {
                 club: &self.club,
                 rivals: &self.rivals,
+                free_agents: &[],
             }
         }
     }
@@ -619,9 +647,8 @@ mod tests {
         let data = data();
         let rules = &data.world;
         let mut world = world(&data);
-        let Some(Contender::Rival(champion)) = world.rome.champion else {
-            panic!("a rival fighter holds the title");
-        };
+        let champion = world.rome.champion;
+        assert!(matches!(champion, Some(Contender::Rival(_))));
         // Not ranked yet: no title fight.
         assert_eq!(world.rome.title_opponent(0, world.rosters(), rules), None);
         world
@@ -629,7 +656,7 @@ mod tests {
             .record(Contender::Club(0), rival(9), FightResult::Won, rules);
         assert_eq!(
             world.rome.title_opponent(0, world.rosters(), rules),
-            Some(champion)
+            champion
         );
         // Out of the top five: no title fight either.
         for r in 0..6 {
@@ -643,15 +670,15 @@ mod tests {
         assert_eq!(world.rome.title_opponent(0, world.rosters(), rules), None);
         // As champion, against the best-ranked rival fighter still fighting.
         world.rome.champion = Some(Contender::Club(0));
-        let Contender::Rival(best) = world.rome.ranking[0].contender else {
+        let best @ Contender::Rival(id) = world.rome.ranking[0].contender else {
             panic!("a rival fighter leads");
         };
         assert_eq!(
             world.rome.title_opponent(0, world.rosters(), rules),
             Some(best)
         );
-        world.rivals[0].fighters[best.fighter].status = Status::Dead;
-        let second = world.rome.best_rival(world.rosters(), None).unwrap();
+        world.rivals[0].fighters[id.fighter].status = Status::Dead;
+        let second = world.rome.best_outsider(world.rosters(), None).unwrap();
         assert_ne!(second, best);
         assert_eq!(
             world.rome.title_opponent(0, world.rosters(), rules),
@@ -660,7 +687,7 @@ mod tests {
         assert_eq!(world.rome.title_opponent(1, world.rosters(), rules), None);
         // A retired fighter fights no more.
         world.club[0].status = Status::Retired;
-        world.rome.champion = Some(Contender::Rival(champion));
+        world.rome.champion = champion;
         world
             .rome
             .ranking
@@ -689,6 +716,7 @@ mod tests {
         let rosters = Rosters {
             club: &world.club,
             rivals: &world.rivals,
+            free_agents: &[],
         };
         assert_eq!(world.rome.strip(deadline - 1, rosters, rules), None);
         assert_eq!(world.rome.champion, Some(club_champion));
@@ -727,11 +755,12 @@ mod tests {
                 fighter: 3,
             },
         );
-        let rome = &mut world.rome;
         let rosters = Rosters {
             club: &world.club,
             rivals: &world.rivals,
+            free_agents: &[],
         };
+        let rome = &mut world.rome;
         // Never fought here: no challenge, and everyone accepts the newcomer's.
         assert_eq!(rome.challenger(0, rosters), None);
         assert!(rome.accepts_challenge(zero, 0, 30, rules));
@@ -752,6 +781,44 @@ mod tests {
         rome.lose_elo(Contender::Club(0), 8, rules);
         assert_eq!(rome.elo(Contender::Club(0), rules), 1292);
         assert_eq!(rome.ranking[0].contender, Contender::Club(0));
+    }
+
+    #[test]
+    fn free_agents_are_outsiders_and_elo_follows_a_fighter_to_its_club() {
+        let data = data();
+        let rules = &data.world;
+        let mut world = world(&data);
+        let agents = vec![CareerFighter::random(
+            &mut ChaCha8Rng::seed_from_u64(5),
+            &data,
+        )];
+        let agent = Contender::FreeAgent(0);
+        world.rome.record(agent, rival(0), FightResult::Won, rules);
+        let rosters = Rosters {
+            club: &world.club,
+            rivals: &world.rivals,
+            free_agents: &agents,
+        };
+        // The best ranked outsider, the club's fighters' opponent for the title.
+        assert_eq!(world.rome.best_outsider(rosters, None), Some(agent));
+        world.rome.champion = Some(agent);
+        assert_eq!(
+            world.rome.best_outsider(rosters, Some(agent)),
+            Some(rival(1))
+        );
+        world
+            .rome
+            .record(Contender::Club(0), rival(2), FightResult::Won, rules);
+        assert_eq!(world.rome.title_opponent(0, rosters, rules), Some(agent));
+        // Against the other outsiders, it is ahead.
+        assert!(world.rome.chance(agent, rosters, rules) > 0.5);
+        // Signed by the club, it takes its Elo and title along.
+        let elo = world.rome.elo(agent, rules);
+        let signed = Contender::Club(1);
+        world.rome.transfer(agent, signed);
+        assert_eq!(world.rome.elo(signed, rules), elo);
+        assert_eq!(world.rome.champion, Some(signed));
+        assert!(world.rome.ranking.iter().all(|r| r.contender != agent));
     }
 
     #[test]

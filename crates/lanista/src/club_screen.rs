@@ -999,10 +999,10 @@ mod tests {
         );
         let (week, menu) = screen.last_week.as_ref().unwrap();
         assert_eq!(*week, 3);
-        assert_eq!(menu[0], "Argent 516 (+21) : recettes +31, entretien -10");
+        assert_eq!(menu[0], "Argent 518 (+23) : recettes +33, entretien -10");
         assert_eq!(
             menu[1],
-            "Mirmillon n° 1 : Combat à Capoue, Contre un Augure, plus fort : abandon, renommée -8"
+            "Mirmillon n° 1 : Combat à Capoue, Contre un Augure, plus fort : abandon, renommée -7"
         );
     }
 

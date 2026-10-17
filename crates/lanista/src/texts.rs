@@ -382,6 +382,7 @@ pub fn contender_name(contender: Contender, state: &GameState, data: &DesignData
     match contender {
         Contender::Club(i) => format!("{} (votre club)", club_fighter(i, state, data)),
         Contender::Rival(id) => rival_fighter_name(id, state, data),
+        Contender::FreeAgent(a) => target_name(Target::FreeAgent(a), state, data),
     }
 }
 
