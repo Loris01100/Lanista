@@ -1,7 +1,8 @@
-//! Money: what comes in (prizes, receipts) and goes out (upkeep, care, training,
-//! entry fees, staff salaries). Money only comes from fights; there is no sponsor.
+//! Money: what comes in (prizes, receipts, a patron's gift) and goes out (upkeep, care,
+//! training, entry fees, staff salaries), and a club's wealth: poor, modest or rich, which
+//! sets its patron's gift and changes with its money at each off-season.
 
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 
 use crate::fighter::fame::Fame;
 use crate::market::MarketRules;
@@ -11,8 +12,8 @@ use crate::staff::StaffRules;
 #[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct EconomyRules {
-    /// The club's money at the start of a game.
-    pub starting_money: u32,
+    /// A club's starting money and patron by wealth, and when its wealth changes.
+    pub wealth: WealthRules,
     /// Most fighters in activity a club may have.
     pub max_fighters: u32,
     /// Paid each week for each active fighter, even into debt.
@@ -21,6 +22,77 @@ pub struct EconomyRules {
     pub training_cost: u32,
     pub staff: StaffRules,
     pub market: MarketRules,
+}
+
+/// How rich a club is: its patron gives more to a richer club, and a rival club plays by
+/// it (`rivals`). It changes at the start of each off-season (`Wealth::next`).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
+pub enum Wealth {
+    /// Bets on scouting rookies and cheap free agents, hoping to find a gem to sell.
+    Poor,
+    Modest,
+    /// Buys at will, and lets go any fighter who no longer performs.
+    Rich,
+}
+
+impl Wealth {
+    pub const ALL: [Self; 3] = [Self::Poor, Self::Modest, Self::Rich];
+
+    /// The wealth of a club with `money` at the start of an off-season: one step up from
+    /// the next level's `from`, one step down below half of its own, else the same.
+    #[must_use]
+    pub fn next(self, money: i64, rules: &WealthRules) -> Self {
+        let up = match self {
+            Self::Poor => Some(Self::Modest),
+            Self::Modest => Some(Self::Rich),
+            Self::Rich => None,
+        };
+        let down = match self {
+            Self::Poor => None,
+            Self::Modest => Some(Self::Poor),
+            Self::Rich => Some(Self::Modest),
+        };
+        if let Some(up) = up.filter(|&up| money >= i64::from(rules.get(up).from)) {
+            up
+        } else if let Some(down) = down.filter(|_| money * 2 < i64::from(rules.get(self).from)) {
+            down
+        } else {
+            self
+        }
+    }
+}
+
+/// One level of wealth.
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct WealthLevel {
+    /// A club's money at the start of a game.
+    pub starting_money: u32,
+    /// Given every week by the club's patron.
+    pub patron: u32,
+    /// A club with this much money at the start of an off-season rises to this level;
+    /// one at this level with less than half falls to the one below.
+    pub from: u32,
+}
+
+/// From `data/economy.ron`.
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct WealthRules {
+    pub poor: WealthLevel,
+    pub modest: WealthLevel,
+    pub rich: WealthLevel,
+}
+
+impl WealthRules {
+    #[must_use]
+    pub fn get(&self, wealth: Wealth) -> &WealthLevel {
+        match wealth {
+            Wealth::Poor => &self.poor,
+            Wealth::Modest => &self.modest,
+            Wealth::Rich => &self.rich,
+        }
+    }
 }
 
 /// A colosseum's fee and purses.
@@ -65,12 +137,14 @@ pub enum Flow {
     Sale,
     /// A staff member's weekly salary.
     Salary,
+    /// The patron's weekly gift, by the club's wealth.
+    Patron,
 }
 
 /// Money in (positive) or out (negative) for one of the club's fighters, or for the club.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct Transaction {
-    /// Index of the fighter in the club; `None` for the club's own costs, its staff.
+    /// Index of the fighter in the club; `None` for the club's own: its staff, its patron.
     pub fighter: Option<usize>,
     pub flow: Flow,
     pub amount: i64,
@@ -92,5 +166,30 @@ mod tests {
         assert_eq!(rules.receipts(Fame::default(), Fame::default()), 20);
         let famous = Fame::default().changed_by(30);
         assert_eq!(rules.receipts(famous, Fame::default().changed_by(10)), 60);
+    }
+
+    #[test]
+    fn wealth_rises_from_the_next_level_and_falls_below_half_its_own() {
+        let level = |from| WealthLevel {
+            starting_money: 0,
+            patron: 0,
+            from,
+        };
+        let rules = WealthRules {
+            poor: level(0),
+            modest: level(1000),
+            rich: level(5000),
+        };
+        let next = |wealth: Wealth, money| wealth.next(money, &rules);
+        assert_eq!(next(Wealth::Poor, 999), Wealth::Poor);
+        assert_eq!(next(Wealth::Poor, 1000), Wealth::Modest);
+        // One step a season, even with the money of the rich.
+        assert_eq!(next(Wealth::Poor, 9000), Wealth::Modest);
+        assert_eq!(next(Wealth::Poor, -100), Wealth::Poor);
+        assert_eq!(next(Wealth::Modest, 500), Wealth::Modest);
+        assert_eq!(next(Wealth::Modest, 499), Wealth::Poor);
+        assert_eq!(next(Wealth::Modest, 5000), Wealth::Rich);
+        assert_eq!(next(Wealth::Rich, 2500), Wealth::Rich);
+        assert_eq!(next(Wealth::Rich, 2499), Wealth::Modest);
     }
 }

@@ -482,6 +482,7 @@ fn total(fighter: &CareerFighter) -> u32 {
 mod tests {
     use super::*;
     use crate::design_data::DesignData;
+    use crate::economy::Wealth;
     use crate::market::with_prestige;
     use crate::staff::Staff;
     use rand::SeedableRng;
@@ -522,6 +523,7 @@ mod tests {
             money: 0,
             fighters,
             staff: Staff::default(),
+            wealth: Wealth::Modest,
         }];
         let ranked: Vec<_> = rivals[0]
             .fighters

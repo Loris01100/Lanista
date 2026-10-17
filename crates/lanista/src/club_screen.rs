@@ -16,7 +16,7 @@ use lanista_core::calendar::SeasonPhase;
 use lanista_core::colosseum::{Challenge, ColosseumId, Contender};
 use lanista_core::combat::Arena;
 use lanista_core::design_data::DesignData;
-use lanista_core::economy::Flow;
+use lanista_core::economy::{Flow, Wealth};
 use lanista_core::fighter::care::CareRules;
 use lanista_core::fighter::career::{Activity, CareerFighter, FightSummary, Status, WeekPlan};
 use lanista_core::fighter::fame::Fame;
@@ -37,7 +37,7 @@ use crate::texts::{
     STAT_NAMES, activity_name, challenger_text, change, class_name, club_name, colosseum_name,
     condition_text, contender_name, fight_text, fighter_name, illness_text, injury_text,
     market_news_text, money_line, move_text, personality_text, rival_fighter_name, staff_move_text,
-    staff_news_text, title_news_text, week_lines,
+    staff_news_text, title_news_text, wealth_name, wealth_text, week_lines,
 };
 
 /// Seed of the standard duel offered from the club.
@@ -197,6 +197,13 @@ impl ClubScreen {
         self.histories
             .resize_with(self.state.fighters.len(), Vec::new);
         let mut overview = vec![money_line(money, self.state.money, &summary.ledger)];
+        if let Some(wealth) = summary.wealth {
+            overview.push(format!(
+                "Le club devient {} : {}",
+                wealth_name(wealth),
+                wealth_text(wealth, data)
+            ));
+        }
         overview.extend(summary.staff.iter().map(|&m| staff_news_text(m)));
         overview.extend(
             summary
@@ -324,6 +331,7 @@ impl ClubScreen {
     /// The general menu; returns whether to play the week.
     fn menu(&mut self, ui: &mut egui::Ui) -> bool {
         ui.heading("Menu général");
+        ui.label(wealth_text(self.state.wealth, &self.data));
         let alerts = self.alerts();
         if !alerts.is_empty() {
             ui.add_space(6.0);
@@ -366,10 +374,16 @@ impl ClubScreen {
                 if ui.button("Charger").clicked() {
                     self.load();
                 }
-                if ui.button("Nouvelle partie").clicked() {
-                    let seed = new_seed();
-                    self.replace(GameState::new(seed, &self.data));
-                    self.message = Some(format!("Nouvelle partie, graine {seed}"));
+                ui.label("Nouvelle partie :");
+                for wealth in Wealth::ALL {
+                    if ui.button(format!("club {}", wealth_name(wealth))).clicked() {
+                        let seed = new_seed();
+                        self.replace(GameState::with_wealth(seed, wealth, &self.data));
+                        self.message = Some(format!(
+                            "Nouvelle partie, club {}, graine {seed}",
+                            wealth_name(wealth)
+                        ));
+                    }
                 }
             });
         }
@@ -1005,10 +1019,13 @@ mod tests {
         );
         let (week, menu) = screen.last_week.as_ref().unwrap();
         assert_eq!(*week, 3);
-        assert_eq!(menu[0], "Argent 505 (+10) : recettes +20, entretien -10");
+        assert_eq!(
+            menu[0],
+            "Argent 959 (+64) : mécène +50, recettes +24, entretien -10"
+        );
         assert_eq!(
             menu[1],
-            "Mirmillon n° 1 : Combat à Capoue, Contre un Augure, plus fort : défaite, étourdi sans se relever, renommée +0"
+            "Mirmillon n° 1 : Combat à Capoue, Contre un Augure, plus fort : abandon, renommée -8"
         );
     }
 
@@ -1139,12 +1156,13 @@ mod tests {
         let money = screen.state.money;
         screen.next_week();
         let (_, overview) = screen.last_week.as_ref().unwrap();
+        let patron = i64::from(data.economy.wealth.modest.patron);
+        let gain = i64::from(offer.price) + patron;
         assert_eq!(
             overview[0],
             format!(
-                "Argent {} (+{}) : vente +{}",
-                money + i64::from(offer.price),
-                offer.price,
+                "Argent {} (+{gain}) : vente +{}, mécène +{patron}",
+                money + gain,
                 offer.price
             )
         );
@@ -1253,9 +1271,9 @@ mod tests {
         assert_eq!(
             screen.rival_lines(),
             [
-                "Ludus Magnus, prudent : 10 combattants, argent 500",
-                "Ludus Gallicus, agressif : 10 combattants, argent 500",
-                "Ludus Dacicus, marchand : 10 combattants, argent 500",
+                "Ludus Magnus, prudent et riche : 10 combattants",
+                "Ludus Gallicus, agressif et pauvre : 10 combattants",
+                "Ludus Dacicus, marchand et modeste : 10 combattants",
             ]
         );
     }

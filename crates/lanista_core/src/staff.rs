@@ -18,6 +18,8 @@ use crate::fighter::{percent_of, pick};
 #[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct StaffRules {
+    /// Each salary is paid once for every so many fighters in activity, at least once.
+    pub fighters_per_salary: u32,
     pub trainers: Vec<TrainerRules>,
     pub doctors: Vec<DoctorRules>,
     pub recruiters: Vec<RecruiterRules>,
@@ -47,6 +49,14 @@ fn index(level: u32) -> Option<usize> {
 }
 
 impl StaffRules {
+    /// How many times a club with `active` fighters in activity pays each salary: once
+    /// for every `fighters_per_salary` of them, at least once.
+    #[must_use]
+    pub fn salary_shares(&self, active: usize) -> u32 {
+        let per = usize::try_from(self.fighters_per_salary.max(1)).unwrap_or(usize::MAX);
+        u32::try_from(active.div_ceil(per).max(1)).unwrap_or(u32::MAX)
+    }
+
     /// The rules of trainer level `level`, from 1.
     #[must_use]
     pub fn trainer(&self, level: u32) -> Option<&TrainerRules> {
@@ -614,11 +624,22 @@ mod tests {
 
     fn trainers(trainers: Vec<TrainerRules>) -> StaffRules {
         StaffRules {
+            fighters_per_salary: 3,
             trainers,
             doctors: Vec::new(),
             recruiters: Vec::new(),
             market: market(2, vec![1, 1], 20),
         }
+    }
+
+    #[test]
+    fn a_salary_is_paid_once_for_every_three_fighters_at_least_once() {
+        let rules = trainers(Vec::new());
+        let shares: Vec<u32> = [0, 1, 3, 4, 10, 12]
+            .into_iter()
+            .map(|n| rules.salary_shares(n))
+            .collect();
+        assert_eq!(shares, [1, 1, 1, 2, 4, 4]);
     }
 
     fn hired_trainer(level: u32, rules: TrainerRules) -> Candidate {

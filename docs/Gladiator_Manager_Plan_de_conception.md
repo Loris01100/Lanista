@@ -197,7 +197,17 @@ Chaque combat a une graine (seed). Pour que la même graine redonne exactement l
 
 ## Économie, marché et personnel
 
-L'argent ne vient que des combats et sert à entretenir, soigner, entraîner et inscrire les combattants. Il n'y a ni sponsor ni mécène, et l'équipement est gratuit.
+L'argent vient des combats et d'un mécène, et sert à entretenir, soigner, entraîner et inscrire les combattants. Il n'y a pas de sponsor, et l'équipement est gratuit.
+
+### Niveaux de richesse
+
+Chaque club, celui du joueur comme les clubs rivaux, est pauvre, modeste ou riche. Le niveau fixe l'argent de départ et le don du mécène chaque semaine (plus il est riche, plus le mécène donne). Au début d'une partie, le joueur choisit un club pauvre, modeste ou riche. À chaque intersaison, le niveau suit l'argent du club, donc ses résultats et ses choix : un club monte d'un niveau s'il a assez d'argent, et redescend d'un niveau s'il en a moins de la moitié. Un club ne change que d'un niveau par saison. Le joueur ne voit pas l'argent des clubs rivaux, seulement leur niveau.
+
+- Un club riche achète à volonté : chaque semaine, il cherche un combattant nettement meilleur que son plus faible, chez un club pas plus riche que lui, et libère son plus faible quand son effectif est plein. À l'intersaison, il libère à tout âge les combattants qui ne performent plus.
+- Un club pauvre mise sur le recrutement : il engage un recruteur avant tout autre personnel, signe les rookies et les free agents du meilleur potentiel que voit son recruteur, et n'achète à personne. Il espère trouver un diamant et le revendre cher à un club plus riche.
+- Un club modeste est entre les deux : il signe le free agent le plus fort, et achète à un autre club quand aucun ne lui convient.
+
+Un club ne vend qu'à un club au moins aussi riche que lui, et n'achète qu'en gardant de quoi rester à son niveau.
 
 ### Flux d'argent
 
@@ -207,11 +217,12 @@ L'argent ne vient que des combats et sert à entretenir, soigner, entraîner et 
 | Entrée | Recettes du combat | Renommée des combattants, format (une mêlée à 20 attire plus) |
 | Entrée | Bonus champion | Versé à chaque défense de titre réussie |
 | Entrée | Vente d'un combattant | Prix négocié sur le marché |
+| Entrée | Mécène | Hebdomadaire, selon le niveau de richesse du club |
 | Sortie | Entretien | Coût hebdomadaire par combattant |
 | Sortie | Soins | Gravité de la blessure ou maladie, niveau du médecin |
 | Sortie | Entraînement | Par séance, niveau de l'entraîneur |
 | Sortie | Inscription | Un frais par combattant inscrit |
-| Sortie | Salaires du personnel | Hebdomadaire |
+| Sortie | Salaires du personnel | Hebdomadaire, une fois par tranche de 3 combattants en activité |
 | Sortie | Achat d'un combattant | Prix du marché |
 
 ### Filet de sécurité
@@ -275,8 +286,8 @@ Chaque club rival a un profil (prudent, agressif, marchand) qui règle ses seuil
 - Forme sous le seuil ou blessure : repos, et soins si le budget le permet et si la blessure le justifie.
 - Forme correcte : inscription au colisée où ses chances sont les meilleures, sinon entraînement.
 - Défis : en proposer à des adversaires d'Elo proche, accepter ceux du joueur si la chance de victoire estimée dépasse son seuil.
-- Marché : acheter si l'effectif est trop petit et le budget suffisant, libérer ou vendre les combattants âgés ou en déclin.
-- Personnel : engager parmi les candidats du marché le meilleur entraîneur puis le meilleur médecin (le moins cher à niveau égal) dont il peut payer les salaires assez longtemps (plus ou moins selon son profil), et les garder tant qu'il peut encore les payer moitié moins longtemps, sauf si un candidat d'un meilleur niveau se présente. Leurs effets valent pour ses combattants comme pour ceux du joueur. Il n'engage pas de recruteur : un club rival connaît déjà la valeur de chaque combattant.
+- Marché : acheter si l'effectif est trop petit et le budget suffisant, libérer ou vendre les combattants âgés ou en déclin, selon son niveau de richesse (voir « Niveaux de richesse »).
+- Personnel : engager parmi les candidats du marché le meilleur entraîneur puis le meilleur médecin (le moins cher à niveau égal) dont il peut payer les salaires assez longtemps (plus ou moins selon son profil), et les garder tant qu'il peut encore les payer moitié moins longtemps, sauf si un candidat d'un meilleur niveau se présente. Leurs effets valent pour ses combattants comme pour ceux du joueur. Un club pauvre engage d'abord un recruteur, pour voir le potentiel des rookies et des free agents ; les autres n'en engagent pas, jugeant un combattant sur ce qu'il montre.
 
 ### Simulation en arrière-plan
 

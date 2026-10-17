@@ -1,6 +1,13 @@
 // Prices: placeholder values, to tune while balancing.
 (
-    starting_money: 500,
+    // A club's wealth: its money at the start of a game, its patron's gift each week,
+    // and from how much money at the start of an off-season it rises to that level
+    // (one level a season; it falls back below half of its level's).
+    wealth: (
+        poor: (starting_money: 300, patron: 20, from: 0),
+        modest: (starting_money: 800, patron: 50, from: 3000),
+        rich: (starting_money: 10000, patron: 120, from: 10000),
+    ),
     // Most fighters in activity a club may have; the dead and retired leave a place.
     max_fighters: 3,
     // Each week, for each active fighter, even into debt.
@@ -8,7 +15,9 @@
     // Each training session without a trainer.
     training_cost: 5,
     staff: (
-        // Every salary is paid every week, even into debt.
+        // Every salary is paid every week, even into debt, once for every so many
+        // fighters in activity, at least once: a larger club gives its staff more work.
+        fighters_per_salary: 3,
         // Trainer levels 1 to 5: salary; price of a training session; chance added to
         // each stat's chance to improve at a session, in percent of it; form a session
         // costs less (5 without a trainer, data/fighter.ron).
@@ -73,6 +82,12 @@
         // At the start of each off-season, a rival club releases its fighters this old
         // worth less than its average fighter.
         release_age: 30,
+        // A rich club also lets go, at any age, those worth less than this percentage
+        // of its average fighter; and each week it tries to buy a fighter of another
+        // club worth at least this percentage of its weakest, letting its weakest go
+        // when that takes it past its most (data/world.ron).
+        rich_release_percent: 75,
+        rich_upgrade_percent: 125,
         // A club counters an offer of at least this percentage of its asking price,
         // and refuses a lower one.
         counter_percent: 75,

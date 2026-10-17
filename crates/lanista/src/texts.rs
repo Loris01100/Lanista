@@ -5,7 +5,7 @@ use lanista_core::colosseum::{
     ArenaKind, Challenge, ColosseumId, Contender, TitleNews, title_kept,
 };
 use lanista_core::design_data::DesignData;
-use lanista_core::economy::{Flow, Transaction};
+use lanista_core::economy::{Flow, Transaction, Wealth};
 use lanista_core::fighter::STAT_COUNT;
 use lanista_core::fighter::care::CareRules;
 use lanista_core::fighter::career::{
@@ -401,6 +401,21 @@ pub fn profile_name(profile: Profile) -> &'static str {
     }
 }
 
+/// "pauvre", "modeste" or "riche".
+pub fn wealth_name(wealth: Wealth) -> &'static str {
+    match wealth {
+        Wealth::Poor => "pauvre",
+        Wealth::Modest => "modeste",
+        Wealth::Rich => "riche",
+    }
+}
+
+/// "Club modeste, mécène 50 par semaine": the club's wealth and what its patron gives.
+pub fn wealth_text(wealth: Wealth, data: &DesignData) -> String {
+    let patron = data.economy.wealth.get(wealth).patron;
+    format!("Club {}, mécène {patron} par semaine", wealth_name(wealth))
+}
+
 /// The name of rival club `club`.
 pub fn club_name(club: usize, data: &DesignData) -> &str {
     data.world.rivals.get(club).map_or("?", |r| r.name.as_str())
@@ -546,6 +561,7 @@ pub fn money_line(before: i64, after: i64, ledger: &[Transaction]) -> String {
                 Flow::Purchase => "achat",
                 Flow::Sale => "vente",
                 Flow::Salary => "salaires",
+                Flow::Patron => "mécène",
             };
             format!("{name} {:+}", t.amount)
         })

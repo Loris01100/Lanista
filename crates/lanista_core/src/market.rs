@@ -33,6 +33,12 @@ pub struct MarketRules {
     /// At the start of each off-season, a rival club releases its fighters this old
     /// worth less than its average fighter.
     pub release_age: u32,
+    /// A rich rival club also releases, at any age, its fighters worth less than this
+    /// percentage of its average fighter.
+    pub rich_release_percent: u32,
+    /// Each week, a rich rival club tries to buy a fighter of another club worth at
+    /// least this percentage of its weakest.
+    pub rich_upgrade_percent: u32,
     /// A club counters an offer of at least this percentage of its asking price, and
     /// refuses a lower one.
     pub counter_percent: u32,
@@ -178,7 +184,23 @@ pub fn stat_ranges(
 /// `None` before, or without a recruiter able to tell.
 #[must_use]
 pub fn potential_range(fighter: &CareerFighter, scouting: &Scouting) -> Option<(u32, u32)> {
-    if scouting.potential_range_percent == 0 || fighter.observed_weeks == 0 {
+    if fighter.observed_weeks == 0 {
+        return None;
+    }
+    scouted_potential(fighter, scouting)
+}
+
+/// What a rival club's recruiter makes of `fighter`'s potential: the middle of the range
+/// `potential_range` gives, as a club on the market watches every free agent; `None`
+/// without a recruiter able to tell.
+#[must_use]
+pub fn estimated_potential(fighter: &CareerFighter, scouting: &Scouting) -> Option<u32> {
+    scouted_potential(fighter, scouting).map(|(low, high)| low + (high - low) / 2)
+}
+
+/// `potential_range` once observed.
+fn scouted_potential(fighter: &CareerFighter, scouting: &Scouting) -> Option<(u32, u32)> {
+    if scouting.potential_range_percent == 0 {
         return None;
     }
     let total: u32 = fighter.potential.to_array().iter().sum();
@@ -350,6 +372,12 @@ mod tests {
         fighter.observed_weeks = 0;
         assert!(potential_range(&fighter, &scouting).is_none());
         assert!(!personality_seen(&fighter, &scouting));
+        // A rival club's recruiter needs no observation, and takes the middle.
+        assert_eq!(
+            estimated_potential(&fighter, &scouting),
+            Some(low + (high - low) / 2)
+        );
+        assert_eq!(estimated_potential(&fighter, &alone), None);
     }
 
     #[test]

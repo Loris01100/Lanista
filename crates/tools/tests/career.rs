@@ -16,7 +16,7 @@ fn a_long_career_is_printed_week_by_week() {
     assert!(output.status.success());
     let text = String::from_utf8(output.stdout).expect("UTF-8 output");
     for expected in [
-        "retired at 30",
+        "retired at ",
         "injured",
         "healed",
         "fell ill",

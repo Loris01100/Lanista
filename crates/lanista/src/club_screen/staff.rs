@@ -54,7 +54,7 @@ impl ClubScreen {
                     };
                     if held.is_some() {
                         let m = StaffMove::Dismiss(role);
-                        staff_toggle(ui, chosen, market, m, "Renvoyer", state.may_staff(m));
+                        staff_toggle(ui, chosen, market, m, "Renvoyer", state.may_staff(m, data));
                     }
                 });
                 let candidates: Vec<usize> = (0..market.len())
@@ -73,7 +73,14 @@ impl ClubScreen {
                             ui.label(person_text(&candidate.person, data));
                             ui.label(weeks_left_text(candidate.weeks_left));
                             let m = StaffMove::Hire(c);
-                            staff_toggle(ui, chosen, market, m, "Engager", state.may_staff(m));
+                            staff_toggle(
+                                ui,
+                                chosen,
+                                market,
+                                m,
+                                "Engager",
+                                state.may_staff(m, data),
+                            );
                             ui.end_row();
                         }
                     });

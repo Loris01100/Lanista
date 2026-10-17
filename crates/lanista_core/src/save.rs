@@ -5,17 +5,18 @@ use serde::Serialize;
 use serde_json::{Value, json};
 
 use crate::design_data::DesignData;
+use crate::economy::Wealth;
 use crate::staff::{Person, Role};
 use crate::state::GameState;
 
 /// Version written in new saves. Raise it with any change to the saved types,
 /// and add the migration from the previous version to [`MIGRATIONS`].
-pub const VERSION: u64 = 13;
+pub const VERSION: u64 = 14;
 
 /// `MIGRATIONS[i]` turns a version `i + 1` save into a version `i + 2` one,
 /// working on the JSON so the old types need not be kept.
 type Migration = fn(&mut Value, &DesignData);
-const MIGRATIONS: [Migration; 12] = [
+const MIGRATIONS: [Migration; 13] = [
     no_colosseums,
     title_since,
     no_challenges,
@@ -28,6 +29,7 @@ const MIGRATIONS: [Migration; 12] = [
     free_agents_unranked,
     no_rival_staff,
     staff_members,
+    no_wealth,
 ];
 const _: () = assert!(MIGRATIONS.len() as u64 == VERSION - 1);
 
@@ -89,7 +91,7 @@ fn rival_rosters(save: &mut Value, data: &DesignData) {
             weeks_observed(fighter);
         }
     }
-    let money = json!(data.economy.starting_money);
+    let money = json!(data.economy.wealth.modest.starting_money);
     if !state["rivals"].is_array() {
         state["rivals"] = json!([]);
     }
@@ -232,6 +234,22 @@ fn staff_members(save: &mut Value, data: &DesignData) {
     state["staff_market"] = Value::Array(Vec::new());
 }
 
+/// Version 14 gives each club its wealth: a modest one for the player's club, the
+/// wealth of `data` for each rival club, whatever money it has; each changes with its
+/// money at the next off-season.
+fn no_wealth(save: &mut Value, data: &DesignData) {
+    let state = &mut save["state"];
+    state["wealth"] = json!(Wealth::Modest);
+    for (rival, rules) in state["rivals"]
+        .as_array_mut()
+        .into_iter()
+        .flatten()
+        .zip(&data.world.rivals)
+    {
+        rival["wealth"] = json!(rules.wealth);
+    }
+}
+
 fn speed_as_accuracy(fighter: &mut Value) {
     for stats in ["stats", "potential"] {
         if fighter[stats].is_object() {
@@ -360,12 +378,12 @@ mod tests {
     fn unknown_versions_are_refused() {
         let data = data();
         let save = to_json(&GameState::new(7, &data));
-        let newer = save.replacen("\"version\": 13", "\"version\": 14", 1);
+        let newer = save.replacen("\"version\": 14", "\"version\": 15", 1);
         assert!(matches!(
             from_json(&newer, &data),
-            Err(SaveError::Version(Some(14)))
+            Err(SaveError::Version(Some(15)))
         ));
-        let none = save.replacen("\"version\": 13", "\"versio\": 13", 1);
+        let none = save.replacen("\"version\": 14", "\"versio\": 14", 1);
         assert!(matches!(
             from_json(&none, &data),
             Err(SaveError::Version(None))

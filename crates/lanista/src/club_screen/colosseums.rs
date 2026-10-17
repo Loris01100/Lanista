@@ -9,7 +9,7 @@ use reesch::egui;
 use super::{ClubScreen, RANKS_SHOWN, View};
 use crate::texts::{
     arena_name, club_name, colosseum_name, condition_text, contender_name, profile_name,
-    record_text, rival_fighter_name, staff_text,
+    record_text, rival_fighter_name, staff_text, wealth_name,
 };
 
 impl ClubScreen {
@@ -98,7 +98,8 @@ impl ClubScreen {
         }
     }
 
-    /// "Ludus Magnus, prudent : 10 combattants, argent 500" for each rival club.
+    /// "Ludus Magnus, prudent et riche : 10 combattants" for each rival club; its money
+    /// stays hidden.
     pub(super) fn rival_lines(&self) -> Vec<String> {
         self.data
             .world
@@ -107,11 +108,11 @@ impl ClubScreen {
             .zip(&self.state.rivals)
             .map(|(rules, rival)| {
                 format!(
-                    "{}, {} : {} combattants, argent {}",
+                    "{}, {} et {} : {} combattants",
                     rules.name,
                     profile_name(rules.profile),
-                    rival.active(),
-                    rival.money
+                    wealth_name(rival.wealth),
+                    rival.active()
                 )
             })
             .collect()
@@ -160,8 +161,8 @@ impl ClubScreen {
             .collect()
     }
 
-    /// A rival club: profile, money, staff, the titles it holds, then its fighters in activity
-    /// with their standing in each colosseum.
+    /// A rival club: profile, wealth (its money stays hidden), staff, the titles it holds,
+    /// then its fighters in activity with their standing in each colosseum.
     pub(super) fn rival_club(&mut self, ui: &mut egui::Ui, club: usize) {
         self.back_button(ui);
         let data = &self.data;
@@ -172,9 +173,9 @@ impl ClubScreen {
         };
         ui.heading(&rules.name);
         ui.label(format!(
-            "Club {}, argent {}, {} combattants en activité (au plus {})",
+            "Club {} et {}, {} combattants en activité (au plus {})",
             profile_name(rules.profile),
-            rival.money,
+            wealth_name(rival.wealth),
             rival.active(),
             data.world.roster.max
         ));

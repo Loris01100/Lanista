@@ -1,5 +1,6 @@
 //! Rival clubs: managers playing by simple weekly rules whose thresholds come from
-//! their profile (`data/world.ron`), each with its own roster of fighters.
+//! their profile (`data/world.ron`), each with its own roster of fighters and its
+//! wealth, which sets how it hires and recruits.
 
 use std::cmp::Reverse;
 
@@ -7,6 +8,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::colosseum::ColosseumId;
 use crate::design_data::DesignData;
+use crate::economy::Wealth;
 use crate::fighter::career::{Activity, CareerFighter, Status, WeekPlan, badly_hurt_or_ill};
 use crate::staff::{Candidate, Role, Staff, StaffMove};
 
@@ -41,7 +43,7 @@ pub struct ProfileRules {
     /// percent of its value (`market::value`).
     pub sell_percent: u32,
     pub buy_percent: u32,
-    /// Each post of the staff (`STAFF_POSTS`) is held at the best level whose salary,
+    /// Each post of the staff (`staff_posts`) is held at the best level whose salary,
     /// with those of the posts before it, the club could pay this many weeks from its
     /// money; someone already there stays while it could pay half as many.
     pub staff_weeks: u32,
@@ -73,6 +75,8 @@ pub struct RivalData {
     /// Shown to the player.
     pub name: String,
     pub profile: Profile,
+    /// At the start of a game.
+    pub wealth: Wealth,
 }
 
 /// The size of the rival clubs' rosters.
@@ -100,8 +104,11 @@ pub struct Rival {
     pub money: i64,
     /// Its fighters; like the player's, one who leaves keeps its place here.
     pub fighters: Vec<CareerFighter>,
-    /// Its trainer and doctor, paid every week (`staff_moves`).
+    /// Its trainer and doctor, and a poor club's recruiter, paid every week
+    /// (`staff_moves`).
     pub staff: Staff,
+    /// Changes with its money at each off-season (`Wealth::next`).
+    pub wealth: Wealth,
 }
 
 impl Rival {
@@ -115,21 +122,28 @@ impl Rival {
     }
 }
 
-/// The posts a rival club fills, in order: no recruiter, as a rival club already
-/// knows every fighter's worth.
-pub const STAFF_POSTS: [Role; 2] = [Role::Trainer, Role::Doctor];
+/// The posts a rival club of `wealth` fills, in order. A poor club, which bets on
+/// finding talent among rookies and cheap free agents, hires a recruiter first to see
+/// their potential; the others none, as they judge a fighter by what it shows.
+#[must_use]
+pub fn staff_posts(wealth: Wealth) -> &'static [Role] {
+    match wealth {
+        Wealth::Poor => &[Role::Recruiter, Role::Trainer, Role::Doctor],
+        Wealth::Modest | Wealth::Rich => &[Role::Trainer, Role::Doctor],
+    }
+}
 
 /// A rival club's changes of staff this week, with `money`, from `held` and the
-/// candidates on `market`, by its profile's `staff_weeks`, post after post
-/// (`STAFF_POSTS`): the candidate of the best level, then the cheapest, whose salary,
-/// with those of the posts before it, it could pay `staff_weeks` weeks; the one
-/// already there stays while it could pay half as many, unless that candidate is of a
-/// better level. A post with no one paid is left empty, and a recruiter is dismissed.
+/// candidates on `market`, by its profile's `staff_weeks`, post after post (`posts`):
+/// the candidate of the best level, then the cheapest, whose salary, with those of the
+/// posts before it, it could pay `staff_weeks` weeks; the one already there stays while
+/// it could pay half as many, unless that candidate is of a better level. A post with
+/// no one paid is left empty, and one held out of `posts` is dismissed.
 #[must_use]
 pub fn staff_moves(
     held: &Staff,
     money: i64,
-    rules: &ProfileRules,
+    (rules, posts): (&ProfileRules, &[Role]),
     market: &[Candidate],
 ) -> Vec<StaffMove> {
     let weeks = i64::from(rules.staff_weeks);
@@ -137,7 +151,7 @@ pub fn staff_moves(
     let fits = |paid: i64, salary: u32, weeks: i64| (paid + i64::from(salary)) * weeks <= money;
     let mut moves = Vec::new();
     let mut paid = 0;
-    for role in STAFF_POSTS {
+    for &role in posts {
         let best = market
             .iter()
             .enumerate()
@@ -169,8 +183,10 @@ pub fn staff_moves(
         };
         paid += i64::from(salary);
     }
-    if held.level(Role::Recruiter).is_some() {
-        moves.push(StaffMove::Dismiss(Role::Recruiter));
+    for role in [Role::Trainer, Role::Doctor, Role::Recruiter] {
+        if !posts.contains(&role) && held.level(role).is_some() {
+            moves.push(StaffMove::Dismiss(role));
+        }
     }
     moves
 }
@@ -378,10 +394,11 @@ mod tests {
     fn a_rival_club_hires_the_best_candidates_its_money_can_keep() {
         let data = DesignData::load().unwrap();
         let staff = &data.economy.staff;
-        let rules = ProfileRules {
+        let profile = ProfileRules {
             staff_weeks: 10,
             ..data.world.profiles.cautious.clone()
         };
+        let rules = (&profile, staff_posts(Wealth::Modest));
         let person = |role, level| Person::of_level(role, level, staff).unwrap();
         let candidate = |role, level| Candidate {
             person: person(role, level),
@@ -405,22 +422,22 @@ mod tests {
         let none = Staff::default();
         // Nothing to pay ten weeks of the cheapest trainer with.
         let poor = salary(Role::Trainer, 1) * 10 - 1;
-        assert_eq!(staff_moves(&none, poor, &rules, &market), []);
+        assert_eq!(staff_moves(&none, poor, rules, &market), []);
         // Rich: the best of both, the cheaper of equals, never a recruiter.
         let rich = (salary(Role::Trainer, 5) + salary(Role::Doctor, 5)) * 10;
         assert_eq!(
-            staff_moves(&none, rich, &rules, &market),
+            staff_moves(&none, rich, rules, &market),
             [StaffMove::Hire(2), StaffMove::Hire(4)]
         );
         // The trainer first, the doctor with what is left.
         let trainer_only = salary(Role::Trainer, 5) * 10;
         assert_eq!(
-            staff_moves(&none, trainer_only, &rules, &market),
+            staff_moves(&none, trainer_only, rules, &market),
             [StaffMove::Hire(2)]
         );
         let doctor_2 = (salary(Role::Trainer, 5) - 1 + salary(Role::Doctor, 2)) * 10;
         assert_eq!(
-            staff_moves(&none, doctor_2, &rules, &market),
+            staff_moves(&none, doctor_2, rules, &market),
             [StaffMove::Hire(2), StaffMove::Hire(3)]
         );
         // Those held stay, as no candidate is better, and the recruiter goes.
@@ -429,29 +446,40 @@ mod tests {
             staff,
         );
         assert_eq!(
-            staff_moves(&full, rich, &rules, &market),
+            staff_moves(&full, rich, rules, &market),
             [StaffMove::Dismiss(Role::Recruiter)]
         );
         // A better candidate takes the place of the one held.
         let low = Staff::of_levels(&[(Role::Trainer, 1)], staff);
         assert_eq!(
-            staff_moves(&low, rich, &rules, &market),
+            staff_moves(&low, rich, rules, &market),
             [StaffMove::Hire(2), StaffMove::Hire(4)]
         );
         // Poorer, the staff stays while half as many weeks are paid; then the last
         // post goes first, for the best candidate still paid, or no one.
         let both = Staff::of_levels(&[(Role::Trainer, 5), (Role::Doctor, 5)], staff);
         let half = rich / 2;
-        assert_eq!(staff_moves(&both, half, &rules, &market), []);
+        assert_eq!(staff_moves(&both, half, rules, &market), []);
         assert_eq!(
-            staff_moves(&both, half - 1, &rules, &market),
+            staff_moves(&both, half - 1, rules, &market),
             [StaffMove::Dismiss(Role::Doctor)]
         );
         let doctor_5 = Staff::of_levels(&[(Role::Doctor, 5)], staff);
         let low_staff = (salary(Role::Trainer, 1) + salary(Role::Doctor, 2)) * 10;
         assert_eq!(
-            staff_moves(&doctor_5, low_staff, &rules, &market),
+            staff_moves(&doctor_5, low_staff, rules, &market),
             [StaffMove::Hire(0), StaffMove::Hire(3)]
+        );
+        // A poor club hires its recruiter first, then the trainer with what is left.
+        let poor = (&profile, staff_posts(Wealth::Poor));
+        let recruiter = salary(Role::Recruiter, 5) * 10;
+        assert_eq!(
+            staff_moves(&none, recruiter, poor, &market),
+            [StaffMove::Hire(5)]
+        );
+        assert_eq!(
+            staff_moves(&none, recruiter + trainer_only, poor, &market),
+            [StaffMove::Hire(5), StaffMove::Hire(2)]
         );
     }
 }
