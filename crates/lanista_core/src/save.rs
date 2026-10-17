@@ -1,262 +1,17 @@
-//! Saves: the [`GameState`] as JSON, with a version number. An older save is
-//! brought up to date one version at a time before it is read.
+//! Saves: the [`GameState`] as JSON, with a version number. Until the Steam release,
+//! only saves of the current [`VERSION`] are read.
 
 use serde::Serialize;
-use serde_json::{Value, json};
+use serde_json::Value;
 
 use crate::design_data::DesignData;
-use crate::economy::Wealth;
-use crate::staff::{Person, Role};
 use crate::state::GameState;
 
-/// Version written in new saves. Raise it with any change to the saved types,
-/// and add the migration from the previous version to [`MIGRATIONS`].
-pub const VERSION: u64 = 14;
-
-/// `MIGRATIONS[i]` turns a version `i + 1` save into a version `i + 2` one,
-/// working on the JSON so the old types need not be kept.
-type Migration = fn(&mut Value, &DesignData);
-const MIGRATIONS: [Migration; 13] = [
-    no_colosseums,
-    title_since,
-    no_challenges,
-    no_rivals,
-    no_market,
-    rival_rosters,
-    no_staff,
-    no_doctor_or_recruiter,
-    accuracy_from_speed,
-    free_agents_unranked,
-    no_rival_staff,
-    staff_members,
-    no_wealth,
-];
-const _: () = assert!(MIGRATIONS.len() as u64 == VERSION - 1);
-
-/// Version 2 adds the colosseums; [`from_json`] opens them.
-fn no_colosseums(save: &mut Value, _: &DesignData) {
-    save["state"]["colosseums"] = Value::Array(Vec::new());
-}
-
-/// Version 3 dates each title: held since the week of the save, so every champion
-/// gets its full time to defend it.
-fn title_since(save: &mut Value, _: &DesignData) {
-    let week = save["state"]["week"].clone();
-    if let Some(colosseums) = save["state"]["colosseums"].as_array_mut() {
-        for colosseum in colosseums {
-            colosseum["title_since"] = week.clone();
-        }
-    }
-}
-
-/// Version 4 adds the residents' challenges, none pending.
-fn no_challenges(save: &mut Value, _: &DesignData) {
-    save["state"]["challenges"] = Value::Array(Vec::new());
-}
-
-/// Version 5 adds the rival clubs; [`from_json`] opens them with the starting money.
-fn no_rivals(save: &mut Value, _: &DesignData) {
-    save["state"]["rivals"] = Value::Array(Vec::new());
-}
-
-/// Version 6 adds the free agents, which [`from_json`] brings to their fewest, and
-/// whether a fighter was observed, false when missing.
-fn no_market(save: &mut Value, _: &DesignData) {
-    save["state"]["free_agents"] = Value::Array(Vec::new());
-}
-
-/// A version 6 fighter as version 7 has it: weeks observed instead of whether it was
-/// observed, and released rather than gone (a club fighter who left was sold or released,
-/// which version 6 did not tell apart).
-fn weeks_observed(fighter: &mut Value) {
-    let observed = fighter
-        .as_object_mut()
-        .and_then(|f| f.remove("observed"))
-        .and_then(|o| o.as_bool())
-        .unwrap_or(false);
-    fighter["observed_weeks"] = json!(u32::from(observed));
-    if fighter["status"] == "Left" {
-        fighter["status"] = json!("Released");
-    }
-}
-
-/// Version 7 gives the rival clubs their own fighters: each colosseum's residents join
-/// the club that owned their place (colosseum + place, in turn among the clubs of
-/// `data`), and rankings, champions and challenges name them by club. The transfer list
-/// and offers start empty; a fighter's record starts at 0 when missing.
-fn rival_rosters(save: &mut Value, data: &DesignData) {
-    let state = &mut save["state"];
-    for list in ["fighters", "free_agents"] {
-        for fighter in state[list].as_array_mut().into_iter().flatten() {
-            weeks_observed(fighter);
-        }
-    }
-    let money = json!(data.economy.wealth.modest.starting_money);
-    if !state["rivals"].is_array() {
-        state["rivals"] = json!([]);
-    }
-    let mut rosters: Vec<Vec<Value>> = vec![Vec::new(); data.world.rivals.len().max(1)];
-    let mut ids: Vec<Vec<Value>> = Vec::new();
-    let clubs = rosters.len();
-    for (c, colosseum) in state["colosseums"]
-        .as_array_mut()
-        .into_iter()
-        .flatten()
-        .enumerate()
-    {
-        let residents = colosseum["residents"].take();
-        let mut here = Vec::new();
-        for (r, fighter) in residents.as_array().into_iter().flatten().enumerate() {
-            let club = (c + r) % clubs;
-            here.push(json!({ "club": club, "fighter": rosters[club].len() }));
-            let mut fighter = fighter.clone();
-            weeks_observed(&mut fighter);
-            rosters[club].push(fighter);
-        }
-        let rename = |contender: &mut Value| {
-            if let Some(r) = contender.get("Resident").and_then(Value::as_u64)
-                && let Some(id) = usize::try_from(r).ok().and_then(|r| here.get(r))
-            {
-                *contender = json!({ "Rival": id });
-            }
-        };
-        for rating in colosseum["ranking"].as_array_mut().into_iter().flatten() {
-            rename(&mut rating["contender"]);
-        }
-        rename(&mut colosseum["champion"]);
-        if let Some(object) = colosseum.as_object_mut() {
-            object.remove("residents");
-        }
-        ids.push(here);
-    }
-    let rivals = state["rivals"].as_array_mut().expect("an array, set above");
-    for (k, roster) in rosters.into_iter().enumerate() {
-        if rivals.len() <= k {
-            rivals.push(json!({ "money": money }));
-        }
-        rivals[k]["fighters"] = Value::Array(roster);
-    }
-    for challenge in state["challenges"].as_array_mut().into_iter().flatten() {
-        let id = challenge["colosseum"]
-            .as_u64()
-            .zip(challenge["resident"].as_u64())
-            .and_then(|(c, r)| {
-                ids.get(usize::try_from(c).ok()?)?
-                    .get(usize::try_from(r).ok()?)
-            });
-        challenge["rival"] = id.cloned().unwrap_or(Value::Null);
-    }
-    if let Some(challenges) = state["challenges"].as_array_mut() {
-        challenges.retain(|ch| !ch["rival"].is_null());
-    }
-    if !state["free_agents"].is_array() {
-        state["free_agents"] = json!([]);
-    }
-    state["transfer_list"] = json!([]);
-    state["sale_offers"] = json!([]);
-    state["counter_offer"] = Value::Null;
-}
-
-/// Version 8 adds the club's staff, no one hired.
-fn no_staff(save: &mut Value, _: &DesignData) {
-    save["state"]["staff"] = json!({ "trainer": null });
-}
-
-/// Version 9 adds a doctor and a recruiter to the staff, neither hired.
-fn no_doctor_or_recruiter(save: &mut Value, _: &DesignData) {
-    let staff = &mut save["state"]["staff"];
-    staff["doctor"] = Value::Null;
-    staff["recruiter"] = Value::Null;
-}
-
-/// Version 10 adds accuracy to the stats: every fighter's trained and potential
-/// accuracy start at its speed, on the same scale (30 in the standard duel for both).
-fn accuracy_from_speed(save: &mut Value, _: &DesignData) {
-    let state = &mut save["state"];
-    for list in ["fighters", "free_agents"] {
-        for fighter in state[list].as_array_mut().into_iter().flatten() {
-            speed_as_accuracy(fighter);
-        }
-    }
-    for rival in state["rivals"].as_array_mut().into_iter().flatten() {
-        for fighter in rival["fighters"].as_array_mut().into_iter().flatten() {
-            speed_as_accuracy(fighter);
-        }
-    }
-}
-
-/// Version 11 ranks free agents in the colosseums (`Contender::FreeAgent`) and keeps
-/// those who left the market, with their status; an older save's free agents are all
-/// on the market and ranked nowhere, so it needs no change.
-fn free_agents_unranked(_: &mut Value, _: &DesignData) {}
-
-/// Version 12 gives the rival clubs a staff, no one hired yet.
-fn no_rival_staff(save: &mut Value, _: &DesignData) {
-    let staff = json!({ "trainer": null, "doctor": null, "recruiter": null });
-    for rival in save["state"]["rivals"].as_array_mut().into_iter().flatten() {
-        rival["staff"] = staff.clone();
-    }
-}
-
-/// Version 13 hires the staff among candidates with their own stats and salary: each
-/// club's staff keeps its levels, each one with that level's stats and salary from
-/// `data`, a level not on offer leaving the post empty; the market has no candidate
-/// yet, [`from_json`] brings them.
-fn staff_members(save: &mut Value, data: &DesignData) {
-    let rules = &data.economy.staff;
-    let members = |staff: &mut Value| {
-        for role in Role::ALL {
-            let post = match role {
-                Role::Trainer => "trainer",
-                Role::Doctor => "doctor",
-                Role::Recruiter => "recruiter",
-            };
-            let member = staff[post]
-                .as_u64()
-                .and_then(|level| u32::try_from(level).ok())
-                .and_then(|level| Person::of_level(role, level, rules))
-                .map_or(Value::Null, |person| {
-                    let member = match person {
-                        Person::Trainer(m) => serde_json::to_value(m),
-                        Person::Doctor(m) => serde_json::to_value(m),
-                        Person::Recruiter(m) => serde_json::to_value(m),
-                    };
-                    member.unwrap_or(Value::Null)
-                });
-            staff[post] = member;
-        }
-    };
-    let state = &mut save["state"];
-    members(&mut state["staff"]);
-    for rival in state["rivals"].as_array_mut().into_iter().flatten() {
-        members(&mut rival["staff"]);
-    }
-    state["staff_market"] = Value::Array(Vec::new());
-}
-
-/// Version 14 gives each club its wealth: a modest one for the player's club, the
-/// wealth of `data` for each rival club, whatever money it has; each changes with its
-/// money at the next off-season.
-fn no_wealth(save: &mut Value, data: &DesignData) {
-    let state = &mut save["state"];
-    state["wealth"] = json!(Wealth::Modest);
-    for (rival, rules) in state["rivals"]
-        .as_array_mut()
-        .into_iter()
-        .flatten()
-        .zip(&data.world.rivals)
-    {
-        rival["wealth"] = json!(rules.wealth);
-    }
-}
-
-fn speed_as_accuracy(fighter: &mut Value) {
-    for stats in ["stats", "potential"] {
-        if fighter[stats].is_object() {
-            fighter[stats]["accuracy"] = fighter[stats]["speed"].clone();
-        }
-    }
-}
+/// Version written in new saves; a save of another version is refused. Until the Steam
+/// release, saves are not migrated: a change to the saved types may make older saves
+/// unreadable, and the game then starts anew. At the release, versions start again from
+/// this one, with a migration from each version to the next.
+pub const VERSION: u64 = 1;
 
 #[derive(Serialize)]
 struct Save<'a> {
@@ -269,7 +24,7 @@ struct Save<'a> {
 pub enum SaveError {
     /// Not JSON, or not the expected fields.
     Json(serde_json::Error),
-    /// No version, or one this game does not know (a save from a newer game).
+    /// No version, or another than [`VERSION`].
     Version(Option<u64>),
     /// A fighter of a class missing from the design data.
     UnknownClass(u32),
@@ -280,7 +35,7 @@ impl std::fmt::Display for SaveError {
         match self {
             Self::Json(e) => write!(f, "{e}"),
             Self::Version(None) => write!(f, "no version"),
-            Self::Version(Some(v)) => write!(f, "unknown version {v} (latest is {VERSION})"),
+            Self::Version(Some(v)) => write!(f, "version {v} instead of {VERSION}"),
             Self::UnknownClass(c) => write!(f, "unknown class {c}"),
         }
     }
@@ -308,20 +63,16 @@ pub fn to_json(state: &GameState) -> String {
     serde_json::to_string_pretty(&save).expect("a game state serializes to JSON")
 }
 
-/// Reads a save of any known version, migrating it first, and opens the colosseums
-/// and rival clubs of `data` it does not have, and the free agents it lacks.
+/// Reads a save of the current [`VERSION`], and opens the colosseums and rival clubs of
+/// `data` it does not have, and the free agents and staff candidates it lacks.
 ///
 /// # Errors
-/// If the text is not a save, its version is unknown, or a fighter's class is not in `data`.
+/// If the text is not a save of this version, or a fighter's class is not in `data`.
 pub fn from_json(text: &str, data: &DesignData) -> Result<GameState, SaveError> {
     let mut save: Value = serde_json::from_str(text).map_err(SaveError::Json)?;
     let version = save.get("version").and_then(Value::as_u64);
-    let from = match version {
-        Some(v @ 1..=VERSION) => usize::try_from(v - 1).map_err(|_| SaveError::Version(version))?,
-        _ => return Err(SaveError::Version(version)),
-    };
-    for migrate in &MIGRATIONS[from..] {
-        migrate(&mut save, data);
+    if version != Some(VERSION) {
+        return Err(SaveError::Version(version));
     }
     let mut state: GameState =
         serde_json::from_value(save["state"].take()).map_err(SaveError::Json)?;
@@ -375,15 +126,15 @@ mod tests {
     }
 
     #[test]
-    fn unknown_versions_are_refused() {
+    fn other_versions_are_refused() {
         let data = data();
         let save = to_json(&GameState::new(7, &data));
-        let newer = save.replacen("\"version\": 14", "\"version\": 15", 1);
+        let newer = save.replacen("\"version\": 1", "\"version\": 2", 1);
         assert!(matches!(
             from_json(&newer, &data),
-            Err(SaveError::Version(Some(15)))
+            Err(SaveError::Version(Some(2)))
         ));
-        let none = save.replacen("\"version\": 14", "\"versio\": 14", 1);
+        let none = save.replacen("\"version\": 1", "\"versio\": 1", 1);
         assert!(matches!(
             from_json(&none, &data),
             Err(SaveError::Version(None))
