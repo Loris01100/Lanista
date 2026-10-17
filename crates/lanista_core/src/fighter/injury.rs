@@ -127,6 +127,17 @@ pub fn stun_wound<R: Rng + ?Sized>(rng: &mut R, rules: &InjuryRules) -> Injury {
     }
 }
 
+/// The permanent injury of a limb a cutting hit severed: a lost arm, or a leg's
+/// after-effect.
+#[must_use]
+pub fn severed_limb_wound(location: Location) -> Injury {
+    Injury {
+        location,
+        severity: Severity::Permanent,
+        weeks_left: 0,
+    }
+}
+
 /// Where an injury lands, by `rules.location_weights`.
 fn roll_location<R: Rng + ?Sized>(rng: &mut R, rules: &InjuryRules) -> Location {
     let side = if rng.random_bool(0.5) {

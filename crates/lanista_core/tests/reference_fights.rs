@@ -33,16 +33,33 @@ fn murmillo_against_murmillo() {
     insta::assert_snapshot!(duel([0, 0], 42));
 }
 
-/// The standard duel of seed 15: both fighters are stunned, the first gets up, the
-/// second is knocked out.
-#[test]
-fn a_standard_duel_with_a_knock_out() {
-    let mut arena = random_duel(&DesignData::load().unwrap(), 15);
+/// The standard duel of `seed`: its log and report.
+fn standard_duel(seed: u64) -> String {
+    let mut arena = random_duel(&DesignData::load().unwrap(), seed);
     play(&mut arena);
-    insta::assert_snapshot!(format!(
+    format!(
         "{}
 {}",
         log_text(&arena),
         Report::new(&arena)
-    ));
+    )
+}
+
+/// The standard duel of seed 15: the first fighter is stunned twice, gets up once, then
+/// is knocked out.
+#[test]
+fn a_standard_duel_with_a_knock_out() {
+    insta::assert_snapshot!(standard_duel(15));
+}
+
+/// The standard duel of seed 62: a cutting hit takes off the second fighter's leg.
+#[test]
+fn a_standard_duel_with_a_lost_limb() {
+    insta::assert_snapshot!(standard_duel(62));
+}
+
+/// The standard duel of seed 13: the killing blow, a cutting one, takes the head off.
+#[test]
+fn a_standard_duel_with_a_beheading() {
+    insta::assert_snapshot!(standard_duel(13));
 }

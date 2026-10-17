@@ -6,7 +6,7 @@ use lanista_core::fighter::career::CareerFighter;
 use lanista_core::fighter::fame::FightResult;
 use lanista_core::fighter::form::Form;
 use lanista_core::fighter::illness::roll_illness;
-use lanista_core::fighter::injury::roll_injury;
+use lanista_core::fighter::injury::{Location, roll_injury};
 use lanista_core::fighter::morale::Morale;
 use lanista_core::fighter::{Fighter, FighterId};
 use lanista_core::stat_model::{Ending, SpectacularHits, StatModel, Winner, features, sigmoid};
@@ -61,7 +61,8 @@ pub fn record(seed: u64, data: &DesignData) -> Sample {
 }
 
 /// The model fitted on `samples`, for `classes` classes: a logistic regression on the
-/// fights with a winner, then the share of each ending and of the stunned.
+/// fights with a winner, then the share of each ending (knock-out, lost limb, beheading,
+/// death by determination of the others) and of the stunned.
 #[must_use]
 pub fn fit(samples: &[Sample], classes: usize) -> StatModel {
     let class = |f: &Fighter| usize::try_from(f.class.0).unwrap_or(0).min(classes - 1);
@@ -70,6 +71,8 @@ pub fn fit(samples: &[Sample], classes: usize) -> StatModel {
     let mut unfinished = vec![vec![(0_u64, 0_u64); classes]; classes];
     // By the winner's class, then by the opponent's class.
     let mut knocked_out = vec![(0_u64, 0_u64); classes];
+    let mut lost_limb = vec![(0_u64, 0_u64); classes];
+    let mut beheaded = vec![(0_u64, 0_u64); classes];
     let mut stunned = vec![(0_u64, 0_u64); classes];
     let mut death = [(0_u64, 0_u64); DEATH_BANDS];
     let mut hits = [[0_u64; HIT_COUNTS]; 3];
@@ -104,23 +107,29 @@ pub fn fit(samples: &[Sample], classes: usize) -> StatModel {
         let (fa, fb) = (features(a, classes), features(b, classes));
         x.push(fa.iter().zip(&fb).map(|(a, b)| a - b).collect());
         y.push(winner == 0);
-        let loser = 1 - winner;
-        let cell = &mut knocked_out[class(&s.fighters[winner])];
-        *cell = (cell.0 + u64::from(s.sides[loser].knocked_out), cell.1 + 1);
-        if s.sides[loser].knocked_out {
+        let loser = &s.sides[1 - winner];
+        let by_winner = class(&s.fighters[winner]);
+        let head = loser.severed == Some(Location::Head);
+        let limb = loser.severed.is_some() && !head;
+        for (table, counted) in [
+            (&mut knocked_out, loser.knocked_out),
+            (&mut lost_limb, limb),
+            (&mut beheaded, head),
+        ] {
+            let cell = &mut table[by_winner];
+            *cell = (cell.0 + u64::from(counted), cell.1 + 1);
+        }
+        if loser.knocked_out || loser.severed.is_some() {
             continue;
         }
-        let determination = s.fighters[loser]
+        let determination = s.fighters[1 - winner]
             .condition
             .personality
             .determination
             .value();
         let band = (usize::try_from(determination).unwrap_or(usize::MAX) * DEATH_BANDS / 101)
             .min(DEATH_BANDS - 1);
-        death[band] = (
-            death[band].0 + u64::from(s.sides[loser].died),
-            death[band].1 + 1,
-        );
+        death[band] = (death[band].0 + u64::from(loser.died), death[band].1 + 1);
     }
     let all_deaths = death
         .iter()
@@ -134,6 +143,8 @@ pub fn fit(samples: &[Sample], classes: usize) -> StatModel {
             .map(|row| row.iter().map(|&(u, n)| share(u, n, 0.0)).collect())
             .collect(),
         knocked_out: knocked_out.iter().map(|&(k, n)| share(k, n, 0.0)).collect(),
+        lost_limb: lost_limb.iter().map(|&(l, n)| share(l, n, 0.0)).collect(),
+        beheaded: beheaded.iter().map(|&(b, n)| share(b, n, 0.0)).collect(),
         death: death
             .iter()
             .map(|&(dead, losers)| share(dead, losers, share(all_deaths.0, all_deaths.1, 0.0)))

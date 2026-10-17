@@ -344,6 +344,21 @@ impl DesignData {
                 problem: "lowest above highest",
             });
         }
+        let cut = &self.combat.cut;
+        if cut.arm_weight.saturating_add(cut.leg_weight) == 0 {
+            return Err(LoadError::Invalid {
+                file: COMBAT_FILE,
+                field: "cut",
+                problem: "no limb to sever",
+            });
+        }
+        if cut.fatal_head_percent > 100 {
+            return Err(LoadError::Invalid {
+                file: COMBAT_FILE,
+                field: "cut.fatal_head_percent",
+                problem: "above 100",
+            });
+        }
         Ok(())
     }
 

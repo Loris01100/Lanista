@@ -4,6 +4,7 @@ use std::fmt::{self, Write};
 
 use crate::combat::Arena;
 use crate::fighter::FighterId;
+use crate::fighter::injury::{Location, Side};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct Event {
@@ -43,6 +44,12 @@ pub enum EventKind {
     KnockedOut {
         fighter: FighterId,
     },
+    /// A cutting hit, just logged, severed `part`: the head, followed by its `Death`,
+    /// or a limb, out of the fight alive.
+    Sever {
+        fighter: FighterId,
+        part: Location,
+    },
 }
 
 /// Summary of a fight, built from its log.
@@ -72,6 +79,8 @@ pub struct FighterReport {
     pub stuns: u32,
     pub surrendered: bool,
     pub knocked_out: bool,
+    /// What a cutting hit severed: the head, or a limb.
+    pub severed: Option<Location>,
 }
 
 impl Report {
@@ -91,6 +100,7 @@ impl Report {
                 stuns: 0,
                 surrendered: f.surrendered,
                 knocked_out: f.knocked_out,
+                severed: f.severed,
             })
             .collect();
         let index = |id: FighterId| usize::try_from(id.0).ok();
@@ -120,7 +130,8 @@ impl Report {
                 EventKind::Death { .. }
                 | EventKind::Surrender { .. }
                 | EventKind::Rise { .. }
-                | EventKind::KnockedOut { .. } => {}
+                | EventKind::KnockedOut { .. }
+                | EventKind::Sever { .. } => {}
             }
         }
         let over = arena.is_over();
@@ -166,16 +177,28 @@ impl fmt::Display for Report {
                 1 => write!(f, ", stunned once")?,
                 n => write!(f, ", stunned {n} times")?,
             }
-            let out = if r.surrendered {
-                ", gave up"
-            } else if r.knocked_out {
-                ", knocked out"
-            } else {
-                ""
+            let out = match r.severed {
+                Some(Location::Head) => ", beheaded".to_owned(),
+                Some(limb) => format!(", lost its {}", limb_name(limb)),
+                None if r.surrendered => ", gave up".to_owned(),
+                None if r.knocked_out => ", knocked out".to_owned(),
+                None => String::new(),
             };
             writeln!(f, "{out}")?;
         }
         Ok(())
+    }
+}
+
+/// A limb's name in the log: "left arm", "right leg"; "head" and "body" for the others.
+fn limb_name(location: Location) -> &'static str {
+    match location {
+        Location::Head => "head",
+        Location::Body => "body",
+        Location::Arm(Side::Left) => "left arm",
+        Location::Arm(Side::Right) => "right arm",
+        Location::Leg(Side::Left) => "left leg",
+        Location::Leg(Side::Right) => "right leg",
     }
 }
 
@@ -227,14 +250,33 @@ pub fn log_text(arena: &Arena) -> String {
                     event.tick, fighter.0
                 )
             }
+            EventKind::Sever {
+                fighter,
+                part: Location::Head,
+            } => {
+                writeln!(
+                    text,
+                    "[{:>5}] fighter {} is beheaded",
+                    event.tick, fighter.0
+                )
+            }
+            EventKind::Sever { fighter, part } => {
+                writeln!(
+                    text,
+                    "[{:>5}] fighter {} loses its {}",
+                    event.tick,
+                    fighter.0,
+                    limb_name(part)
+                )
+            }
         };
     }
     text
 }
 
 /// Each fighter's place in a fight, in the arena's order, from the elimination order:
-/// 1 for those still fighting at the end, then the later a fighter died, gave up or was
-/// knocked out, the better. Fighters out on the same tick, or still fighting together
+/// 1 for those still fighting at the end, then the later a fighter died, gave up, was
+/// knocked out or lost a limb, the better. Fighters out on the same tick, or still fighting together
 /// when time ran out, share a place.
 #[must_use]
 pub fn places(arena: &Arena) -> Vec<u32> {
@@ -249,7 +291,8 @@ pub fn places(arena: &Arena) -> Vec<u32> {
                 .find(|e| match e.kind {
                     EventKind::Death { fighter }
                     | EventKind::Surrender { fighter }
-                    | EventKind::KnockedOut { fighter } => fighter == f.id,
+                    | EventKind::KnockedOut { fighter }
+                    | EventKind::Sever { fighter, .. } => fighter == f.id,
                     EventKind::Cast { .. } | EventKind::Stun { .. } | EventKind::Rise { .. } => {
                         false
                     }

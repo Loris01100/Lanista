@@ -428,18 +428,39 @@ pub fn illness_text(illness: Illness) -> String {
     format!("Maladie {level}, {}", weeks(illness.weeks_left))
 }
 
+/// A severed limb in a sentence: "bras gauche tranché", "jambe droite tranchée".
+fn limb_cut(location: Location) -> String {
+    let side = |s, feminine| match (s, feminine) {
+        (Side::Left, _) => "gauche",
+        (Side::Right, false) => "droit",
+        (Side::Right, true) => "droite",
+    };
+    match location {
+        Location::Head => "tête tranchée".into(),
+        Location::Body => "corps tranché".into(),
+        Location::Arm(s) => format!("bras {} tranché", side(s, false)),
+        Location::Leg(s) => format!("jambe {} tranchée", side(s, true)),
+    }
+}
+
 pub fn fight_text(fight: &FightSummary, data: &DesignData) -> String {
+    let mine = fight.report.fighters.first();
     // Brought to 0 HP, it may still have survived the fatal blow.
-    let fell = fight.report.fighters.first().is_some_and(|f| f.hp == 0);
-    let knocked_out = fight.report.fighters.first().is_some_and(|f| f.knocked_out);
-    let result = match (fight.result, fight.died) {
-        (_, true) => "mort au combat",
-        (FightResult::Lost, false) if fell => "laissé pour mort, survit grièvement blessé",
-        (FightResult::Lost, false) if knocked_out => "défaite, étourdi sans se relever",
-        (FightResult::Won, _) => "victoire",
-        (FightResult::Lost, _) => "défaite",
-        (FightResult::GaveUp, _) => "abandon",
-        (FightResult::Unfinished, _) => "pas de vainqueur après une minute",
+    let fell = mine.is_some_and(|f| f.hp == 0);
+    let knocked_out = mine.is_some_and(|f| f.knocked_out);
+    let severed = mine.and_then(|f| f.severed);
+    let result = match (fight.result, fight.died, severed) {
+        (_, true, Some(Location::Head)) => "décapité".into(),
+        (_, true, _) => "mort au combat".into(),
+        (FightResult::Lost, false, Some(limb)) => format!("défaite, {}", limb_cut(limb)),
+        (FightResult::Lost, false, _) if fell => {
+            "laissé pour mort, survit grièvement blessé".into()
+        }
+        (FightResult::Lost, false, _) if knocked_out => "défaite, étourdi sans se relever".into(),
+        (FightResult::Won, ..) => "victoire".into(),
+        (FightResult::Lost, ..) => "défaite".into(),
+        (FightResult::GaveUp, ..) => "abandon".into(),
+        (FightResult::Unfinished, ..) => "pas de vainqueur après une minute".into(),
     };
     let stronger = if fight.against_stronger {
         ", plus fort"

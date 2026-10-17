@@ -4,9 +4,10 @@ use lanista_core::ai::{CombatAi, UtilityAi};
 use lanista_core::combat::{AccuracyRules, Arena, RADIUS, Vec2, run, tick};
 use lanista_core::design_data::DesignData;
 use lanista_core::duel::{ARENA_SIZE, MAX_TICKS, STATS};
+use lanista_core::fighter::injury::Location;
 use lanista_core::fighter::personality::{Personality, TraitValue};
 use lanista_core::fighter::{ClassId, Fighter, FighterId, Stats};
-use lanista_core::log::EventKind;
+use lanista_core::log::{EventKind, Report};
 use proptest::prelude::*;
 use rand::SeedableRng;
 use rand_chacha::ChaCha8Rng;
@@ -103,7 +104,7 @@ proptest! {
     ) {
         let (mut arena, mut ais) = duel(setup, [STATS; 2], seed);
         // Stuns at every blunt hit, to see many of them.
-        arena.stun.blunt_percent = 10_000;
+        arena.stun.blunt_hundredths = 1_000_000;
         for (f, d) in arena.fighters.iter_mut().zip(determination) {
             f.condition.personality.determination = TraitValue::new(d);
         }
@@ -125,6 +126,36 @@ proptest! {
                     prop_assert!(new.is_alive() && new.stuns > 0);
                 }
             }
+        }
+    }
+
+    #[test]
+    fn a_beheaded_fighter_is_dead_and_one_that_lost_a_limb_is_out_alive(
+        setup in setup(),
+        seed: u64,
+    ) {
+        let (mut arena, mut ais) = duel(setup, [STATS; 2], seed);
+        // Cuts far more often, to see many of them.
+        arena.cut.limb_hundredths = 2_000;
+        arena.cut.head_hundredths = 500;
+        while !arena.is_over() && arena.tick < MAX_TICKS {
+            let before = arena.fighters.clone();
+            tick(&mut arena, &mut ais);
+            for (old, new) in before.iter().zip(&arena.fighters) {
+                // Out of the fight: never hit again.
+                if old.severed.is_some() {
+                    prop_assert_eq!(new.hp, old.hp);
+                }
+                match new.severed {
+                    Some(Location::Head) => prop_assert!(!new.is_alive()),
+                    Some(_) => prop_assert!(new.is_alive() && !new.is_fighting()),
+                    None => {}
+                }
+            }
+        }
+        let report = Report::new(&arena);
+        for f in &arena.fighters {
+            prop_assert!(f.severed.is_none() || report.winner != Some(f.id));
         }
     }
 

@@ -20,6 +20,8 @@ pub struct Outcome {
     pub injured: [bool; 2],
     /// Whether that injury is to the head, as the wound a stun leaves.
     pub head_injured: [bool; 2],
+    /// Whether that injury is permanent, as a limb a cutting hit severed.
+    pub maimed: [bool; 2],
 }
 
 /// The same fight played both ways.
@@ -85,11 +87,19 @@ fn outcome(
                 .last()
                 .is_some_and(|injury| injury.location == Location::Head)
     };
+    let maimed = |i: usize| {
+        injured(i)
+            && after[i]
+                .injuries
+                .last()
+                .is_some_and(lanista_core::fighter::injury::Injury::is_permanent)
+    };
     Outcome {
         winner: (0..2).find(|&i| gained(i)),
         died: [0, 1].map(|i| after[i].status == Status::Dead),
         injured: [0, 1].map(injured),
         head_injured: [0, 1].map(head_injured),
+        maimed: [0, 1].map(maimed),
     }
 }
 
@@ -110,8 +120,8 @@ impl Rate {
 }
 
 /// The rates `compare` shows over `pairs`: fights at the time limit, wins of the first
-/// fighter, of the stronger and of each class (named by `classes`), deaths, injuries and
-/// head injuries.
+/// fighter, of the stronger and of each class (named by `classes`), deaths, injuries,
+/// head injuries and after-effects.
 #[must_use]
 pub fn rates(pairs: &[Pair], classes: &[String]) -> Vec<Rate> {
     let rate = |name: &str, count: &dyn Fn(&Pair, &Outcome) -> (u64, u64)| {
@@ -156,6 +166,9 @@ pub fn rates(pairs: &[Pair], classes: &[String]) -> Vec<Rate> {
     rates.push(rate("fighters injured at the head", &|_, o| {
         flags(o.head_injured)
     }));
+    rates.push(rate("fighters with a new after-effect", &|_, o| {
+        flags(o.maimed)
+    }));
     rates
 }
 
@@ -187,7 +200,7 @@ mod tests {
             .collect();
         let names: Vec<String> = data.classes.iter().map(|c| c.name.clone()).collect();
         let rates = rates(&pairs, &names);
-        assert_eq!(rates.len(), 6 + names.len());
+        assert_eq!(rates.len(), 7 + names.len());
         // A thousand fights leave a few points of chance on each side.
         for rate in &rates {
             assert!(rate.gap() < 4.0, "{rate:?}");
@@ -201,6 +214,7 @@ mod tests {
             died,
             injured,
             head_injured: [false; 2],
+            maimed: [false; 2],
         };
         let pair = Pair {
             classes: [0, 1],

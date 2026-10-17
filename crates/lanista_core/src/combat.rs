@@ -5,9 +5,9 @@ use serde::Deserialize;
 
 use crate::ai::{Action, CombatAi};
 use crate::design_data::SpellData;
-use crate::fighter::injury::Location;
+use crate::fighter::injury::{Location, Side};
 use crate::fighter::personality::Personality;
-use crate::fighter::{Fighter, FighterId, Stats};
+use crate::fighter::{Fighter, FighterId, Stats, pick};
 use crate::log::{Event, EventKind};
 
 pub const TICKS_PER_SECOND: u32 = 30;
@@ -58,6 +58,8 @@ pub struct Arena {
     pub accuracy: AccuracyRules,
     /// How hits stun; never, unless set with [`Arena::with_rules`].
     pub stun: StunRules,
+    /// How cutting hits sever; never, unless set with [`Arena::with_rules`].
+    pub cut: CutRules,
 }
 
 /// Combat rules, from `data/combat.ron`.
@@ -66,6 +68,7 @@ pub struct Arena {
 pub struct CombatRules {
     pub accuracy: AccuracyRules,
     pub stun: StunRules,
+    pub cut: CutRules,
 }
 
 /// How a hit may stun its target (see [`stun_chance`]), and how a stunned fighter gets
@@ -73,10 +76,11 @@ pub struct CombatRules {
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct StunRules {
-    /// Chance a blunt hit stuns, in percent per tenth of the target's max HP it takes.
-    pub blunt_percent: u32,
+    /// Chance a blunt hit stuns, in hundredths of a percent per tenth of the target's
+    /// max HP it takes.
+    pub blunt_hundredths: u32,
     /// The same for a cutting hit; a neutral one never stuns.
-    pub cutting_percent: u32,
+    pub cutting_hundredths: u32,
     /// Each injury to the target's head, after-effect included, raises the chance by
     /// this percentage of it.
     pub head_injury_percent: u32,
@@ -92,8 +96,8 @@ pub struct StunRules {
 impl StunRules {
     /// No hit ever stuns.
     pub const NEVER: Self = Self {
-        blunt_percent: 0,
-        cutting_percent: 0,
+        blunt_hundredths: 0,
+        cutting_hundredths: 0,
         head_injury_percent: 0,
         ticks: 0,
         rise_percent_least_determined: 100,
@@ -102,9 +106,37 @@ impl StunRules {
     };
 }
 
-/// What a spell hits with: a blunt blow stuns more often than a cutting one, a neutral
-/// one (spells without an element yet) never.
-// ponytail: cutting is meant to favor lost limbs and deaths too (roadmap, phase 5 bis).
+/// How a cutting hit may sever a limb or the head (see [`severed_part`]).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct CutRules {
+    /// Chance a cutting hit the target survives standing severs one of its limbs, in
+    /// hundredths of a percent per tenth of the target's max HP the hit takes.
+    pub limb_hundredths: u32,
+    /// The same for the head, on any cutting hit that lands: the target dies.
+    pub head_hundredths: u32,
+    /// Chance, in percent, that a cutting hit bringing its target to 0 HP takes its
+    /// head off: a fatal blow nobody survives.
+    pub fatal_head_percent: u32,
+    /// Relative chances that a severed limb is an arm or a leg; the side is drawn 50/50.
+    pub arm_weight: u32,
+    pub leg_weight: u32,
+}
+
+impl CutRules {
+    /// No hit ever severs anything.
+    pub const NEVER: Self = Self {
+        limb_hundredths: 0,
+        head_hundredths: 0,
+        fatal_head_percent: 0,
+        arm_weight: 1,
+        leg_weight: 1,
+    };
+}
+
+/// What a spell hits with: a blunt blow stuns more often than a cutting one, a cutting
+/// one may sever a limb or the head, a neutral one (spells without an element yet) does
+/// neither.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize)]
 pub enum DamageKind {
     Blunt,
@@ -146,6 +178,7 @@ impl Arena {
             log: Vec::new(),
             accuracy: AccuracyRules::ALWAYS,
             stun: StunRules::NEVER,
+            cut: CutRules::NEVER,
         }
     }
 
@@ -156,15 +189,17 @@ impl Arena {
         self
     }
 
-    /// This arena, where attacks hit and stun following `rules`, as in real fights.
+    /// This arena, where attacks hit, stun and sever following `rules`, as in real fights.
     #[must_use]
     pub fn with_rules(mut self, rules: CombatRules) -> Self {
         self.accuracy = rules.accuracy;
         self.stun = rules.stun;
+        self.cut = rules.cut;
         self
     }
 
-    /// At most one fighter still fighting: the others are dead, gave up or were knocked out.
+    /// At most one fighter still fighting: the others are dead, gave up, were knocked
+    /// out or lost a limb.
     #[must_use]
     pub fn is_over(&self) -> bool {
         self.fighters.iter().filter(|f| f.is_fighting()).count() <= 1
@@ -245,14 +280,23 @@ pub fn hit_percent(attacker: &Stats, defender: &Stats, rules: &AccuracyRules) ->
     percent.clamp(rules.min_percent, rules.max_percent.max(rules.min_percent))
 }
 
+/// `hundredths` of a percent per tenth of `max_hp` that `damage` takes, in hundredths
+/// of a percent, at most 10 000 (sure); 0 for no HP.
+fn per_tenth(hundredths: u32, damage: u32, max_hp: u32) -> u64 {
+    (u64::from(hundredths) * u64::from(damage) * 10)
+        .checked_div(u64::from(max_hp))
+        .unwrap_or(0)
+        .min(10_000)
+}
+
 /// Chance, in hundredths of a percent (10 000 for sure), that a hit taking `damage` HP
-/// with a `kind` weapon stuns `target`: the kind's percentage per tenth of the target's
+/// with a `kind` weapon stuns `target`: the kind's hundredths per tenth of the target's
 /// max HP the hit takes, raised by `head_injury_percent` of it per head injury.
 #[must_use]
 pub fn stun_chance(damage: u32, kind: DamageKind, target: &Fighter, rules: &StunRules) -> u32 {
-    let percent = match kind {
-        DamageKind::Blunt => rules.blunt_percent,
-        DamageKind::Cutting => rules.cutting_percent,
+    let hundredths = match kind {
+        DamageKind::Blunt => rules.blunt_hundredths,
+        DamageKind::Cutting => rules.cutting_hundredths,
         DamageKind::Neutral => 0,
     };
     let heads = target
@@ -265,12 +309,55 @@ pub fn stun_chance(damage: u32, kind: DamageKind, target: &Fighter, rules: &Stun
     let raise = heads
         .saturating_mul(u64::from(rules.head_injury_percent))
         .saturating_add(100);
-    // percent × damage / (max HP / 10) × raise / 100, in hundredths of a percent.
-    let chance = (u64::from(percent) * u64::from(damage) * 10)
+    // hundredths × damage / (max HP / 10) × raise / 100.
+    let chance = (u64::from(hundredths) * u64::from(damage) * 10)
         .saturating_mul(raise)
-        .checked_div(u64::from(target.stats.hp))
+        .checked_div(u64::from(target.stats.hp).saturating_mul(100))
         .unwrap_or(0);
     u32::try_from(chance.min(10_000)).unwrap_or(10_000)
+}
+
+/// What a cutting hit taking `damage` HP severs of `target`, as the hit left it: its
+/// head with `fatal_head_percent` if the hit brought it to 0 HP, else with
+/// `head_hundredths` per tenth of its max HP the hit takes; then, if it still fights,
+/// a limb with `limb_hundredths` per tenth (see [`severed_limb`]). Each chance is
+/// drawn only above 0.
+pub fn severed_part<R: rand::Rng + ?Sized>(
+    rng: &mut R,
+    damage: u32,
+    target: &Fighter,
+    rules: &CutRules,
+) -> Option<Location> {
+    let draw = |rng: &mut R, chance: u64| {
+        chance > 0 && u64::from(rng.random_range(0..10_000_u32)) < chance
+    };
+    let head = if target.is_alive() {
+        per_tenth(rules.head_hundredths, damage, target.stats.hp)
+    } else {
+        u64::from(rules.fatal_head_percent.min(100)) * 100
+    };
+    if draw(rng, head) {
+        return Some(Location::Head);
+    }
+    let limb = per_tenth(rules.limb_hundredths, damage, target.stats.hp);
+    (target.is_fighting() && draw(rng, limb)).then(|| severed_limb(rng, rules))
+}
+
+/// Which limb a cutting hit severs: an arm or a leg by `arm_weight` and `leg_weight`,
+/// on a side drawn 50/50.
+pub fn severed_limb<R: rand::Rng + ?Sized>(rng: &mut R, rules: &CutRules) -> Location {
+    let side = if rng.random_bool(0.5) {
+        Side::Left
+    } else {
+        Side::Right
+    };
+    pick(
+        rng,
+        &[
+            (rules.arm_weight, Location::Arm(side)),
+            (rules.leg_weight, Location::Leg(side)),
+        ],
+    )
 }
 
 /// Chance, in percent, that `fighter`, down after its latest stun, gets back up: from
@@ -361,9 +448,11 @@ fn cast_order(arena: &mut Arena) -> Vec<usize> {
 
 /// Casts the spell each fighter standing chose, if it is ready, affordable and the
 /// target is standing and in reach, in `cast_order`; a cast fighter then waits for
-/// its next decision. The spell hits with `hit_percent`, drawn only when below 100; the
-/// target dies at 0 HP, gives up at its surrender threshold, or else may be stunned with
-/// `stun_chance`, drawn only above 0, staying down for `StunRules::ticks`.
+/// its next decision. The spell hits with `hit_percent`, drawn only when below 100; a
+/// cutting hit may then sever the target's head, killing it, or a limb, taking it out of
+/// the fight alive (`severed_part`); the target dies at 0 HP, gives up at its surrender
+/// threshold, or else may be stunned with `stun_chance`, drawn only above 0, staying
+/// down for `StunRules::ticks`.
 fn cast_spells(arena: &mut Arena) {
     for i in cast_order(arena) {
         let caster = &arena.fighters[i];
@@ -408,12 +497,26 @@ fn cast_spells(arena: &mut Arena) {
             damage: hp_before - defender.hp,
             missed,
         });
+        let damage = hp_before - defender.hp;
+        let severed = if kind == DamageKind::Cutting && !missed {
+            severed_part(&mut arena.rng, damage, defender, &arena.cut)
+        } else {
+            None
+        };
+        if let Some(part) = severed {
+            defender.severed = Some(part);
+            defender.action = Action::Wait;
+            if part == Location::Head {
+                defender.hp = 0;
+                defender.surrendered = false;
+            }
+        }
         let died = !defender.is_alive();
         let surrendered = defender.surrendered;
-        let chance = if died || surrendered {
+        let chance = if died || surrendered || severed.is_some() {
             0
         } else {
-            stun_chance(hp_before - defender.hp, kind, defender, &arena.stun)
+            stun_chance(damage, kind, defender, &arena.stun)
         };
         let stunned = chance > 0 && arena.rng.random_range(0..10_000) < chance;
         if stunned {
@@ -422,6 +525,12 @@ fn cast_spells(arena: &mut Arena) {
             defender.action = Action::Wait;
         }
         arena.log.push(cast);
+        if let Some(part) = severed {
+            arena.log.push(event(EventKind::Sever {
+                fighter: target,
+                part,
+            }));
+        }
         if died {
             arena.log.push(event(EventKind::Death { fighter: target }));
         } else if surrendered {
@@ -447,14 +556,15 @@ fn move_fighters(arena: &mut Arena) {
     }
 }
 
-/// Pushes overlapping fighters still fighting apart, each by half the overlap.
+/// Pushes overlapping fighters still fighting apart, each by half the overlap; a fighter
+/// down stays where it lies and the one standing takes the whole push.
 // ponytail: one pass in index order, a crowded melee may keep small overlaps; iterate if visible.
 fn separate(arena: &mut Arena) {
     let fighters = &mut arena.fighters;
     for i in 0..fighters.len() {
         for j in i + 1..fighters.len() {
             let (a, b) = (&fighters[i], &fighters[j]);
-            if !a.is_fighting() || !b.is_fighting() {
+            if !a.is_fighting() || !b.is_fighting() || !a.is_standing() && !b.is_standing() {
                 continue;
             }
             let offset = Vec2::new(b.position.x - a.position.x, b.position.y - a.position.y);
@@ -469,11 +579,16 @@ fn separate(arena: &mut Arena) {
             } else {
                 Vec2::new(1.0, 0.0)
             };
-            let half = overlap / 2.0;
-            fighters[i].position.x -= normal.x * half;
-            fighters[i].position.y -= normal.y * half;
-            fighters[j].position.x += normal.x * half;
-            fighters[j].position.y += normal.y * half;
+            // A fighter down does not move: the one standing takes the whole push.
+            let (push_a, push_b) = match (a.is_standing(), b.is_standing()) {
+                (true, false) => (overlap, 0.0),
+                (false, true) => (0.0, overlap),
+                _ => (overlap / 2.0, overlap / 2.0),
+            };
+            fighters[i].position.x -= normal.x * push_a;
+            fighters[i].position.y -= normal.y * push_a;
+            fighters[j].position.x += normal.x * push_b;
+            fighters[j].position.y += normal.y * push_b;
         }
     }
 }
@@ -587,6 +702,25 @@ mod tests {
         let (a, b) = (arena.fighters[0].position, arena.fighters[1].position);
         let distance = Vec2::new(b.x - a.x, b.y - a.y).length();
         assert!(distance >= 2.0 * RADIUS - 1e-9, "{distance}");
+    }
+
+    #[test]
+    fn a_fighter_walking_into_one_down_is_pushed_back_alone() {
+        let mut arena = Arena::new(
+            20.0,
+            20.0,
+            vec![fighter(0, 5.0, 5.0), fighter(1, 6.5, 5.0)],
+            0,
+        );
+        arena.fighters[1].stunned_ticks = 1_000;
+        play(
+            &mut arena,
+            &[Action::Move(Vec2::new(1.0, 0.0)), Action::Wait],
+            60,
+        );
+        let (a, b) = (arena.fighters[0].position, arena.fighters[1].position);
+        assert_eq!(b, Vec2::new(6.5, 5.0));
+        assert!(b.x - a.x >= 2.0 * RADIUS - 1e-9, "{}", b.x - a.x);
     }
 
     fn stats(
@@ -763,8 +897,8 @@ mod tests {
     }
 
     const STUN: StunRules = StunRules {
-        blunt_percent: 5,
-        cutting_percent: 1,
+        blunt_hundredths: 500,
+        cutting_hundredths: 167,
         head_injury_percent: 50,
         ticks: 60,
         rise_percent_least_determined: 30,
@@ -781,7 +915,8 @@ mod tests {
         let chance = |damage, kind, target: &Fighter| stun_chance(damage, kind, target, &STUN);
         assert_eq!(chance(10, DamageKind::Blunt, &target), 500);
         assert_eq!(chance(20, DamageKind::Blunt, &target), 1000);
-        assert_eq!(chance(20, DamageKind::Cutting, &target), 200);
+        // A third of the blunt chance.
+        assert_eq!(chance(20, DamageKind::Cutting, &target), 334);
         assert_eq!(chance(20, DamageKind::Neutral, &target), 0);
         assert_eq!(chance(1000, DamageKind::Blunt, &target), 10_000);
         let head = Injury {
@@ -816,7 +951,7 @@ mod tests {
     fn stunning_duel(rise_percent: u32) -> Arena {
         let mut arena = duel(0.5);
         arena.stun = StunRules {
-            blunt_percent: 10_000,
+            blunt_hundredths: 10_000,
             rise_percent_least_determined: rise_percent,
             rise_percent_most_determined: rise_percent,
             ..STUN
@@ -868,6 +1003,179 @@ mod tests {
         let report = crate::log::Report::new(&arena);
         assert_eq!(report.winner, Some(FighterId(0)));
         assert!(report.fighters[1].knocked_out && report.fighters[1].stuns == 1);
+    }
+
+    const CUT: CutRules = CutRules {
+        limb_hundredths: 20,
+        head_hundredths: 5,
+        fatal_head_percent: 30,
+        arm_weight: 1,
+        leg_weight: 1,
+    };
+
+    /// `duel(0.5)` where fighter 0 strikes with a cutting weapon, severing by `cut`.
+    fn cutting_duel(cut: CutRules) -> Arena {
+        let mut arena = duel(0.5);
+        arena.fighters[0].spells[0].damage_kind = DamageKind::Cutting;
+        arena.cut = cut;
+        arena
+    }
+
+    #[test]
+    fn a_fatal_cut_may_behead_and_a_lighter_one_sever_a_limb() {
+        let mut rng = ChaCha8Rng::seed_from_u64(3);
+        let mut target = fighter(1, 0.0, 0.0);
+        let sure = CutRules {
+            limb_hundredths: 10_000,
+            fatal_head_percent: 100,
+            ..CUT
+        };
+        // Standing after the hit: the limb, never the head without head_hundredths.
+        let limb = severed_part(
+            &mut rng,
+            10,
+            &target,
+            &CutRules {
+                head_hundredths: 0,
+                ..sure
+            },
+        );
+        assert!(matches!(limb, Some(Location::Arm(_) | Location::Leg(_))));
+        // Gave up: no limb is cut off a fighter out of the fight.
+        target.surrendered = true;
+        assert_eq!(
+            severed_part(
+                &mut rng,
+                10,
+                &target,
+                &CutRules {
+                    head_hundredths: 0,
+                    ..sure
+                }
+            ),
+            None
+        );
+        // Brought to 0 HP: the head, by fatal_head_percent.
+        target.hp = 0;
+        assert_eq!(
+            severed_part(&mut rng, 10, &target, &sure),
+            Some(Location::Head)
+        );
+        let never = CutRules {
+            fatal_head_percent: 0,
+            ..sure
+        };
+        assert_eq!(severed_part(&mut rng, 10, &target, &never), None);
+        let beheaded = (0..10_000)
+            .filter(|_| severed_part(&mut rng, 10, &target, &CUT).is_some())
+            .count();
+        assert!(beheaded.abs_diff(3_000) < 150, "{beheaded}");
+        // Standing, 10 % of the HP: 0.05 % for the head, then 0.2 % for a limb.
+        let mut target = fighter(1, 0.0, 0.0);
+        target.hp = 90;
+        let cut = (0..100_000)
+            .filter(|_| severed_part(&mut rng, 10, &target, &CUT).is_some())
+            .count();
+        assert!(cut.abs_diff(250) < 60, "{cut}");
+    }
+
+    #[test]
+    fn arms_and_legs_are_severed_by_their_weights() {
+        let mut rng = ChaCha8Rng::seed_from_u64(4);
+        let arms_only = CutRules {
+            leg_weight: 0,
+            ..CUT
+        };
+        for _ in 0..100 {
+            assert!(matches!(
+                severed_limb(&mut rng, &arms_only),
+                Location::Arm(_)
+            ));
+        }
+        let left = (0..1000)
+            .filter(|_| {
+                matches!(
+                    severed_limb(&mut rng, &CUT),
+                    Location::Arm(Side::Left) | Location::Leg(Side::Left)
+                )
+            })
+            .count();
+        assert!(left.abs_diff(500) < 60, "{left}");
+    }
+
+    #[test]
+    fn a_fighter_that_lost_a_limb_is_out_alive_and_never_hit_again() {
+        let mut arena = cutting_duel(CutRules {
+            limb_hundredths: 10_000,
+            head_hundredths: 0,
+            ..CUT
+        });
+        play(&mut arena, &[HIT, HIT_BACK], 1);
+        let out = &arena.fighters[1];
+        assert!(matches!(
+            out.severed,
+            Some(Location::Arm(_) | Location::Leg(_))
+        ));
+        assert!(out.is_alive() && !out.is_fighting() && !out.surrendered);
+        assert_eq!(out.hp, 100 - HIT_DAMAGE);
+        assert!(arena.is_over());
+        assert!(matches!(
+            arena.log.last().map(|e| e.kind),
+            Some(EventKind::Sever { fighter: FighterId(1), part }) if Some(part) == out.severed
+        ));
+        // Not a single stun: the cut took it out first.
+        assert_eq!(out.stuns, 0);
+        let report = crate::log::Report::new(&arena);
+        assert_eq!(report.winner, Some(FighterId(0)));
+        assert_eq!(report.fighters[1].severed, out.severed);
+        assert!(crate::log::log_text(&arena).contains("fighter 1 loses its "));
+    }
+
+    #[test]
+    fn a_beheading_kills_even_a_light_hit() {
+        let mut arena = cutting_duel(CutRules {
+            head_hundredths: 10_000,
+            ..CUT
+        });
+        // A threshold the hit crosses: the beheaded did not give up, it died.
+        arena.fighters[1].surrender_hp = 95;
+        play(&mut arena, &[HIT, Action::Wait], 1);
+        let dead = &arena.fighters[1];
+        assert_eq!((dead.hp, dead.severed), (0, Some(Location::Head)));
+        assert!(!dead.surrendered);
+        let kinds: Vec<EventKind> = arena.log.iter().map(|e| e.kind).collect();
+        assert_eq!(
+            kinds[1..],
+            [
+                EventKind::Sever {
+                    fighter: FighterId(1),
+                    part: Location::Head
+                },
+                EventKind::Death {
+                    fighter: FighterId(1)
+                },
+            ]
+        );
+        assert!(crate::log::log_text(&arena).contains("fighter 1 is beheaded"));
+    }
+
+    #[test]
+    fn only_cutting_hits_sever() {
+        let sure = CutRules {
+            limb_hundredths: 10_000,
+            head_hundredths: 10_000,
+            ..CUT
+        };
+        // The test spell is blunt.
+        let mut arena = duel(0.5);
+        arena.cut = sure;
+        play(&mut arena, &[HIT, Action::Wait], 150);
+        assert_eq!(arena.fighters[1].severed, None);
+        // Without cut rules, a cutting hit severs nothing either.
+        let mut arena = cutting_duel(CutRules::NEVER);
+        play(&mut arena, &[HIT, Action::Wait], 150);
+        assert_eq!(arena.fighters[1].severed, None);
+        assert_eq!(arena.fighters[1].hp, 100 - 5 * HIT_DAMAGE);
     }
 
     #[test]

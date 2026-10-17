@@ -9,6 +9,7 @@ use lanista_core::combat::{self, Arena};
 use lanista_core::design_data::DesignData;
 use lanista_core::duel::{MAX_TICKS, random_duel, utility_ais};
 use lanista_core::fighter::FighterId;
+use lanista_core::fighter::injury::Location;
 use lanista_core::log::EventKind;
 use macroquad::prelude::*;
 use reesch::{
@@ -273,6 +274,10 @@ impl CombatScreen {
         let reasons: Vec<String> = [
             out("abandon", |f| f.surrendered),
             out("K.-O.", |f| f.knocked_out),
+            out("décapité", |f| f.severed == Some(Location::Head)),
+            out("membre tranché", |f| {
+                f.severed.is_some_and(|part| part != Location::Head)
+            }),
         ]
         .into_iter()
         .flatten()
@@ -603,6 +608,21 @@ mod tests {
         assert_eq!(
             screen.result(),
             "Vainqueur : combattant 1 (K.-O. : combattant 0)"
+        );
+    }
+
+    /// In the standard duel of seed 62, fighter 1 loses a leg: it lies down, alive.
+    #[test]
+    fn a_fighter_that_lost_a_limb_lies_down_alive() {
+        let mut screen = screen(62);
+        while screen.running() {
+            screen.advance(1.0 / 60.0);
+        }
+        assert_eq!(screen.looks[1].pose, Pose::Down);
+        assert!(screen.looks.iter().all(|look| look.dead_for.is_none()));
+        assert_eq!(
+            screen.result(),
+            "Vainqueur : combattant 0 (membre tranché : combattant 1)"
         );
     }
 

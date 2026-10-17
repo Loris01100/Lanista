@@ -1,19 +1,22 @@
 //! The statistical model: resolves a fight between rival fighters without playing it.
 //! A logistic regression gives the winner, probability tables how the fight ends
-//! (time limit, knock-out, death or surrender of the loser, stuns, spectacular hits).
+//! (time limit, knock-out, lost limb, beheading, death or surrender of the loser,
+//! stuns, spectacular hits).
 //! The `calibrate` tool fits it on thousands of real duels and writes
 //! `data/stat_model.ron`.
 //!
 //! Injuries need no table: in both modes they are drawn after the fight from the
-//! fighter's form, or follow a fatal blow or a stun (`CareerFighter::after_fight`).
+//! fighter's form, or follow a fatal blow, a lost limb or a stun
+//! (`CareerFighter::after_fight`).
 
 use rand::{Rng, RngExt};
 use serde::{Deserialize, Serialize};
 
 use crate::ai::fear;
-use crate::combat::Arena;
+use crate::combat::{Arena, CutRules, severed_limb};
 use crate::duel::STATS;
 use crate::fighter::fame::{FameRules, FightOutcome, FightResult};
+use crate::fighter::injury::Location;
 use crate::fighter::personality::Personality;
 use crate::fighter::{Fighter, FighterId};
 
@@ -33,8 +36,13 @@ pub struct StatModel {
     pub unfinished: Vec<Vec<f64>>,
     /// Chance the loser of a finished fight was knocked out, by the winner's class.
     pub knocked_out: Vec<f64>,
-    /// Chance the loser of a finished fight not knocked out dies rather than gives up,
-    /// by band of determination: the first band starts at 0, the last ends at 100.
+    /// Chance the loser of a finished fight lost a limb, by the winner's class.
+    pub lost_limb: Vec<f64>,
+    /// Chance the loser of a finished fight was beheaded, by the winner's class.
+    pub beheaded: Vec<f64>,
+    /// Chance the loser of a finished fight neither knocked out nor cut (limb or head)
+    /// falls to 0 HP rather than gives up, by band of determination: the first band
+    /// starts at 0, the last ends at 100.
     pub death: Vec<f64>,
     /// Chance a fighter not knocked out was stunned in the fight, by its opponent's class.
     pub stunned: Vec<f64>,
@@ -83,6 +91,8 @@ pub struct Ending {
     pub stunned: bool,
     /// Lost by not getting up after a stun.
     pub knocked_out: bool,
+    /// What a cutting hit severed: the head (`died` too) or a limb (lost, alive).
+    pub severed: Option<Location>,
     pub spectacular_hits: u32,
 }
 
@@ -97,6 +107,7 @@ impl Ending {
             died: fighter.is_some_and(|f| !f.is_alive()),
             stunned: fighter.is_some_and(|f| f.stuns > 0),
             knocked_out: fighter.is_some_and(|f| f.knocked_out),
+            severed: fighter.and_then(|f| f.severed),
             spectacular_hits: outcome.spectacular_hits,
         }
     }
@@ -199,6 +210,8 @@ impl StatModel {
             winner: Winner::from_weights(&[]),
             unfinished: Vec::new(),
             knocked_out: Vec::new(),
+            lost_limb: Vec::new(),
+            beheaded: Vec::new(),
             death: vec![0.0],
             stunned: Vec::new(),
             spectacular_hits: SpectacularHits {
@@ -228,6 +241,20 @@ impl StatModel {
         by_class(&self.knocked_out, winner)
     }
 
+    /// Chance that the loser of a finished fight won by `winner` lost a limb; 0 for a
+    /// class the model does not know.
+    #[must_use]
+    pub fn lost_limb_chance(&self, winner: &Fighter) -> f64 {
+        by_class(&self.lost_limb, winner)
+    }
+
+    /// Chance that the loser of a finished fight won by `winner` was beheaded; 0 for a
+    /// class the model does not know.
+    #[must_use]
+    pub fn beheaded_chance(&self, winner: &Fighter) -> f64 {
+        by_class(&self.beheaded, winner)
+    }
+
     /// Chance that a fighter not knocked out was stunned by `opponent`; 0 for a class
     /// the model does not know.
     #[must_use]
@@ -235,8 +262,8 @@ impl StatModel {
         by_class(&self.stunned, opponent)
     }
 
-    /// Chance that `loser`, beaten in a finished fight and not knocked out, dies rather
-    /// than gives up.
+    /// Chance that `loser`, beaten in a finished fight, neither knocked out nor cut,
+    /// falls to 0 HP rather than gives up.
     #[must_use]
     pub fn death_chance(&self, loser: &Fighter) -> f64 {
         let determination = loser.condition.personality.determination.value();
@@ -248,8 +275,15 @@ impl StatModel {
             .unwrap_or(0.0)
     }
 
-    /// The fight between `a` and `b`, as the model draws it: what each side gets.
-    pub fn resolve<R: Rng + ?Sized>(&self, a: &Fighter, b: &Fighter, rng: &mut R) -> [Ending; 2] {
+    /// The fight between `a` and `b`, as the model draws it: what each side gets. A
+    /// limb the loser lost is drawn by `cut` (see [`severed_limb`]).
+    pub fn resolve<R: Rng + ?Sized>(
+        &self,
+        a: &Fighter,
+        b: &Fighter,
+        cut: &CutRules,
+        rng: &mut R,
+    ) -> [Ending; 2] {
         let hits = &self.spectacular_hits;
         if rng.random::<f64>() < self.unfinished_chance(a, b) {
             let side = |rng: &mut R, opponent| Ending {
@@ -257,23 +291,40 @@ impl StatModel {
                 died: false,
                 stunned: rng.random::<f64>() < self.stunned_chance(opponent),
                 knocked_out: false,
+                severed: None,
                 spectacular_hits: draw(rng, &hits.unfinished),
             };
             return [side(rng, b), side(rng, a)];
         }
         let a_wins = rng.random::<f64>() < self.winner.chance(a, b);
         let (first, second) = if a_wins { (a, b) } else { (b, a) };
-        let knocked_out = rng.random::<f64>() < self.knocked_out_chance(first);
-        let died = !knocked_out && rng.random::<f64>() < self.death_chance(second);
+        // One draw for the loser's way out: knocked out, a limb lost, beheaded, or else.
+        let out = rng.random::<f64>();
+        let knocked_out_below = self.knocked_out_chance(first);
+        let lost_limb_below = knocked_out_below + self.lost_limb_chance(first);
+        let beheaded_below = lost_limb_below + self.beheaded_chance(first);
+        let knocked_out = out < knocked_out_below;
+        let severed = if knocked_out {
+            None
+        } else if out < lost_limb_below {
+            Some(severed_limb(rng, cut))
+        } else if out < beheaded_below {
+            Some(Location::Head)
+        } else {
+            None
+        };
+        let died = severed == Some(Location::Head)
+            || !knocked_out && severed.is_none() && rng.random::<f64>() < self.death_chance(second);
         let winner = Ending {
             result: FightResult::Won,
             died: false,
             stunned: rng.random::<f64>() < self.stunned_chance(second),
             knocked_out: false,
+            severed: None,
             spectacular_hits: draw(rng, &hits.won),
         };
         let loser = Ending {
-            result: if died || knocked_out {
+            result: if died || knocked_out || severed.is_some() {
                 FightResult::Lost
             } else {
                 FightResult::GaveUp
@@ -281,6 +332,7 @@ impl StatModel {
             died,
             stunned: knocked_out || rng.random::<f64>() < self.stunned_chance(first),
             knocked_out,
+            severed,
             spectacular_hits: draw(rng, &hits.lost),
         };
         if a_wins {
@@ -315,6 +367,10 @@ impl StatModel {
             Some("unfinished")
         } else if !self.knocked_out.iter().all(chance) {
             Some("knocked_out")
+        } else if !self.lost_limb.iter().all(chance) {
+            Some("lost_limb")
+        } else if !self.beheaded.iter().all(chance) {
+            Some("beheaded")
         } else if !table(&self.death) {
             Some("death")
         } else if !self.stunned.iter().all(chance) {
@@ -418,7 +474,7 @@ mod tests {
         let f = fighter(&data, 0, STATS);
         let mut rng = ChaCha8Rng::seed_from_u64(1);
         for _ in 0..20 {
-            let endings = model.resolve(&f, &f, &mut rng);
+            let endings = model.resolve(&f, &f, &data.combat.cut, &mut rng);
             assert_eq!(
                 endings
                     .iter()
@@ -428,9 +484,10 @@ mod tests {
             );
             assert!(endings.iter().any(|e| e.result == FightResult::GaveUp));
             assert!(
-                endings
-                    .iter()
-                    .all(|e| !e.died && !e.stunned && e.spectacular_hits == 0)
+                endings.iter().all(|e| !e.died
+                    && !e.stunned
+                    && e.severed.is_none()
+                    && e.spectacular_hits == 0)
             );
         }
     }
@@ -444,8 +501,9 @@ mod tests {
     }
 
     proptest! {
-        /// One winner, never killed nor knocked out, or a time limit for both; a
-        /// knocked-out loser was stunned and lives; the same seed gives the same fight.
+        /// One winner, never killed, knocked out nor cut, or a time limit for both; a
+        /// knocked-out loser was stunned and lives; a beheaded one is dead, one that lost
+        /// a limb lives; the same seed gives the same fight.
         #[test]
         fn a_modelled_fight_ends_consistently(
             seed: u64,
@@ -458,18 +516,20 @@ mod tests {
             let model = &data.stat_model;
             let first = fighter(&data, a, STATS);
             let second = determined(fighter(&data, b, crate::fighter::Stats { hp, ..STATS }), determination);
-            let endings = model.resolve(&first, &second, &mut ChaCha8Rng::seed_from_u64(seed));
-            prop_assert_eq!(endings, model.resolve(&first, &second, &mut ChaCha8Rng::seed_from_u64(seed)));
+            let cut = &data.combat.cut;
+            let endings = model.resolve(&first, &second, cut, &mut ChaCha8Rng::seed_from_u64(seed));
+            prop_assert_eq!(endings, model.resolve(&first, &second, cut, &mut ChaCha8Rng::seed_from_u64(seed)));
             let winners = endings.iter().filter(|e| e.result == FightResult::Won).count();
             if winners == 0 {
-                prop_assert!(endings.iter().all(|e| e.result == FightResult::Unfinished && !e.died && !e.knocked_out));
+                prop_assert!(endings.iter().all(|e| e.result == FightResult::Unfinished && !e.died && !e.knocked_out && e.severed.is_none()));
             } else {
                 prop_assert_eq!(winners, 1);
                 let loser = endings.iter().find(|e| e.result != FightResult::Won).unwrap();
-                prop_assert_eq!(loser.died || loser.knocked_out, loser.result == FightResult::Lost);
+                prop_assert_eq!(loser.died || loser.knocked_out || loser.severed.is_some(), loser.result == FightResult::Lost);
                 prop_assert!(!(loser.died && loser.knocked_out));
-                prop_assert!(!loser.knocked_out || loser.stunned);
-                prop_assert!(endings.iter().all(|e| e.result != FightResult::Won || !e.died && !e.knocked_out));
+                prop_assert!(!loser.knocked_out || loser.stunned && loser.severed.is_none());
+                prop_assert_eq!(loser.severed == Some(Location::Head), loser.died && loser.severed.is_some());
+                prop_assert!(endings.iter().all(|e| e.result != FightResult::Won || !e.died && !e.knocked_out && e.severed.is_none()));
             }
         }
     }

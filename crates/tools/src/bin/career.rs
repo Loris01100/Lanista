@@ -8,6 +8,7 @@ use lanista_core::design_data::DesignData;
 use lanista_core::fighter::Stats;
 use lanista_core::fighter::career::{Activity, CareerFighter, FightSummary, Status, WeekReport};
 use lanista_core::fighter::fame::FightResult;
+use lanista_core::fighter::injury::Location;
 use lanista_core::fighter::personality::Personality;
 use lanista_core::state::{Decisions, GameState, next_week};
 use tools::{one_decimal, options};
@@ -221,9 +222,13 @@ fn week_text(
 }
 
 fn fight_text(fight: &FightSummary, data: &DesignData) -> String {
-    let knocked_out = fight.report.fighters.first().is_some_and(|f| f.knocked_out);
+    let mine = fight.report.fighters.first();
+    let knocked_out = mine.is_some_and(|f| f.knocked_out);
+    let severed = mine.and_then(|f| f.severed);
     let result = match (fight.result, fight.died) {
+        (_, true) if severed == Some(Location::Head) => "beheaded",
         (_, true) => "killed",
+        (FightResult::Lost, _) if severed.is_some() => "lost a limb",
         (FightResult::Lost, _) if knocked_out => "knocked out",
         (FightResult::Won, _) => "won",
         (FightResult::Lost, _) => "lost",

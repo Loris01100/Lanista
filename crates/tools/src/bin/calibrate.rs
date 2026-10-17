@@ -6,6 +6,7 @@ use std::process::ExitCode;
 
 use lanista_core::design_data::{DesignData, STAT_MODEL_FILE};
 use lanista_core::fighter::fame::FightResult;
+use lanista_core::fighter::injury::Location;
 use rayon::prelude::*;
 use tools::calibration::{Sample, fit, record};
 use tools::{one_decimal, option};
@@ -46,6 +47,12 @@ fn main() -> ExitCode {
             .any(|d| d.died && d.result != FightResult::Won)
     });
     let knock_outs = count(&|s| s.sides.iter().any(|d| d.knocked_out));
+    let beheadings = count(&|s| s.sides.iter().any(|d| d.severed == Some(Location::Head)));
+    let lost_limbs = count(&|s| {
+        s.sides
+            .iter()
+            .any(|d| d.severed.is_some_and(|part| part != Location::Head))
+    });
     let stuns = count(&|s| s.sides.iter().any(|d| d.stunned));
     let foreseen = count(&|s| {
         let chance = model.winner.chance(&s.fighters[0], &s.fighters[1]);
@@ -63,9 +70,11 @@ fn main() -> ExitCode {
         one_decimal(deaths * 100, fights),
     );
     println!(
-        "  a stun {} %, a knock-out {} %",
+        "  a stun {} %, a knock-out {} %, a lost limb {} %, a beheading {} %",
         one_decimal(stuns * 100, fights),
         one_decimal(knock_outs * 100, fights),
+        one_decimal(lost_limbs * 100, fights),
+        one_decimal(beheadings * 100, fights),
     );
     println!(
         "  the regression foresees the winner of {} % of the fights with one",
@@ -74,6 +83,8 @@ fn main() -> ExitCode {
     println!("winner weights: {:?}", model.winner);
     println!("unfinished by classes: {:?}", model.unfinished);
     println!("knocked out by the winner's class: {:?}", model.knocked_out);
+    println!("lost limb by the winner's class: {:?}", model.lost_limb);
+    println!("beheaded by the winner's class: {:?}", model.beheaded);
     println!("death by determination: {:?}", model.death);
     println!("stunned by the opponent's class: {:?}", model.stunned);
 

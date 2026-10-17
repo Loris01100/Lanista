@@ -17,7 +17,7 @@ use crate::combat::Vec2;
 use crate::design_data::{ClassData, Cost, SpellData};
 use crate::fighter::form::Form;
 use crate::fighter::illness::Illness;
-use crate::fighter::injury::Injury;
+use crate::fighter::injury::{Injury, Location};
 use crate::fighter::morale::Morale;
 use crate::fighter::personality::Personality;
 
@@ -178,6 +178,8 @@ pub struct Fighter {
     pub stuns: u32,
     /// Did not get up after a stun: out of the fight, alive.
     pub knocked_out: bool,
+    /// What a cutting hit severed: its head, dead, or a limb, out of the fight alive.
+    pub severed: Option<Location>,
     /// The fighter's state outside the fight, read by the AI so that an injured or
     /// fearful fighter fights differently. `stats` already include its effects.
     pub condition: Condition,
@@ -233,6 +235,7 @@ impl Fighter {
             stunned_ticks: 0,
             stuns: 0,
             knocked_out: false,
+            severed: None,
             condition: Condition::default(),
         }
     }
@@ -242,10 +245,11 @@ impl Fighter {
         self.hp > 0
     }
 
-    /// Alive, has not given up and was not knocked out; maybe down for now.
+    /// Alive, has not given up, was not knocked out and has all its limbs; maybe down
+    /// for now.
     #[must_use]
     pub fn is_fighting(&self) -> bool {
-        self.is_alive() && !self.surrendered && !self.knocked_out
+        self.is_alive() && !self.surrendered && !self.knocked_out && self.severed.is_none()
     }
 
     /// Fighting and not down: acts, and can be hit.

@@ -13,8 +13,8 @@ use crate::fighter::fame::{Fame, FightOutcome, FightResult};
 use crate::fighter::form::{Form, FormEvent};
 use crate::fighter::illness::{Illness, IllnessLevel, roll_illness};
 use crate::fighter::injury::{
-    Injury, Severity, Side, fatal_blow_wound, heal_week, injured_stats, roll_injury,
-    spare_after_effect, stun_wound,
+    Injury, Location, Severity, Side, fatal_blow_wound, heal_week, injured_stats, roll_injury,
+    severed_limb_wound, spare_after_effect, stun_wound,
 };
 use crate::fighter::morale::{Morale, MoraleEvent};
 use crate::fighter::personality::Personality;
@@ -318,8 +318,9 @@ impl CareerFighter {
         )
     }
 
-    /// The fame, record and death `side` brings: a fighter brought to 0 HP survives
-    /// with a chance of `InjuryRules::fatal_blow_survival`, and a severe wound; a
+    /// The fame, record and death `side` brings: a beheaded fighter dies; one brought
+    /// to 0 HP otherwise survives with a chance of `InjuryRules::fatal_blow_survival`,
+    /// and a severe wound; one that lost a limb keeps it lost (a permanent injury); a
     /// stunned one keeps a severe head wound with `InjuryRules::stun_wound_chance`. The
     /// wound is returned with the outcome and the fame change, not yet taken.
     fn take_side<R: Rng + ?Sized>(
@@ -338,12 +339,16 @@ impl CareerFighter {
         self.fame = self.fame.changed_by(fame_change);
         self.record.add(outcome.result);
         let mut wound = None;
-        if side.died {
+        if side.severed == Some(Location::Head) {
+            self.status = Status::Dead;
+        } else if side.died {
             if rng.random_bool(rules.injury.fatal_blow_survival) {
                 wound = Some(fatal_blow_wound(rng, &rules.injury));
             } else {
                 self.status = Status::Dead;
             }
+        } else if let Some(limb) = side.severed {
+            wound = Some(severed_limb_wound(limb));
         } else if side.stunned && rng.random_bool(rules.injury.stun_wound_chance) {
             wound = Some(stun_wound(rng, &rules.injury));
         }
@@ -395,6 +400,7 @@ impl CareerFighter {
         let [mine, theirs] = data.stat_model.resolve(
             &self.combat_fighter(FighterId(0), data, origin),
             &opponent.combat_fighter(FighterId(1), data, origin),
+            &data.combat.cut,
             rng,
         );
         let stronger = opponent.stronger_than(self, rules);
@@ -719,7 +725,6 @@ struct Taken {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::fighter::injury::Location;
     use crate::staff::Coaching;
     use rand::SeedableRng;
     use rand_chacha::ChaCha8Rng;
@@ -984,6 +989,7 @@ mod tests {
             died: true,
             stunned: false,
             knocked_out: false,
+            severed: None,
             spectacular_hits: 0,
         };
         let mut rng = ChaCha8Rng::seed_from_u64(1);
@@ -1012,6 +1018,43 @@ mod tests {
     }
 
     #[test]
+    fn a_beheaded_fighter_dies_and_a_severed_limb_stays_lost() {
+        let mut data = data();
+        let cut = |severed| Ending {
+            result: FightResult::Lost,
+            died: severed == Location::Head,
+            stunned: true,
+            knocked_out: false,
+            severed: Some(severed),
+            spectacular_hits: 0,
+        };
+        let mut rng = ChaCha8Rng::seed_from_u64(1);
+        let rules = &mut data.fighter;
+        // Even a fighter sure to survive a fatal blow, or keep a stun's wound.
+        rules.injury.fatal_blow_survival = 1.0;
+        rules.injury.stun_wound_chance = 1.0;
+        let mut beheaded = fighter(1);
+        let taken = beheaded.take_side(cut(Location::Head), false, &mut rng, rules);
+        assert_eq!((beheaded.status, taken.wound), (Status::Dead, None));
+        let arm = Location::Arm(Side::Left);
+        let mut maimed = fighter(1);
+        let taken = maimed.take_side(cut(arm), false, &mut rng, rules);
+        assert_eq!(maimed.status, Status::Active);
+        assert_eq!(taken.wound, Some(severed_limb_wound(arm)));
+        // A lost limb is a defeat, not a surrender: no fame lost.
+        assert_eq!(taken.fame_change, 0);
+        // No doctor gives a limb back.
+        let medicine = Medicine {
+            after_effect_spared_percent: 100,
+            ..Medicine::default()
+        };
+        let (injury, spared) =
+            maimed.after_fight(taken, FormEvent::Fight, medicine, &mut rng, rules);
+        assert_eq!((injury, spared), (Some(severed_limb_wound(arm)), false));
+        assert!(maimed.injuries[0].is_permanent());
+    }
+
+    #[test]
     fn a_stun_may_leave_a_severe_head_wound() {
         let mut data = data();
         let knocked_out = Ending {
@@ -1019,6 +1062,7 @@ mod tests {
             died: false,
             stunned: true,
             knocked_out: true,
+            severed: None,
             spectacular_hits: 0,
         };
         let mut rng = ChaCha8Rng::seed_from_u64(1);

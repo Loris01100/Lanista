@@ -2,8 +2,8 @@
 // ClassId(i) is the i-th class of this list.
 // reach: meters between the fighters' edges. power: % of the damage formula.
 // cooldown: ticks, 30 per second.
-// damage_kind: Blunt stuns more often than Cutting; Neutral (spells without an element
-// yet) never stuns. Cutting is meant to favor lost limbs and deaths too, not done yet.
+// damage_kind: Blunt stuns three times as often as Cutting, which may sever a limb or
+// the head instead (data/combat.ron); Neutral (spells without an element yet) does neither.
 [
     (
         name: "Mirmillon",

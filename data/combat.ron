@@ -10,18 +10,31 @@
         max_percent: 95,
     ),
     // A hit that neither kills nor makes its target give up may stun it: a chance in
-    // percent per tenth of the target's max HP the hit takes, by the spell's damage kind
-    // (Neutral never stuns), raised by head_injury_percent of it per head injury.
+    // hundredths of a percent per tenth of the target's max HP the hit takes, by the
+    // spell's damage kind (Cutting a third of Blunt, Neutral never), raised by
+    // head_injury_percent of it per head injury.
     // A stunned fighter stays down for `ticks` (30 per second), its opponent waiting,
     // then gets up with a chance from its determination, lower for each stun after the
     // first; if it does not, it is knocked out and loses, alive.
     stun: (
-        blunt_percent: 5,
-        cutting_percent: 1,
+        blunt_hundredths: 500,
+        cutting_hundredths: 167,
         head_injury_percent: 50,
         ticks: 60,
         rise_percent_least_determined: 30,
         rise_percent_most_determined: 90,
         rise_percent_lost_per_stun: 20,
+    ),
+    // A cutting hit that lands may sever: the head, killing, with head_hundredths per
+    // tenth of the target's max HP the hit takes, or with fatal_head_percent on a hit that
+    // brings it to 0 HP (no surviving that fatal blow); else, if the target still fights,
+    // a limb with limb_hundredths per tenth: out of the fight alive, with a permanent
+    // injury there. The limb is an arm or a leg by their weights, the side 50/50.
+    cut: (
+        limb_hundredths: 30,
+        head_hundredths: 5,
+        fatal_head_percent: 30,
+        arm_weight: 1,
+        leg_weight: 1,
     ),
 )
