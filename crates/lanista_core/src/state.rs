@@ -2563,17 +2563,19 @@ mod tests {
         // Every title changed hands, and the first ranks are not those of the first season.
         assert!(title_changes.iter().all(|&n| n > 0), "{title_changes:?}");
         assert_ne!(leaders[0], leaders[2]);
-        // The clubs replaced those who died or retired, and bought from one another.
+        // The clubs replaced those who died, retired or were released in the off-season.
+        // Fighters released at `release_age` are worth signing, so the clubs seldom buy
+        // from one another (none here).
         for (rival, before) in state.rivals.iter().zip(&start.rivals) {
             assert!(rival.fighters.len() > before.fighters.len());
         }
-        let sold = state
+        let released = state
             .rivals
             .iter()
             .flat_map(|r| &r.fighters)
-            .filter(|f| f.status == Status::Sold)
+            .filter(|f| f.status == Status::Released)
             .count();
-        assert!(sold > 0);
+        assert!(released > 0);
         // Three off-seasons of rookies, some signed by the clubs.
         let rookie_age = data.economy.market.rookie_age;
         let young = state

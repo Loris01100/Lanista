@@ -72,7 +72,7 @@
         price_per_loss: 10,
         // At the start of each off-season, a rival club releases its fighters this old
         // worth less than its average fighter.
-        release_age: 33,
+        release_age: 30,
         // A club counters an offer of at least this percentage of its asking price,
         // and refuses a lower one.
         counter_percent: 75,
