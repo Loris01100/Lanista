@@ -387,3 +387,9 @@ Ajouté après la vérification du jalon, sur les retours du jeu : un club compt
 - [x] `ort` ou `tract` pour l'inférence : `tract`, tranché en phase 0.
 - [x] Cadence de la logique et fréquence de décision de l'IA : 30 ticks par seconde, 5 décisions par seconde, retenus en phase 1 (à revoir si l'équilibrage l'exige).
 - [ ] Extraction du moteur dans son propre dépôt : à reconsidérer après la publication, pas avant.
+- [ ] Ouverture du code : le jeu sera gratuit, sans microtransactions, et son code open-source sur GitHub. Le dépôt dit encore le contraire (`LICENSE` « all rights reserved », « proprietary » dans AGENTS.md). Reste à décider et à faire :
+  - la licence du code : MIT/Apache-2.0 (réutilisable partout, même dans un jeu fermé) ou GPL-3.0 (les versions modifiées restent ouvertes) ;
+  - une licence à part pour les graphismes et les sons (par exemple CC BY-NC, ou tous droits réservés) ;
+  - mettre le dépôt d'accord : `LICENSE`, AGENTS.md, `license-file` dans `[workspace.package]`, et `deny.toml`, qui ne vérifie pas aujourd'hui la licence des crates du workspace grâce à `publish = false` (vérifier que les licences des dépendances sont compatibles, surtout avec une GPL) ;
+  - la langue des documents de conception, en français pour l'instant ;
+  - accueillir les contributeurs : README qui présente le jeu, CONTRIBUTING (règles de déterminisme, outils), modèles d'issues, et un AGENTS.md plus court qui renvoie le détail des phases ici.
