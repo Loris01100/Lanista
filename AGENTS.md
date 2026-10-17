@@ -79,7 +79,7 @@ Same seed must replay the same combat across Windows and Linux (cloud saves, rep
 
 ## Validation
 
-Before handing off code changes, run `cargo fmt --all --check`, `cargo clippy --workspace --all-targets -- -D warnings` and the relevant `cargo test`; run `cargo machete` and `cargo deny check` too when dependencies changed. Add dependencies with `cargo add`; roadmap versions are indicative. Prefer `try_from` over `as` for narrowing casts (pedantic flags `as`).
+Before handing off code changes, run `cargo fmt --all --check`, `cargo clippy --workspace --all-targets -- -D warnings` and the relevant `cargo test`; run `cargo machete` and `cargo deny check` too when dependencies changed. In Claude Code, hooks in `.claude/settings.json` run `cargo fmt --all` after each Rust file edit and the clippy command above before handing off (`.claude/hooks/`); the tests are not run by any hook. To bump the save format, follow the `save-version` skill (`.claude/skills/save-version/SKILL.md`). Add dependencies with `cargo add`; roadmap versions are indicative. Prefer `try_from` over `as` for narrowing casts (pedantic flags `as`).
 
 Tests: `proptest` for invariants (HP never above max, a combat always ends), `insta` snapshots for reference combats (a seed always produces the same log). Review snapshot changes with `cargo insta review` and commit the `.snap` files; CI sets `CI=true`, so a missing or changed snapshot fails.
 
