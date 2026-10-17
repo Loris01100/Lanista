@@ -224,6 +224,46 @@ impl Staff {
             Role::Recruiter => self.recruiter = level,
         }
     }
+
+    /// The trainer, `None` without one or with a level missing from `rules`.
+    #[must_use]
+    pub fn trainer<'a>(&self, rules: &'a StaffRules) -> Option<&'a TrainerRules> {
+        rules.trainer(self.trainer?)
+    }
+
+    /// The doctor, `None` without one or with a level missing from `rules`.
+    #[must_use]
+    pub fn doctor<'a>(&self, rules: &'a StaffRules) -> Option<&'a DoctorRules> {
+        rules.doctor(self.doctor?)
+    }
+
+    /// The recruiter, `None` without one or with a level missing from `rules`.
+    #[must_use]
+    pub fn recruiter<'a>(&self, rules: &'a StaffRules) -> Option<&'a RecruiterRules> {
+        rules.recruiter(self.recruiter?)
+    }
+
+    /// What the trainer and the doctor bring to the club's fighters' weeks.
+    #[must_use]
+    pub fn effects(&self, rules: &StaffRules) -> StaffEffects {
+        StaffEffects {
+            coaching: self.trainer(rules).map(|t| t.coaching).unwrap_or_default(),
+            medicine: self.doctor(rules).map(|d| d.medicine).unwrap_or_default(),
+        }
+    }
+
+    /// The price of a training session: the trainer's, `without` a trainer.
+    #[must_use]
+    pub fn training_cost(&self, rules: &StaffRules, without: u32) -> u32 {
+        self.trainer(rules).map_or(without, |t| t.training_cost)
+    }
+
+    /// Every post's weekly salary, in `Role::ALL` order, for the posts held.
+    pub fn salaries(&self, rules: &StaffRules) -> impl Iterator<Item = u32> {
+        Role::ALL
+            .into_iter()
+            .filter_map(|role| rules.salary(role, self.level(role)?))
+    }
 }
 
 /// A change of staff, made before the week.
@@ -306,5 +346,33 @@ mod tests {
         staff.set(Role::Doctor, Some(3));
         assert_eq!(Role::ALL.map(|r| staff.level(r)), [None, Some(3), None]);
         assert_eq!(StaffMove::Hire(Role::Recruiter, 2).role(), Role::Recruiter);
+    }
+
+    #[test]
+    fn the_staff_sets_salaries_effects_and_the_session_s_price() {
+        let coaching = Coaching {
+            progress_percent: 20,
+            form_spared: 1,
+        };
+        let rules = StaffRules {
+            trainers: vec![TrainerRules {
+                salary: 10,
+                training_cost: 7,
+                coaching,
+            }],
+            doctors: Vec::new(),
+            recruiters: Vec::new(),
+        };
+        let mut staff = Staff::default();
+        assert_eq!(staff.training_cost(&rules, 5), 5);
+        assert_eq!(staff.effects(&rules), StaffEffects::default());
+        assert_eq!(staff.salaries(&rules).count(), 0);
+        staff.trainer = Some(1);
+        // A doctor of a level not on offer is neither paid nor heard.
+        staff.doctor = Some(3);
+        assert_eq!(staff.training_cost(&rules, 5), 7);
+        assert_eq!(staff.effects(&rules).coaching, coaching);
+        assert_eq!(staff.effects(&rules).medicine, Medicine::default());
+        assert_eq!(staff.salaries(&rules).collect::<Vec<_>>(), [10]);
     }
 }

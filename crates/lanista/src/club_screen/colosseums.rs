@@ -9,7 +9,7 @@ use reesch::egui;
 use super::{ClubScreen, RANKS_SHOWN, View};
 use crate::texts::{
     arena_name, club_name, colosseum_name, condition_text, contender_name, profile_name,
-    record_text, rival_fighter_name,
+    record_text, rival_fighter_name, staff_text,
 };
 
 impl ClubScreen {
@@ -160,7 +160,7 @@ impl ClubScreen {
             .collect()
     }
 
-    /// A rival club: profile, money, the titles it holds, then its fighters in activity
+    /// A rival club: profile, money, staff, the titles it holds, then its fighters in activity
     /// with their standing in each colosseum.
     pub(super) fn rival_club(&mut self, ui: &mut egui::Ui, club: usize) {
         self.back_button(ui);
@@ -178,6 +178,7 @@ impl ClubScreen {
             rival.active(),
             data.world.roster.max
         ));
+        ui.label(staff_text(&rival.staff));
         for line in self.titles_of(club) {
             ui.colored_label(egui::Color32::GOLD, line);
         }

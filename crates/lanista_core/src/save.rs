@@ -9,12 +9,12 @@ use crate::state::GameState;
 
 /// Version written in new saves. Raise it with any change to the saved types,
 /// and add the migration from the previous version to [`MIGRATIONS`].
-pub const VERSION: u64 = 11;
+pub const VERSION: u64 = 12;
 
 /// `MIGRATIONS[i]` turns a version `i + 1` save into a version `i + 2` one,
 /// working on the JSON so the old types need not be kept.
 type Migration = fn(&mut Value, &DesignData);
-const MIGRATIONS: [Migration; 10] = [
+const MIGRATIONS: [Migration; 11] = [
     no_colosseums,
     title_since,
     no_challenges,
@@ -25,6 +25,7 @@ const MIGRATIONS: [Migration; 10] = [
     no_doctor_or_recruiter,
     accuracy_from_speed,
     free_agents_unranked,
+    no_rival_staff,
 ];
 const _: () = assert!(MIGRATIONS.len() as u64 == VERSION - 1);
 
@@ -185,6 +186,14 @@ fn accuracy_from_speed(save: &mut Value, _: &DesignData) {
 /// on the market and ranked nowhere, so it needs no change.
 fn free_agents_unranked(_: &mut Value, _: &DesignData) {}
 
+/// Version 12 gives the rival clubs a staff, no one hired yet.
+fn no_rival_staff(save: &mut Value, _: &DesignData) {
+    let staff = json!({ "trainer": null, "doctor": null, "recruiter": null });
+    for rival in save["state"]["rivals"].as_array_mut().into_iter().flatten() {
+        rival["staff"] = staff.clone();
+    }
+}
+
 fn speed_as_accuracy(fighter: &mut Value) {
     for stats in ["stats", "potential"] {
         if fighter[stats].is_object() {
@@ -313,12 +322,12 @@ mod tests {
     fn unknown_versions_are_refused() {
         let data = data();
         let save = to_json(&GameState::new(7, &data));
-        let newer = save.replacen("\"version\": 11", "\"version\": 12", 1);
+        let newer = save.replacen("\"version\": 12", "\"version\": 13", 1);
         assert!(matches!(
             from_json(&newer, &data),
-            Err(SaveError::Version(Some(12)))
+            Err(SaveError::Version(Some(13)))
         ));
-        let none = save.replacen("\"version\": 11", "\"versio\": 11", 1);
+        let none = save.replacen("\"version\": 12", "\"versio\": 12", 1);
         assert!(matches!(
             from_json(&none, &data),
             Err(SaveError::Version(None))

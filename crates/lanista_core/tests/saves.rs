@@ -7,6 +7,7 @@
 use std::path::PathBuf;
 
 use lanista_core::design_data::DesignData;
+use lanista_core::fighter::career::Status;
 use lanista_core::market::{Move, Target};
 use lanista_core::save::{VERSION, from_json, to_json};
 use lanista_core::staff::{Role, StaffMove};
@@ -85,20 +86,27 @@ fn keep_a_save_of_the_current_version() {
     let mut state = played(7, 2, &data);
     // Enough to keep fighting with the staff's salaries until it all happens.
     state.money += 5_000;
-    let hire = Decisions {
-        plans: Vec::new(),
-        moves: vec![
-            Move::Observe(Target::FreeAgent(0)),
-            Move::Sign(0),
-            Move::List(0),
-        ],
-        staff: vec![
-            StaffMove::Hire(Role::Trainer, 1),
-            StaffMove::Hire(Role::Doctor, 1),
-            StaffMove::Hire(Role::Recruiter, 1),
-        ],
+    // The first free agent on the market, signed whenever there is a place.
+    let hire = |state: &GameState| {
+        let agent = (0..state.free_agents.len())
+            .find(|&a| state.free_agents[a].status == Status::Active)
+            .unwrap_or(0);
+        Decisions {
+            plans: Vec::new(),
+            moves: vec![
+                Move::Observe(Target::FreeAgent(agent)),
+                Move::Sign(agent),
+                Move::List(0),
+            ],
+            staff: vec![
+                StaffMove::Hire(Role::Trainer, 1),
+                StaffMove::Hire(Role::Doctor, 1),
+                StaffMove::Hire(Role::Recruiter, 1),
+            ],
+        }
     };
-    next_week(&mut state, &hire, &data);
+    let week = hire(&state);
+    next_week(&mut state, &week, &data);
     while state.week <= 31
         || !state
             .fighters
@@ -110,7 +118,8 @@ fn keep_a_save_of_the_current_version() {
             state.week < 1000,
             "no fighter both hurt and ill with a challenge pending"
         );
-        next_week(&mut state, &hire, &data);
+        let week = hire(&state);
+        next_week(&mut state, &week, &data);
     }
     std::fs::create_dir_all(saves()).unwrap();
     std::fs::write(path, to_json(&state)).unwrap();

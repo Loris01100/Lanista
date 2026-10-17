@@ -274,6 +274,7 @@ Chaque club rival a un profil (prudent, agressif, marchand) qui règle ses seuil
 - Forme correcte : inscription au colisée où ses chances sont les meilleures, sinon entraînement.
 - Défis : en proposer à des adversaires d'Elo proche, accepter ceux du joueur si la chance de victoire estimée dépasse son seuil.
 - Marché : acheter si l'effectif est trop petit et le budget suffisant, libérer ou vendre les combattants âgés ou en déclin.
+- Personnel : engager le meilleur entraîneur puis le meilleur médecin dont il peut payer les salaires assez longtemps (plus ou moins selon son profil), et les garder tant qu'il peut encore les payer moitié moins longtemps. Leurs effets valent pour ses combattants comme pour ceux du joueur. Il n'engage pas de recruteur : un club rival connaît déjà la valeur de chaque combattant.
 
 ### Simulation en arrière-plan
 

@@ -890,12 +890,14 @@ mod tests {
     use lanista_core::fighter::FighterId;
     use lanista_core::log::Report;
     use lanista_core::market::Move;
-    use lanista_core::staff::{Role, Scouting, StaffMove};
+    use lanista_core::staff::{Role, Scouting, Staff, StaffMove};
     use rand_chacha::ChaCha8Rng;
     use rand_chacha::rand_core::SeedableRng;
 
     use super::*;
-    use crate::texts::{free_agent_name, outside_personality_text, potential_text, range_texts};
+    use crate::texts::{
+        free_agent_name, outside_personality_text, potential_text, range_texts, staff_text,
+    };
 
     fn screen(seed: u64) -> ClubScreen {
         let data = Rc::new(DesignData::load().unwrap());
@@ -1239,6 +1241,18 @@ mod tests {
                 "Ludus Gallicus, agressif : 10 combattants, argent 500",
                 "Ludus Dacicus, marchand : 10 combattants, argent 500",
             ]
+        );
+    }
+
+    #[test]
+    fn a_rival_club_s_staff_is_told() {
+        let mut staff = Staff::default();
+        assert_eq!(staff_text(&staff), "Personnel : aucun");
+        staff.trainer = Some(5);
+        staff.doctor = Some(2);
+        assert_eq!(
+            staff_text(&staff),
+            "Personnel : entraîneur de niveau 5, médecin de niveau 2"
         );
     }
 

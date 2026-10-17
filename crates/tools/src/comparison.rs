@@ -5,6 +5,7 @@ use lanista_core::design_data::DesignData;
 use lanista_core::fighter::career::{CareerFighter, Status};
 use lanista_core::fighter::form::FormEvent;
 use lanista_core::fighter::injury::Location;
+use lanista_core::staff::Medicine;
 use rand::SeedableRng;
 use rand_chacha::ChaCha8Rng;
 
@@ -73,7 +74,13 @@ fn outcome(
     let before = fighters.clone();
     let [mut a, mut b] = fighters;
     if modelled {
-        a.modelled_fight(&mut b, FormEvent::Fight, rng, data);
+        a.modelled_fight(
+            &mut b,
+            FormEvent::Fight,
+            [Medicine::default(); 2],
+            rng,
+            data,
+        );
     } else {
         a.dueled_fight(&mut b, FormEvent::Fight, rng, data);
     }

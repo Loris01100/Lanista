@@ -19,7 +19,9 @@ use lanista_core::market::{
     MarketNews, Move, Target, personality_seen, potential_range, stat_ranges,
 };
 use lanista_core::rivals::{Profile, RivalId};
-use lanista_core::staff::{DoctorRules, RecruiterRules, Role, Scouting, StaffMove, TrainerRules};
+use lanista_core::staff::{
+    DoctorRules, RecruiterRules, Role, Scouting, Staff, StaffMove, TrainerRules,
+};
 use lanista_core::state::GameState;
 
 /// Stat names, in `Stats::to_array` order.
@@ -194,6 +196,23 @@ pub fn role_title(role: Role) -> &'static str {
         Role::Trainer => "Entraîneur",
         Role::Doctor => "Médecin",
         Role::Recruiter => "Recruteur",
+    }
+}
+
+/// A club's staff: "Personnel : entraîneur de niveau 5, médecin de niveau 2", or
+/// "Personnel : aucun".
+pub fn staff_text(staff: &Staff) -> String {
+    let posts: Vec<String> = Role::ALL
+        .into_iter()
+        .filter_map(|role| {
+            let level = staff.level(role)?;
+            Some(format!("{} de niveau {level}", role_name(role)))
+        })
+        .collect();
+    if posts.is_empty() {
+        "Personnel : aucun".into()
+    } else {
+        format!("Personnel : {}", posts.join(", "))
     }
 }
 

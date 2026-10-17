@@ -483,6 +483,7 @@ mod tests {
     use super::*;
     use crate::design_data::DesignData;
     use crate::market::with_prestige;
+    use crate::staff::Staff;
     use rand::SeedableRng;
     use rand_chacha::ChaCha8Rng;
 
@@ -517,7 +518,11 @@ mod tests {
         let fighters = (0..15)
             .map(|_| with_prestige(CareerFighter::random(&mut rng, data), 3, data))
             .collect();
-        let rivals = vec![Rival { money: 0, fighters }];
+        let rivals = vec![Rival {
+            money: 0,
+            fighters,
+            staff: Staff::default(),
+        }];
         let ranked: Vec<_> = rivals[0]
             .fighters
             .iter()

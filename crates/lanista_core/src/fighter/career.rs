@@ -181,7 +181,7 @@ impl CareerFighter {
     pub fn play_week<R: Rng + ?Sized>(
         &mut self,
         plan: WeekPlan,
-        opponent: Option<&mut Self>,
+        opponent: Option<(&mut Self, Medicine)>,
         staff: StaffEffects,
         rng: &mut R,
         data: &DesignData,
@@ -214,13 +214,14 @@ impl CareerFighter {
                     FormEvent::Fight
                 };
                 let mut stranger;
-                let opponent = if let Some(opponent) = opponent {
+                let (opponent, theirs) = if let Some(opponent) = opponent {
                     opponent
                 } else {
                     stranger = Self::random(rng, data);
-                    &mut stranger
+                    (&mut stranger, Medicine::default())
                 };
-                let (fight, injury, spared) = self.fight(opponent, form, staff.medicine, rng, data);
+                let medicine = [staff.medicine, theirs];
+                let (fight, injury, spared) = self.fight(opponent, form, medicine, rng, data);
                 report.fight = Some(fight);
                 report.new_injury = injury;
                 report.after_effect_spared = spared;
@@ -413,19 +414,20 @@ impl CareerFighter {
 
     /// A fight between rival fighters against `opponent`, resolved by the statistical
     /// model: fame, record and death, then what the fight leaves both (`after_fight`,
-    /// with `form`'s cost). Neither ends its week. Returns this fighter's result.
+    /// with `form`'s cost and each one's doctor's `medicine`, this fighter's first).
+    /// Neither ends its week. Returns this fighter's result.
     pub fn modelled_fight<R: Rng + ?Sized>(
         &mut self,
         opponent: &mut Self,
         form: FormEvent,
+        medicine: [Medicine; 2],
         rng: &mut R,
         data: &DesignData,
     ) -> FightResult {
         let [mine, theirs] = self.modelled_sides(opponent, rng, data);
         let rules = &data.fighter;
-        let alone = Medicine::default();
-        self.after_fight(mine, form, alone, rng, rules);
-        opponent.after_fight(theirs, form, alone, rng, rules);
+        self.after_fight(mine, form, medicine[0], rng, rules);
+        opponent.after_fight(theirs, form, medicine[1], rng, rules);
         mine.outcome.result
     }
 
@@ -438,19 +440,20 @@ impl CareerFighter {
         rng: &mut R,
         data: &DesignData,
     ) -> FightResult {
-        let (summary, _, _) = self.fight(opponent, form, Medicine::default(), rng, data);
+        let alone = [Medicine::default(); 2];
+        let (summary, _, _) = self.fight(opponent, form, alone, rng, data);
         summary.result
     }
 
     /// A duel against `opponent`, then its effects on both: fame, death, morale, form
     /// (`form`'s cost), illness worsening, a possible injury and progression. Returns
-    /// this fighter's new injury, and whether its doctor's `medicine` spared it an
-    /// after-effect.
+    /// this fighter's new injury, and whether its doctor's `medicine` (the first, the
+    /// opponent's doctor's second) spared it an after-effect.
     fn fight<R: Rng + ?Sized>(
         &mut self,
         opponent: &mut Self,
         form: FormEvent,
-        medicine: Medicine,
+        medicine: [Medicine; 2],
         rng: &mut R,
         data: &DesignData,
     ) -> (FightSummary, Option<Injury>, bool) {
@@ -473,9 +476,8 @@ impl CareerFighter {
             fame_change: mine.fame_change,
             ticks: arena.tick,
         };
-        let (injury, spared) = self.after_fight(mine, form, medicine, rng, rules);
-        let alone = Medicine::default();
-        opponent.after_fight(theirs, form, alone, rng, rules);
+        let (injury, spared) = self.after_fight(mine, form, medicine[0], rng, rules);
+        opponent.after_fight(theirs, form, medicine[1], rng, rules);
         (summary, injury, spared)
     }
 
@@ -1117,7 +1119,7 @@ mod tests {
             let report = f
                 .play_week(
                     plan(fight),
-                    Some(&mut opponent),
+                    Some((&mut opponent, Medicine::default())),
                     StaffEffects::default(),
                     &mut rng,
                     &data,

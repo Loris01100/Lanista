@@ -102,6 +102,7 @@ impl GameState {
         let new = Rival {
             money,
             fighters: Vec::new(),
+            staff: Staff::default(),
         };
         self.rivals.extend(std::iter::repeat_n(new, missing));
         let clubs = self.rivals.len();
@@ -205,7 +206,8 @@ impl GameState {
                         Some(profile) if f.status == Status::Active => {
                             let me = Contender::Rival(RivalId { club, fighter });
                             let chances = self.chances(me, data);
-                            rivals::plan(f, &chances, &mut left, profile, data)
+                            let rules = (profile, &rival.staff);
+                            rivals::plan(f, &chances, &mut left, rules, data)
                         }
                         _ => REST,
                     })
@@ -228,7 +230,7 @@ impl GameState {
                     return REST;
                 }
                 let chances = self.chances(Contender::FreeAgent(a), data);
-                rivals::plan(f, &chances, &mut 0, profile, data)
+                rivals::plan(f, &chances, &mut 0, (profile, &Staff::default()), data)
             })
             .collect()
     }
@@ -415,28 +417,25 @@ impl GameState {
     /// The club's trainer, `None` without one or with a level missing from `data`.
     #[must_use]
     pub fn trainer<'a>(&self, data: &'a DesignData) -> Option<&'a TrainerRules> {
-        data.economy.staff.trainer(self.staff.trainer?)
+        self.staff.trainer(&data.economy.staff)
     }
 
     /// The club's doctor, `None` without one or with a level missing from `data`.
     #[must_use]
     pub fn doctor<'a>(&self, data: &'a DesignData) -> Option<&'a DoctorRules> {
-        data.economy.staff.doctor(self.staff.doctor?)
+        self.staff.doctor(&data.economy.staff)
     }
 
     /// The club's recruiter, `None` without one or with a level missing from `data`.
     #[must_use]
     pub fn recruiter<'a>(&self, data: &'a DesignData) -> Option<&'a RecruiterRules> {
-        data.economy.staff.recruiter(self.staff.recruiter?)
+        self.staff.recruiter(&data.economy.staff)
     }
 
     /// What the club's trainer and doctor bring to its fighters' weeks.
     #[must_use]
     pub fn staff_effects(&self, data: &DesignData) -> StaffEffects {
-        StaffEffects {
-            coaching: self.trainer(data).map(|t| t.coaching).unwrap_or_default(),
-            medicine: self.doctor(data).map(|d| d.medicine).unwrap_or_default(),
-        }
+        self.staff.effects(&data.economy.staff)
     }
 
     /// What the club's recruiter shows of the fighters out of the club.
@@ -456,8 +455,8 @@ impl GameState {
     /// The price of a training session, set by the trainer.
     #[must_use]
     pub fn training_cost(&self, data: &DesignData) -> u32 {
-        self.trainer(data)
-            .map_or(data.economy.training_cost, |t| t.training_cost)
+        self.staff
+            .training_cost(&data.economy.staff, data.economy.training_cost)
     }
 
     /// Whether `m` may be made now: someone is hired for a post at a level of `data`
@@ -543,6 +542,7 @@ pub fn next_week(state: &mut GameState, decisions: &Decisions, data: &DesignData
     // A training session's price, and the doctor's for care.
     let costs = (state.training_cost(data), effects.medicine);
     let (wanted, title_meetings) = week_plans(state, decisions, data);
+    rival_staff(state, data);
     let plans = state.outsider_plans(data);
     // The outsiders who had their fight, against the club's fighters.
     let mut fought = Vec::new();
@@ -564,7 +564,7 @@ pub fn next_week(state: &mut GameState, decisions: &Decisions, data: &DesignData
         };
         fought.extend(meeting.map(|(_, them)| them));
         let opponent = meeting
-            .and_then(|(_, them)| outsider_mut(&mut state.rivals, &mut state.free_agents, them));
+            .and_then(|(_, them)| met(&mut state.rivals, &mut state.free_agents, them, data));
         let report = fighter.play_week(plan, opponent, effects, &mut state.rng, data);
         if let Some(report) = &report {
             let mut pay = |flow, amount: i64| {
@@ -640,6 +640,41 @@ pub fn next_week(state: &mut GameState, decisions: &Decisions, data: &DesignData
         market,
         staff,
     }
+}
+
+/// Each rival club's staff this week (`rivals::hired_staff`), then its salaries, paid
+/// even into debt.
+fn rival_staff(state: &mut GameState, data: &DesignData) {
+    let rules = &data.economy.staff;
+    for (club, rival) in state.rivals.iter_mut().enumerate() {
+        if let Some(profile) = data.world.profile(club) {
+            rival.staff = rivals::hired_staff(&rival.staff, rival.money, profile, rules);
+        }
+        let salaries: u32 = rival.staff.salaries(rules).sum();
+        rival.money -= i64::from(salaries);
+    }
+}
+
+/// What the staff of `outsider`'s club brings to its weeks: nothing for a free agent.
+fn outsider_effects(rivals: &[Rival], outsider: Contender, data: &DesignData) -> StaffEffects {
+    match outsider {
+        Contender::Rival(id) => rivals
+            .get(id.club)
+            .map(|r| r.staff.effects(&data.economy.staff))
+            .unwrap_or_default(),
+        Contender::Club(_) | Contender::FreeAgent(_) => StaffEffects::default(),
+    }
+}
+
+/// The outsider `them` met by a club's fighter, with its doctor's medicine.
+fn met<'a>(
+    rivals: &'a mut [Rival],
+    free_agents: &'a mut [CareerFighter],
+    them: Contender,
+    data: &DesignData,
+) -> Option<(&'a mut CareerFighter, Medicine)> {
+    let medicine = outsider_effects(rivals, them, data).medicine;
+    outsider_mut(rivals, free_agents, them).map(|f| (f, medicine))
 }
 
 /// The changes of staff `moves` made before the week, the first for each post, each
@@ -1350,7 +1385,14 @@ fn outsider_weeks(
                 continue;
             };
             let receipts = i64::from(purses.receipts(first.fame, second.fame));
-            let result = first.modelled_fight(&mut second, FormEvent::Fight, &mut state.rng, data);
+            let medicine = [a, b].map(|o| outsider_effects(&state.rivals, o, data).medicine);
+            let result = first.modelled_fight(
+                &mut second,
+                FormEvent::Fight,
+                medicine,
+                &mut state.rng,
+                data,
+            );
             first.end_fought_week(&mut state.rng, data);
             second.end_fought_week(&mut state.rng, data);
             put_outsider(state, a, first);
@@ -1371,17 +1413,31 @@ fn outsider_weeks(
             }
         }
     }
+    planned_weeks(state, &plans, &done, data);
+}
+
+/// The planned weeks of the outsiders not in `done`, each rival club paying its
+/// fighters' care and training at its staff's prices, its staff's effects with them.
+fn planned_weeks(
+    state: &mut GameState,
+    plans: &OutsiderPlans,
+    done: &[Contender],
+    data: &DesignData,
+) {
+    let staff_rules = &data.economy.staff;
     for (club, rival) in state.rivals.iter_mut().enumerate() {
+        let effects = rival.staff.effects(staff_rules);
+        let session = rival
+            .staff
+            .training_cost(staff_rules, data.economy.training_cost);
         for (fighter, f) in rival.fighters.iter_mut().enumerate() {
             let me = Contender::Rival(RivalId { club, fighter });
             let Some(plan) = plans.of(me).filter(|_| !done.contains(&me)) else {
                 continue;
             };
-            if let Some(report) =
-                f.play_week(plan, None, StaffEffects::default(), &mut state.rng, data)
-            {
+            if let Some(report) = f.play_week(plan, None, effects, &mut state.rng, data) {
                 let training = if plan.activity == Activity::Train {
-                    data.economy.training_cost
+                    session
                 } else {
                     0
                 };
@@ -2529,6 +2585,12 @@ mod tests {
             .filter(|f| f.status == Status::Active && f.age <= rookie_age + 2)
             .count();
         assert!(young > 0);
+        // The clubs hired a trainer and a doctor, whose salaries keep their money within
+        // bounds (it swelled to 25 000 without them).
+        for rival in &state.rivals {
+            assert!(rival.staff.trainer.is_some() && rival.staff.doctor.is_some());
+            assert!(rival.money < 20_000, "{}", rival.money);
+        }
         // Free agents fought too, ranked in the colosseum free to enter; some were
         // signed with their record, and some died in the arena.
         let fights = |f: &CareerFighter| f.record.wins + f.record.losses + f.record.draws;
@@ -2550,6 +2612,28 @@ mod tests {
                 .any(|r| matches!(r.contender, Contender::FreeAgent(_)))
         );
         assert_eq!(state.date(&data).season, 4);
+    }
+
+    #[test]
+    fn rival_clubs_hire_the_staff_their_money_can_keep_and_pay_it() {
+        let data = data();
+        let mut state = GameState::new(7, &data);
+        state.fighters[0].status = Status::Retired;
+        state.rivals[0].money = 100_000;
+        state.rivals[1].money = 0;
+        next_week(&mut state, &Decisions::default(), &data);
+        let best = Staff {
+            trainer: Some(5),
+            doctor: Some(5),
+            recruiter: None,
+        };
+        assert_eq!(state.rivals[0].staff, best);
+        assert_eq!(state.rivals[1].staff, Staff::default());
+        // The salaries are paid each week: broke, the club lets its staff go.
+        let salaries: u32 = best.salaries(&data.economy.staff).sum();
+        state.rivals[0].money = i64::from(salaries);
+        next_week(&mut state, &Decisions::default(), &data);
+        assert_eq!(state.rivals[0].staff, Staff::default());
     }
 
     #[test]
