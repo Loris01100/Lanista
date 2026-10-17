@@ -68,7 +68,7 @@ enum Pose {
     Move,
     Cast,
     Death,
-    /// Stunned or knocked out: lying down, alive.
+    /// Stunned, knocked out, maimed or left for dead: lying down, alive.
     Down,
 }
 
@@ -107,6 +107,9 @@ pub struct CombatScreen {
     data: Rc<DesignData>,
     mode: Mode,
     arena: Arena,
+    /// Those the arena kills who survive the fatal blow, once the fight is over: they
+    /// fall and lie down alive, without bleeding out.
+    survivors: Vec<FighterId>,
     ais: Vec<Box<dyn CombatAi>>,
     step: FixedStep,
     /// Fighter positions before the last tick, to interpolate from.
@@ -129,9 +132,17 @@ impl CombatScreen {
     }
 
     /// Watches the fight `arena`, from its first tick: a career fight, fighter 0
-    /// being the player's. Once it is over, « Continuer » goes back.
-    pub fn watch(data: Rc<DesignData>, arena: Arena, bindings: Bindings<Action>) -> Self {
-        Self::with(data, arena, Mode::Watch, bindings)
+    /// being the player's, where `survivors` fall at 0 HP but survive the fatal blow
+    /// (`FightSummary::survived_fatal_blow`). Once it is over, « Continuer » goes back.
+    pub fn watch(
+        data: Rc<DesignData>,
+        arena: Arena,
+        survivors: Vec<FighterId>,
+        bindings: Bindings<Action>,
+    ) -> Self {
+        let mut screen = Self::with(data, arena, Mode::Watch, bindings);
+        screen.survivors = survivors;
+        screen
     }
 
     fn with(data: Rc<DesignData>, arena: Arena, mode: Mode, bindings: Bindings<Action>) -> Self {
@@ -145,6 +156,7 @@ impl CombatScreen {
         let mut screen = Self {
             data,
             mode,
+            survivors: Vec::new(),
             ais: Vec::new(),
             previous: Vec::new(),
             arena: arena.clone(),
@@ -261,7 +273,7 @@ impl CombatScreen {
             Some(winner) => format!("Vainqueur : {}", self.name(winner.id)),
             None => "Aucun vainqueur".into(),
         };
-        let out = |how: &str, out: fn(&lanista_core::fighter::Fighter) -> bool| {
+        let out = |how: &str, out: &dyn Fn(&lanista_core::fighter::Fighter) -> bool| {
             let names: Vec<String> = self
                 .arena
                 .fighters
@@ -272,10 +284,13 @@ impl CombatScreen {
             (!names.is_empty()).then(|| format!("{how} : {}", names.join(", ")))
         };
         let reasons: Vec<String> = [
-            out("abandon", |f| f.surrendered),
-            out("K.-O.", |f| f.knocked_out),
-            out("décapité", |f| f.severed == Some(Location::Head)),
-            out("membre tranché", |f| {
+            out("abandon", &|f| f.surrendered),
+            out("K.-O.", &|f| f.knocked_out),
+            out("laissé pour mort, survit", &|f| {
+                !f.is_alive() && self.survivors.contains(&f.id)
+            }),
+            out("décapité", &|f| f.severed == Some(Location::Head)),
+            out("membre tranché", &|f| {
                 f.severed.is_some_and(|part| part != Location::Head)
             }),
         ]
@@ -311,7 +326,7 @@ impl CombatScreen {
     }
 
     /// Returns the sounds to play: a hit at each impact frame of a cast that hit,
-    /// a cry at each death.
+    /// a cry at each death. A survivor of the fatal blow falls without one.
     fn animate(&mut self, dt: f32) -> Vec<&'static str> {
         let mut sounds = Vec::new();
         // A cast resolves within one tick: the log, not `action`, shows it.
@@ -328,9 +343,10 @@ impl CombatScreen {
 
         for (fighter, look) in self.arena.fighters.iter().zip(&mut self.looks) {
             let casting = look.pose == Pose::Cast && !look.player.is_finished(&self.animations[2]);
-            let pose = if !fighter.is_alive() {
+            let survives = self.survivors.contains(&fighter.id);
+            let pose = if !fighter.is_alive() && !survives {
                 Pose::Death
-            } else if !fighter.is_standing() && !fighter.surrendered {
+            } else if !fighter.is_alive() || (!fighter.is_standing() && !fighter.surrendered) {
                 Pose::Down
             } else if casting {
                 Pose::Cast
@@ -544,6 +560,7 @@ mod tests {
         let mut screen = CombatScreen::watch(
             Rc::new(data),
             fight.start.clone(),
+            Vec::new(),
             Bindings::new(Vec::new()),
         );
         // Past the one-minute limit.
@@ -608,6 +625,41 @@ mod tests {
         assert_eq!(
             screen.result(),
             "Vainqueur : combattant 1 (K.-O. : combattant 0)"
+        );
+    }
+
+    /// The loser of seed 42 falls at 0 HP: watched as a survivor of the fatal blow, it
+    /// lies down alive, without a cry, a stain or a darker body.
+    #[test]
+    fn a_survivor_of_the_fatal_blow_falls_and_lies_down_alive() {
+        let mut fallen = simulated(42);
+        let dead = fallen.fighters.iter().position(|f| !f.is_alive()).unwrap();
+        let id = fallen.fighters[dead].id;
+        fallen = random_duel(&DesignData::load().unwrap(), 42);
+        let mut screen = CombatScreen::watch(
+            Rc::new(DesignData::load().unwrap()),
+            fallen,
+            vec![id],
+            Bindings::new(Vec::new()),
+        );
+        let mut sounds = Vec::new();
+        while screen.running() {
+            sounds.extend(screen.advance(1.0 / 60.0));
+        }
+        for _ in 0..60 {
+            sounds.extend(screen.advance(1.0 / 60.0));
+        }
+        assert!(!screen.arena.fighters[dead].is_alive());
+        assert_eq!(screen.looks[dead].pose, Pose::Down);
+        assert!(screen.looks.iter().all(|look| look.dead_for.is_none()));
+        assert!(!sounds.contains(&DEATH_SOUND));
+        let name = screen.name(id);
+        assert!(
+            screen
+                .result()
+                .contains(&format!("laissé pour mort, survit : {name}")),
+            "{}",
+            screen.result()
         );
     }
 

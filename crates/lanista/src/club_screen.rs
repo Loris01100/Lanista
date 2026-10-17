@@ -17,6 +17,7 @@ use lanista_core::colosseum::{Challenge, ColosseumId, Contender};
 use lanista_core::combat::Arena;
 use lanista_core::design_data::DesignData;
 use lanista_core::economy::{Flow, Wealth};
+use lanista_core::fighter::FighterId;
 use lanista_core::fighter::care::CareRules;
 use lanista_core::fighter::career::{Activity, CareerFighter, FightSummary, Status, WeekPlan};
 use lanista_core::fighter::fame::Fame;
@@ -96,8 +97,9 @@ pub struct ClubScreen {
     last_week: Option<(u64, Vec<String>)>,
     /// The last week's fights.
     fights: Vec<FightReport>,
-    /// Fights still to watch, the next one last.
-    to_watch: Vec<Arena>,
+    /// Fights still to watch, the next one last, each with those who survive a fatal
+    /// blow in it.
+    to_watch: Vec<(Arena, Vec<FighterId>)>,
     /// Folder of the save files; `None` saves nothing.
     saves: Option<PathBuf>,
     /// The outcome of the last save or load, for the player.
@@ -276,7 +278,7 @@ impl ClubScreen {
             .fights
             .iter()
             .rev()
-            .map(|f| f.fight.start.clone())
+            .map(|f| watched(&f.fight))
             .collect();
         // Free agents are new each week: the one on screen may be gone or replaced.
         if matches!(self.view, View::Outside(Target::FreeAgent(_))) {
@@ -572,7 +574,7 @@ impl ClubScreen {
     }
 
     /// The fight summary; returns a fight to watch again.
-    fn fight_summary(&self, ui: &mut egui::Ui) -> Option<Arena> {
+    fn fight_summary(&self, ui: &mut egui::Ui) -> Option<(Arena, Vec<FighterId>)> {
         let data = &self.data;
         let mut again = None;
         ui.heading("Résumé des combats");
@@ -641,7 +643,7 @@ impl ClubScreen {
                     ));
                 }
                 if ui.button("Revoir le combat").clicked() {
-                    again = Some(fight.start.clone());
+                    again = Some(watched(fight));
                 }
                 ui.separator();
             }
@@ -665,16 +667,17 @@ impl ClubScreen {
         }
     }
 
-    fn watch(&self, arena: Arena) -> Transition {
-        let screen = CombatScreen::watch(Rc::clone(&self.data), arena, self.bindings.clone());
+    fn watch(&self, (arena, survivors): (Arena, Vec<FighterId>)) -> Transition {
+        let data = Rc::clone(&self.data);
+        let screen = CombatScreen::watch(data, arena, survivors, self.bindings.clone());
         Transition::Push(Box::new(screen))
     }
 }
 
 impl Screen for ClubScreen {
     fn update(&mut self, ui: &egui::Context, _assets: &Assets, _audio: &mut Audio) -> Transition {
-        if let Some(arena) = self.to_watch.pop() {
-            return self.watch(arena);
+        if let Some(fight) = self.to_watch.pop() {
+            return self.watch(fight);
         }
         if self.bindings.pressed(ui, &Action::Quit) {
             if self.view == View::Menu {
@@ -700,8 +703,8 @@ impl Screen for ClubScreen {
         if let Some(transition) = transition {
             return transition;
         }
-        if let Some(arena) = again {
-            return self.watch(arena);
+        if let Some(fight) = again {
+            return self.watch(fight);
         }
         if play {
             self.next_week();
@@ -712,6 +715,17 @@ impl Screen for ClubScreen {
     fn draw(&self, _assets: &Assets) {
         clear_background(BACKGROUND);
     }
+}
+
+/// What the combat screen needs to show `fight`: the fight before its first tick, and
+/// those who fall at 0 HP but survive the fatal blow.
+fn watched(fight: &FightSummary) -> (Arena, Vec<FighterId>) {
+    let survivors = (0..)
+        .zip(fight.survived_fatal_blow)
+        .filter(|&(_, survived)| survived)
+        .map(|(id, _)| FighterId(id))
+        .collect();
+    (fight.start.clone(), survivors)
 }
 
 /// A seed for a new game: the game, unlike `lanista_core`, may read the clock.
@@ -955,7 +969,8 @@ mod tests {
         );
         screen.next_week();
         assert_eq!(screen.view, View::Fights);
-        let mut fight = screen.to_watch.pop().unwrap();
+        let (mut fight, survivors) = screen.to_watch.pop().unwrap();
+        assert_eq!(survivors, []);
         assert_eq!(fight.tick, 0);
         assert_eq!(fight.fighters[0].stats, {
             let mut rng = ChaCha8Rng::seed_from_u64(7);

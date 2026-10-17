@@ -465,6 +465,10 @@ impl CareerFighter {
         let theirs = opponent.take_fame_and_death(&arena, FighterId(1), weaker, rng, rules);
         let mine = self.take_fame_and_death(&arena, FighterId(0), stronger, rng, rules);
         let died = self.status == Status::Dead;
+        // Fallen at 0 HP in the arena, yet alive after the fight.
+        let survived = |id: usize, fighter: &Self| {
+            arena.fighters.get(id).is_some_and(|f| !f.is_alive()) && fighter.status != Status::Dead
+        };
         let summary = FightSummary {
             seed,
             start,
@@ -473,6 +477,7 @@ impl CareerFighter {
             against_stronger: stronger,
             result: mine.outcome.result,
             died,
+            survived_fatal_blow: [survived(0, self), survived(1, opponent)],
             fame_change: mine.fame_change,
             ticks: arena.tick,
         };
@@ -699,6 +704,10 @@ pub struct FightSummary {
     pub against_stronger: bool,
     pub result: FightResult,
     pub died: bool,
+    /// Whether each side, the career fighter first, fell at 0 HP in the arena and
+    /// survived it (`InjuryRules::fatal_blow_survival`): the arena shows it dead, the
+    /// fight leaves it alive and badly wounded.
+    pub survived_fatal_blow: [bool; 2],
     pub fame_change: i32,
     pub ticks: u32,
 }
@@ -1017,6 +1026,32 @@ mod tests {
         assert_eq!(injury, Some(wound));
         assert_eq!(survivor.injuries, [wound]);
         assert_eq!(survivor.record.losses, 1);
+    }
+
+    #[test]
+    fn a_fight_tells_who_survived_a_fatal_blow() {
+        let mut data = data();
+        for survival in [0.0, 1.0] {
+            data.fighter.injury.fatal_blow_survival = survival;
+            let mut rng = ChaCha8Rng::seed_from_u64(3);
+            let fallen = (0..500).find_map(|_| {
+                let mut mine = CareerFighter::random(&mut rng, &data);
+                let mut theirs = CareerFighter::random(&mut rng, &data);
+                let alone = [Medicine::default(); 2];
+                let (summary, ..) =
+                    mine.fight(&mut theirs, FormEvent::Fight, alone, &mut rng, &data);
+                let mut arena = summary.start.clone();
+                crate::duel::play(&mut arena);
+                let i = arena.fighters.iter().position(|f| !f.is_alive())?;
+                let beheaded = arena.fighters[i].severed == Some(Location::Head);
+                (!beheaded).then_some((summary, i, [mine, theirs]))
+            });
+            let (summary, i, fighters) = fallen.expect("a fighter falls at 0 HP in 500 fights");
+            let survived = survival > 0.5;
+            assert_eq!(summary.survived_fatal_blow[i], survived);
+            assert!(!summary.survived_fatal_blow[1 - i]);
+            assert_eq!(fighters[i].status == Status::Dead, !survived);
+        }
     }
 
     #[test]
