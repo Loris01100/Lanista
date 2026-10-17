@@ -4,5 +4,34 @@
       "Bash(git commit:*)",
       "PowerShell(git commit:*)"
     ]
+  },
+  "hooks": {
+    "PostToolUse": [
+      {
+        "matcher": "Write|Edit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "sh \"$CLAUDE_PROJECT_DIR/.claude/hooks/fmt.sh\"",
+            "shell": "bash",
+            "timeout": 60,
+            "statusMessage": "cargo fmt"
+          }
+        ]
+      }
+    ],
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "sh \"$CLAUDE_PROJECT_DIR/.claude/hooks/clippy.sh\"",
+            "shell": "bash",
+            "timeout": 600,
+            "statusMessage": "cargo clippy"
+          }
+        ]
+      }
+    ]
   }
 }
