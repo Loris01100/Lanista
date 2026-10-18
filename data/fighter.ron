@@ -3,10 +3,11 @@
     form: (
         // k of the risk formula: injury and illness risk is tripled at form 0 with k = 2.
         risk_factor: 2.0,
-        // Form lost per fight, per title defense and per week of training,
+        // Form lost per fight, per title defense, per melee and per week of training,
         // and recovered per week of rest (form goes from 0 to 100).
         fight: 20,
         title_defense: 30,
+        melee: 30,
         training: 5,
         rest: 15,
     ),
@@ -100,6 +101,9 @@
         refused_armour: 3,
         refused_weapon: 6,
         refused_all: 12,
+        // In a melee, shared out by place: all of it to the last one standing, none to
+        // the first one out.
+        melee_survival: 10,
     ),
     // The colosseum's equipment is the same for everyone. A refused piece costs, in
     // percent of what is left: defenses without armour, attacks without weapon, whose

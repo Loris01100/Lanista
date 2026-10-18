@@ -619,7 +619,8 @@ pub fn next_week(state: &mut GameState, decisions: &Decisions, data: &DesignData
                     pay(Flow::EntryFee, -fee);
                     colosseum.record(club, rival, fight.result, &data.world);
                 }
-                let receipts = i64::from(purses.receipts(fame, fight.opponent.fame));
+                let theirs = fight.opponent().map_or(Fame::default(), |o| o.fame);
+                let receipts = i64::from(purses.receipts(fame, theirs));
                 pay(Flow::Receipts, receipts);
                 let prize = i64::from(purses.win_prize);
                 let mut theirs = receipts - fee;
@@ -2098,7 +2099,7 @@ mod tests {
             .rivals
             .iter()
             .flat_map(|r| &r.fighters)
-            .position(|f| f.potential == fight.opponent.potential);
+            .position(|f| Some(f.potential) == fight.opponent().map(|o| o.potential));
         assert!(opponent.is_some());
     }
 
@@ -2251,7 +2252,7 @@ mod tests {
         let report = summary.reports[0].as_ref().unwrap();
         assert_eq!(report.plan.activity, Activity::Challenge(rome, rival));
         let fight = report.fight.as_ref().unwrap();
-        assert_eq!(fight.opponent, before);
+        assert_eq!(fight.opponent(), Some(&before));
         let fee = i64::from(rules.colosseums[1].purses.entry_fee);
         assert_eq!(flows(&summary)[0], (Flow::EntryFee, -fee));
         if state.rival_fighter(rival).unwrap().status == Status::Active {

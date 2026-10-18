@@ -329,6 +329,7 @@ mod tests {
         risk_factor: 2.0,
         fight: 20,
         title_defense: 30,
+        melee: 30,
         training: 5,
         rest: 15,
     };

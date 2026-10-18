@@ -5,6 +5,7 @@ pub mod fame;
 pub mod form;
 pub mod illness;
 pub mod injury;
+pub mod melee;
 pub mod morale;
 pub mod personality;
 pub mod progression;

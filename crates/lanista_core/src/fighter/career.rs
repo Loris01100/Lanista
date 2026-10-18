@@ -22,7 +22,7 @@ use crate::fighter::personality::Personality;
 use crate::fighter::progression::{ProgressEvent, age_decline, progress, random_potential};
 use crate::fighter::retirement::decides_to_retire;
 use crate::fighter::{ClassId, Condition, Fighter, FighterId, Stats};
-use crate::log::Report;
+use crate::log::{Report, places};
 use crate::rivals::RivalId;
 use crate::staff::{Medicine, StaffEffects};
 use crate::stat_model::Ending;
@@ -321,11 +321,13 @@ impl CareerFighter {
     /// Whether this fighter's fighting stats add up to more than `other`'s.
     #[must_use]
     pub fn stronger_than(&self, other: &Self, rules: &FighterRules) -> bool {
-        let total = |f: &Self| {
-            let stats = f.fighting_stats(rules).to_array();
-            stats.iter().map(|&v| u64::from(v)).sum::<u64>()
-        };
-        total(self) > total(other)
+        self.strength(rules) > other.strength(rules)
+    }
+
+    /// Its fighting stats added up.
+    pub(crate) fn strength(&self, rules: &FighterRules) -> u64 {
+        let stats = self.fighting_stats(rules).to_array();
+        stats.iter().map(|&v| u64::from(v)).sum()
     }
 
     /// The fame, record and death the finished fight in `arena`, where this fighter was
@@ -339,20 +341,21 @@ impl CareerFighter {
         rules: &FighterRules,
     ) -> Taken {
         let side = Ending::from_arena(arena, id, &rules.fame);
-        self.take_side(side, against_stronger, refused, rng, rules)
+        let bonus = refused.fame_bonus(&rules.fame);
+        self.take_side(side, against_stronger, bonus, rng, rules)
     }
 
     /// The fame, record and death `side` brings: a beheaded fighter dies; one brought
     /// to 0 HP otherwise survives with a chance of `InjuryRules::fatal_blow_survival`,
     /// and a severe wound; one that lost a limb keeps it lost (a permanent injury); a
-    /// stunned one keeps a severe head wound with `InjuryRules::stun_wound_chance`. The
-    /// `refused` pieces of equipment add their fame bonus, whatever the result. The
-    /// wound is returned with the outcome and the fame change, not yet taken.
-    fn take_side<R: Rng + ?Sized>(
+    /// stunned one keeps a severe head wound with `InjuryRules::stun_wound_chance`.
+    /// `bonus` fame comes whatever the result: refused equipment, a place in a melee.
+    /// The wound is returned with the outcome and the fame change, not yet taken.
+    pub(crate) fn take_side<R: Rng + ?Sized>(
         &mut self,
         side: Ending,
         against_stronger: bool,
-        refused: Refused,
+        bonus: u32,
         rng: &mut R,
         rules: &FighterRules,
     ) -> Taken {
@@ -361,7 +364,7 @@ impl CareerFighter {
             against_stronger,
             spectacular_hits: side.spectacular_hits,
         };
-        let bonus = i32::try_from(refused.fame_bonus(&rules.fame)).unwrap_or(i32::MAX);
+        let bonus = i32::try_from(bonus).unwrap_or(i32::MAX);
         let fame_change = outcome.fame_change(&rules.fame).saturating_add(bonus);
         self.fame = self.fame.changed_by(fame_change);
         self.record.add(outcome.result);
@@ -435,8 +438,8 @@ impl CareerFighter {
         let stronger = opponent.stronger_than(self, rules);
         let weaker = self.stronger_than(opponent, rules);
         [
-            self.take_side(mine, stronger, Refused::NONE, rng, rules),
-            opponent.take_side(theirs, weaker, Refused::NONE, rng, rules),
+            self.take_side(mine, stronger, 0, rng, rules),
+            opponent.take_side(theirs, weaker, 0, rng, rules),
         ]
     }
 
@@ -507,12 +510,14 @@ impl CareerFighter {
             seed,
             start,
             report: Report::new(&arena),
-            opponent: summary_opponent,
+            me: FighterId(0),
+            opponents: vec![summary_opponent],
+            place: places(&arena).first().copied().unwrap_or(1),
             against_stronger: stronger,
             refused,
             result: mine.outcome.result,
             died,
-            survived_fatal_blow: [survived(0, self), survived(1, opponent)],
+            survived_fatal_blow: vec![survived(0, self), survived(1, opponent)],
             fame_change: mine.fame_change,
             ticks: arena.tick,
         };
@@ -525,7 +530,7 @@ impl CareerFighter {
     /// `medicine` kept it from leaving an after-effect): the wound of a fatal blow
     /// survived or of a stun, else a possible one; form (`form`'s cost), illness
     /// worsening and progression.
-    fn after_fight<R: Rng + ?Sized>(
+    pub(crate) fn after_fight<R: Rng + ?Sized>(
         &mut self,
         taken: Taken,
         form: FormEvent,
@@ -729,28 +734,55 @@ impl WeekReport {
     }
 }
 
+/// A fight as one of its fighters, the career fighter, lived it: a duel, or a melee
+/// that several of the club's fighters may share, each with its own summary.
 #[derive(Debug, Clone, PartialEq)]
 pub struct FightSummary {
-    /// Replaying the duel with this seed gives the same fight.
+    /// Replaying the fight with this seed gives the same fight.
     pub seed: u64,
-    /// The fight before its first tick, the career fighter as `FighterId(0)`:
-    /// playing it with utility AIs gives this very fight, to watch it.
+    /// The fight before its first tick: playing it with utility AIs gives this very
+    /// fight, to watch it.
     pub start: Arena,
-    /// Damage dealt and taken and spells cast by each side, the career fighter first.
+    /// Damage dealt and taken and spells cast by each fighter, in the arena's order.
     pub report: Report,
-    /// The opponent before the fight.
-    pub opponent: CareerFighter,
+    /// The career fighter in the arena: `FighterId(0)` in a duel.
+    pub me: FighterId,
+    /// The others before the fight, in the arena's order: one in a duel.
+    pub opponents: Vec<CareerFighter>,
+    /// The career fighter's place, 1 the best (see `log::places`).
+    pub place: u32,
+    /// Stronger than this fighter, or than its average in a melee.
     pub against_stronger: bool,
     /// The pieces of equipment the career fighter fought without.
     pub refused: Refused,
     pub result: FightResult,
     pub died: bool,
-    /// Whether each side, the career fighter first, fell at 0 HP in the arena and
+    /// Whether each fighter, in the arena's order, fell at 0 HP in the arena and
     /// survived it (`InjuryRules::fatal_blow_survival`): the arena shows it dead, the
     /// fight leaves it alive and badly wounded.
-    pub survived_fatal_blow: [bool; 2],
+    pub survived_fatal_blow: Vec<bool>,
     pub fame_change: i32,
     pub ticks: u32,
+}
+
+impl FightSummary {
+    /// The opponent of a duel, the first other fighter of a melee.
+    #[must_use]
+    pub fn opponent(&self) -> Option<&CareerFighter> {
+        self.opponents.first()
+    }
+
+    /// Whether more than two fought.
+    #[must_use]
+    pub fn is_melee(&self) -> bool {
+        self.opponents.len() > 1
+    }
+
+    /// The career fighter's line of the report.
+    #[must_use]
+    pub fn mine(&self) -> Option<&crate::log::FighterReport> {
+        self.report.fighters.get(usize::try_from(self.me.0).ok()?)
+    }
 }
 
 /// Starting values of generated fighters, from `data/fighter.ron`.
@@ -767,9 +799,9 @@ pub struct CareerRules {
 
 /// What a fight brings a fighter before its after-effects (see `CareerFighter::take_side`).
 #[derive(Debug, Clone, Copy)]
-struct Taken {
-    outcome: FightOutcome,
-    fame_change: i32,
+pub(crate) struct Taken {
+    pub(crate) outcome: FightOutcome,
+    pub(crate) fame_change: i32,
     /// The severe wound of a fatal blow survived.
     wound: Option<Injury>,
 }
@@ -1050,11 +1082,11 @@ mod tests {
         let rules = &mut data.fighter;
         rules.injury.fatal_blow_survival = 0.0;
         let mut dead = fighter(1);
-        dead.take_side(fallen, false, Refused::NONE, &mut rng, rules);
+        dead.take_side(fallen, false, 0, &mut rng, rules);
         assert_eq!(dead.status, Status::Dead);
         rules.injury.fatal_blow_survival = 1.0;
         let mut survivor = fighter(1);
-        let taken = survivor.take_side(fallen, false, Refused::NONE, &mut rng, rules);
+        let taken = survivor.take_side(fallen, false, 0, &mut rng, rules);
         assert_eq!(survivor.status, Status::Active);
         let wound = taken.wound.unwrap();
         assert_eq!(wound.severity, Severity::Severe);
@@ -1115,10 +1147,8 @@ mod tests {
         };
         let mut rng = ChaCha8Rng::seed_from_u64(5);
         let mut f = CareerFighter::random(&mut rng, &data);
-        let equipped = f
-            .clone()
-            .take_side(lost, false, Refused::NONE, &mut rng, rules);
-        let bare = f.take_side(lost, false, weapon, &mut rng, rules);
+        let equipped = f.clone().take_side(lost, false, 0, &mut rng, rules);
+        let bare = f.take_side(lost, false, weapon.fame_bonus(&rules.fame), &mut rng, rules);
         let bonus = i32::try_from(rules.fame.refused_weapon).unwrap();
         assert_eq!(bare.fame_change, equipped.fame_change + bonus);
     }
@@ -1239,11 +1269,11 @@ mod tests {
         rules.injury.fatal_blow_survival = 1.0;
         rules.injury.stun_wound_chance = 1.0;
         let mut beheaded = fighter(1);
-        let taken = beheaded.take_side(cut(Location::Head), false, Refused::NONE, &mut rng, rules);
+        let taken = beheaded.take_side(cut(Location::Head), false, 0, &mut rng, rules);
         assert_eq!((beheaded.status, taken.wound), (Status::Dead, None));
         let arm = Location::Arm(Side::Left);
         let mut maimed = fighter(1);
-        let taken = maimed.take_side(cut(arm), false, Refused::NONE, &mut rng, rules);
+        let taken = maimed.take_side(cut(arm), false, 0, &mut rng, rules);
         assert_eq!(maimed.status, Status::Active);
         assert_eq!(taken.wound, Some(severed_limb_wound(arm)));
         // A lost limb is a defeat, not a surrender: no fame lost.
@@ -1274,7 +1304,7 @@ mod tests {
         let rules = &mut data.fighter;
         rules.injury.stun_wound_chance = 1.0;
         let mut f = fighter(1);
-        let taken = f.take_side(knocked_out, false, Refused::NONE, &mut rng, rules);
+        let taken = f.take_side(knocked_out, false, 0, &mut rng, rules);
         assert_eq!(f.status, Status::Active);
         let wound = taken.wound.unwrap();
         assert_eq!(
@@ -1284,7 +1314,7 @@ mod tests {
         // A knock-out is a defeat, not a surrender: no fame lost.
         assert_eq!(taken.fame_change, 0);
         rules.injury.stun_wound_chance = 0.0;
-        let taken = fighter(1).take_side(knocked_out, false, Refused::NONE, &mut rng, rules);
+        let taken = fighter(1).take_side(knocked_out, false, 0, &mut rng, rules);
         assert_eq!(taken.wound, None);
     }
 
@@ -1329,7 +1359,7 @@ mod tests {
                 )
                 .unwrap();
             let summary = report.fight.unwrap();
-            assert_eq!(summary.opponent, fighter(seed + 100));
+            assert_eq!(summary.opponent(), Some(&fighter(seed + 100)));
             let mut replay = summary.start.clone();
             play(&mut replay);
             let died = !replay.fighters[1].is_alive();

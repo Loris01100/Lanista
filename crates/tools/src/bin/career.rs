@@ -222,7 +222,7 @@ fn week_text(
 }
 
 fn fight_text(fight: &FightSummary, data: &DesignData) -> String {
-    let mine = fight.report.fighters.first();
+    let mine = fight.mine();
     let knocked_out = mine.is_some_and(|f| f.knocked_out);
     let severed = mine.and_then(|f| f.severed);
     let result = match (fight.result, fight.died) {
@@ -237,7 +237,9 @@ fn fight_text(fight: &FightSummary, data: &DesignData) -> String {
     };
     format!(
         "against {} ({}fight seed {}): {result} in {} s, fame {:+}",
-        class_name(&fight.opponent, data),
+        fight
+            .opponent()
+            .map_or_else(|| "?".into(), |o| class_name(o, data)),
         if fight.against_stronger {
             "stronger, "
         } else {

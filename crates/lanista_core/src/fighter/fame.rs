@@ -85,14 +85,15 @@ impl FightOutcome {
                 _ => false,
             })
             .count();
-        let result = if !over {
-            FightResult::Unfinished
-        } else if fighter.is_some_and(|f| f.surrendered) {
+        // A fighter out of a melee that reached the time limit still lost.
+        let result = if fighter.is_some_and(|f| f.surrendered) {
             FightResult::GaveUp
-        } else if fighter.is_some_and(Fighter::is_fighting) {
+        } else if !fighter.is_some_and(Fighter::is_fighting) {
+            FightResult::Lost
+        } else if over {
             FightResult::Won
         } else {
-            FightResult::Lost
+            FightResult::Unfinished
         };
         Self {
             result,
@@ -138,6 +139,9 @@ pub struct FameRules {
     pub refused_armour: u32,
     pub refused_weapon: u32,
     pub refused_all: u32,
+    /// Gained in a melee by the last one standing, less for each place below, none
+    /// for the first one out.
+    pub melee_survival: u32,
 }
 
 // Saves go through `new`: an edited value stays within its bounds.
@@ -170,6 +174,7 @@ mod tests {
         refused_armour: 3,
         refused_weapon: 6,
         refused_all: 12,
+        melee_survival: 10,
     };
 
     struct Fixed(Action);

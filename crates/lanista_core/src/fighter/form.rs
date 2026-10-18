@@ -32,6 +32,7 @@ impl Form {
         match event {
             FormEvent::Fight => Self(self.0.saturating_sub(rules.fight)),
             FormEvent::TitleDefense => Self(self.0.saturating_sub(rules.title_defense)),
+            FormEvent::Melee => Self(self.0.saturating_sub(rules.melee)),
             FormEvent::Training => Self(self.0.saturating_sub(rules.training)),
             FormEvent::Rest => Self::new(self.0.saturating_add(rules.rest)),
         }
@@ -52,6 +53,8 @@ pub enum FormEvent {
     Fight,
     /// Costs more than a normal fight.
     TitleDefense,
+    /// The season-opening melee: long, against many.
+    Melee,
     Training,
     Rest,
 }
@@ -66,6 +69,8 @@ pub struct FormRules {
     pub fight: u32,
     /// Form lost in a title defense.
     pub title_defense: u32,
+    /// Form lost in a melee.
+    pub melee: u32,
     /// Form lost in a week of training.
     pub training: u32,
     /// Form recovered in a week of rest.
@@ -94,6 +99,7 @@ mod tests {
         risk_factor: 2.0,
         fight: 20,
         title_defense: 30,
+        melee: 30,
         training: 5,
         rest: 15,
     };

@@ -1,0 +1,303 @@
+//! A melee between career fighters: the arena of `crate::melee` played to its end, then
+//! what it leaves each of them, as a duel does (`CareerFighter::fight`). Only the last
+//! one standing wins; the others lose, and fame follows each one's place.
+
+use rand::{Rng, RngExt};
+
+use crate::ai::{CombatAi, UtilityAi};
+use crate::combat::{Arena, ArenaKind, Vec2, run};
+use crate::design_data::DesignData;
+use crate::fighter::FighterId;
+use crate::fighter::career::{CareerFighter, FightSummary, Status};
+use crate::fighter::equipment::Refused;
+use crate::fighter::fame::{FameRules, FightResult};
+use crate::fighter::form::FormEvent;
+use crate::fighter::injury::Injury;
+use crate::log::{Report, places};
+use crate::melee::melee_arena;
+use crate::staff::Medicine;
+use crate::stat_model::Ending;
+
+/// How one fighter goes into a melee: the equipment it refuses, its club's doctor.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub struct Entrant {
+    pub refused: Refused,
+    pub medicine: Medicine,
+}
+
+/// What a melee left one of its fighters.
+#[derive(Debug, Clone, PartialEq)]
+pub struct MeleeSide {
+    /// Stronger than this fighter, on average, were the others.
+    pub against_stronger: bool,
+    pub refused: Refused,
+    pub result: FightResult,
+    pub died: bool,
+    pub fame_change: i32,
+    pub new_injury: Option<Injury>,
+    /// Its doctor kept the new injury from leaving an after-effect.
+    pub after_effect_spared: bool,
+}
+
+/// A melee played: the fight itself, and what it left each fighter, in the arena's
+/// order, which is the order of the fighters given to [`play_melee`].
+#[derive(Debug, Clone, PartialEq)]
+pub struct MeleeFight {
+    pub seed: u64,
+    /// The arena before its first tick: playing it with utility AIs gives this melee.
+    pub start: Arena,
+    pub report: Report,
+    /// The fighters before the melee.
+    pub before: Vec<CareerFighter>,
+    /// Each one's place, 1 the best (see `log::places`), for the Elo.
+    pub places: Vec<u32>,
+    /// Whether each one fell at 0 HP yet survived the fatal blow.
+    pub survived_fatal_blow: Vec<bool>,
+    pub sides: Vec<MeleeSide>,
+    pub ticks: u32,
+}
+
+impl MeleeFight {
+    /// The melee as fighter `i` lived it, `None` past the last one.
+    #[must_use]
+    pub fn summary(&self, i: usize) -> Option<FightSummary> {
+        let side = self.sides.get(i)?;
+        let opponents = (0..self.before.len())
+            .filter(|&j| j != i)
+            .map(|j| self.before[j].clone())
+            .collect();
+        Some(FightSummary {
+            seed: self.seed,
+            start: self.start.clone(),
+            report: self.report.clone(),
+            me: FighterId(u32::try_from(i).ok()?),
+            opponents,
+            place: self.places.get(i).copied().unwrap_or(1),
+            against_stronger: side.against_stronger,
+            refused: side.refused,
+            result: side.result,
+            died: side.died,
+            survived_fatal_blow: self.survived_fatal_blow.clone(),
+            fame_change: side.fame_change,
+            ticks: self.ticks,
+        })
+    }
+}
+
+/// Fame a place brings in a melee of `count`: `melee_survival` for the first, shared
+/// down to none for the last.
+#[must_use]
+pub fn place_fame(place: u32, count: usize, rules: &FameRules) -> u32 {
+    let count = u64::try_from(count).unwrap_or(u64::MAX);
+    let Some(below) = count.checked_sub(1).filter(|&n| n > 0) else {
+        return 0;
+    };
+    let outlasted = count.saturating_sub(u64::from(place.max(1)));
+    u32::try_from(u64::from(rules.melee_survival) * outlasted / below).unwrap_or(u32::MAX)
+}
+
+/// The melee between `fighters` (as `entrants` go in, one each, missing ones fully
+/// equipped without doctor) on the floor of `kind`, played to its end or its time
+/// limit, then its effects on each, in order: fame, record and death, then morale,
+/// form (a melee's cost), illness worsening, a possible injury and progression.
+/// Fame adds the place's share (see [`place_fame`]) and the refused equipment's bonus;
+/// a fighter is against stronger when the others' strength is above its own on average.
+/// Nobody ends its week.
+pub fn play_melee<R: Rng + ?Sized>(
+    fighters: &mut [CareerFighter],
+    entrants: &[Entrant],
+    kind: ArenaKind,
+    rng: &mut R,
+    data: &DesignData,
+) -> MeleeFight {
+    let rules = &data.fighter;
+    let entrant = |i: usize| entrants.get(i).copied().unwrap_or_default();
+    let seed = rng.random::<u64>();
+    let origin = Vec2::new(0.0, 0.0);
+    let combat = fighters
+        .iter()
+        .enumerate()
+        .map(|(i, f)| {
+            let id = FighterId(u32::try_from(i).unwrap_or(u32::MAX));
+            f.combat_fighter(id, entrant(i).refused, data, origin)
+        })
+        .collect();
+    let start = melee_arena(combat, kind, seed, &data.combat);
+    let mut arena = start.clone();
+    let mut ais: Vec<Box<dyn CombatAi>> = arena
+        .fighters
+        .iter()
+        .map(|_| Box::new(UtilityAi) as Box<dyn CombatAi>)
+        .collect();
+    run(&mut arena, &mut ais, data.combat.melee.max_ticks);
+    let places = places(&arena);
+    let before = fighters.to_vec();
+    let strengths: Vec<u64> = fighters.iter().map(|f| f.strength(rules)).collect();
+    let total: u64 = strengths.iter().sum();
+    let others = u64::try_from(fighters.len().saturating_sub(1)).unwrap_or(u64::MAX);
+    let count = fighters.len();
+    let taken: Vec<_> = fighters
+        .iter_mut()
+        .enumerate()
+        .map(|(i, f)| {
+            let id = FighterId(u32::try_from(i).unwrap_or(u32::MAX));
+            let side = Ending::from_arena(&arena, id, &rules.fame);
+            // The others' average above its own, without dividing.
+            let against_stronger = total - strengths[i] > strengths[i] * others;
+            let place = places.get(i).copied().unwrap_or(1);
+            let bonus = place_fame(place, count, &rules.fame)
+                .saturating_add(entrant(i).refused.fame_bonus(&rules.fame));
+            (
+                against_stronger,
+                f.take_side(side, against_stronger, bonus, rng, rules),
+            )
+        })
+        .collect();
+    let survived_fatal_blow = fighters
+        .iter()
+        .zip(&arena.fighters)
+        .map(|(f, c)| !c.is_alive() && f.status != Status::Dead)
+        .collect();
+    let sides = fighters
+        .iter_mut()
+        .zip(taken)
+        .enumerate()
+        .map(|(i, (f, (against_stronger, taken)))| {
+            let died = f.status == Status::Dead;
+            let medicine = entrant(i).medicine;
+            let (new_injury, after_effect_spared) =
+                f.after_fight(taken, FormEvent::Melee, medicine, rng, rules);
+            MeleeSide {
+                against_stronger,
+                refused: entrant(i).refused,
+                result: taken.outcome.result,
+                died,
+                fame_change: taken.fame_change,
+                new_injury,
+                after_effect_spared,
+            }
+        })
+        .collect();
+    MeleeFight {
+        seed,
+        start,
+        report: Report::new(&arena),
+        before,
+        places,
+        survived_fatal_blow,
+        sides,
+        ticks: arena.tick,
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use rand::SeedableRng;
+    use rand_chacha::ChaCha8Rng;
+
+    fn data() -> DesignData {
+        DesignData::load().unwrap()
+    }
+
+    fn twenty(data: &DesignData, seed: u64) -> (Vec<CareerFighter>, ChaCha8Rng) {
+        let mut rng = ChaCha8Rng::seed_from_u64(seed);
+        let fighters = (0..20)
+            .map(|_| CareerFighter::random(&mut rng, data))
+            .collect();
+        (fighters, rng)
+    }
+
+    #[test]
+    fn fame_follows_the_place() {
+        let rules = data().fighter.fame;
+        let full = rules.melee_survival;
+        assert_eq!(place_fame(1, 20, &rules), full);
+        assert_eq!(place_fame(20, 20, &rules), 0);
+        assert!(place_fame(10, 20, &rules) < full && place_fame(10, 20, &rules) > 0);
+        assert_eq!(place_fame(1, 1, &rules), 0);
+    }
+
+    #[test]
+    fn only_the_last_one_standing_wins_and_everyone_takes_the_melee() {
+        let data = data();
+        let (mut fighters, mut rng) = twenty(&data, 1);
+        let before = fighters.clone();
+        let melee = play_melee(&mut fighters, &[], ArenaKind::Sand, &mut rng, &data);
+        let winners: Vec<usize> = (0..20)
+            .filter(|&i| melee.sides[i].result == FightResult::Won)
+            .collect();
+        assert!(winners.len() <= 1);
+        if let &[winner] = winners.as_slice() {
+            assert_eq!(melee.places[winner], 1);
+            assert_eq!(fighters[winner].record.wins, 1);
+        }
+        for (i, (f, old)) in fighters.iter().zip(&before).enumerate() {
+            let side = &melee.sides[i];
+            assert_eq!(side.died, f.status == Status::Dead);
+            if !winners.contains(&i) && melee.report.over {
+                assert!(matches!(
+                    side.result,
+                    FightResult::Lost | FightResult::GaveUp
+                ));
+            }
+            assert_eq!(f.record.wins + f.record.losses + f.record.draws, 1);
+            if !side.died {
+                assert!(f.form.value() < old.form.value() || old.form.value() == 0);
+            }
+            let fame = i64::from(old.fame.value()) + i64::from(side.fame_change);
+            assert_eq!(i64::from(f.fame.value()), fame.clamp(0, 100));
+        }
+        // Replaying the start with utility AIs gives the same melee.
+        let mut replay = melee.start.clone();
+        let mut ais: Vec<Box<dyn CombatAi>> = (0..20)
+            .map(|_| Box::new(UtilityAi) as Box<dyn CombatAi>)
+            .collect();
+        run(&mut replay, &mut ais, data.combat.melee.max_ticks);
+        assert_eq!(Report::new(&replay), melee.report);
+    }
+
+    #[test]
+    fn the_same_seed_plays_the_same_melee() {
+        let data = data();
+        let play = || {
+            let (mut fighters, mut rng) = twenty(&data, 2);
+            let melee = play_melee(&mut fighters, &[], ArenaKind::Pillars, &mut rng, &data);
+            (melee, fighters)
+        };
+        assert_eq!(play(), play());
+    }
+
+    #[test]
+    fn each_fighter_sees_the_melee_from_its_place() {
+        let data = data();
+        let (mut fighters, mut rng) = twenty(&data, 3);
+        let refused = Refused {
+            armour: true,
+            weapon: false,
+        };
+        let entrants = [
+            Entrant::default(),
+            Entrant {
+                refused,
+                ..Entrant::default()
+            },
+        ];
+        let melee = play_melee(&mut fighters, &entrants, ArenaKind::Narrow, &mut rng, &data);
+        let summary = melee.summary(1).unwrap();
+        assert_eq!(summary.me, FighterId(1));
+        assert!(summary.is_melee());
+        assert_eq!(summary.opponents.len(), 19);
+        assert_eq!(summary.opponent(), Some(&melee.before[0]));
+        assert_eq!(summary.place, melee.places[1]);
+        assert_eq!(summary.refused, refused);
+        assert_eq!(summary.mine().map(|r| r.id), Some(FighterId(1)));
+        let armour = data.fighter.equipment.armourless_defense_percent;
+        let defense = melee.before[1].fighting_stats(&data.fighter).melee_defense;
+        assert_eq!(
+            summary.start.fighters[1].stats.melee_defense,
+            defense * armour / 100
+        );
+        assert!(melee.summary(20).is_none());
+    }
+}

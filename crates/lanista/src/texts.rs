@@ -505,7 +505,7 @@ fn limb_cut(location: Location) -> String {
 }
 
 pub fn fight_text(fight: &FightSummary, data: &DesignData) -> String {
-    let mine = fight.report.fighters.first();
+    let mine = fight.mine();
     // Brought to 0 HP, it may still have survived the fatal blow.
     let fell = mine.is_some_and(|f| f.hp == 0);
     let knocked_out = mine.is_some_and(|f| f.knocked_out);
@@ -534,11 +534,36 @@ pub fn fight_text(fight: &FightSummary, data: &DesignData) -> String {
         (false, true) => ", sans arme",
         (false, false) => "",
     };
+    let against = if fight.is_melee() {
+        format!(
+            "Mêlée à {}, {}{}",
+            fight.opponents.len() + 1,
+            place_name(fight.place),
+            if fight.against_stronger {
+                ", plus forts"
+            } else {
+                ""
+            }
+        )
+    } else {
+        let class = fight
+            .opponent()
+            .map_or_else(|| "?".into(), |o| class_name(o, data));
+        format!("Contre un {class}{stronger}")
+    };
     format!(
-        "Contre un {}{stronger}{bare} : {result}, renommée {:+}",
-        class_name(&fight.opponent, data),
+        "{against}{bare} : {result}, renommée {:+}",
         fight.fame_change
     )
+}
+
+/// A place in a melee: « 1er », « 2e »…
+pub fn place_name(place: u32) -> String {
+    if place == 1 {
+        "1er".into()
+    } else {
+        format!("{place}e")
+    }
 }
 
 /// `name after (±difference)`, or `name value` when it did not change. Plain ASCII
@@ -650,6 +675,27 @@ pub fn week_lines(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_melee_is_told_by_its_size_and_place() {
+        use lanista_core::combat::ArenaKind;
+        use lanista_core::fighter::melee::play_melee;
+        use rand_chacha::ChaCha8Rng;
+        use rand_chacha::rand_core::SeedableRng;
+
+        let data = DesignData::load().unwrap();
+        let mut rng = ChaCha8Rng::seed_from_u64(1);
+        let mut fighters: Vec<CareerFighter> = (0..5)
+            .map(|_| CareerFighter::random(&mut rng, &data))
+            .collect();
+        let melee = play_melee(&mut fighters, &[], ArenaKind::Sand, &mut rng, &data);
+        let summary = melee.summary(2).unwrap();
+        let text = fight_text(&summary, &data);
+        let place = place_name(melee.places[2]);
+        assert!(text.starts_with(&format!("Mêlée à 5, {place}")), "{text}");
+        assert_eq!(place_name(1), "1er");
+        assert_eq!(place_name(3), "3e");
+    }
 
     #[test]
     fn injuries_read_in_french() {

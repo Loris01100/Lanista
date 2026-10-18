@@ -603,12 +603,15 @@ impl ClubScreen {
                 egui::Grid::new(("fight", n)).striped(true).show(ui, |ui| {
                     ui.label("");
                     ui.strong("Votre combattant");
-                    ui.strong(format!(
-                        "L'adversaire ({})",
-                        class_name(&fight.opponent, data)
-                    ));
+                    // A melee shows the fighter's line only, a duel both sides.
+                    let sides: Vec<_> =
+                        if let (false, Some(opponent)) = (fight.is_melee(), fight.opponent()) {
+                            ui.strong(format!("L'adversaire ({})", class_name(opponent, data)));
+                            fight.report.fighters.iter().collect()
+                        } else {
+                            fight.mine().into_iter().collect()
+                        };
                     ui.end_row();
-                    let sides = &fight.report.fighters;
                     let rows = sides.iter().map(|f| {
                         [
                             f.damage_dealt,
@@ -727,7 +730,7 @@ impl Screen for ClubScreen {
 /// those who fall at 0 HP but survive the fatal blow.
 fn watched(fight: &FightSummary) -> (Arena, Vec<FighterId>) {
     let survivors = (0..)
-        .zip(fight.survived_fatal_blow)
+        .zip(fight.survived_fatal_blow.iter().copied())
         .filter(|&(_, survived)| survived)
         .map(|(id, _)| FighterId(id))
         .collect();
@@ -1033,7 +1036,7 @@ mod tests {
             screen.alerts()
         );
         screen.next_week();
-        assert_eq!(screen.fights[0].fight.opponent, resident);
+        assert_eq!(screen.fights[0].fight.opponent(), Some(&resident));
         // A week of rest: nothing to watch, nothing to sum up.
         screen.decisions.plans[0].activity = Activity::Rest;
         screen.next_week();
