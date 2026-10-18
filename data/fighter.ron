@@ -105,6 +105,29 @@
         // the first one out.
         melee_survival: 10,
     ),
+    // How fighters look, to tell 20 of them apart in a melee: drawn at random when a
+    // fighter is generated (docs/Formats_graphiques.md). Every layer is the `build`
+    // variant (assets/fighters/<layer>/<build>.png) but the hair, one of `hair`
+    // (assets/fighters/hair/<shape>.png); the grey drawings are multiplied by a skin
+    // tint (head, arms, legs), a hair tint and a tunic tint (body), RGB from 0 to 255.
+    appearance: (
+        build: "average",
+        hair: ["short", "long"],
+        skins: [(241, 194, 150), (198, 134, 66), (120, 74, 42)],
+        hair_tints: [(45, 32, 22), (150, 90, 40), (220, 196, 130)],
+        tunics: [(170, 40, 40), (45, 85, 160), (225, 215, 185)],
+        // The head and hair images turn around the neck, at this pixel of their 32 x
+        // 32 image; for each of the 16 images of the spritesheet (idle, move, attack,
+        // death), they move by (right, down) pixels from their place in the first idle
+        // image and turn by degrees, clockwise.
+        head_pivot: (16.0, 12.0),
+        head_frames: [
+            (0.0, 0.0, 0.0), (0.0, 1.0, 0.0), (0.0, 1.0, 0.0), (0.0, 0.0, 0.0),
+            (0.0, 0.0, 0.0), (0.0, 1.0, 0.0), (0.0, 0.0, 0.0), (0.0, 1.0, 0.0),
+            (-1.0, 0.0, 0.0), (0.0, 0.0, 0.0), (1.0, 0.0, 0.0), (0.0, 0.0, 0.0),
+            (-2.7, 0.1, -22.5), (-4.6, 2.4, -45.0), (-4.9, 7.3, -67.5), (-3.0, 12.0, -90.0),
+        ],
+    ),
     // The colosseum's equipment is the same for everyone. A refused piece costs, in
     // percent of what is left: defenses without armour, attacks without weapon, whose
     // cutting hits turn blunt (bare hands).

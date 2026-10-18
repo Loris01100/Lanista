@@ -1,3 +1,4 @@
+pub mod appearance;
 pub mod care;
 pub mod career;
 pub mod equipment;
@@ -17,6 +18,7 @@ use serde::{Deserialize, Serialize};
 use crate::ai::Action;
 use crate::combat::Vec2;
 use crate::design_data::{ClassData, Cost, SpellData};
+use crate::fighter::appearance::Appearance;
 use crate::fighter::form::Form;
 use crate::fighter::illness::Illness;
 use crate::fighter::injury::{Injury, Location};
@@ -185,6 +187,8 @@ pub struct Fighter {
     /// The fighter's state outside the fight, read by the AI so that an injured or
     /// fearful fighter fights differently. `stats` already include its effects.
     pub condition: Condition,
+    /// How it is drawn; no effect on the fight.
+    pub appearance: Appearance,
 }
 
 /// Everything about a fighter's state that its combat AI reads, beyond HP and resources.
@@ -239,6 +243,7 @@ impl Fighter {
             knocked_out: false,
             severed: None,
             condition: Condition::default(),
+            appearance: Appearance::default(),
         }
     }
 

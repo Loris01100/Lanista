@@ -63,6 +63,13 @@ impl Assets {
         loaded(&self.textures, path)
     }
 
+    /// The texture at `path`, if it was loaded: for optional ones, whose loading may
+    /// have failed.
+    #[must_use]
+    pub fn try_texture(&self, path: &str) -> Option<&Texture2D> {
+        self.textures.get(path)
+    }
+
     /// # Panics
     /// If the sound was not loaded.
     #[must_use]

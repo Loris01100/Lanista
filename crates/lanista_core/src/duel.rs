@@ -7,6 +7,7 @@ use rand_chacha::ChaCha8Rng;
 use crate::ai::{CombatAi, UtilityAi};
 use crate::combat::{Arena, Vec2, run};
 use crate::design_data::DesignData;
+use crate::fighter::appearance::Appearance;
 use crate::fighter::{ClassId, Fighter, FighterId, Stats};
 
 /// A fight lasts at most one minute.
@@ -25,7 +26,8 @@ pub const STATS: Stats = Stats {
 };
 
 /// A duel set up from `seed`: random classes, fighter 0 starts in the left quarter,
-/// fighter 1 in the right quarter. The arena gets the same seed and `data`'s combat rules.
+/// fighter 1 in the right quarter, each with a random look. The arena gets the same seed
+/// and `data`'s combat rules.
 ///
 /// # Panics
 /// If `data` has no class, which [`DesignData::from_ron`] rejects: a bug, not a data error.
@@ -41,7 +43,11 @@ pub fn random_duel(data: &DesignData, seed: u64) -> Arena {
         let class_data = data.class(class).expect("drawn among the loaded classes");
         Fighter::new(FighterId(id), class, class_data, STATS, Vec2::new(x, y))
     };
-    let fighters = vec![fighter(0, 1.0), fighter(1, ARENA_SIZE * 3.0 / 4.0 - 1.0)];
+    let mut fighters = vec![fighter(0, 1.0), fighter(1, ARENA_SIZE * 3.0 / 4.0 - 1.0)];
+    // Drawn last: the duel of a seed stays the one it was before looks.
+    for f in &mut fighters {
+        f.appearance = Appearance::random(&mut rng, &data.fighter.appearance);
+    }
     Arena::new(ARENA_SIZE, ARENA_SIZE, fighters, seed).with_rules(&data.combat)
 }
 

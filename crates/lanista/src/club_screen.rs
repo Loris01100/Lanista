@@ -1192,8 +1192,15 @@ mod tests {
         screen.next_week();
         assert_eq!(screen.state.week, 2);
         assert_eq!(screen.histories[0], []);
-        let signed = free_agent_name(0, &screen.state.free_agents[0], &screen.data);
-        screen.decisions.moves = vec![Move::Sign(0)];
+        // The first free agent still on the market: the opening melee may have killed
+        // one, or a rival club signed it.
+        let agents = &screen.state.free_agents;
+        let a = agents
+            .iter()
+            .position(|f| f.status == Status::Active)
+            .unwrap();
+        let signed = free_agent_name(a, &agents[a], &screen.data);
+        screen.decisions.moves = vec![Move::Sign(a)];
         screen.next_week();
         assert_eq!(screen.state.fighters.len(), 2);
         assert_eq!(screen.decisions.plans.len(), 2);
@@ -1202,7 +1209,7 @@ mod tests {
         let (_, overview) = screen.last_week.as_ref().unwrap();
         let name = fighter_name(1, &screen.state.fighters[1], &screen.data);
         assert_eq!(overview[1], format!("Recrute {name}"));
-        assert!(signed.starts_with("Free agent n° 1"));
+        assert!(signed.starts_with(&format!("Free agent n° {}", a + 1)));
     }
 
     #[test]

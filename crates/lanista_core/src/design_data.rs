@@ -8,6 +8,7 @@ use crate::colosseum::WorldRules;
 use crate::combat::{ArenaKind, ArenaLayout, CombatRules, DamageKind, Pillar, RADIUS, Range};
 use crate::economy::EconomyRules;
 use crate::fighter::ClassId;
+use crate::fighter::appearance::AppearanceRules;
 use crate::fighter::care::CareRules;
 use crate::fighter::career::CareerRules;
 use crate::fighter::equipment::EquipmentRules;
@@ -49,6 +50,7 @@ pub struct FighterRules {
     pub retirement: RetirementRules,
     pub career: CareerRules,
     pub equipment: EquipmentRules,
+    pub appearance: AppearanceRules,
 }
 
 #[derive(Debug, Clone, PartialEq, Deserialize)]
@@ -87,6 +89,8 @@ pub enum Cost {
 }
 
 const CLASSES_FILE: &str = "data/classes.ron";
+/// Images of a fighter's spritesheet: 4 animations of 4 (`docs/Formats_graphiques.md`).
+pub const APPEARANCE_FRAMES: usize = 16;
 const COMBAT_FILE: &str = "data/combat.ron";
 const FIGHTER_FILE: &str = "data/fighter.ron";
 const CALENDAR_FILE: &str = "data/calendar.ron";
@@ -284,6 +288,27 @@ impl DesignData {
 
     fn validate_fighter(&self) -> Result<(), LoadError> {
         let rules = &self.fighter;
+        let looks = &rules.appearance;
+        let empty = [
+            ("appearance.hair", looks.hair.is_empty()),
+            ("appearance.skins", looks.skins.is_empty()),
+            ("appearance.hair_tints", looks.hair_tints.is_empty()),
+            ("appearance.tunics", looks.tunics.is_empty()),
+        ];
+        if let Some(&(field, _)) = empty.iter().find(|(_, empty)| *empty) {
+            return Err(LoadError::Invalid {
+                file: FIGHTER_FILE,
+                field,
+                problem: "empty",
+            });
+        }
+        if looks.head_frames.len() != APPEARANCE_FRAMES {
+            return Err(LoadError::Invalid {
+                file: FIGHTER_FILE,
+                field: "appearance.head_frames",
+                problem: "not one for each of the spritesheet's 16 images",
+            });
+        }
         let equipment = &rules.equipment;
         // A refused piece must not make the fighter stronger.
         for (field, percent) in [
@@ -540,6 +565,10 @@ mod tests {
             field(CLASSES, &stronger),
             "equipment.weaponless_attack_percent"
         );
+        let bald = FIGHTER.replacen(r#"hair: ["short", "long"]"#, "hair: []", 1);
+        assert_eq!(field(CLASSES, &bald), "appearance.hair");
+        let still = FIGHTER.replacen("(-1.0, 0.0, 0.0), ", "", 1);
+        assert_eq!(field(CLASSES, &still), "appearance.head_frames");
         let not_a_chance = FIGHTER.replacen("worsening_chance: 0.5", "worsening_chance: 1.5", 1);
         assert_eq!(field(CLASSES, &not_a_chance), "illness.worsening_chance");
         let no_week = "(competition_weeks: 0, great_event_weeks: 0, off_season_weeks: 0)";

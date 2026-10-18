@@ -37,15 +37,17 @@ Le personnage est découpé en calques superposés, un fichier par calque :
 
 | Calque | Ordre de dessin | Teinté |
 | --- | --- | --- |
-| `leg_back` (jambe arrière) | 1 | peau ou tunique |
+| `leg_back` (jambe arrière) | 1 | peau |
 | `arm_back` (bras arrière) | 2 | peau |
-| `body` (corps) | 3 | peau, tunique |
-| `leg_front` (jambe avant) | 4 | peau ou tunique |
-| `head` (tête et cheveux) | 5 | peau, cheveux |
-| `arm_front` (bras avant) | 6 | peau |
+| `body` (corps) | 3 | tunique |
+| `leg_front` (jambe avant) | 4 | peau |
+| `head` (tête) | 5 | peau |
+| `hair` (cheveux) | 6 | cheveux |
+| `arm_front` (bras avant) | 7 | peau |
 
+- Une seule teinte par fichier : la tête et les cheveux sont donc deux calques, et ce qui, sur un calque, n'a pas sa teinte (une jambe nue sous la tunique, un col…) va dans un autre calque ou dans le fichier de détail.
 - Chaque calque de corps et de membre est une feuille complète de 128 × 128 px sur la même grille, transparente hors de sa partie.
-- La tête est **une seule image de 32 × 32 px** par variante, placée comme dans l'image de repos. Le jeu la décale image par image pour suivre le corps ; ce décalage sera réglé dans `data/`.
+- La tête et les cheveux sont chacun **une seule image de 32 × 32 px** par variante, placée comme dans l'image de repos. Le jeu les décale et les tourne image par image autour du cou pour suivre le corps : le point de rotation (`head_pivot`) et, pour chacune des 16 images, le décalage en pixels et l'angle en degrés dans le sens horaire (`head_frames`) sont dans `appearance`, dans `data/fighter.ron`. Une nouvelle carrure dont le cou bouge autrement demande d'y reporter ses valeurs.
 - « Avant » et « arrière » sont vus du combattant tourné vers la droite. Le côté anatomique (gauche ou droit, main dominante) est géré par le jeu.
 
 ### Variantes et teintes
@@ -63,7 +65,9 @@ assets/fighters/<calque>/<variante>.png   teinté
 assets/fighters/<calque>/<variante>_detail.png   non teinté, facultatif
 ```
 
-Exemples : `assets/fighters/head/bald.png`, `assets/fighters/head/bald_detail.png`, `assets/fighters/body/average.png`.
+Les variantes de chaque calque sont la carrure (`build` dans `data/fighter.ron`, `average` pour l'instant), sauf pour les cheveux, une variante par forme (`hair`). Exemples : `assets/fighters/head/average.png`, `assets/fighters/head/average_detail.png` (les yeux), `assets/fighters/hair/long.png`, `assets/fighters/body/average.png`.
+
+Les calques actuels sont **provisoires** : des formes simples en gris clair (carrure `average`, cheveux `short` et `long`), générées par un script en attendant les vrais dessins, qui les remplacent sous les mêmes noms.
 
 ### Personnages uniques
 
@@ -99,11 +103,11 @@ Un personnage unique est dessiné à la main, sans calques générés ni teintes
 
 - Nouveau sprite de 32 × 32 px, mode de couleur RGBA, fond transparent.
 - Charger la palette du jeu (Palette > Load Palette).
-- Un calque par partie, nommé comme dans le tableau des calques (`leg_back`, `arm_back`, `body`, `leg_front`, `head`, `arm_front`), plus un calque `_detail` à côté de chaque partie qui en a.
+- Un calque par partie, nommé comme dans le tableau des calques (`leg_back`, `arm_back`, `body`, `leg_front`, `head`, `hair`, `arm_front`), plus un calque `_detail` à côté de chaque partie qui en a.
 - 16 images ; un tag par animation (`idle` images 1 à 4, `move` 5 à 8, `attack` 9 à 12, `death` 13 à 16).
 - Utiliser le papier calque (Onion Skin) pour animer.
 
-Dessiner d'abord un personnage complet et le tester dans le jeu à la place de `assets/placeholder/fighter.png` (même grille), puis seulement ensuite le répartir en calques et créer les variantes.
+Dessiner d'abord un personnage complet, puis le répartir en calques à la place des calques provisoires de `assets/fighters/` (même grille, mêmes noms) et créer les variantes.
 
 ### Exporter
 
@@ -114,7 +118,7 @@ File > Export Sprite Sheet, une exportation par calque :
 - Borders : tout à 0 (pas de marge ni d'espacement entre les images).
 - Output : Output File = `assets/fighters/<calque>/<variante>.png` ; décocher JSON Data.
 
-Pour la tête, exporter seulement la première image du calque `head` (File > Export As, Frames = 1).
+Pour la tête et les cheveux, exporter seulement la première image des calques `head` et `hair` (File > Export As, Frames = 1).
 
 ## Point ouvert
 

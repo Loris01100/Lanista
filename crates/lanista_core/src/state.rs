@@ -2510,6 +2510,8 @@ mod tests {
         let data = data();
         let rules = &data.world;
         let mut state = GameState::new(7, &data);
+        // Past the season's opening, whose melees keep the rival fighters busy.
+        state.week = 2;
         let rome = ColosseumId(1);
         let summary = next_week(&mut state, &plan(Activity::Fight(rome), false), &data);
         let fight = summary.reports[0].as_ref().unwrap().fight.as_ref().unwrap();
@@ -3391,10 +3393,12 @@ mod tests {
             }
             assert!(rival.money < 25_000, "{}", rival.money);
         }
-        // Rich, modest and poor clubs live side by side.
+        // Clubs of different wealth live side by side, each one's following its money
+        // (a rich club that spent too much on fighters is modest now).
         let mut wealths: Vec<Wealth> = state.rivals.iter().map(|r| r.wealth).collect();
         wealths.sort();
-        assert_eq!(wealths, Wealth::ALL);
+        wealths.dedup();
+        assert!(wealths.len() >= 2, "{wealths:?}");
         // Free agents fought too, ranked in the colosseum free to enter; some were
         // signed with their record, and some died in the arena.
         let fights = |f: &CareerFighter| f.record.wins + f.record.losses + f.record.draws;

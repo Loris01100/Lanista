@@ -3,6 +3,7 @@
 
 mod club_screen;
 mod combat_screen;
+mod fighter_sprite;
 mod saves;
 mod texts;
 mod theme;
@@ -10,7 +11,7 @@ mod theme;
 use std::rc::Rc;
 
 use club_screen::ClubScreen;
-use combat_screen::{DEATH_SOUND, FIGHTER_SHEET, HIT_SOUND, MUSIC};
+use combat_screen::{DEATH_SOUND, HIT_SOUND, MUSIC};
 use lanista_core::design_data::DesignData;
 use macroquad::prelude::*;
 use reesch::{Assets, Bindings, Button};
@@ -45,15 +46,22 @@ async fn main() {
     // ponytail: relative to the working directory (the workspace root with
     // `cargo run`); resolve next to the executable when packaging for Steam.
     set_pc_assets_folder("assets");
+    let data = Rc::new(DesignData::load().expect("load the design data"));
     let mut assets = Assets::default();
-    assets
-        .load_texture(FIGHTER_SHEET)
-        .await
-        .expect("load the fighter spritesheet");
+    let (layers, details) = fighter_sprite::texture_paths(&data.fighter.appearance);
+    for layer in &layers {
+        assets
+            .load_texture(layer)
+            .await
+            .unwrap_or_else(|e| panic!("load the fighter layer {layer}: {e}"));
+    }
+    // A layer's details are optional.
+    for detail in &details {
+        let _ = assets.load_texture(detail).await;
+    }
     for sound in [HIT_SOUND, DEATH_SOUND, MUSIC] {
         assets.load_sound(sound).await.expect("load a sound");
     }
-    let data = Rc::new(DesignData::load().expect("load the design data"));
     let bindings = Bindings::new(vec![
         (Action::Quit, Button::Key(KeyCode::Escape)),
         (Action::SlowSpeed, Button::Key(KeyCode::Key1)),

@@ -8,6 +8,7 @@ use crate::colosseum::ColosseumId;
 use crate::combat::{Arena, ArenaKind, Vec2};
 use crate::design_data::{DesignData, FighterRules};
 use crate::duel::{STATS, play};
+use crate::fighter::appearance::Appearance;
 use crate::fighter::care::CareRules;
 use crate::fighter::equipment::Refused;
 use crate::fighter::fame::{Fame, FightOutcome, FightResult};
@@ -84,12 +85,14 @@ pub struct CareerFighter {
     /// and the narrower (`market::stat_ranges`).
     #[serde(default)]
     pub observed_weeks: u32,
+    /// How it looks, for life.
+    pub appearance: Appearance,
 }
 
 impl CareerFighter {
     /// A new fighter: random class, stats within `rules.career.stats_spread_percent` of the
-    /// standard duel's, hidden potential, dominant hand, age and personality; neutral morale,
-    /// no fame, full form, healthy.
+    /// standard duel's, hidden potential, dominant hand, age, personality and look;
+    /// neutral morale, no fame, full form, healthy.
     ///
     /// # Panics
     /// If `data` has no class, which [`DesignData::from_ron`] rejects: a bug, not a data error.
@@ -111,6 +114,8 @@ impl CareerFighter {
         };
         let (youngest, oldest) = rules.career.start_age;
         let age = rng.random_range(youngest..=oldest);
+        let personality = Personality::random(rng);
+        let appearance = Appearance::random(rng, &rules.appearance);
         Self {
             class,
             stats,
@@ -118,7 +123,7 @@ impl CareerFighter {
             dominant_hand,
             age,
             weeks_this_year: 0,
-            personality: Personality::random(rng),
+            personality,
             morale: Morale::neutral(),
             fame: Fame::default(),
             form: Form::full(),
@@ -127,6 +132,7 @@ impl CareerFighter {
             status: Status::Active,
             record: Record::default(),
             observed_weeks: 0,
+            appearance,
         }
     }
 
@@ -174,6 +180,7 @@ impl CareerFighter {
             spell.damage_kind = refused.damage_kind(spell.damage_kind);
         }
         fighter.surrender_hp = self.personality.surrender_hp(stats.hp, &rules.personality);
+        fighter.appearance = self.appearance.clone();
         fighter.condition = Condition {
             personality: self.personality,
             morale: self.morale,

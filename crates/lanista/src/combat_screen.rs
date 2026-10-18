@@ -14,30 +14,16 @@ use lanista_core::log::EventKind;
 use macroquad::prelude::*;
 use reesch::{
     Animation, AnimationEvent, AnimationPlayer, Assets, Audio, Bindings, FixedStep, Screen,
-    SpriteSheet, Transition, egui, fit_camera,
+    Transition, egui, fit_camera,
 };
 
 use crate::Action;
+use crate::fighter_sprite::{Placement, SHEET, draw_fighter};
 
-pub const FIGHTER_SHEET: &str = "placeholder/fighter.png";
 // ponytail: placeholder sounds; per-spell and per-class sounds in `data/` later.
 pub const HIT_SOUND: &str = "placeholder/hit.wav";
 pub const DEATH_SOUND: &str = "placeholder/death.wav";
 pub const MUSIC: &str = "placeholder/music.wav";
-// ponytail: one placeholder sheet for every class; per-class sheets
-// and animations in `data/` (RON) with the real sprites.
-const SHEET: SpriteSheet = SpriteSheet {
-    columns: 4,
-    frame_width: 16.0,
-    frame_height: 16.0,
-};
-/// Drawn size of a fighter, in meters (its body is 1 m wide).
-const SPRITE_SIZE: f32 = 1.6;
-/// Tint per fighter, in `FighterId` order, to tell them apart in a mirror match.
-const FIGHTER_TINTS: [Color; 2] = [
-    Color::new(1.0, 0.75, 0.55, 1.0),
-    Color::new(0.6, 0.75, 1.0, 1.0),
-];
 /// Fight speeds offered, with their labels.
 const SPEEDS: [(f32, &str); 3] = [(0.5, "x0,5"), (1.0, "x1"), (1.5, "x1,5")];
 const SAND: Color = Color::new(0.76, 0.66, 0.48, 1.0);
@@ -66,7 +52,7 @@ const BLOOD_BLOTS: [(f32, f32, f32); 4] = [
     (-0.55, 0.5, 0.45),
     (0.2, -0.7, 0.4),
 ];
-/// Brightness of a dead fighter's sprite once it lies down, a share of its tint.
+/// Brightness of a dead fighter's sprite once it lies down, a share of its tints.
 const DEAD_SHADE: f32 = 0.6;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -444,7 +430,7 @@ impl Screen for CombatScreen {
             }
         }
 
-        let texture = assets.texture(FIGHTER_SHEET);
+        let looks = &self.data.fighter.appearance;
         let alpha = self.step.alpha();
         // The dead first, so the living walk over them.
         let mut order: Vec<usize> = (0..self.arena.fighters.len()).collect();
@@ -458,32 +444,16 @@ impl Screen for CombatScreen {
             // Sprites face right: turn toward the other fighters' side.
             let others = self.arena.fighters.iter().filter(|f| f.id != fighter.id);
             let flip_x = others.map(|f| f.position.x - to.x).sum::<f64>() < 0.0;
-            let mut tint = index(fighter.id.0)
-                .and_then(|i| FIGHTER_TINTS.get(i))
-                .copied()
-                .unwrap_or(WHITE);
             let animation = &self.animations[look.pose as usize];
-            if look.pose == Pose::Death && look.player.is_finished(animation) {
-                tint = Color::new(
-                    tint.r * DEAD_SHADE,
-                    tint.g * DEAD_SHADE,
-                    tint.b * DEAD_SHADE,
-                    tint.a,
-                );
-            }
-            let frame = look.player.frame(animation);
-            draw_texture_ex(
-                texture,
-                x - SPRITE_SIZE / 2.0,
-                y - SPRITE_SIZE / 2.0,
-                tint,
-                DrawTextureParams {
-                    dest_size: Some(vec2(SPRITE_SIZE, SPRITE_SIZE)),
-                    source: Some(SHEET.frame_rect(frame)),
-                    flip_x,
-                    ..Default::default()
-                },
-            );
+            let lying = look.pose == Pose::Death && look.player.is_finished(animation);
+            let at = Placement {
+                x,
+                y,
+                frame: look.player.frame(animation),
+                flip_x,
+                shade: if lying { DEAD_SHADE } else { 1.0 },
+            };
+            draw_fighter(assets, looks, &fighter.appearance, &at);
         }
         set_default_camera();
     }
