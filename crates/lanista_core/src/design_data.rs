@@ -456,8 +456,10 @@ fn melee_problem(rules: &MeleeRules) -> Option<(&'static str, &'static str)> {
         Some(("melee.pacts", "a chance above 100"))
     } else if pacts.break_fighting < 2 {
         Some(("melee.pacts.break_fighting", "below 2"))
-    } else if rules.quota.every_ticks == 0 {
-        Some(("melee.quota.every_ticks", "0"))
+    } else if rules.elimination.every_ticks == 0 {
+        Some(("melee.elimination.every_ticks", "0"))
+    } else if rules.elimination.final_fighters < 1 {
+        Some(("melee.elimination.final_fighters", "below 1"))
     } else {
         None
     }

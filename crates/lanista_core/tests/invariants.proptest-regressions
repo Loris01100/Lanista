@@ -5,3 +5,4 @@
 # It is recommended to check this file in to source control so that
 # everyone who runs the test benefits from these saved cases.
 cc ce9c5e67366892982f170efcc2c0381af66210eb03d13b8a8d61d58ab46a52d6 # shrinks to setup = [(0, Vec2 { x: 17.61939280706249, y: 0.5 }), (0, Vec2 { x: 17.49185151386473, y: 1.3466987639664985 })], determination = [0, 0], seed = 4033115754188295
+cc feb8253a04bdb66352d95410e3cb1a8c238c6b64f093f5fd88043c7dd5d42502 # shrinks to kind = Pillars, count = 9, seed = 5293050048383209458

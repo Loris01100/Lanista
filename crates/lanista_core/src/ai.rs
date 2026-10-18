@@ -8,7 +8,7 @@ use crate::fighter::illness::IllnessLevel;
 use crate::fighter::morale::Morale;
 use crate::fighter::personality::Personality;
 use crate::fighter::{Condition, Fighter, FighterId};
-use crate::melee::quota_pressure;
+use crate::melee::{in_danger, in_final};
 
 #[derive(Debug, Clone, Copy, PartialEq, Default)]
 pub enum Action {
@@ -92,8 +92,9 @@ pub fn fear(condition: &Condition) -> f64 {
 /// value a showman sees in its strongest spell about to be ready; closing in scores
 /// `MOVE_SCORE`; a fearful, hurt fighter scores backing away from a threatening enemy.
 /// A pillar between the two makes ranged spells useless: the fighter walks around it,
-/// as it closes in around any pillar in its way. In a melee, a fighter short of its
-/// damage quota backs away less and less as the check nears (`quota_pressure`).
+/// as it closes in around any pillar in its way. In a melee, a fighter the next check
+/// would put out (`in_danger`), or in the final (`in_final`), neither backs away nor
+/// waits: it goes for a hit.
 #[must_use]
 pub fn score_actions(arena: &Arena, me: FighterId) -> Vec<(Action, f64)> {
     let mut scored = vec![(Action::Wait, 0.0)];
@@ -116,12 +117,16 @@ pub fn score_actions(arena: &Arena, me: FighterId) -> Vec<(Action, f64)> {
         }
     }
     let can_cast = scored.len() > 1;
-    scored[0].1 = show_wait_value(me, target, distance, &arena.accuracy);
+    let endangered = in_danger(arena, me) || in_final(arena);
+    if !endangered {
+        scored[0].1 = show_wait_value(me, target, distance, &arena.accuracy);
+    }
 
-    let retreat = fear(&me.condition)
-        * (1.0 - share(me.hp, me.stats.hp))
-        * (1.0 - quota_pressure(arena, me))
-        * RETREAT_WEIGHT;
+    let retreat = if endangered {
+        0.0
+    } else {
+        fear(&me.condition) * (1.0 - share(me.hp, me.stats.hp)) * RETREAT_WEIGHT
+    };
     let toward = path_direction(&arena.pillars, me.position, target.position);
     let longest_reach = |f: &Fighter| f.spells.iter().map(|s| s.reach).fold(0.0, f64::max);
     let usable_reach = me
@@ -142,10 +147,14 @@ pub fn score_actions(arena: &Arena, me: FighterId) -> Vec<(Action, f64)> {
     } else if distance > usable_reach {
         scored.push((Action::Move(toward), MOVE_SCORE));
     } else if !can_cast && distance > PRESS_MIN_DISTANCE {
-        let press = offset(
-            me.condition.personality.aggression.value(),
-            Personality::NEUTRAL,
-        );
+        let press = if endangered {
+            1.0
+        } else {
+            offset(
+                me.condition.personality.aggression.value(),
+                Personality::NEUTRAL,
+            )
+        };
         if press > 0.0 {
             scored.push((Action::Move(toward), press * PRESS_SCORE));
         }

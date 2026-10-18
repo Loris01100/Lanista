@@ -9,6 +9,7 @@ use lanista_core::duel::utility_ais;
 use lanista_core::fighter::FighterId;
 use lanista_core::fighter::injury::Location;
 use lanista_core::log::EventKind;
+use lanista_core::melee::{in_danger, in_final, next_cut};
 use macroquad::prelude::*;
 use reesch::{Animation, AnimationEvent, AnimationPlayer, Assets, FixedStep};
 
@@ -29,6 +30,13 @@ pub const STANDS: Color = Color::new(0.16, 0.13, 0.11, 1.0);
 const CLUB: Color = Color::new(1.0, 0.82, 0.25, 0.9);
 /// The line between two allies.
 const PACT: Color = Color::new(0.55, 0.8, 1.0, 0.8);
+/// The damage gauge over a melee fighter: safe, or out if the check came now.
+const SAFE: Color = Color::new(0.35, 0.8, 0.35, 1.0);
+const DANGER: Color = Color::new(0.9, 0.2, 0.15, 1.0);
+const GAUGE_BACK: Color = Color::new(0.1, 0.08, 0.07, 0.8);
+/// The damage gauge's size and its height over a fighter's center, in meters.
+const GAUGE_SIZE: (f32, f32) = (0.9, 0.12);
+const GAUGE_RISE: f32 = 0.95;
 // ponytail: blood drawn with shapes until the real sprites bring a stain.
 // Opaque, so overlapping blots make one even stain.
 const BLOOD: Color = Color::new(0.45, 0.03, 0.03, 1.0);
@@ -288,6 +296,52 @@ impl FightView {
         }
     }
 
+    /// What the next check of a melee holds, in words, for the player: when it comes,
+    /// how many it puts out and the damage it takes to stay, then where each of the
+    /// club's fighters stands; « Duel final » once the checks are over. Nothing in a
+    /// duel, nor once the fight is over.
+    #[must_use]
+    pub fn elimination_lines(&self) -> Vec<String> {
+        if !self.running() {
+            return Vec::new();
+        }
+        let Some(cut) = next_cut(&self.arena) else {
+            return if in_final(&self.arena) {
+                vec!["Duel final".into()]
+            } else {
+                Vec::new()
+            };
+        };
+        let seconds = cut.ticks_left.div_ceil(combat::TICKS_PER_SECOND);
+        let out = match cut.out {
+            1 => "1 combattant sort".into(),
+            n => format!("{n} combattants sortent"),
+        };
+        let mut lines = vec![
+            format!("Élimination dans {seconds} s : {out}"),
+            format!(
+                "Pour rester, plus de {} dégâts depuis la dernière élimination",
+                cut.threshold
+            ),
+        ];
+        for &id in &self.cast.club {
+            let Some(f) = self.arena.fighter(id).filter(|f| f.is_fighting()) else {
+                continue;
+            };
+            let standing = if in_danger(&self.arena, f) {
+                "éliminé si rien ne change"
+            } else {
+                "à l'abri"
+            };
+            lines.push(format!(
+                "{} : {} dégâts, {standing}",
+                self.name(id),
+                f.round_damage
+            ));
+        }
+        lines
+    }
+
     /// The world area to show: the floor and a meter around it.
     #[must_use]
     pub fn world(&self) -> Rect {
@@ -362,6 +416,7 @@ impl FightView {
                 draw_circle_lines(p.x, p.y + radius * 0.5, radius, 0.08, CLUB);
             }
         }
+        self.draw_gauges(&at);
         let rules = &data.fighter.appearance;
         // The dead first, so the living walk over them.
         let mut order: Vec<usize> = (0..self.arena.fighters.len()).collect();
@@ -386,6 +441,30 @@ impl FightView {
                 },
             };
             draw_fighter(assets, rules, &fighter.appearance, &placement);
+        }
+    }
+
+    /// Over each fighter still in a melee, before a check: the damage it dealt since the
+    /// last one, full past what it takes to stay, red if the check would put it out.
+    fn draw_gauges(&self, at: &[Vec2]) {
+        let Some(cut) = next_cut(&self.arena).filter(|_| self.running()) else {
+            return;
+        };
+        let (width, height) = GAUGE_SIZE;
+        let needed = f64::from(cut.threshold) + 1.0;
+        for (fighter, p) in self.arena.fighters.iter().zip(at) {
+            if !fighter.is_fighting() {
+                continue;
+            }
+            let share = to_f32((f64::from(fighter.round_damage) / needed).min(1.0));
+            let color = if in_danger(&self.arena, fighter) {
+                DANGER
+            } else {
+                SAFE
+            };
+            let (x, y) = (p.x - width / 2.0, p.y - GAUGE_RISE);
+            draw_rectangle(x, y, width, height, GAUGE_BACK);
+            draw_rectangle(x, y, width * share.max(0.08), height, color);
         }
     }
 
@@ -457,6 +536,42 @@ mod tests {
         assert!(early > 0.3 && late > early && late < 1.0, "{early} {late}");
         assert!((blood_spread(BLOOD_SPREAD_SECONDS) - 1.0).abs() < f32::EPSILON);
         assert!((blood_spread(10.0) - 1.0).abs() < f32::EPSILON);
+    }
+
+    #[test]
+    fn a_melee_tells_its_next_elimination_and_where_the_club_stands() {
+        use lanista_core::combat::ArenaKind;
+        use lanista_core::melee::melee_arena;
+
+        let data = DesignData::load().unwrap();
+        let fighters = (0..20)
+            .flat_map(|seed| random_duel(&data, seed).fighters)
+            .take(20)
+            .enumerate()
+            .map(|(i, mut f)| {
+                f.id = FighterId(u32::try_from(i).unwrap());
+                f
+            })
+            .collect();
+        let arena = melee_arena(fighters, ArenaKind::Sand, 1, &data.combat);
+        let cast = Cast {
+            names: vec!["Mirmillon n° 1".into()],
+            club: vec![FighterId(0)],
+            ..Cast::default()
+        };
+        let mut view = FightView::new(arena, cast);
+        let lines = view.elimination_lines();
+        assert_eq!(lines[0], "Élimination dans 15 s : 3 combattants sortent");
+        assert!(lines[1].starts_with("Pour rester, plus de 0 dégâts"));
+        assert!(
+            lines[2].starts_with("Mirmillon n° 1 : 0 dégâts, "),
+            "{lines:?}"
+        );
+        view.skip();
+        assert_eq!(view.elimination_lines(), Vec::<String>::new());
+        // A duel tells nothing.
+        let duel = FightView::new(random_duel(&data, 1), Cast::default());
+        assert_eq!(duel.elimination_lines(), Vec::<String>::new());
     }
 
     #[test]

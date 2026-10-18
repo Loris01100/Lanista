@@ -222,6 +222,25 @@ impl CombatScreen {
     }
 }
 
+impl CombatScreen {
+    /// The next elimination of the melee shown big, top middle.
+    fn elimination(&self, ui: &egui::Context) {
+        let lines = self.fight().elimination_lines();
+        if lines.is_empty() {
+            return;
+        }
+        egui::Window::new("Élimination")
+            .title_bar(false)
+            .resizable(false)
+            .anchor(egui::Align2::CENTER_TOP, [0.0, 12.0])
+            .show(ui, |ui| {
+                for line in &lines {
+                    ui.label(line);
+                }
+            });
+    }
+}
+
 /// Where the `count` thumbnails go on a screen `width` pixels wide: down the left side,
 /// each `THUMBNAIL_SHARE` of the width, 16:10.
 #[must_use]
@@ -272,6 +291,7 @@ impl Screen for CombatScreen {
                     egui::Frame::popup(ui.style()).show(ui, |ui| ui.label(name));
                 });
         }
+        self.elimination(ui);
         volumes(ui, audio);
         audio.play_music(assets, MUSIC);
         // Speed scales time: more or fewer ticks per frame, animations alike.

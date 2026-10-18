@@ -9,7 +9,7 @@ use crate::fighter::injury::{Location, Side};
 use crate::fighter::personality::Personality;
 use crate::fighter::{Fighter, FighterId, Stats, pick};
 use crate::log::{Event, EventKind};
-use crate::melee::{MeleeRules, PactRules, QuotaRules, enforce_quota, update_pacts};
+use crate::melee::{EliminationRules, MeleeRules, PactRules, eliminate, update_pacts};
 
 pub const TICKS_PER_SECOND: u32 = 30;
 /// Duration of a tick, in seconds.
@@ -70,9 +70,9 @@ pub struct Arena {
     pub pact_rules: PactRules,
     /// The pairs of allies, who do not aim at each other; each fighter has one at most.
     pub pacts: Vec<(FighterId, FighterId)>,
-    /// How much damage each fighter must deal between two checks; none, unless set
-    /// with [`Arena::with_quota`].
-    pub quota: QuotaRules,
+    /// Who is put out for dealing too little damage, and when; nobody, unless set with
+    /// [`Arena::with_elimination`].
+    pub elimination: EliminationRules,
     /// Ticks the fight lasts at most: a duel's minute (`duel::MAX_TICKS`), unless set
     /// with [`Arena::with_max_ticks`].
     pub max_ticks: u32,
@@ -259,7 +259,7 @@ impl Arena {
             pillars: Vec::new(),
             pact_rules: PactRules::NEVER,
             pacts: Vec::new(),
-            quota: QuotaRules::NEVER,
+            elimination: EliminationRules::NEVER,
             max_ticks: crate::duel::MAX_TICKS,
         }
     }
@@ -294,11 +294,11 @@ impl Arena {
         self
     }
 
-    /// This arena, where a fighter who deals too little damage between two checks is
-    /// out, following `rules`: a melee.
+    /// This arena, where those who deal the least damage are put out at each check,
+    /// following `rules`: a melee.
     #[must_use]
-    pub fn with_quota(mut self, rules: QuotaRules) -> Self {
-        self.quota = rules;
+    pub fn with_elimination(mut self, rules: EliminationRules) -> Self {
+        self.elimination = rules;
         self
     }
 
@@ -350,7 +350,6 @@ impl Arena {
 pub fn tick(arena: &mut Arena, ais: &mut [Box<dyn CombatAi>]) {
     assert_eq!(arena.fighters.len(), ais.len(), "one AI per fighter");
     come_round(arena);
-    enforce_quota(arena);
     if arena.tick.is_multiple_of(TICKS_PER_DECISION) {
         update_pacts(arena);
         for (i, ai) in ais.iter_mut().enumerate() {
@@ -366,6 +365,7 @@ pub fn tick(arena: &mut Arena, ais: &mut [Box<dyn CombatAi>]) {
     separate(arena);
     keep_inside(arena);
     cast_spells(arena);
+    eliminate(arena);
     arena.tick += 1;
 }
 

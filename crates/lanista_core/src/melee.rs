@@ -1,7 +1,9 @@
 //! The melee, or King of the hill: up to 20 fighters in the arena at once, each for
-//! itself, who may make pacts with a neighbour and break them, and must keep dealing
-//! damage or be out. Its floor is the colosseum's, grown with the number of fighters,
-//! who start on a circle.
+//! itself, who may make pacts with a neighbour and break them; every 15 seconds, those
+//! who dealt the least damage are out, down to a final duel. Its floor is the
+//! colosseum's, grown with the number of fighters, who start on a circle.
+
+use std::cmp::Ordering;
 
 use rand::RngExt;
 use serde::Deserialize;
@@ -22,27 +24,42 @@ pub struct MeleeRules {
     /// Ticks a melee lasts at most (30 per second).
     pub max_ticks: u32,
     pub pacts: PactRules,
-    pub quota: QuotaRules,
+    pub elimination: EliminationRules,
 }
 
-/// How a melee keeps its fighters fighting: every `every_ticks`, a fighter still in it
-/// who dealt less than `min_damage` since the last check is out, a defeat alive (see
-/// [`enforce_quota`]).
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize)]
+/// How a melee keeps its fighters fighting: every `every_ticks`, the next number of
+/// `out` who dealt the least damage since the last check are out, a defeat alive, never
+/// below `final_fighters`, who then fight the final (see [`eliminate`]).
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
 #[serde(deny_unknown_fields)]
-pub struct QuotaRules {
+pub struct EliminationRules {
     /// Ticks between two checks (30 per second).
     pub every_ticks: u32,
-    /// Damage each fighter must deal between two checks.
-    pub min_damage: u32,
+    /// Fighters put out at each check, in order; past the last, none.
+    pub out: Vec<u32>,
+    /// Fighters left for the final, whom no check puts out.
+    pub final_fighters: u32,
 }
 
-impl QuotaRules {
+impl EliminationRules {
     /// Nobody is ever put out: a duel.
     pub const NEVER: Self = Self {
         every_ticks: u32::MAX,
-        min_damage: 0,
+        out: Vec::new(),
+        final_fighters: 0,
     };
+}
+
+/// The next check of a melee, as the fight stands.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct Cut {
+    /// Ticks before it.
+    pub ticks_left: u32,
+    /// Fighters it puts out.
+    pub out: u32,
+    /// The most damage one it would put out has dealt: to stay, deal more. 0 when it
+    /// puts nobody out.
+    pub threshold: u32,
 }
 
 /// How fighters make and break pacts in a melee (see [`update_pacts`]).
@@ -140,7 +157,7 @@ pub fn melee_arena(
         .with_rules(rules)
         .with_layout(&layout)
         .with_pacts(rules.melee.pacts)
-        .with_quota(rules.melee.quota)
+        .with_elimination(rules.melee.elimination.clone())
         .with_max_ticks(rules.melee.max_ticks)
 }
 
@@ -217,80 +234,126 @@ pub fn update_pacts(arena: &mut Arena) {
     }
 }
 
-/// At each check of the arena's `QuotaRules`, puts out every fighter still in the fight
-/// who dealt less than `min_damage` since the last one (`Eliminated`), then starts the
-/// count again. If all fall short, one stays and wins: who dealt the most, then who
-/// has the largest share of its HP left, then one drawn among them, the only draw.
-pub fn enforce_quota(arena: &mut Arena) {
-    let rules = arena.quota;
-    if rules.min_damage == 0 || arena.tick == 0 || !arena.tick.is_multiple_of(rules.every_ticks) {
+/// Fighters check `number` (1 the first) of `arena` puts out of those `fighting`: its
+/// number, without going below the final's; 0 past the last check.
+fn out_at(arena: &Arena, number: u32, fighting: usize) -> usize {
+    let rules = &arena.elimination;
+    let wanted = number
+        .checked_sub(1)
+        .and_then(|k| rules.out.get(usize::try_from(k).ok()?))
+        .map_or(0, |&n| usize::try_from(n).unwrap_or(usize::MAX));
+    let kept = usize::try_from(rules.final_fighters).unwrap_or(usize::MAX);
+    wanted.min(fighting.saturating_sub(kept))
+}
+
+/// Whether `arena` is a melee down to its final: a check would put nobody out any more.
+#[must_use]
+pub fn in_final(arena: &Arena) -> bool {
+    let rules = &arena.elimination;
+    let fighting = arena.fighters.iter().filter(|f| f.is_fighting()).count();
+    !rules.out.is_empty() && fighting <= usize::try_from(rules.final_fighters).unwrap_or(usize::MAX)
+}
+
+/// Who goes out first: who dealt less damage since the last check, then who has the
+/// smaller share of its HP left.
+fn rank(a: &Fighter, b: &Fighter) -> Ordering {
+    // The HP shares, hp / max, compared by cross products.
+    let (ha, ma) = (u64::from(a.hp), u64::from(a.stats.hp.max(1)));
+    let (hb, mb) = (u64::from(b.hp), u64::from(b.stats.hp.max(1)));
+    a.round_damage
+        .cmp(&b.round_damage)
+        .then((ha * mb).cmp(&(hb * ma)))
+}
+
+/// The fighters still in the fight, by index, in [`rank`] order, equals in index order.
+fn ranked(arena: &Arena) -> Vec<usize> {
+    let fighters = &arena.fighters;
+    let mut order: Vec<usize> = (0..fighters.len())
+        .filter(|&i| fighters[i].is_fighting())
+        .collect();
+    order.sort_by(|&a, &b| rank(&fighters[a], &fighters[b]));
+    order
+}
+
+/// The next check of `arena` that puts someone out, `None` without one: a duel, or the
+/// final of a melee.
+#[must_use]
+pub fn next_cut(arena: &Arena) -> Option<Cut> {
+    let every = arena.elimination.every_ticks.max(1);
+    let number = arena.tick / every + 1;
+    let order = ranked(arena);
+    let out = out_at(arena, number, order.len());
+    if out == 0 {
+        return None;
+    }
+    let threshold = out
+        .checked_sub(1)
+        .and_then(|k| order.get(k))
+        .map_or(0, |&i| arena.fighters[i].round_damage);
+    Some(Cut {
+        ticks_left: number.saturating_mul(every) - arena.tick,
+        out: u32::try_from(out).unwrap_or(u32::MAX),
+        threshold,
+    })
+}
+
+/// Whether `fighter` would be out if the next check came now, those tied with the last
+/// one out included.
+#[must_use]
+pub fn in_danger(arena: &Arena, fighter: &Fighter) -> bool {
+    let Some(cut) = next_cut(arena) else {
+        return false;
+    };
+    let order = ranked(arena);
+    let last = usize::try_from(cut.out - 1).ok().and_then(|k| order.get(k));
+    fighter.is_fighting()
+        && last.is_some_and(|&i| rank(fighter, &arena.fighters[i]) != Ordering::Greater)
+}
+
+/// At each check of the arena's `EliminationRules`, at the end of every `every_ticks`
+/// ticks, puts out its number of fighters in [`rank`] order (`Eliminated`), then starts
+/// counting damage again. Of those equal at the edge, the ones out are drawn, the only
+/// draw.
+pub fn eliminate(arena: &mut Arena) {
+    let every = arena.elimination.every_ticks;
+    let played = arena.tick.saturating_add(1);
+    if !played.is_multiple_of(every) {
         return;
     }
-    let mut out: Vec<FighterId> = arena
-        .fighters
-        .iter()
-        .filter(|f| f.is_fighting() && f.round_damage < rules.min_damage)
-        .map(|f| f.id)
-        .collect();
-    let fighting = arena.fighters.iter().filter(|f| f.is_fighting()).count();
-    if out.len() == fighting {
-        let spared = last_one_in(arena, &out);
-        out.retain(|&id| Some(id) != spared);
-    }
-    for id in out {
-        if let Some(f) = arena.fighters.iter_mut().find(|f| f.id == id) {
+    let order = ranked(arena);
+    let count = out_at(arena, played / every, order.len());
+    if let Some(&edge) = count.checked_sub(1).and_then(|k| order.get(k)) {
+        let edge = &arena.fighters[edge];
+        let side = |i: &usize| rank(&arena.fighters[*i], edge);
+        let mut out: Vec<usize> = order.iter().copied().filter(|i| side(i).is_lt()).collect();
+        let mut tied: Vec<usize> = order.iter().copied().filter(|i| side(i).is_eq()).collect();
+        let need = count - out.len();
+        if need < tied.len() {
+            shuffle(arena, &mut tied);
+        }
+        out.extend(tied.into_iter().take(need));
+        out.sort_unstable();
+        for i in out {
+            let f = &mut arena.fighters[i];
             f.eliminated = true;
             f.action = crate::ai::Action::Wait;
+            let fighter = f.id;
+            log(arena, EventKind::Eliminated { fighter });
         }
-        log(arena, EventKind::Eliminated { fighter: id });
     }
     for f in &mut arena.fighters {
         f.round_damage = 0;
     }
 }
 
-/// Who of `short`, all still fighting and all short of the quota, stays: who dealt the
-/// most, then who has the largest share of its HP left, then one drawn among them.
-fn last_one_in(arena: &mut Arena, short: &[FighterId]) -> Option<FighterId> {
-    // The HP share as hp / max, compared by cross products.
-    let key = |f: &Fighter| {
-        (
-            f.round_damage,
-            u64::from(f.hp),
-            u64::from(f.stats.hp.max(1)),
-        )
-    };
-    let better =
-        |a: (u32, u64, u64), b: (u32, u64, u64)| a.0.cmp(&b.0).then((a.1 * b.2).cmp(&(b.1 * a.2)));
-    let keys: Vec<(FighterId, (u32, u64, u64))> = short
-        .iter()
-        .filter_map(|&id| arena.fighter(id).map(|f| (id, key(f))))
-        .collect();
-    let best = keys.iter().map(|&(_, k)| k).max_by(|&a, &b| better(a, b))?;
-    let tied: Vec<FighterId> = keys
-        .iter()
-        .filter(|&&(_, k)| better(k, best).is_eq())
-        .map(|&(id, _)| id)
-        .collect();
-    if tied.len() < 2 {
-        return tied.first().copied();
+/// Shuffles `items` on the arena's generator (Fisher-Yates on u32 draws, the same on
+/// every platform).
+fn shuffle(arena: &mut Arena, items: &mut [usize]) {
+    for k in (1..items.len()).rev() {
+        let Ok(top) = u32::try_from(k) else { continue };
+        let j = arena.rng.random_range(0..=top);
+        items.swap(k, usize::try_from(j).unwrap_or(k));
     }
-    let top = u32::try_from(tied.len() - 1).unwrap_or(0);
-    let drawn = arena.rng.random_range(0..=top);
-    tied.get(usize::try_from(drawn).unwrap_or(0)).copied()
-}
-
-/// How pressed `fighter` is to deal damage before the next check: 0 once it has dealt
-/// enough, or without a quota; else the share of the time between two checks gone by,
-/// from 0 just after one to nearly 1 just before the next.
-#[must_use]
-pub fn quota_pressure(arena: &Arena, fighter: &Fighter) -> f64 {
-    let rules = arena.quota;
-    if rules.min_damage == 0 || fighter.round_damage >= rules.min_damage {
-        return 0.0;
-    }
-    let every = rules.every_ticks.max(1);
-    f64::from(arena.tick % every) / f64::from(every)
 }
 
 fn log(arena: &mut Arena, kind: EventKind) {
@@ -448,95 +511,121 @@ mod tests {
         assert!(arena.pacts.is_empty() && arena.log.is_empty());
     }
 
-    /// Every 2 s, at least 10 damage.
-    const QUOTA: QuotaRules = QuotaRules {
-        every_ticks: 60,
-        min_damage: 10,
-    };
-
-    #[test]
-    fn a_fighter_who_deals_too_little_damage_is_out_at_the_check() {
-        let fighters = vec![
-            test_fighter(0, 5.0, 5.0),
-            test_fighter(1, 8.0, 5.0),
-            test_fighter(2, 15.0, 15.0),
-        ];
-        let mut arena = Arena::new(20.0, 20.0, fighters, 0).with_quota(QUOTA);
-        let mut ais = waiting(&arena);
-        for _ in 0..60 {
-            tick(&mut arena, &mut ais);
+    /// Every 2 s, 2 then 3 out, down to a final of 2.
+    fn every_two_seconds() -> EliminationRules {
+        EliminationRules {
+            every_ticks: 60,
+            out: vec![2, 3, 3],
+            final_fighters: 2,
         }
-        assert!(arena.fighters.iter().all(Fighter::is_fighting));
-        arena.fighters[0].round_damage = 10;
-        arena.fighters[1].round_damage = 9;
-        // The check opens tick 60.
-        tick(&mut arena, &mut ais);
-        assert!(arena.fighters[0].is_fighting());
-        assert!(arena.fighters[1].eliminated && arena.fighters[2].eliminated);
-        assert!(!arena.fighters[1].is_fighting() && arena.fighters[1].is_alive());
-        assert!(arena.is_over());
-        assert!(arena.fighters.iter().all(|f| f.round_damage == 0));
-        let out: Vec<_> = arena
+    }
+
+    fn six() -> Arena {
+        let fighters = (0..6)
+            .map(|i| test_fighter(i, 2.0 + 3.0 * f64::from(i), 5.0))
+            .collect();
+        Arena::new(20.0, 20.0, fighters, 0).with_elimination(every_two_seconds())
+    }
+
+    fn eliminated(arena: &Arena) -> Vec<(u32, u32)> {
+        arena
             .log
             .iter()
             .filter_map(|e| match e.kind {
-                EventKind::Eliminated { fighter } => Some((e.tick, fighter)),
+                EventKind::Eliminated { fighter } => Some((e.tick, fighter.0)),
                 _ => None,
             })
-            .collect();
-        assert_eq!(out, [(60, FighterId(1)), (60, FighterId(2))]);
+            .collect()
     }
 
     #[test]
-    fn when_all_fall_short_one_stays_and_wins() {
-        let fighters: Vec<Fighter> = (0..4)
-            .map(|i| test_fighter(i, 2.0 + 3.0 * f64::from(i), 5.0))
-            .collect();
-        let quota = Arena::new(20.0, 20.0, fighters, 0).with_quota(QUOTA);
-        let left = |dealt: [u32; 4], hp: [u32; 4]| {
-            let mut arena = quota.clone();
-            arena.tick = 60;
-            for ((f, dealt), hp) in arena.fighters.iter_mut().zip(dealt).zip(hp) {
-                f.round_damage = dealt;
-                f.hp = hp;
+    fn those_who_dealt_the_least_are_out_at_each_check_down_to_a_final() {
+        let mut arena = six();
+        let mut ais = waiting(&arena);
+        for _ in 0..59 {
+            tick(&mut arena, &mut ais);
+        }
+        for (f, dealt) in arena.fighters.iter_mut().zip([0, 5, 9, 9, 20, 3]) {
+            f.round_damage = dealt;
+        }
+        let cut = next_cut(&arena).unwrap();
+        assert_eq!(
+            cut,
+            Cut {
+                ticks_left: 1,
+                out: 2,
+                threshold: 3
             }
-            let before = arena.rng.clone();
-            enforce_quota(&mut arena);
-            assert!(arena.is_over());
-            let drew = arena.rng != before;
-            let fighting: Vec<bool> = arena.fighters.iter().map(Fighter::is_fighting).collect();
-            (fighting, drew)
-        };
-        // Who dealt the most, then who has more HP left, with no draw.
-        let (fighting, drew) = left([4, 7, 7, 0], [100, 50, 60, 100]);
-        assert_eq!(fighting, [false, false, true, false]);
-        assert!(!drew);
-        // A perfect tie is drawn.
-        let (fighting, drew) = left([0, 0, 0, 0], [80, 80, 80, 80]);
-        assert_eq!(fighting.iter().filter(|&&f| f).count(), 1);
-        assert!(drew);
+        );
+        tick(&mut arena, &mut ais);
+        assert_eq!(eliminated(&arena), [(59, 0), (59, 5)]);
+        assert!(arena.fighters[0].is_alive() && !arena.fighters[0].is_fighting());
+        assert!(arena.fighters.iter().all(|f| f.round_damage == 0));
+        // One gives up meanwhile: the next check puts one out, not three, keeping two
+        // for the final.
+        arena.fighters[1].surrendered = true;
+        arena.fighters[4].round_damage = 1;
+        assert!(!in_final(&arena));
+        let cut = next_cut(&arena).unwrap();
+        assert_eq!((cut.ticks_left, cut.out), (60, 1));
+        for _ in 0..60 {
+            tick(&mut arena, &mut ais);
+        }
+        assert_eq!(eliminated(&arena).len(), 3);
+        // The final: no check, nobody else out.
+        assert!(in_final(&arena));
+        assert_eq!(next_cut(&arena), None);
+        for _ in 0..600 {
+            tick(&mut arena, &mut ais);
+        }
+        assert_eq!(eliminated(&arena).len(), 3);
+        assert_eq!(arena.fighters.iter().filter(|f| f.is_fighting()).count(), 2);
     }
 
     #[test]
-    fn the_pressure_grows_until_the_check_unless_the_quota_is_met() {
-        let fighters = vec![test_fighter(0, 5.0, 5.0)];
-        let mut arena = Arena::new(20.0, 20.0, fighters, 0);
-        arena.tick = 110;
-        assert!(quota_pressure(&arena, &arena.fighters[0]).abs() < 1e-12);
-        arena = arena.with_quota(QUOTA);
-        arena.tick = 61;
-        let early = quota_pressure(&arena, &arena.fighters[0]);
-        arena.tick = 110;
-        let late = quota_pressure(&arena, &arena.fighters[0]);
-        assert!(early < 0.1 && late > 0.8, "{early} {late}");
-        arena.fighters[0].round_damage = 10;
-        assert!(quota_pressure(&arena, &arena.fighters[0]).abs() < 1e-12);
+    fn those_in_danger_are_the_ones_the_check_would_put_out() {
+        let mut arena = six();
+        for (f, dealt) in arena.fighters.iter_mut().zip([0, 5, 9, 9, 20, 3]) {
+            f.round_damage = dealt;
+        }
+        let danger: Vec<bool> = arena
+            .fighters
+            .iter()
+            .map(|f| in_danger(&arena, f))
+            .collect();
+        assert_eq!(danger, [true, false, false, false, false, true]);
+        // Equal damage: the one with less HP left goes first.
+        arena.fighters[5].round_damage = 5;
+        arena.fighters[1].hp = 50;
+        assert!(in_danger(&arena, &arena.fighters[1]));
+        assert!(!in_danger(&arena, &arena.fighters[5]));
     }
 
     #[test]
-    fn an_arena_without_quota_puts_nobody_out() {
+    fn of_equals_at_the_edge_the_ones_out_are_drawn() {
+        let mut arena = six();
+        arena.tick = 59;
+        let before = arena.rng.clone();
+        eliminate(&mut arena);
+        assert_ne!(arena.rng, before);
+        assert_eq!(eliminated(&arena).len(), 2);
+        // No tie at the edge: no draw.
+        let mut arena = six();
+        arena.tick = 59;
+        for (f, dealt) in arena.fighters.iter_mut().zip([0, 1, 2, 3, 4, 5]) {
+            f.round_damage = dealt;
+        }
+        let before = arena.rng.clone();
+        eliminate(&mut arena);
+        assert_eq!(arena.rng, before);
+        assert_eq!(eliminated(&arena), [(59, 0), (59, 1)]);
+    }
+
+    #[test]
+    fn an_arena_without_eliminations_puts_nobody_out() {
         let fighters = vec![test_fighter(0, 5.0, 5.0), test_fighter(1, 15.0, 5.0)];
         let mut arena = Arena::new(20.0, 20.0, fighters, 0);
+        assert_eq!(next_cut(&arena), None);
         let mut ais = waiting(&arena);
         for _ in 0..1800 {
             tick(&mut arena, &mut ais);
@@ -545,7 +634,7 @@ mod tests {
     }
 
     #[test]
-    fn a_melee_of_twenty_always_ends_with_one_standing() {
+    fn a_melee_of_twenty_nearly_always_ends_with_one_standing() {
         use crate::fighter::personality::Personality;
         use rand::SeedableRng;
         use rand_chacha::ChaCha8Rng;
@@ -576,8 +665,9 @@ mod tests {
                 arena.is_over()
             })
             .count();
-        // The quota puts out those who wait, and leaves one if all fall short.
-        assert_eq!(ended, 20);
+        // The checks leave two, who fight the final; two out of mana and endurance,
+        // which do not come back yet, may reach the time limit.
+        assert!(ended >= 19, "{ended} of 20");
     }
 
     #[test]

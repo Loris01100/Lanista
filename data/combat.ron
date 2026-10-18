@@ -77,9 +77,10 @@
             betrayal_percent_most_aggressive: 2,
             break_fighting: 3,
         ),
-        // Every every_ticks (15 s), a fighter still in the fight who dealt less than
-        // min_damage since the last check is out, a defeat alive; if all fall short,
-        // one stays and wins: who dealt the most, then who has most of its HP left.
-        quota: (every_ticks: 450, min_damage: 20),
+        // Every every_ticks (15 s), the next number of out who dealt the least damage
+        // since the last check are out, a defeat alive (equal damage: the one with less
+        // HP left), never leaving fewer than final_fighters, who fight the final: from
+        // 20, 3, 3, 4, 2, 2, 2 and 2 out, then a duel.
+        elimination: (every_ticks: 450, out: [3, 3, 4, 2, 2, 2, 2], final_fighters: 2),
     ),
 )
