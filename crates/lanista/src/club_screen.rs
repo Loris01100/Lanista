@@ -231,7 +231,8 @@ impl ClubScreen {
                 Some(fight),
                 Activity::Fight(colosseum)
                 | Activity::TitleFight(colosseum)
-                | Activity::Challenge(colosseum, _),
+                | Activity::Challenge(colosseum, _)
+                | Activity::Melee(colosseum),
             ) = (report.fight, report.plan.activity)
             {
                 let money = summary
@@ -275,12 +276,7 @@ impl ClubScreen {
             )
         }));
         self.last_week = Some((week, overview));
-        self.to_watch = self
-            .fights
-            .iter()
-            .rev()
-            .map(|f| watched(&f.fight))
-            .collect();
+        self.to_watch = to_watch(&self.fights);
         // Free agents are new each week: the one on screen may be gone or replaced.
         if matches!(self.view, View::Outside(Target::FreeAgent(_))) {
             self.view = View::Market;
@@ -464,10 +460,25 @@ impl ClubScreen {
         alerts
     }
 
-    /// The title fights the club's fighter `i` may have this week and the challenges
-    /// it received, with their names.
+    /// The title fights the club's fighter `i` may have this week, the challenges it
+    /// received and, in the season's opening week, each colosseum's melee, with their
+    /// names.
     fn special_fights(&self, i: usize) -> Vec<(Activity, String)> {
         let data = &self.data;
+        let melees = (0..data.world.colosseums.len())
+            .filter(|_| self.state.opens_season(data))
+            .filter_map(|c| u32::try_from(c).ok().map(ColosseumId))
+            .map(|id| {
+                let activity = Activity::Melee(id);
+                let fee = data.world.colosseum(id).map_or(0, |c| c.purses.entry_fee);
+                let name = activity_name(activity, data);
+                let name = if fee > 0 {
+                    format!("{name} ({fee})")
+                } else {
+                    name
+                };
+                (activity, name)
+            });
         let titles = (0..data.world.colosseums.len())
             .filter_map(|c| u32::try_from(c).ok().map(ColosseumId))
             .filter(|&id| self.state.title_opponent(i, id, data).is_some())
@@ -487,7 +498,7 @@ impl ClubScreen {
                     format!("Défi de {name}"),
                 )
             });
-        titles.chain(challenges).collect()
+        melees.chain(titles).chain(challenges).collect()
     }
 
     fn roster(&mut self, ui: &mut egui::Ui) {
@@ -726,6 +737,21 @@ impl Screen for ClubScreen {
     }
 }
 
+/// The week's fights to watch, the last one first: a melee several of the club's
+/// fighters shared is watched once.
+fn to_watch(fights: &[FightReport]) -> Vec<(Arena, Vec<FighterId>)> {
+    let mut seeds = Vec::new();
+    let once: Vec<&FightReport> = fights
+        .iter()
+        .filter(|f| {
+            let first = !seeds.contains(&f.fight.seed);
+            seeds.push(f.fight.seed);
+            first
+        })
+        .collect();
+    once.iter().rev().map(|f| watched(&f.fight)).collect()
+}
+
 /// What the combat screen needs to show `fight`: the fight before its first tick, and
 /// those who fall at 0 HP but survive the fatal blow.
 fn watched(fight: &FightSummary) -> (Arena, Vec<FighterId>) {
@@ -775,7 +801,7 @@ fn plan_editor(
         });
     }
     // A challenge the fighter sent is chosen in its sheet.
-    if matches!(plan.activity, Activity::TitleFight(_))
+    if matches!(plan.activity, Activity::TitleFight(_) | Activity::Melee(_))
         && !special.iter().any(|(a, _)| *a == plan.activity)
     {
         plan.activity = Activity::Rest;
@@ -793,10 +819,7 @@ fn plan_editor(
     } else {
         ui.checkbox(&mut plan.care, format!("Soigner ({cost})"));
     }
-    let fights = matches!(
-        plan.activity,
-        Activity::Fight(_) | Activity::TitleFight(_) | Activity::Challenge(..)
-    );
+    let fights = plan.activity.fights();
     // The colosseum's equipment, refused for fame; nothing to refuse without a fight.
     if fights {
         let fame = &data.fighter.fame;
@@ -942,7 +965,6 @@ fn gauge(ui: &mut egui::Ui, name: &str, value: u32, max: u32) {
 mod tests {
     use lanista_core::combat::Vec2;
     use lanista_core::duel::play;
-    use lanista_core::fighter::FighterId;
     use lanista_core::log::Report;
     use lanista_core::market::Move;
     use lanista_core::staff::{Candidate, Person, Role, Scouting, Staff, StaffMove};
@@ -986,34 +1008,45 @@ mod tests {
     #[test]
     fn a_fight_week_queues_the_fight_and_sums_it_up() {
         let mut screen = screen(7);
-        // Seed 7's first week is a fight.
+        // The season opens with Capua's melee, where seed 7's fighter would have fought.
         assert_eq!(
             screen.decisions.plans[0].activity,
-            Activity::Fight(ColosseumId(0))
+            Activity::Melee(ColosseumId(0))
         );
         screen.next_week();
         assert_eq!(screen.view, View::Fights);
         let (mut fight, survivors) = screen.to_watch.pop().unwrap();
-        assert_eq!(survivors, []);
+        let report = &screen.fights[0];
+        let melee = &report.fight;
+        assert!(melee.is_melee());
         assert_eq!(fight.tick, 0);
-        assert_eq!(fight.fighters[0].stats, {
+        assert_eq!(fight.fighters.len(), melee.opponents.len() + 1);
+        let survived = melee.survived_fatal_blow.iter().filter(|&&s| s).count();
+        assert_eq!(survivors.len(), survived);
+        let me = usize::try_from(melee.me.0).unwrap();
+        assert_eq!(fight.fighters[me].stats, {
             let mut rng = ChaCha8Rng::seed_from_u64(7);
             let f = CareerFighter::random(&mut rng, &screen.data);
-            f.combat_fighter(
-                FighterId(0),
-                Refused::NONE,
-                &screen.data,
-                Vec2::new(3.0, 10.0),
-            )
-            .stats
+            let at = Vec2::new(0.0, 0.0);
+            f.combat_fighter(melee.me, Refused::NONE, &screen.data, at)
+                .stats
         });
         play(&mut fight);
-        assert!(fight.is_over());
-        // The summary tells the very fight that was watched.
-        let report = &screen.fights[0];
+        assert!(fight.is_over() || fight.tick == fight.max_ticks);
+        // The summary tells the very melee that was watched, which cost 30 form.
         assert_eq!(report.fight.report, Report::new(&fight));
-        // Given up in Capua: the receipts only.
-        assert_eq!((report.money, report.form), (20, (100, 80)));
+        assert_eq!(report.form, (100, 70));
+        // A duel week afterwards: one opponent, watched as fought.
+        while screen.decisions.plans[0].activity != Activity::Fight(ColosseumId(0)) {
+            assert!(screen.state.week < 10, "no fight");
+            screen.next_week();
+        }
+        screen.next_week();
+        let (mut duel, _) = screen.to_watch.pop().unwrap();
+        let report = &screen.fights[0];
+        assert!(!report.fight.is_melee() && report.fight.opponent().is_some());
+        play(&mut duel);
+        assert_eq!(report.fight.report, Report::new(&duel));
         // A rival fighter challenges it and the suggestion accepts: a fight against
         // that fighter.
         while screen.state.challenges.is_empty() {
@@ -1067,25 +1100,19 @@ mod tests {
         let weeks: Vec<u64> = screen.histories[0].iter().map(|(week, _)| *week).collect();
         assert_eq!(weeks, [3, 2, 1]);
         let first = &screen.histories[0][2].1;
-        assert_eq!(first[0], "Combat à Capoue");
+        assert_eq!(first[0], "Mêlée à Capoue");
+        assert!(first[1].starts_with("Mêlée à "), "{first:?}");
         assert!(
-            first[1].starts_with("Contre un Mirmillon, plus fort : abandon"),
-            "{first:?}"
-        );
-        assert!(
-            first.contains(&"Forme 80 (-20), moral 40 (-10), renommée 0".to_owned()),
+            first.iter().any(|l| l.starts_with("Forme 70 (-30)")),
             "{first:?}"
         );
         let (week, menu) = screen.last_week.as_ref().unwrap();
         assert_eq!(*week, 3);
-        assert_eq!(
-            menu[0],
-            "Argent 955 (+60) : mécène +50, recettes +20, entretien -10"
+        assert!(
+            menu[0].starts_with("Argent ") && menu[0].contains("entretien -10"),
+            "{menu:?}"
         );
-        assert_eq!(
-            menu[1],
-            "Mirmillon n° 1 : Défi à Capoue, Contre un Augure, plus fort : abandon, renommée -8"
-        );
+        assert!(menu[1].starts_with("Mirmillon n° 1 : "), "{menu:?}");
     }
 
     #[test]

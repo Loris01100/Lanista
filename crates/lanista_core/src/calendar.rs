@@ -57,6 +57,12 @@ impl Date {
         }
     }
 
+    /// Whether this is the season's first week: its melees make the first ranking.
+    #[must_use]
+    pub fn opens_season(self) -> bool {
+        self.week == 1
+    }
+
     #[must_use]
     pub fn phase(self, rules: &CalendarRules) -> SeasonPhase {
         if self.week <= rules.competition_weeks {

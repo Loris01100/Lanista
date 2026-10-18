@@ -69,6 +69,10 @@
                 receipts_per_fame: 1,
                 // Paid for each title defense the club's champion survives.
                 champion_bonus: 30,
+                // The season-opening melee: to the club of the last one standing, and
+                // added to each fighter's receipts for each other fighter in it.
+                melee_prize: 150,
+                receipts_per_fighter: 3,
             ),
         ),
         (
@@ -82,6 +86,8 @@
                 receipts_base: 40,
                 receipts_per_fame: 2,
                 champion_bonus: 100,
+                melee_prize: 450,
+                receipts_per_fighter: 6,
             ),
         ),
     ],

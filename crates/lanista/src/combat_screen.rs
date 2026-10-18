@@ -7,7 +7,7 @@ use std::rc::Rc;
 use lanista_core::ai::{self, CombatAi};
 use lanista_core::combat::{self, Arena};
 use lanista_core::design_data::DesignData;
-use lanista_core::duel::{MAX_TICKS, random_duel, utility_ais};
+use lanista_core::duel::{random_duel, utility_ais};
 use lanista_core::fighter::FighterId;
 use lanista_core::fighter::injury::Location;
 use lanista_core::log::EventKind;
@@ -211,7 +211,8 @@ impl CombatScreen {
 
     /// Plays the rest of the fight at once, without drawing it.
     fn skip(&mut self) {
-        combat::run(&mut self.arena, &mut self.ais, MAX_TICKS);
+        let ticks = self.arena.max_ticks;
+        combat::run(&mut self.arena, &mut self.ais, ticks);
         self.previous = positions(&self.arena);
         // No cast animation for hits nobody saw.
         self.seen_events = self.arena.log.len();
@@ -312,7 +313,7 @@ impl CombatScreen {
     }
 
     fn running(&self) -> bool {
-        !self.arena.is_over() && self.arena.tick < MAX_TICKS
+        !self.arena.is_over() && self.arena.tick < self.arena.max_ticks
     }
 
     /// Plays the ticks due after `dt` seconds of fight time, then animates;

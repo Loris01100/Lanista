@@ -75,6 +75,9 @@ pub struct Arena {
     /// How far the left and right walls (`x`), and the top and bottom ones (`y`), have
     /// each moved in, in meters.
     pub inset: Vec2,
+    /// Ticks the fight lasts at most: a duel's minute (`duel::MAX_TICKS`), unless set
+    /// with [`Arena::with_max_ticks`].
+    pub max_ticks: u32,
 }
 
 /// Combat rules, from `data/combat.ron`.
@@ -260,7 +263,15 @@ impl Arena {
             pacts: Vec::new(),
             shrink: ShrinkRules::NEVER,
             inset: Vec2::new(0.0, 0.0),
+            max_ticks: crate::duel::MAX_TICKS,
         }
+    }
+
+    /// This arena, whose fight lasts at most `ticks`: a melee.
+    #[must_use]
+    pub fn with_max_ticks(mut self, ticks: u32) -> Self {
+        self.max_ticks = ticks;
+        self
     }
 
     /// This arena, where attacks hit following `rules`.

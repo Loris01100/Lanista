@@ -135,6 +135,10 @@ fn week_text(
             "fight in {}",
             data.world.colosseum(id).map_or("?", |c| c.name.as_str())
         ),
+        Activity::Melee(id) => format!(
+            "melee in {}",
+            data.world.colosseum(id).map_or("?", |c| c.name.as_str())
+        ),
         Activity::TitleFight(id) => format!(
             "title fight in {}",
             data.world.colosseum(id).map_or("?", |c| c.name.as_str())

@@ -55,10 +55,12 @@ pub fn utility_ais(arena: &Arena) -> Vec<Box<dyn CombatAi>> {
         .collect()
 }
 
-/// Plays the fight to its end, or `MAX_TICKS`, with a utility AI for every fighter.
+/// Plays the fight to its end, or its time limit (`Arena::max_ticks`), with a utility
+/// AI for every fighter.
 pub fn play(arena: &mut Arena) {
     let mut ais = utility_ais(arena);
-    run(arena, &mut ais, MAX_TICKS);
+    let ticks = arena.max_ticks;
+    run(arena, &mut ais, ticks);
 }
 
 #[cfg(test)]

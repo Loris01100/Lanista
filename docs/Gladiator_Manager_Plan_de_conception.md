@@ -171,10 +171,10 @@ Plus le coup est fort, plus il risque d'étourdir, et une blessure à la tête a
 | Format | Joueurs dans l'arène | Utilisé par |
 | --- | --- | --- |
 | Duel | 2 | Classique, Championnat du monde |
-| Mêlée / King of the hill | 3 à 20, chacun pour soi | Classique |
+| Mêlée / King of the hill | 3 à 20 à la fois, chacun pour soi, pactes possibles | Ouverture de la Classique, une fois par saison |
 | Équipe | 5 contre 5 | Inter-Coliseum |
 
-En mêlée, le joueur peut inscrire plusieurs de ses combattants, mais aucune alliance n'est autorisée : l'IA traite ses coéquipiers de club comme n'importe quel adversaire.
+La mêlée, ou King of the hill, ouvre chaque saison dans chaque colisée, la première semaine de compétition : elle fait le classement de début de saison. Jusqu'à 20 combattants sont dans l'arène en même temps ; le joueur peut en inscrire plusieurs, que rien ne lie d'office, et les rivaux et free agents complètent, puis le classement s'il manque du monde. En combat, deux voisins peuvent faire un pacte, selon leur prudence, et ne plus se viser ; un pacte se trahit, selon l'agressivité, et tous se rompent quand il ne reste que trois combattants. Passé une minute, la garde resserre le cercle : les murs avancent jusqu'à forcer les derniers à se battre. Plus on survit, plus on gagne d'Elo et de renommée ; seul le dernier debout compte une victoire à son bilan, et sa victoire rapporte la prime de mêlée. Les recettes grandissent avec la taille de la mêlée.
 
 Chaque colisée a un type d'arène qui change la tactique : sable qui ralentit, piliers qui bloquent les tirs, arène étroite qui favorise le corps à corps.
 
@@ -253,7 +253,7 @@ Chaque colisée a son type d'arène, son prestige, son classement et son champio
 
 ### Classement
 
-Le classement utilise le système Elo, calculé séparément pour chaque colisée. Seuls les 50 meilleurs sont affichés ; les autres sont « non classés » mais gardent un Elo caché. En mêlée, chaque participant est comparé à tous les autres selon l'ordre d'élimination, ce qui adapte Elo au format jusqu'à 20 joueurs.
+Le classement utilise le système Elo, calculé séparément pour chaque colisée. Seuls les 50 meilleurs sont affichés ; les autres sont « non classés » mais gardent un Elo caché. En mêlée, chaque participant est comparé à tous les autres selon l'ordre d'élimination, ce qui adapte Elo au format jusqu'à 20 joueurs : l'Elo de la saison passée est ajusté, et les nouveaux venus y entrent.
 
 ### Titre de champion
 
@@ -267,7 +267,7 @@ Les clubs peuvent proposer et recevoir des défis. Refuser un défi n'est pas sa
 
 | Compétition | Fréquence | Participants | Format |
 | --- | --- | --- | --- |
-| La Classique | Toute la saison, dans chaque colisée | Tous les inscrits | Duel ou mêlée (de 2 à 20), compte pour le classement |
+| La Classique | Toute la saison, dans chaque colisée | Tous les inscrits | Une mêlée d'ouverture (3 à 20), puis des duels, compte pour le classement |
 | Championnat du monde | Saisons 4, 8, 12… | Top 5 de chaque colisée | Duels : phase de poules puis élimination directe |
 | Inter-Coliseum | Saisons impaires | 5 combattants convoqués par colisée | 5 contre 5, colisée contre colisée |
 
@@ -434,7 +434,7 @@ Le développement se fait en neuf phases, chacune terminée par un jalon jouable
 | Titre de champion | Défense au minimum toutes les 4 semaines, plus souvent si le champion le souhaite |
 | Combat sans équipement | Malus et bonus selon la pièce refusée ; refuser l'arme rapporte plus que refuser l'armure |
 | Refus de défi | Perte de renommée et d'Elo si le combattant ne combat pas assez |
-| Mêlée | Plusieurs combattants d'un même club autorisés, sans aucune alliance |
+| Mêlée | Une par colisée et par saison, plusieurs combattants d'un même club autorisés, sans lien d'office, pactes spontanés en combat |
 | Mort à l'écran | Tâche de sang et petite animation, selon ce qui est faisable |
 
 ### Points encore ouverts

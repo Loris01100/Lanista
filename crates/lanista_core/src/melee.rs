@@ -142,6 +142,7 @@ pub fn melee_arena(
         .with_layout(&layout)
         .with_pacts(rules.melee.pacts)
         .with_shrink(rules.melee.shrink)
+        .with_max_ticks(rules.melee.max_ticks)
 }
 
 /// A chance in percent, from `low` at trait 0 to `high` at trait 100.

@@ -57,6 +57,7 @@ pub fn activity_name(activity: Activity, data: &DesignData) -> String {
         Activity::Fight(id) => format!("Combat à {}", colosseum_name(id, data)),
         Activity::TitleFight(id) => format!("Combat pour le titre à {}", colosseum_name(id, data)),
         Activity::Challenge(id, _) => format!("Défi à {}", colosseum_name(id, data)),
+        Activity::Melee(id) => format!("Mêlée à {}", colosseum_name(id, data)),
     }
 }
 
@@ -521,7 +522,13 @@ pub fn fight_text(fight: &FightSummary, data: &DesignData) -> String {
         (FightResult::Won, ..) => "victoire".into(),
         (FightResult::Lost, ..) => "défaite".into(),
         (FightResult::GaveUp, ..) => "abandon".into(),
-        (FightResult::Unfinished, ..) => "pas de vainqueur après une minute".into(),
+        (FightResult::Unfinished, ..) => {
+            let minutes = fight.start.max_ticks / (lanista_core::combat::TICKS_PER_SECOND * 60);
+            match minutes {
+                1 => "pas de vainqueur après une minute".into(),
+                n => format!("pas de vainqueur après {n} minutes"),
+            }
+        }
     };
     let stronger = if fight.against_stronger {
         ", plus fort"

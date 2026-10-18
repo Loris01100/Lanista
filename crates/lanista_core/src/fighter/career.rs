@@ -190,7 +190,9 @@ impl CareerFighter {
     /// A fight is against `opponent`, or a new random fighter without one, in the
     /// colosseum's arena (see [`WorldRules::arena`](crate::colosseum::WorldRules::arena)). The club's
     /// `staff` helps: training gains more and costs less form with the trainer's
-    /// coaching, care and injuries follow the doctor's medicine.
+    /// coaching, care and injuries follow the doctor's medicine. A melee, which the
+    /// world plays with everyone in it ([`CareerFighter::begin_melee_week`]), is a rest
+    /// here.
     pub fn play_week<R: Rng + ?Sized>(
         &mut self,
         plan: WeekPlan,
@@ -199,15 +201,10 @@ impl CareerFighter {
         rng: &mut R,
         data: &DesignData,
     ) -> Option<WeekReport> {
-        if self.status != Status::Active {
-            return None;
-        }
+        let mut report = self.begin_melee_week(plan, staff, data)?;
         let rules = &data.fighter;
-        let care = staff.medicine.care_rules(&rules.care);
-        let care_cost = if plan.care { self.care(&care) } else { 0 };
-        let mut report = WeekReport::new(plan, care_cost);
         match plan.activity {
-            Activity::Rest => {
+            Activity::Rest | Activity::Melee(_) => {
                 self.form = match &self.illness {
                     Some(illness) => illness.rest(self.form, &rules.illness, &rules.form),
                     None => self.form.after(FormEvent::Rest, &rules.form),
@@ -248,6 +245,43 @@ impl CareerFighter {
         }
         self.end_week(&mut report, rng, data);
         Some(report)
+    }
+
+    /// The start of a week whose melee the world plays with everyone in it
+    /// (`fighter::melee::play_melee`), and of every week: care following `plan`, at the
+    /// prices of `staff`'s doctor. `None`, and nothing changes, if the fighter is
+    /// retired or dead.
+    pub fn begin_melee_week(
+        &mut self,
+        plan: WeekPlan,
+        staff: StaffEffects,
+        data: &DesignData,
+    ) -> Option<WeekReport> {
+        if self.status != Status::Active {
+            return None;
+        }
+        let care = staff.medicine.care_rules(&data.fighter.care);
+        let care_cost = if plan.care { self.care(&care) } else { 0 };
+        Some(WeekReport::new(plan, care_cost))
+    }
+
+    /// The end of a week of melee begun with [`CareerFighter::begin_melee_week`]: the
+    /// melee as this fighter lived it (`fight`, with its new injury and whether its
+    /// doctor spared it an after-effect) told in `report`, then, unless it died,
+    /// healing, the illness draw and the yearly birthday.
+    pub fn end_melee_week<R: Rng + ?Sized>(
+        &mut self,
+        report: &mut WeekReport,
+        (fight, injury, spared): (FightSummary, Option<Injury>, bool),
+        rng: &mut R,
+        data: &DesignData,
+    ) {
+        report.fight = Some(fight);
+        report.new_injury = injury;
+        report.after_effect_spared = spared;
+        if self.status != Status::Dead {
+            self.end_week(report, rng, data);
+        }
     }
 
     /// Price of caring for every injury and illness where `care` helps, without caring.
@@ -649,6 +683,16 @@ pub enum Activity {
     /// A duel in this colosseum against this rival fighter, who challenged the fighter
     /// or accepts its challenge.
     Challenge(ColosseumId, RivalId),
+    /// The season-opening melee of this colosseum, in the season's first week only.
+    Melee(ColosseumId),
+}
+
+impl Activity {
+    /// Whether the fighter fights this week: a duel or a melee.
+    #[must_use]
+    pub fn fights(self) -> bool {
+        !matches!(self, Self::Rest | Self::Train)
+    }
 }
 
 /// Below this form, `suggested_plan` rests.

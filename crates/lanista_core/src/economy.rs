@@ -109,9 +109,23 @@ pub struct Purses {
     pub receipts_per_fame: u32,
     /// Paid for each title defense the club's champion survives.
     pub champion_bonus: u32,
+    /// Paid to the club of a melee's last one standing.
+    pub melee_prize: u32,
+    /// In a melee, added to each fighter's receipts for each other fighter in it.
+    pub receipts_per_fighter: u32,
 }
 
 impl Purses {
+    /// Gate receipts a melee of `fighters` brings the club of a fighter of `fame`:
+    /// the bigger the melee and the more famous the fighter, the bigger the crowd.
+    #[must_use]
+    pub fn melee_receipts(&self, fame: Fame, fighters: usize) -> u32 {
+        let others = u32::try_from(fighters.saturating_sub(1)).unwrap_or(u32::MAX);
+        self.receipts_base
+            .saturating_add(self.receipts_per_fame.saturating_mul(fame.value()))
+            .saturating_add(self.receipts_per_fighter.saturating_mul(others))
+    }
+
     /// Gate receipts of a fight: famous fighters draw a crowd.
     #[must_use]
     pub fn receipts(&self, fighter: Fame, opponent: Fame) -> u32 {
@@ -162,10 +176,15 @@ mod tests {
             receipts_base: 20,
             receipts_per_fame: 1,
             champion_bonus: 0,
+            melee_prize: 150,
+            receipts_per_fighter: 3,
         };
         assert_eq!(rules.receipts(Fame::default(), Fame::default()), 20);
         let famous = Fame::default().changed_by(30);
         assert_eq!(rules.receipts(famous, Fame::default().changed_by(10)), 60);
+        // A melee of 20 draws a crowd: 19 others at 3 each.
+        assert_eq!(rules.melee_receipts(famous, 20), 20 + 30 + 57);
+        assert_eq!(rules.melee_receipts(Fame::default(), 1), 20);
     }
 
     #[test]

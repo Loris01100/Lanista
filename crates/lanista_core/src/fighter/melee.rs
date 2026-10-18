@@ -129,7 +129,8 @@ pub fn play_melee<R: Rng + ?Sized>(
         .iter()
         .map(|_| Box::new(UtilityAi) as Box<dyn CombatAi>)
         .collect();
-    run(&mut arena, &mut ais, data.combat.melee.max_ticks);
+    let ticks = arena.max_ticks;
+    run(&mut arena, &mut ais, ticks);
     let places = places(&arena);
     let before = fighters.to_vec();
     let strengths: Vec<u64> = fighters.iter().map(|f| f.strength(rules)).collect();
