@@ -1,5 +1,6 @@
 pub mod care;
 pub mod career;
+pub mod equipment;
 pub mod fame;
 pub mod form;
 pub mod illness;

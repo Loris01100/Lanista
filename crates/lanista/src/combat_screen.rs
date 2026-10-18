@@ -543,6 +543,7 @@ fn to_f32(meters: f64) -> f32 {
 #[cfg(test)]
 mod tests {
     use lanista_core::duel::play;
+    use lanista_core::fighter::equipment::Refused;
     use lanista_core::log::{Report, log_text};
 
     use super::*;
@@ -566,6 +567,7 @@ mod tests {
         let plan = WeekPlan {
             activity: Activity::Fight(ColosseumId(0)),
             care: false,
+            refused: Refused::NONE,
         };
         let fight = fighter
             .play_week(plan, None, StaffEffects::default(), &mut rng, &data)

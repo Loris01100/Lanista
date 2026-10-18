@@ -4,6 +4,7 @@
 use lanista_core::combat::ArenaKind;
 use lanista_core::design_data::DesignData;
 use lanista_core::fighter::career::CareerFighter;
+use lanista_core::fighter::equipment::Refused;
 use lanista_core::fighter::fame::FightResult;
 use lanista_core::fighter::form::Form;
 use lanista_core::fighter::illness::roll_illness;
@@ -53,7 +54,7 @@ pub fn record(seed: u64, kind: ArenaKind, data: &DesignData) -> Sample {
     let mut rng = ChaCha8Rng::seed_from_u64(seed);
     let a = varied_fighter(&mut rng, data);
     let b = varied_fighter(&mut rng, data);
-    let (_, start, arena) = a.duel(&b, kind, &mut rng, data);
+    let (_, start, arena) = a.duel(&b, (kind, Refused::NONE), &mut rng, data);
     let side = |i| Ending::from_arena(&arena, FighterId(i), &data.fighter.fame);
     Sample {
         fighters: [start.fighters[0].clone(), start.fighters[1].clone()],

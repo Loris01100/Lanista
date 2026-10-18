@@ -10,6 +10,7 @@ use crate::economy::EconomyRules;
 use crate::fighter::ClassId;
 use crate::fighter::care::CareRules;
 use crate::fighter::career::CareerRules;
+use crate::fighter::equipment::EquipmentRules;
 use crate::fighter::fame::FameRules;
 use crate::fighter::form::FormRules;
 use crate::fighter::illness::IllnessRules;
@@ -46,6 +47,7 @@ pub struct FighterRules {
     pub progression: ProgressionRules,
     pub retirement: RetirementRules,
     pub career: CareerRules,
+    pub equipment: EquipmentRules,
 }
 
 #[derive(Debug, Clone, PartialEq, Deserialize)]
@@ -281,6 +283,26 @@ impl DesignData {
 
     fn validate_fighter(&self) -> Result<(), LoadError> {
         let rules = &self.fighter;
+        let equipment = &rules.equipment;
+        // A refused piece must not make the fighter stronger.
+        for (field, percent) in [
+            (
+                "equipment.armourless_defense_percent",
+                equipment.armourless_defense_percent,
+            ),
+            (
+                "equipment.weaponless_attack_percent",
+                equipment.weaponless_attack_percent,
+            ),
+        ] {
+            if percent > 100 {
+                return Err(LoadError::Invalid {
+                    file: FIGHTER_FILE,
+                    field,
+                    problem: "above 100",
+                });
+            }
+        }
         let ranges = [
             ("career.start_age", rules.career.start_age),
             (
@@ -467,6 +489,15 @@ mod tests {
         assert_eq!(field("[]", FIGHTER), "classes");
         let upside_down = FIGHTER.replacen("start_age: (20, 30)", "start_age: (30, 20)", 1);
         assert_eq!(field(CLASSES, &upside_down), "career.start_age");
+        let stronger = FIGHTER.replacen(
+            "weaponless_attack_percent: 40",
+            "weaponless_attack_percent: 140",
+            1,
+        );
+        assert_eq!(
+            field(CLASSES, &stronger),
+            "equipment.weaponless_attack_percent"
+        );
         let not_a_chance = FIGHTER.replacen("worsening_chance: 0.5", "worsening_chance: 1.5", 1);
         assert_eq!(field(CLASSES, &not_a_chance), "illness.worsening_chance");
         let no_week = "(competition_weeks: 0, great_event_weeks: 0, off_season_weeks: 0)";

@@ -34,8 +34,8 @@ impl Fame {
 }
 
 /// What a fight meant for one fighter's fame.
-// ponytail: flights, King of the hill, refused equipment and refused challenges
-// come with the phases that add them (4 and 5).
+// ponytail: flights and King of the hill come with the phases that add them; refused
+// equipment brings its bonus apart (`equipment::Refused::fame_bonus`).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct FightOutcome {
     pub result: FightResult,
@@ -133,6 +133,11 @@ pub struct FameRules {
     pub surrender: u32,
     /// Lost by every fighter when the fight ends on the time limit.
     pub dull_fight: u32,
+    /// Gained for fighting without armour, without weapon, or without either
+    /// (see `equipment::Refused::fame_bonus`).
+    pub refused_armour: u32,
+    pub refused_weapon: u32,
+    pub refused_all: u32,
 }
 
 // Saves go through `new`: an edited value stays within its bounds.
@@ -162,6 +167,9 @@ mod tests {
         spectacular_hit_percent: 25,
         surrender: 8,
         dull_fight: 3,
+        refused_armour: 3,
+        refused_weapon: 6,
+        refused_all: 12,
     };
 
     struct Fixed(Action);

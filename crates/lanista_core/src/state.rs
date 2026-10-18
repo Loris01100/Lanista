@@ -19,6 +19,7 @@ use crate::fighter::care::CareRules;
 use crate::fighter::career::{
     Activity, CareerFighter, Status, WeekPlan, WeekReport, suggested_plan,
 };
+use crate::fighter::equipment::Refused;
 use crate::fighter::fame::{Fame, FightResult};
 use crate::fighter::form::FormEvent;
 use crate::fighter::percent_of;
@@ -32,6 +33,7 @@ use crate::staff::{
 const REST: WeekPlan = WeekPlan {
     activity: Activity::Rest,
     care: false,
+    refused: Refused::NONE,
 };
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -1741,7 +1743,11 @@ mod tests {
 
     fn plan(activity: Activity, care: bool) -> Decisions {
         Decisions {
-            plans: vec![WeekPlan { activity, care }],
+            plans: vec![WeekPlan {
+                activity,
+                care,
+                refused: Refused::NONE,
+            }],
             ..Decisions::default()
         }
     }
@@ -2480,6 +2486,7 @@ mod tests {
             plans: vec![WeekPlan {
                 activity: Activity::Train,
                 care: false,
+                refused: Refused::NONE,
             }],
             moves: list.moves.clone(),
             staff: Vec::new(),

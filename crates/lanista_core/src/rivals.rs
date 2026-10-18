@@ -10,6 +10,7 @@ use crate::colosseum::ColosseumId;
 use crate::design_data::DesignData;
 use crate::economy::Wealth;
 use crate::fighter::career::{Activity, CareerFighter, Status, WeekPlan, badly_hurt_or_ill};
+use crate::fighter::equipment::Refused;
 use crate::staff::{Candidate, Role, Staff, StaffMove};
 
 /// How a rival manager plays.
@@ -234,7 +235,11 @@ pub fn plan(
     } else {
         Activity::Rest
     };
-    WeekPlan { activity, care }
+    WeekPlan {
+        activity,
+        care,
+        refused: Refused::NONE,
+    }
 }
 
 #[cfg(test)]
@@ -341,7 +346,8 @@ mod tests {
             cautious,
             WeekPlan {
                 activity: Activity::Rest,
-                care: true
+                care: true,
+                refused: Refused::NONE,
             }
         );
         assert_eq!(money, 100);
@@ -357,7 +363,8 @@ mod tests {
             merchant,
             WeekPlan {
                 activity: Activity::Rest,
-                care: false
+                care: false,
+                refused: Refused::NONE,
             }
         );
         // A doctor's care costs more, at its price.

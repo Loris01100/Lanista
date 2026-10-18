@@ -528,8 +528,14 @@ pub fn fight_text(fight: &FightSummary, data: &DesignData) -> String {
     } else {
         ""
     };
+    let bare = match (fight.refused.armour, fight.refused.weapon) {
+        (true, true) => ", sans armure ni arme",
+        (true, false) => ", sans armure",
+        (false, true) => ", sans arme",
+        (false, false) => "",
+    };
     format!(
-        "Contre un {}{stronger} : {result}, renommée {:+}",
+        "Contre un {}{stronger}{bare} : {result}, renommée {:+}",
         class_name(&fight.opponent, data),
         fight.fame_change
     )

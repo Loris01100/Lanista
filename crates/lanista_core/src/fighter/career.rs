@@ -9,6 +9,7 @@ use crate::combat::{Arena, ArenaKind, Vec2};
 use crate::design_data::{DesignData, FighterRules};
 use crate::duel::{STATS, play};
 use crate::fighter::care::CareRules;
+use crate::fighter::equipment::Refused;
 use crate::fighter::fame::{Fame, FightOutcome, FightResult};
 use crate::fighter::form::{Form, FormEvent};
 use crate::fighter::illness::{Illness, IllnessLevel, roll_illness};
@@ -151,16 +152,27 @@ impl CareerFighter {
         u32::try_from(count).unwrap_or(u32::MAX)
     }
 
-    /// This fighter ready to fight in an arena, as fighter `id` at `position`.
+    /// This fighter ready to fight in an arena, as fighter `id` at `position`, without
+    /// the `refused` pieces of equipment: their maluses on its stats, its cutting hits
+    /// blunt without weapon.
     ///
     /// # Panics
     /// If its class is not in `data`.
     #[must_use]
-    pub fn combat_fighter(&self, id: FighterId, data: &DesignData, position: Vec2) -> Fighter {
+    pub fn combat_fighter(
+        &self,
+        id: FighterId,
+        refused: Refused,
+        data: &DesignData,
+        position: Vec2,
+    ) -> Fighter {
         let class_data = data.class(self.class).expect("a class of the design data");
         let rules = &data.fighter;
-        let stats = self.fighting_stats(rules);
+        let stats = refused.stats(self.fighting_stats(rules), &rules.equipment);
         let mut fighter = Fighter::new(id, self.class, class_data, stats, position);
+        for spell in &mut fighter.spells {
+            spell.damage_kind = refused.damage_kind(spell.damage_kind);
+        }
         fighter.surrender_hp = self.personality.surrender_hp(stats.hp, &rules.personality);
         fighter.condition = Condition {
             personality: self.personality,
@@ -223,8 +235,9 @@ impl CareerFighter {
                 };
                 let medicine = [staff.medicine, theirs];
                 let arena = data.world.arena(id);
+                let refused = plan.refused;
                 let (fight, injury, spared) =
-                    self.fight(opponent, arena, form, medicine, rng, data);
+                    self.fight(opponent, (arena, refused), form, medicine, rng, data);
                 report.fight = Some(fight);
                 report.new_injury = injury;
                 report.after_effect_spared = spared;
@@ -274,13 +287,14 @@ impl CareerFighter {
         );
     }
 
-    /// A duel between this fighter, `FighterId(0)`, and `opponent`, `FighterId(1)`, on
-    /// the floor of `kind`, played to its end: its seed, and the arena before its first
-    /// tick and after its last. They start at 15 % and 85 % of the width, mid-height.
+    /// A duel between this fighter, `FighterId(0)`, without the `refused` pieces of
+    /// equipment, and `opponent`, `FighterId(1)`, fully equipped, on the floor of `kind`,
+    /// played to its end: its seed, and the arena before its first tick and after its
+    /// last. They start at 15 % and 85 % of the width, mid-height.
     pub fn duel<R: Rng + ?Sized>(
         &self,
         opponent: &Self,
-        kind: ArenaKind,
+        (kind, refused): (ArenaKind, Refused),
         rng: &mut R,
         data: &DesignData,
     ) -> (u64, Arena, Arena) {
@@ -288,8 +302,13 @@ impl CareerFighter {
         let layout = data.combat.arenas.get(kind);
         let (width, middle) = (layout.width, layout.height / 2.0);
         let fighters = vec![
-            self.combat_fighter(FighterId(0), data, Vec2::new(width * 0.15, middle)),
-            opponent.combat_fighter(FighterId(1), data, Vec2::new(width * 0.85, middle)),
+            self.combat_fighter(FighterId(0), refused, data, Vec2::new(width * 0.15, middle)),
+            opponent.combat_fighter(
+                FighterId(1),
+                Refused::NONE,
+                data,
+                Vec2::new(width * 0.85, middle),
+            ),
         ];
         let start = Arena::new(width, layout.height, fighters, seed)
             .with_rules(&data.combat)
@@ -310,32 +329,30 @@ impl CareerFighter {
     }
 
     /// The fame, record and death the finished fight in `arena`, where this fighter was
-    /// `id`, brings (see `take_side`).
+    /// `id` without the `refused` pieces of equipment, brings (see `take_side`).
     fn take_fame_and_death<R: Rng + ?Sized>(
         &mut self,
         arena: &Arena,
-        id: FighterId,
+        (id, refused): (FighterId, Refused),
         against_stronger: bool,
         rng: &mut R,
         rules: &FighterRules,
     ) -> Taken {
-        self.take_side(
-            Ending::from_arena(arena, id, &rules.fame),
-            against_stronger,
-            rng,
-            rules,
-        )
+        let side = Ending::from_arena(arena, id, &rules.fame);
+        self.take_side(side, against_stronger, refused, rng, rules)
     }
 
     /// The fame, record and death `side` brings: a beheaded fighter dies; one brought
     /// to 0 HP otherwise survives with a chance of `InjuryRules::fatal_blow_survival`,
     /// and a severe wound; one that lost a limb keeps it lost (a permanent injury); a
     /// stunned one keeps a severe head wound with `InjuryRules::stun_wound_chance`. The
+    /// `refused` pieces of equipment add their fame bonus, whatever the result. The
     /// wound is returned with the outcome and the fame change, not yet taken.
     fn take_side<R: Rng + ?Sized>(
         &mut self,
         side: Ending,
         against_stronger: bool,
+        refused: Refused,
         rng: &mut R,
         rules: &FighterRules,
     ) -> Taken {
@@ -344,7 +361,8 @@ impl CareerFighter {
             against_stronger,
             spectacular_hits: side.spectacular_hits,
         };
-        let fame_change = outcome.fame_change(&rules.fame);
+        let bonus = i32::try_from(refused.fame_bonus(&rules.fame)).unwrap_or(i32::MAX);
+        let fame_change = outcome.fame_change(&rules.fame).saturating_add(bonus);
         self.fame = self.fame.changed_by(fame_change);
         self.record.add(outcome.result);
         let mut wound = None;
@@ -409,16 +427,16 @@ impl CareerFighter {
         let rules = &data.fighter;
         let origin = Vec2::new(0.0, 0.0);
         let [mine, theirs] = data.stat_model.get(kind).resolve(
-            &self.combat_fighter(FighterId(0), data, origin),
-            &opponent.combat_fighter(FighterId(1), data, origin),
+            &self.combat_fighter(FighterId(0), Refused::NONE, data, origin),
+            &opponent.combat_fighter(FighterId(1), Refused::NONE, data, origin),
             &data.combat.cut,
             rng,
         );
         let stronger = opponent.stronger_than(self, rules);
         let weaker = self.stronger_than(opponent, rules);
         [
-            self.take_side(mine, stronger, rng, rules),
-            opponent.take_side(theirs, weaker, rng, rules),
+            self.take_side(mine, stronger, Refused::NONE, rng, rules),
+            opponent.take_side(theirs, weaker, Refused::NONE, rng, rules),
         ]
     }
 
@@ -453,30 +471,33 @@ impl CareerFighter {
         data: &DesignData,
     ) -> FightResult {
         let alone = [Medicine::default(); 2];
-        let (summary, _, _) = self.fight(opponent, kind, form, alone, rng, data);
+        let equipped = (kind, Refused::NONE);
+        let (summary, _, _) = self.fight(opponent, equipped, form, alone, rng, data);
         summary.result
     }
 
-    /// A duel against `opponent` in an arena of `kind`, then its effects on both: fame,
-    /// death, morale, form (`form`'s cost), illness worsening, a possible injury and
-    /// progression. Returns this fighter's new injury, and whether its doctor's
-    /// `medicine` (the first, the opponent's doctor's second) spared it an after-effect.
+    /// A duel against `opponent` in an arena of `kind`, without the `refused` pieces of
+    /// equipment, then its effects on both: fame, death, morale, form (`form`'s cost),
+    /// illness worsening, a possible injury and progression. Returns this fighter's new
+    /// injury, and whether its doctor's `medicine` (the first, the opponent's doctor's
+    /// second) spared it an after-effect.
     fn fight<R: Rng + ?Sized>(
         &mut self,
         opponent: &mut Self,
-        kind: ArenaKind,
+        (kind, refused): (ArenaKind, Refused),
         form: FormEvent,
         medicine: [Medicine; 2],
         rng: &mut R,
         data: &DesignData,
     ) -> (FightSummary, Option<Injury>, bool) {
         let rules = &data.fighter;
-        let (seed, start, arena) = self.duel(opponent, kind, rng, data);
+        let (seed, start, arena) = self.duel(opponent, (kind, refused), rng, data);
         let stronger = opponent.stronger_than(self, rules);
         let weaker = self.stronger_than(opponent, rules);
         let summary_opponent = opponent.clone();
-        let theirs = opponent.take_fame_and_death(&arena, FighterId(1), weaker, rng, rules);
-        let mine = self.take_fame_and_death(&arena, FighterId(0), stronger, rng, rules);
+        let equipped = (FighterId(1), Refused::NONE);
+        let theirs = opponent.take_fame_and_death(&arena, equipped, weaker, rng, rules);
+        let mine = self.take_fame_and_death(&arena, (FighterId(0), refused), stronger, rng, rules);
         let died = self.status == Status::Dead;
         // Fallen at 0 HP in the arena, yet alive after the fight.
         let survived = |id: usize, fighter: &Self| {
@@ -488,6 +509,7 @@ impl CareerFighter {
             report: Report::new(&arena),
             opponent: summary_opponent,
             against_stronger: stronger,
+            refused,
             result: mine.outcome.result,
             died,
             survived_fatal_blow: [survived(0, self), survived(1, opponent)],
@@ -558,6 +580,7 @@ impl CareerFighter {
             let plan = WeekPlan {
                 activity: Activity::Rest,
                 care: false,
+                refused: Refused::NONE,
             };
             self.end_week(&mut WeekReport::new(plan, 0), rng, data);
         }
@@ -644,6 +667,7 @@ pub fn suggested_plan(fighter: &CareerFighter, week: u64) -> WeekPlan {
     WeekPlan {
         activity,
         care: hurt,
+        refused: Refused::NONE,
     }
 }
 
@@ -668,6 +692,8 @@ pub struct WeekPlan {
     pub activity: Activity,
     /// Care for every injury and illness where it helps, before the activity.
     pub care: bool,
+    /// The pieces of the colosseum's equipment the fighter leaves, if it fights.
+    pub refused: Refused,
 }
 
 /// What happened in a week.
@@ -715,6 +741,8 @@ pub struct FightSummary {
     /// The opponent before the fight.
     pub opponent: CareerFighter,
     pub against_stronger: bool,
+    /// The pieces of equipment the career fighter fought without.
+    pub refused: Refused,
     pub result: FightResult,
     pub died: bool,
     /// Whether each side, the career fighter first, fell at 0 HP in the arena and
@@ -765,6 +793,7 @@ mod tests {
         WeekPlan {
             activity,
             care: false,
+            refused: Refused::NONE,
         }
     }
 
@@ -866,6 +895,7 @@ mod tests {
             let rest = WeekPlan {
                 activity: Activity::Rest,
                 care: true,
+                refused: Refused::NONE,
             };
             let report = f.play_week(rest, None, staff, &mut rng, &data).unwrap();
             (report.care_cost, f.injuries[0].weeks_left)
@@ -933,7 +963,7 @@ mod tests {
             weeks_left: 3,
         });
         assert!(f.fighting_stats(&rules).speed < healthy.speed);
-        let fighter = f.combat_fighter(FighterId(0), &data(), Vec2::new(3.0, 10.0));
+        let fighter = f.combat_fighter(FighterId(0), Refused::NONE, &data(), Vec2::new(3.0, 10.0));
         assert_eq!(fighter.stats, f.fighting_stats(&rules));
         assert_eq!(fighter.condition.injuries, f.injuries);
     }
@@ -1020,11 +1050,11 @@ mod tests {
         let rules = &mut data.fighter;
         rules.injury.fatal_blow_survival = 0.0;
         let mut dead = fighter(1);
-        dead.take_side(fallen, false, &mut rng, rules);
+        dead.take_side(fallen, false, Refused::NONE, &mut rng, rules);
         assert_eq!(dead.status, Status::Dead);
         rules.injury.fatal_blow_survival = 1.0;
         let mut survivor = fighter(1);
-        let taken = survivor.take_side(fallen, false, &mut rng, rules);
+        let taken = survivor.take_side(fallen, false, Refused::NONE, &mut rng, rules);
         assert_eq!(survivor.status, Status::Active);
         let wound = taken.wound.unwrap();
         assert_eq!(wound.severity, Severity::Severe);
@@ -1042,6 +1072,80 @@ mod tests {
     }
 
     #[test]
+    fn a_fighter_without_its_equipment_fights_weaker_and_bare_handed() {
+        let data = data();
+        let mut rng = ChaCha8Rng::seed_from_u64(4);
+        let f = CareerFighter::random(&mut rng, &data);
+        let at = Vec2::new(3.0, 10.0);
+        let equipped = f.combat_fighter(FighterId(0), Refused::NONE, &data, at);
+        let nothing = Refused {
+            armour: true,
+            weapon: true,
+        };
+        let bare = f.combat_fighter(FighterId(0), nothing, &data, at);
+        assert_eq!(
+            bare.stats,
+            nothing.stats(equipped.stats, &data.fighter.equipment)
+        );
+        assert!(bare.stats.melee_attack < equipped.stats.melee_attack);
+        assert!(bare.stats.melee_defense < equipped.stats.melee_defense);
+        assert_eq!(bare.stats.hp, equipped.stats.hp);
+        assert!(
+            bare.spells
+                .iter()
+                .all(|s| s.damage_kind != crate::combat::DamageKind::Cutting)
+        );
+    }
+
+    #[test]
+    fn refused_equipment_brings_fame_whatever_the_result() {
+        let data = data();
+        let rules = &data.fighter;
+        let lost = Ending {
+            result: FightResult::GaveUp,
+            died: false,
+            stunned: false,
+            knocked_out: false,
+            severed: None,
+            spectacular_hits: 0,
+        };
+        let weapon = Refused {
+            armour: false,
+            weapon: true,
+        };
+        let mut rng = ChaCha8Rng::seed_from_u64(5);
+        let mut f = CareerFighter::random(&mut rng, &data);
+        let equipped = f
+            .clone()
+            .take_side(lost, false, Refused::NONE, &mut rng, rules);
+        let bare = f.take_side(lost, false, weapon, &mut rng, rules);
+        let bonus = i32::try_from(rules.fame.refused_weapon).unwrap();
+        assert_eq!(bare.fame_change, equipped.fame_change + bonus);
+    }
+
+    #[test]
+    fn a_week_s_fight_is_fought_without_what_the_plan_refuses() {
+        let data = data();
+        let mut rng = ChaCha8Rng::seed_from_u64(6);
+        let mut f = CareerFighter::random(&mut rng, &data);
+        let armour = Refused {
+            armour: true,
+            weapon: false,
+        };
+        let week = WeekPlan {
+            refused: armour,
+            ..plan(Activity::Fight(ColosseumId(0)))
+        };
+        let expected = f.combat_fighter(FighterId(0), armour, &data, Vec2::new(0.0, 0.0));
+        let report = f
+            .play_week(week, None, StaffEffects::default(), &mut rng, &data)
+            .unwrap();
+        let fight = report.fight.unwrap();
+        assert_eq!(fight.refused, armour);
+        assert_eq!(fight.start.fighters[0].stats, expected.stats);
+    }
+
+    #[test]
     fn a_duel_is_fought_on_the_floor_of_its_arena() {
         let data = data();
         let mut rng = ChaCha8Rng::seed_from_u64(1);
@@ -1051,7 +1155,7 @@ mod tests {
         );
         for kind in ArenaKind::ALL {
             let layout = data.combat.arenas.get(kind);
-            let (_, start, end) = a.duel(&b, kind, &mut rng, &data);
+            let (_, start, end) = a.duel(&b, (kind, Refused::NONE), &mut rng, &data);
             assert_eq!((start.width, start.height), (layout.width, layout.height));
             assert_eq!(start.speed_percent, layout.speed_percent);
             assert_eq!(start.pillars, layout.pillars);
@@ -1096,8 +1200,14 @@ mod tests {
                 let mut theirs = CareerFighter::random(&mut rng, &data);
                 let alone = [Medicine::default(); 2];
                 let sand = ArenaKind::Sand;
-                let (summary, ..) =
-                    mine.fight(&mut theirs, sand, FormEvent::Fight, alone, &mut rng, &data);
+                let (summary, ..) = mine.fight(
+                    &mut theirs,
+                    (sand, Refused::NONE),
+                    FormEvent::Fight,
+                    alone,
+                    &mut rng,
+                    &data,
+                );
                 let mut arena = summary.start.clone();
                 crate::duel::play(&mut arena);
                 let i = arena.fighters.iter().position(|f| !f.is_alive())?;
@@ -1129,11 +1239,11 @@ mod tests {
         rules.injury.fatal_blow_survival = 1.0;
         rules.injury.stun_wound_chance = 1.0;
         let mut beheaded = fighter(1);
-        let taken = beheaded.take_side(cut(Location::Head), false, &mut rng, rules);
+        let taken = beheaded.take_side(cut(Location::Head), false, Refused::NONE, &mut rng, rules);
         assert_eq!((beheaded.status, taken.wound), (Status::Dead, None));
         let arm = Location::Arm(Side::Left);
         let mut maimed = fighter(1);
-        let taken = maimed.take_side(cut(arm), false, &mut rng, rules);
+        let taken = maimed.take_side(cut(arm), false, Refused::NONE, &mut rng, rules);
         assert_eq!(maimed.status, Status::Active);
         assert_eq!(taken.wound, Some(severed_limb_wound(arm)));
         // A lost limb is a defeat, not a surrender: no fame lost.
@@ -1164,7 +1274,7 @@ mod tests {
         let rules = &mut data.fighter;
         rules.injury.stun_wound_chance = 1.0;
         let mut f = fighter(1);
-        let taken = f.take_side(knocked_out, false, &mut rng, rules);
+        let taken = f.take_side(knocked_out, false, Refused::NONE, &mut rng, rules);
         assert_eq!(f.status, Status::Active);
         let wound = taken.wound.unwrap();
         assert_eq!(
@@ -1174,7 +1284,7 @@ mod tests {
         // A knock-out is a defeat, not a surrender: no fame lost.
         assert_eq!(taken.fame_change, 0);
         rules.injury.stun_wound_chance = 0.0;
-        let taken = fighter(1).take_side(knocked_out, false, &mut rng, rules);
+        let taken = fighter(1).take_side(knocked_out, false, Refused::NONE, &mut rng, rules);
         assert_eq!(taken.wound, None);
     }
 
@@ -1247,7 +1357,8 @@ mod tests {
             suggested_plan(&f, 1),
             WeekPlan {
                 activity: Activity::Rest,
-                care: true
+                care: true,
+                refused: Refused::NONE,
             }
         );
     }

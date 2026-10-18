@@ -95,6 +95,18 @@
         surrender: 8,
         // A fight stopped by the time limit, for every fighter in it.
         dull_fight: 3,
+        // For daring to fight without part of the colosseum's equipment, whatever the
+        // result: more without weapon than without armour, most without anything.
+        refused_armour: 3,
+        refused_weapon: 6,
+        refused_all: 12,
+    ),
+    // The colosseum's equipment is the same for everyone. A refused piece costs, in
+    // percent of what is left: defenses without armour, attacks without weapon, whose
+    // cutting hits turn blunt (bare hands).
+    equipment: (
+        armourless_defense_percent: 30,
+        weaponless_attack_percent: 40,
     ),
     progression: (
         // No levels: each stat may improve after every training session and fight.

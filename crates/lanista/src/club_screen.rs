@@ -20,6 +20,7 @@ use lanista_core::economy::{Flow, Wealth};
 use lanista_core::fighter::FighterId;
 use lanista_core::fighter::care::CareRules;
 use lanista_core::fighter::career::{Activity, CareerFighter, FightSummary, Status, WeekPlan};
+use lanista_core::fighter::equipment::Refused;
 use lanista_core::fighter::fame::Fame;
 use lanista_core::fighter::form::Form;
 use lanista_core::fighter::illness::IllnessLevel;
@@ -287,7 +288,12 @@ impl ClubScreen {
         if !self.fights.is_empty() {
             self.view = View::Fights;
         }
+        let refused: Vec<Refused> = self.decisions.plans.iter().map(|p| p.refused).collect();
         self.decisions = self.state.suggested_decisions(&self.data);
+        // A fighter keeps fighting without what it refused, until the player says otherwise.
+        for (plan, refused) in self.decisions.plans.iter_mut().zip(refused) {
+            plan.refused = refused;
+        }
         // Saved before the fights are watched: quitting during one keeps its outcome.
         self.save(saves::AUTO, false);
     }
@@ -784,13 +790,28 @@ fn plan_editor(
     } else {
         ui.checkbox(&mut plan.care, format!("Soigner ({cost})"));
     }
+    let fights = matches!(
+        plan.activity,
+        Activity::Fight(_) | Activity::TitleFight(_) | Activity::Challenge(..)
+    );
+    // The colosseum's equipment, refused for fame; nothing to refuse without a fight.
+    if fights {
+        let fame = &data.fighter.fame;
+        ui.checkbox(&mut plan.refused.armour, "Sans armure")
+            .on_hover_text(format!(
+                "Défenses très réduites, renommée +{} (+{} sans rien)",
+                fame.refused_armour, fame.refused_all
+            ));
+        ui.checkbox(&mut plan.refused.weapon, "Sans arme")
+            .on_hover_text(format!(
+                "Attaques très réduites, coups à mains nues, renommée +{} (+{} sans rien)",
+                fame.refused_weapon, fame.refused_all
+            ));
+    } else {
+        plan.refused = Refused::NONE;
+    }
     let ill = fighter.illness.is_some_and(|i| !i.fight_advised());
-    if ill
-        && matches!(
-            plan.activity,
-            Activity::Fight(_) | Activity::TitleFight(_) | Activity::Challenge(..)
-        )
-    {
+    if ill && fights {
         ui.colored_label(egui::Color32::LIGHT_RED, "Combat déconseillé");
     }
 }
@@ -975,8 +996,13 @@ mod tests {
         assert_eq!(fight.fighters[0].stats, {
             let mut rng = ChaCha8Rng::seed_from_u64(7);
             let f = CareerFighter::random(&mut rng, &screen.data);
-            f.combat_fighter(FighterId(0), &screen.data, Vec2::new(3.0, 10.0))
-                .stats
+            f.combat_fighter(
+                FighterId(0),
+                Refused::NONE,
+                &screen.data,
+                Vec2::new(3.0, 10.0),
+            )
+            .stats
         });
         play(&mut fight);
         assert!(fight.is_over());
@@ -1012,6 +1038,21 @@ mod tests {
         screen.decisions.plans[0].activity = Activity::Rest;
         screen.next_week();
         assert!(screen.to_watch.is_empty() && screen.fights.is_empty());
+    }
+
+    #[test]
+    fn refused_equipment_is_kept_from_week_to_week_and_told() {
+        let mut screen = screen(7);
+        let weapon = Refused {
+            armour: false,
+            weapon: true,
+        };
+        screen.decisions.plans[0].activity = Activity::Fight(ColosseumId(0));
+        screen.decisions.plans[0].refused = weapon;
+        screen.next_week();
+        assert_eq!(screen.decisions.plans[0].refused, weapon);
+        let lines = &screen.histories[0][0].1;
+        assert!(lines[1].contains(", sans arme :"), "{lines:?}");
     }
 
     #[test]
@@ -1102,6 +1143,7 @@ mod tests {
         screen.decisions.plans[0] = WeekPlan {
             activity: Activity::Rest,
             care: false,
+            refused: Refused::NONE,
         };
         screen.next_week();
         assert_eq!(screen.to_watch, []);
