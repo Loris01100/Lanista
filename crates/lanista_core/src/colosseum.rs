@@ -7,6 +7,7 @@ use std::cmp::{Ordering, Reverse};
 use rand::{Rng, RngExt};
 use serde::{Deserialize, Serialize};
 
+use crate::combat::ArenaKind;
 use crate::economy::Purses;
 use crate::fighter::career::{CareerFighter, Status};
 use crate::fighter::fame::FightResult;
@@ -46,6 +47,13 @@ impl WorldRules {
         self.colosseums.get(usize::try_from(id.0).ok()?)
     }
 
+    /// The arena kind of colosseum `id`; sand, as in Capoue, for one missing from the
+    /// data, which no plan may enter.
+    #[must_use]
+    pub fn arena(&self, id: ColosseumId) -> ArenaKind {
+        self.colosseum(id).map_or(ArenaKind::Sand, |c| c.arena)
+    }
+
     /// The thresholds of the rival club at index `club`.
     #[must_use]
     pub fn profile(&self, club: usize) -> Option<&ProfileRules> {
@@ -75,18 +83,6 @@ pub struct ColosseumData {
     /// Rival fighters ranked here at its opening, generated as strong as its prestige.
     pub residents: u32,
     pub purses: Purses,
-}
-
-/// What the arena does to the fight.
-// ponytail: no effect on the fight until phase 6.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize)]
-pub enum ArenaKind {
-    /// Slows everyone.
-    Sand,
-    /// Pillars block ranged spells.
-    Pillars,
-    /// Favours melee.
-    Narrow,
 }
 
 /// Index of a colosseum in `WorldRules::colosseums` and `GameState::colosseums`.

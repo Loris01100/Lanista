@@ -1,7 +1,9 @@
 //! Invariants checked on random duels between utility AIs.
 
 use lanista_core::ai::{CombatAi, UtilityAi};
-use lanista_core::combat::{AccuracyRules, Arena, RADIUS, Vec2, run, tick};
+use lanista_core::combat::{
+    AccuracyRules, Arena, ArenaKind, RADIUS, Range, Vec2, run, shot_blocked, tick,
+};
 use lanista_core::design_data::DesignData;
 use lanista_core::duel::{ARENA_SIZE, MAX_TICKS, STATS};
 use lanista_core::fighter::injury::Location;
@@ -58,11 +60,61 @@ fn duel(setup: Setup, stats: [Stats; 2], seed: u64) -> (Arena, Vec<Box<dyn Comba
         })
         .collect();
     let ais: Vec<Box<dyn CombatAi>> = vec![Box::new(UtilityAi), Box::new(UtilityAi)];
-    let arena = Arena::new(ARENA_SIZE, ARENA_SIZE, fighters, seed).with_rules(data.combat);
+    let arena = Arena::new(ARENA_SIZE, ARENA_SIZE, fighters, seed).with_rules(&data.combat);
     (arena, ais)
 }
 
+fn kind() -> impl Strategy<Value = ArenaKind> {
+    prop::sample::select(ArenaKind::ALL.to_vec())
+}
+
 proptest! {
+    /// On every floor, fighters stay inside the walls and out of the pillars, and no
+    /// ranged spell lands through a pillar.
+    #[test]
+    fn fighters_keep_out_of_pillars_and_shots_never_go_through(
+        kind in kind(),
+        classes in [0..2u32, 0..2u32],
+        heights in [0.1..0.9f64, 0.1..0.9f64],
+        seed: u64,
+    ) {
+        let data = DesignData::load().unwrap();
+        let layout = data.combat.arenas.get(kind);
+        let fighters = (0..2u32)
+            .zip(classes.into_iter().zip(heights))
+            .map(|(id, (class, height))| {
+                let x = layout.width * if id == 0 { 0.15 } else { 0.85 };
+                let position = Vec2::new(x, layout.height * height);
+                let class_data = data.class(ClassId(class)).unwrap();
+                Fighter::new(FighterId(id), ClassId(class), class_data, STATS, position)
+            })
+            .collect();
+        let mut arena = Arena::new(1.0, 1.0, fighters, seed)
+            .with_rules(&data.combat)
+            .with_layout(layout);
+        let mut ais: Vec<Box<dyn CombatAi>> = vec![Box::new(UtilityAi), Box::new(UtilityAi)];
+        while !arena.is_over() && arena.tick < MAX_TICKS {
+            let logged = arena.log.len();
+            tick(&mut arena, &mut ais);
+            for f in &arena.fighters {
+                prop_assert!((RADIUS..=layout.width - RADIUS).contains(&f.position.x));
+                prop_assert!((RADIUS..=layout.height - RADIUS).contains(&f.position.y));
+                for p in &layout.pillars {
+                    let off = Vec2::new(f.position.x - p.x, f.position.y - p.y);
+                    prop_assert!(off.length() >= p.radius + RADIUS - 1e-9);
+                }
+            }
+            for event in &arena.log[logged..] {
+                if let EventKind::Cast { caster, target, spell, missed: false, .. } = event.kind {
+                    let (c, t) = (arena.fighter(caster).unwrap(), arena.fighter(target).unwrap());
+                    if c.spells[spell].range == Range::Ranged {
+                        prop_assert!(!shot_blocked(&arena.pillars, c.position, t.position));
+                    }
+                }
+            }
+        }
+    }
+
     #[test]
     fn hp_gauges_and_positions_stay_in_bounds_whatever_the_personalities(
         setup in setup(),

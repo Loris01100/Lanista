@@ -5,9 +5,9 @@ use rand::{Rng, RngExt};
 use serde::{Deserialize, Serialize};
 
 use crate::colosseum::ColosseumId;
-use crate::combat::{Arena, Vec2};
+use crate::combat::{Arena, ArenaKind, Vec2};
 use crate::design_data::{DesignData, FighterRules};
-use crate::duel::{ARENA_SIZE, STATS, play};
+use crate::duel::{STATS, play};
 use crate::fighter::care::CareRules;
 use crate::fighter::fame::{Fame, FightOutcome, FightResult};
 use crate::fighter::form::{Form, FormEvent};
@@ -175,7 +175,8 @@ impl CareerFighter {
     /// Plays one week following `plan`; `None`, and nothing changes, if the fighter
     /// is retired or dead. In order: care, the week's activity, then healing,
     /// the illness draw and, once a year, ageing and the retirement decision.
-    /// A fight is against `opponent`, or a new random fighter without one. The club's
+    /// A fight is against `opponent`, or a new random fighter without one, in the
+    /// colosseum's arena (see [`WorldRules::arena`](crate::colosseum::WorldRules::arena)). The club's
     /// `staff` helps: training gains more and costs less form with the trainer's
     /// coaching, care and injuries follow the doctor's medicine.
     pub fn play_week<R: Rng + ?Sized>(
@@ -207,7 +208,7 @@ impl CareerFighter {
                 let coaching_percent = coaching.progress_percent;
                 self.progress(ProgressEvent::Training { coaching_percent }, rng, rules);
             }
-            Activity::Fight(_) | Activity::TitleFight(_) | Activity::Challenge(..) => {
+            Activity::Fight(id) | Activity::TitleFight(id) | Activity::Challenge(id, _) => {
                 let form = if matches!(plan.activity, Activity::TitleFight(_)) {
                     FormEvent::TitleDefense
                 } else {
@@ -221,7 +222,9 @@ impl CareerFighter {
                     (&mut stranger, Medicine::default())
                 };
                 let medicine = [staff.medicine, theirs];
-                let (fight, injury, spared) = self.fight(opponent, form, medicine, rng, data);
+                let arena = data.world.arena(id);
+                let (fight, injury, spared) =
+                    self.fight(opponent, arena, form, medicine, rng, data);
                 report.fight = Some(fight);
                 report.new_injury = injury;
                 report.after_effect_spared = spared;
@@ -271,21 +274,26 @@ impl CareerFighter {
         );
     }
 
-    /// A duel between this fighter, `FighterId(0)`, and `opponent`, `FighterId(1)`,
-    /// played to its end: its seed, and the arena before its first tick and after its last.
+    /// A duel between this fighter, `FighterId(0)`, and `opponent`, `FighterId(1)`, on
+    /// the floor of `kind`, played to its end: its seed, and the arena before its first
+    /// tick and after its last. They start at 15 % and 85 % of the width, mid-height.
     pub fn duel<R: Rng + ?Sized>(
         &self,
         opponent: &Self,
+        kind: ArenaKind,
         rng: &mut R,
         data: &DesignData,
     ) -> (u64, Arena, Arena) {
         let seed = rng.random::<u64>();
-        let middle = ARENA_SIZE / 2.0;
+        let layout = data.combat.arenas.get(kind);
+        let (width, middle) = (layout.width, layout.height / 2.0);
         let fighters = vec![
-            self.combat_fighter(FighterId(0), data, Vec2::new(3.0, middle)),
-            opponent.combat_fighter(FighterId(1), data, Vec2::new(ARENA_SIZE - 3.0, middle)),
+            self.combat_fighter(FighterId(0), data, Vec2::new(width * 0.15, middle)),
+            opponent.combat_fighter(FighterId(1), data, Vec2::new(width * 0.85, middle)),
         ];
-        let start = Arena::new(ARENA_SIZE, ARENA_SIZE, fighters, seed).with_rules(data.combat);
+        let start = Arena::new(width, layout.height, fighters, seed)
+            .with_rules(&data.combat)
+            .with_layout(layout);
         let mut arena = start.clone();
         play(&mut arena);
         (seed, start, arena)
@@ -367,16 +375,17 @@ impl CareerFighter {
 
     /// A fight against `opponent` that the statistical model resolves instead of a
     /// duel, taking only fame, record and death to both: all a title defense between
-    /// rival fighters leaves. Returns the outcome and fame change of each, this
-    /// fighter's first.
+    /// rival fighters leaves, in an arena of `kind`. Returns the outcome and fame change
+    /// of each, this fighter's first.
     pub fn modelled_fame_and_death<R: Rng + ?Sized>(
         &mut self,
         opponent: &mut Self,
+        kind: ArenaKind,
         rng: &mut R,
         data: &DesignData,
     ) -> [(FightOutcome, i32); 2] {
         let rules = &data.fighter;
-        let [mine, theirs] = self.modelled_sides(opponent, rng, data);
+        let [mine, theirs] = self.modelled_sides(opponent, kind, rng, data);
         for (fighter, taken) in [(&mut *self, mine), (&mut *opponent, theirs)] {
             if let Some(wound) = taken.wound {
                 fighter.take_injury(wound, rules);
@@ -388,17 +397,18 @@ impl CareerFighter {
         ]
     }
 
-    /// The fight against `opponent` as the statistical model resolves it, taken by both
-    /// (see `take_side`), this fighter's first.
+    /// The fight against `opponent` in an arena of `kind` as the statistical model
+    /// resolves it, taken by both (see `take_side`), this fighter's first.
     fn modelled_sides<R: Rng + ?Sized>(
         &mut self,
         opponent: &mut Self,
+        kind: ArenaKind,
         rng: &mut R,
         data: &DesignData,
     ) -> [Taken; 2] {
         let rules = &data.fighter;
         let origin = Vec2::new(0.0, 0.0);
-        let [mine, theirs] = data.stat_model.resolve(
+        let [mine, theirs] = data.stat_model.get(kind).resolve(
             &self.combat_fighter(FighterId(0), data, origin),
             &opponent.combat_fighter(FighterId(1), data, origin),
             &data.combat.cut,
@@ -412,19 +422,20 @@ impl CareerFighter {
         ]
     }
 
-    /// A fight between rival fighters against `opponent`, resolved by the statistical
-    /// model: fame, record and death, then what the fight leaves both (`after_fight`,
-    /// with `form`'s cost and each one's doctor's `medicine`, this fighter's first).
-    /// Neither ends its week. Returns this fighter's result.
+    /// A fight between rival fighters against `opponent` in an arena of `kind`, resolved
+    /// by the statistical model: fame, record and death, then what the fight leaves both
+    /// (`after_fight`, with `form`'s cost and each one's doctor's `medicine`, this
+    /// fighter's first). Neither ends its week. Returns this fighter's result.
     pub fn modelled_fight<R: Rng + ?Sized>(
         &mut self,
         opponent: &mut Self,
+        kind: ArenaKind,
         form: FormEvent,
         medicine: [Medicine; 2],
         rng: &mut R,
         data: &DesignData,
     ) -> FightResult {
-        let [mine, theirs] = self.modelled_sides(opponent, rng, data);
+        let [mine, theirs] = self.modelled_sides(opponent, kind, rng, data);
         let rules = &data.fighter;
         self.after_fight(mine, form, medicine[0], rng, rules);
         opponent.after_fight(theirs, form, medicine[1], rng, rules);
@@ -436,29 +447,31 @@ impl CareerFighter {
     pub fn dueled_fight<R: Rng + ?Sized>(
         &mut self,
         opponent: &mut Self,
+        kind: ArenaKind,
         form: FormEvent,
         rng: &mut R,
         data: &DesignData,
     ) -> FightResult {
         let alone = [Medicine::default(); 2];
-        let (summary, _, _) = self.fight(opponent, form, alone, rng, data);
+        let (summary, _, _) = self.fight(opponent, kind, form, alone, rng, data);
         summary.result
     }
 
-    /// A duel against `opponent`, then its effects on both: fame, death, morale, form
-    /// (`form`'s cost), illness worsening, a possible injury and progression. Returns
-    /// this fighter's new injury, and whether its doctor's `medicine` (the first, the
-    /// opponent's doctor's second) spared it an after-effect.
+    /// A duel against `opponent` in an arena of `kind`, then its effects on both: fame,
+    /// death, morale, form (`form`'s cost), illness worsening, a possible injury and
+    /// progression. Returns this fighter's new injury, and whether its doctor's
+    /// `medicine` (the first, the opponent's doctor's second) spared it an after-effect.
     fn fight<R: Rng + ?Sized>(
         &mut self,
         opponent: &mut Self,
+        kind: ArenaKind,
         form: FormEvent,
         medicine: [Medicine; 2],
         rng: &mut R,
         data: &DesignData,
     ) -> (FightSummary, Option<Injury>, bool) {
         let rules = &data.fighter;
-        let (seed, start, arena) = self.duel(opponent, rng, data);
+        let (seed, start, arena) = self.duel(opponent, kind, rng, data);
         let stronger = opponent.stronger_than(self, rules);
         let weaker = self.stronger_than(opponent, rules);
         let summary_opponent = opponent.clone();
@@ -1029,6 +1042,50 @@ mod tests {
     }
 
     #[test]
+    fn a_duel_is_fought_on_the_floor_of_its_arena() {
+        let data = data();
+        let mut rng = ChaCha8Rng::seed_from_u64(1);
+        let (a, b) = (
+            CareerFighter::random(&mut rng, &data),
+            CareerFighter::random(&mut rng, &data),
+        );
+        for kind in ArenaKind::ALL {
+            let layout = data.combat.arenas.get(kind);
+            let (_, start, end) = a.duel(&b, kind, &mut rng, &data);
+            assert_eq!((start.width, start.height), (layout.width, layout.height));
+            assert_eq!(start.speed_percent, layout.speed_percent);
+            assert_eq!(start.pillars, layout.pillars);
+            assert!(start.fighters[0].position.x < start.fighters[1].position.x);
+            assert!(end.fighters.iter().all(|f| f.position.x <= layout.width));
+        }
+    }
+
+    #[test]
+    fn a_fight_takes_the_arena_of_its_colosseum() {
+        let data = data();
+        let rome = data
+            .world
+            .colosseums
+            .iter()
+            .position(|c| c.arena == ArenaKind::Pillars)
+            .expect("a colosseum with pillars");
+        let rome = ColosseumId(u32::try_from(rome).unwrap());
+        let mut rng = ChaCha8Rng::seed_from_u64(2);
+        let mut f = CareerFighter::random(&mut rng, &data);
+        let report = f
+            .play_week(
+                plan(Activity::Fight(rome)),
+                None,
+                StaffEffects::default(),
+                &mut rng,
+                &data,
+            )
+            .unwrap();
+        let fight = report.fight.unwrap();
+        assert_eq!(fight.start.pillars, data.combat.arenas.pillars.pillars);
+    }
+
+    #[test]
     fn a_fight_tells_who_survived_a_fatal_blow() {
         let mut data = data();
         for survival in [0.0, 1.0] {
@@ -1038,8 +1095,9 @@ mod tests {
                 let mut mine = CareerFighter::random(&mut rng, &data);
                 let mut theirs = CareerFighter::random(&mut rng, &data);
                 let alone = [Medicine::default(); 2];
+                let sand = ArenaKind::Sand;
                 let (summary, ..) =
-                    mine.fight(&mut theirs, FormEvent::Fight, alone, &mut rng, &data);
+                    mine.fight(&mut theirs, sand, FormEvent::Fight, alone, &mut rng, &data);
                 let mut arena = summary.start.clone();
                 crate::duel::play(&mut arena);
                 let i = arena.fighters.iter().position(|f| !f.is_alive())?;

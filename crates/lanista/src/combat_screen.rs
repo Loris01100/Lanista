@@ -41,6 +41,11 @@ const FIGHTER_TINTS: [Color; 2] = [
 /// Fight speeds offered, with their labels.
 const SPEEDS: [(f32, &str); 3] = [(0.5, "x0,5"), (1.0, "x1"), (1.5, "x1,5")];
 const SAND: Color = Color::new(0.76, 0.66, 0.48, 1.0);
+/// The floor of an arena that slows fighters down: deeper, darker sand.
+const DEEP_SAND: Color = Color::new(0.66, 0.54, 0.36, 1.0);
+// ponytail: pillars drawn with shapes until the arenas get their sprites.
+const PILLAR: Color = Color::new(0.55, 0.53, 0.5, 1.0);
+const PILLAR_TOP: Color = Color::new(0.72, 0.7, 0.66, 1.0);
 const STANDS: Color = Color::new(0.16, 0.13, 0.11, 1.0);
 // ponytail: blood drawn with shapes until the real sprites bring a stain.
 // Opaque, so overlapping blots make one even stain.
@@ -409,7 +414,17 @@ impl Screen for CombatScreen {
             width + 2.0,
             height + 2.0,
         )));
-        draw_rectangle(0.0, 0.0, width, height, SAND);
+        let floor = if self.arena.speed_percent < 100 {
+            DEEP_SAND
+        } else {
+            SAND
+        };
+        draw_rectangle(0.0, 0.0, width, height, floor);
+        for pillar in &self.arena.pillars {
+            let (x, y, radius) = (to_f32(pillar.x), to_f32(pillar.y), to_f32(pillar.radius));
+            draw_circle(x, y, radius, PILLAR);
+            draw_circle(x, y, radius * 0.75, PILLAR_TOP);
+        }
         // Blood under everyone.
         for (fighter, look) in self.arena.fighters.iter().zip(&self.looks) {
             if let Some(dead_for) = look.dead_for {

@@ -1036,11 +1036,11 @@ mod tests {
         assert_eq!(*week, 3);
         assert_eq!(
             menu[0],
-            "Argent 959 (+64) : mécène +50, recettes +24, entretien -10"
+            "Argent 955 (+60) : mécène +50, recettes +20, entretien -10"
         );
         assert_eq!(
             menu[1],
-            "Mirmillon n° 1 : Combat à Capoue, Contre un Augure, plus fort : abandon, renommée -8"
+            "Mirmillon n° 1 : Défi à Capoue, Contre un Augure, plus fort : abandon, renommée -8"
         );
     }
 

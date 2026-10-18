@@ -1,4 +1,7 @@
-use crate::combat::{AccuracyRules, Arena, RADIUS, Vec2, edge_distance, hit_percent, spell_damage};
+use crate::combat::{
+    AccuracyRules, Arena, RADIUS, Range, Vec2, edge_distance, hit_percent, path_direction,
+    shot_blocked, spell_damage,
+};
 use crate::design_data::SpellData;
 use crate::fighter::form::Form;
 use crate::fighter::illness::IllnessLevel;
@@ -87,6 +90,8 @@ pub fn fear(condition: &Condition) -> f64 {
 /// to hit; waiting scores 0, or the
 /// value a showman sees in its strongest spell about to be ready; closing in scores
 /// `MOVE_SCORE`; a fearful, hurt fighter scores backing away from a threatening enemy.
+/// A pillar between the two makes ranged spells useless: the fighter walks around it,
+/// as it closes in around any pillar in its way.
 #[must_use]
 pub fn score_actions(arena: &Arena, me: FighterId) -> Vec<(Action, f64)> {
     let mut scored = vec![(Action::Wait, 0.0)];
@@ -97,8 +102,10 @@ pub fn score_actions(arena: &Arena, me: FighterId) -> Vec<(Action, f64)> {
         return scored;
     };
     let distance = edge_distance(me, target);
+    let blocked = shot_blocked(&arena.pillars, me.position, target.position);
+    let usable = |data: &SpellData| !(blocked && data.range == Range::Ranged);
     for (spell, data) in me.spells.iter().enumerate() {
-        if me.can_cast(spell) && distance <= data.reach {
+        if me.can_cast(spell) && distance <= data.reach && usable(data) {
             let cast = Action::Cast {
                 spell,
                 target: target.id,
@@ -110,18 +117,24 @@ pub fn score_actions(arena: &Arena, me: FighterId) -> Vec<(Action, f64)> {
     scored[0].1 = show_wait_value(me, target, distance, &arena.accuracy);
 
     let retreat = fear(&me.condition) * (1.0 - share(me.hp, me.stats.hp)) * RETREAT_WEIGHT;
-    let toward = Vec2::new(
-        target.position.x - me.position.x,
-        target.position.y - me.position.y,
-    );
+    let toward = path_direction(&arena.pillars, me.position, target.position);
     let longest_reach = |f: &Fighter| f.spells.iter().map(|s| s.reach).fold(0.0, f64::max);
+    let usable_reach = me
+        .spells
+        .iter()
+        .filter(|s| usable(s))
+        .map(|s| s.reach)
+        .fold(0.0, f64::max);
     if retreat > RETREAT_MIN {
-        let away = Vec2::new(-toward.x, -toward.y);
+        let away = Vec2::new(
+            me.position.x - target.position.x,
+            me.position.y - target.position.y,
+        );
         let threatened = distance <= longest_reach(target) + THREAT_MARGIN;
         if threatened && can_back_off(arena, me, away) {
             scored.push((Action::Move(away), retreat));
         }
-    } else if distance > longest_reach(me) {
+    } else if distance > usable_reach {
         scored.push((Action::Move(toward), MOVE_SCORE));
     } else if !can_cast && distance > PRESS_MIN_DISTANCE {
         let press = offset(

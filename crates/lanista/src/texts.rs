@@ -1,9 +1,8 @@
 //! What the player reads, in French: fighters, injuries, illnesses, fights,
 //! weeks, money, colosseums, the market and the staff.
 
-use lanista_core::colosseum::{
-    ArenaKind, Challenge, ColosseumId, Contender, TitleNews, title_kept,
-};
+use lanista_core::colosseum::{Challenge, ColosseumId, Contender, TitleNews, title_kept};
+use lanista_core::combat::ArenaKind;
 use lanista_core::design_data::DesignData;
 use lanista_core::economy::{Flow, Transaction, Wealth};
 use lanista_core::fighter::STAT_COUNT;
@@ -426,6 +425,15 @@ pub fn arena_name(arena: ArenaKind) -> &'static str {
         ArenaKind::Sand => "sable",
         ArenaKind::Pillars => "piliers",
         ArenaKind::Narrow => "étroite",
+    }
+}
+
+/// What an arena kind does to the fight, for the player.
+pub fn arena_effect(arena: ArenaKind) -> &'static str {
+    match arena {
+        ArenaKind::Sand => "le sable ralentit tout le monde, les tireurs en profitent",
+        ArenaKind::Pillars => "les piliers arrêtent les tirs et barrent le passage",
+        ArenaKind::Narrow => "le corps à corps s'engage vite",
     }
 }
 

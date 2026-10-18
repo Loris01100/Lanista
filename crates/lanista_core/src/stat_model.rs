@@ -2,7 +2,8 @@
 //! A logistic regression gives the winner, probability tables how the fight ends
 //! (time limit, knock-out, lost limb, beheading, death or surrender of the loser,
 //! stuns, spectacular hits).
-//! The `calibrate` tool fits it on thousands of real duels and writes
+//! There is one model per arena kind, the arena changing who wins and how.
+//! The `calibrate` tool fits them on thousands of real duels and writes
 //! `data/stat_model.ron`.
 //!
 //! Injuries need no table: in both modes they are drawn after the fight from the
@@ -13,7 +14,7 @@ use rand::{Rng, RngExt};
 use serde::{Deserialize, Serialize};
 
 use crate::ai::fear;
-use crate::combat::{Arena, CutRules, severed_limb};
+use crate::combat::{Arena, ArenaKind, CutRules, severed_limb};
 use crate::duel::STATS;
 use crate::fighter::fame::{FameRules, FightOutcome, FightResult};
 use crate::fighter::injury::Location;
@@ -24,7 +25,58 @@ use crate::fighter::{Fighter, FighterId};
 /// threshold, aggression and showmanship.
 pub const BASE_FEATURES: usize = 11;
 
-/// Coefficients fitted by `calibrate`, read from `data/stat_model.ron`.
+/// The model of each arena kind, fitted by `calibrate`, read from `data/stat_model.ron`.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct StatModels {
+    pub sand: StatModel,
+    pub pillars: StatModel,
+    pub narrow: StatModel,
+}
+
+impl StatModels {
+    #[must_use]
+    pub fn get(&self, kind: ArenaKind) -> &StatModel {
+        match kind {
+            ArenaKind::Sand => &self.sand,
+            ArenaKind::Pillars => &self.pillars,
+            ArenaKind::Narrow => &self.narrow,
+        }
+    }
+
+    /// Builds them from the model of each kind, in the order of [`ArenaKind::ALL`].
+    #[must_use]
+    pub fn from_kinds([sand, pillars, narrow]: [StatModel; 3]) -> Self {
+        Self {
+            sand,
+            pillars,
+            narrow,
+        }
+    }
+
+    /// The models as `data/stat_model.ron` holds them.
+    ///
+    /// # Errors
+    /// If RON cannot write them, which would be a bug.
+    pub fn to_ron(&self) -> Result<String, ron::Error> {
+        let ron = ron::ser::to_string_pretty(self, ron::ser::PrettyConfig::default())?;
+        Ok(format!(
+            "// Written by `cargo run --release -p tools --bin calibrate`: rerun it after any\n\
+             // balancing change rather than editing by hand.\n{ron}\n"
+        ))
+    }
+
+    /// The name of the first value a model may not hold (see
+    /// [`StatModel::invalid_field`]).
+    #[must_use]
+    pub fn invalid_field(&self) -> Option<&'static str> {
+        ArenaKind::ALL
+            .iter()
+            .find_map(|&kind| self.get(kind).invalid_field())
+    }
+}
+
+/// Coefficients fitted by `calibrate` for one arena kind.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct StatModel {
@@ -342,18 +394,6 @@ impl StatModel {
         }
     }
 
-    /// The model as `data/stat_model.ron` holds it.
-    ///
-    /// # Errors
-    /// If RON cannot write it, which would be a bug.
-    pub fn to_ron(&self) -> Result<String, ron::Error> {
-        let ron = ron::ser::to_string_pretty(self, ron::ser::PrettyConfig::default())?;
-        Ok(format!(
-            "// Written by `cargo run --release -p tools --bin calibrate`: rerun it after any\n\
-             // balancing change rather than editing by hand.\n{ron}\n"
-        ))
-    }
-
     /// The name of the first value the model may not hold: a chance outside 0 to 1,
     /// a weight that is not a number, or an empty table.
     #[must_use]
@@ -436,17 +476,20 @@ mod tests {
     }
 
     #[test]
-    fn the_shipped_model_is_calibrated() {
-        let model = data().stat_model;
-        assert!(model.fights >= 10_000, "rerun calibrate");
-        assert_eq!(model.winner.classes.len(), data().classes.len());
-        assert_eq!(model.invalid_field(), None);
+    fn the_shipped_models_are_calibrated() {
+        let models = data().stat_model;
+        assert_eq!(models.invalid_field(), None);
+        for kind in ArenaKind::ALL {
+            let model = models.get(kind);
+            assert!(model.fights >= 10_000, "rerun calibrate");
+            assert_eq!(model.winner.classes.len(), data().classes.len());
+        }
     }
 
     #[test]
     fn the_stronger_wins_more_often_and_mirrors_are_even() {
         let data = data();
-        let model = &data.stat_model.winner;
+        let model = &data.stat_model.sand.winner;
         let standard = fighter(&data, 0, STATS);
         let strong = fighter(&data, 0, STATS.map(|v| v * 3 / 2));
         assert!(model.chance(&strong, &standard) > 0.8);
@@ -458,7 +501,7 @@ mod tests {
 
     #[test]
     fn the_determined_fall_far_more_often_than_the_timid() {
-        let model = data().stat_model;
+        let model = data().stat_model.sand;
         let f = fighter(&data(), 0, STATS);
         let (bold, timid) = (determined(f.clone(), 100), determined(f, 0));
         // The most determined still give up, at 10 % of their HP.
@@ -513,7 +556,7 @@ mod tests {
             determination in 0_u32..=100,
         ) {
             let data = data();
-            let model = &data.stat_model;
+            let model = data.stat_model.get(ArenaKind::ALL[usize::try_from(seed % 3).unwrap()]);
             let first = fighter(&data, a, STATS);
             let second = determined(fighter(&data, b, crate::fighter::Stats { hp, ..STATS }), determination);
             let cut = &data.combat.cut;

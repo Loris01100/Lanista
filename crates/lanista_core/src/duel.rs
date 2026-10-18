@@ -42,7 +42,7 @@ pub fn random_duel(data: &DesignData, seed: u64) -> Arena {
         Fighter::new(FighterId(id), class, class_data, STATS, Vec2::new(x, y))
     };
     let fighters = vec![fighter(0, 1.0), fighter(1, ARENA_SIZE * 3.0 / 4.0 - 1.0)];
-    Arena::new(ARENA_SIZE, ARENA_SIZE, fighters, seed).with_rules(data.combat)
+    Arena::new(ARENA_SIZE, ARENA_SIZE, fighters, seed).with_rules(&data.combat)
 }
 
 /// A utility AI for every fighter of `arena`.

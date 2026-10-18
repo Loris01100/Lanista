@@ -1,6 +1,7 @@
 //! What `compare` does: plays the same fights between varied fighters as real duels and
 //! through the statistical model, then sets their rates side by side.
 
+use lanista_core::combat::ArenaKind;
 use lanista_core::design_data::DesignData;
 use lanista_core::fighter::career::{CareerFighter, Status};
 use lanista_core::fighter::form::FormEvent;
@@ -36,10 +37,11 @@ pub struct Pair {
     pub model: Outcome,
 }
 
-/// The fight of `seed` between two varied fighters, as a real duel and as the model
-/// resolves it, each with what the fight leaves them (injuries included).
+/// The fight of `seed` between two varied fighters in an arena of `kind`, as a real
+/// duel and as the model resolves it, each with what the fight leaves them (injuries
+/// included).
 #[must_use]
-pub fn play(seed: u64, data: &DesignData) -> Pair {
+pub fn play(seed: u64, kind: ArenaKind, data: &DesignData) -> Pair {
     let mut rng = ChaCha8Rng::seed_from_u64(seed);
     let fighters = [
         varied_fighter(&mut rng, data),
@@ -59,14 +61,16 @@ pub fn play(seed: u64, data: &DesignData) -> Pair {
     Pair {
         classes: [class(a), class(b)],
         stronger,
-        real: outcome(fighters.clone(), false, &mut rng, data),
-        model: outcome(fighters, true, &mut model_rng, data),
+        real: outcome(fighters.clone(), kind, false, &mut rng, data),
+        model: outcome(fighters, kind, true, &mut model_rng, data),
     }
 }
 
-/// How the fight between `fighters` ends, `modelled` or as a real duel.
+/// How the fight between `fighters` in an arena of `kind` ends, `modelled` or as a
+/// real duel.
 fn outcome(
     fighters: [CareerFighter; 2],
+    kind: ArenaKind,
     modelled: bool,
     rng: &mut ChaCha8Rng,
     data: &DesignData,
@@ -76,13 +80,14 @@ fn outcome(
     if modelled {
         a.modelled_fight(
             &mut b,
+            kind,
             FormEvent::Fight,
             [Medicine::default(); 2],
             rng,
             data,
         );
     } else {
-        a.dueled_fight(&mut b, FormEvent::Fight, rng, data);
+        a.dueled_fight(&mut b, kind, FormEvent::Fight, rng, data);
     }
     let after = [a, b];
     let gained = |i: usize| after[i].record.wins > before[i].record.wins;
@@ -186,8 +191,8 @@ mod tests {
     #[test]
     fn a_fight_is_played_the_same_way_twice() {
         let data = DesignData::load().unwrap();
-        let pair = play(5, &data);
-        assert_eq!(play(5, &data), pair);
+        let pair = play(5, ArenaKind::Pillars, &data);
+        assert_eq!(play(5, ArenaKind::Pillars, &data), pair);
         for outcome in [pair.real, pair.model] {
             if let Some(winner) = outcome.winner {
                 assert!(!outcome.died[winner]);
@@ -202,15 +207,17 @@ mod tests {
     #[test]
     fn the_model_stays_close_to_the_real_duels() {
         let data = DesignData::load().unwrap();
-        let pairs: Vec<Pair> = (1_000_000..1_001_000)
-            .map(|seed| play(seed, &data))
-            .collect();
         let names: Vec<String> = data.classes.iter().map(|c| c.name.clone()).collect();
-        let rates = rates(&pairs, &names);
-        assert_eq!(rates.len(), 7 + names.len());
-        // A thousand fights leave a few points of chance on each side.
-        for rate in &rates {
-            assert!(rate.gap() < 4.0, "{rate:?}");
+        for kind in ArenaKind::ALL {
+            let pairs: Vec<Pair> = (1_000_000..1_001_000)
+                .map(|seed| play(seed, kind, &data))
+                .collect();
+            let rates = rates(&pairs, &names);
+            assert_eq!(rates.len(), 7 + names.len());
+            // A thousand fights leave a few points of chance on each side.
+            for rate in &rates {
+                assert!(rate.gap() < 4.0, "{kind:?} {rate:?}");
+            }
         }
     }
 

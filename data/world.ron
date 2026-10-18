@@ -54,7 +54,8 @@
     colosseums: [
         (
             name: "Capoue",
-            // Effects come with phase 6: sand slows, pillars block shots, narrow favours melee.
+            // Its floor is in data/combat.ron (arenas): sand slows, pillars block shots
+            // and the way, narrow is small, so melee closes in fast.
             arena: Sand,
             // 1 to 5.
             prestige: 1,

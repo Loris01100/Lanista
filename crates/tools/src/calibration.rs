@@ -1,6 +1,7 @@
 //! What `calibrate` does: plays real duels between varied fighters, then fits the
 //! statistical model of `lanista_core::stat_model` on their results.
 
+use lanista_core::combat::ArenaKind;
 use lanista_core::design_data::DesignData;
 use lanista_core::fighter::career::CareerFighter;
 use lanista_core::fighter::fame::FightResult;
@@ -46,13 +47,13 @@ pub fn varied_fighter(rng: &mut ChaCha8Rng, data: &DesignData) -> CareerFighter 
     fighter
 }
 
-/// The real duel of `seed` between two varied fighters.
+/// The real duel of `seed` between two varied fighters, in an arena of `kind`.
 #[must_use]
-pub fn record(seed: u64, data: &DesignData) -> Sample {
+pub fn record(seed: u64, kind: ArenaKind, data: &DesignData) -> Sample {
     let mut rng = ChaCha8Rng::seed_from_u64(seed);
     let a = varied_fighter(&mut rng, data);
     let b = varied_fighter(&mut rng, data);
-    let (_, start, arena) = a.duel(&b, &mut rng, data);
+    let (_, start, arena) = a.duel(&b, kind, &mut rng, data);
     let side = |i| Ending::from_arena(&arena, FighterId(i), &data.fighter.fame);
     Sample {
         fighters: [start.fighters[0].clone(), start.fighters[1].clone()],
@@ -273,8 +274,11 @@ mod tests {
     #[test]
     fn a_fitted_model_is_valid_and_favors_the_stronger() {
         let data = DesignData::load().unwrap();
-        let samples: Vec<Sample> = (0..400).map(|seed| record(seed, &data)).collect();
-        assert_eq!(record(3, &data), samples[3]);
+        let samples: Vec<Sample> = (0..400)
+            .map(|seed| record(seed, ArenaKind::Sand, &data))
+            .collect();
+        assert_eq!(record(3, ArenaKind::Sand, &data), samples[3]);
+        assert_ne!(record(3, ArenaKind::Narrow, &data), samples[3]);
         let model = fit(&samples, data.classes.len());
         assert_eq!(model.fights, 400);
         assert_eq!(model.invalid_field(), None);

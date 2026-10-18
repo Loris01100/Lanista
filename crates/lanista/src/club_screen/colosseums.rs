@@ -8,8 +8,8 @@ use reesch::egui;
 
 use super::{ClubScreen, RANKS_SHOWN, View};
 use crate::texts::{
-    arena_name, club_name, colosseum_name, condition_text, contender_name, profile_name,
-    record_text, rival_fighter_name, staff_text, wealth_name,
+    arena_effect, arena_name, club_name, colosseum_name, condition_text, contender_name,
+    profile_name, record_text, rival_fighter_name, staff_text, wealth_name,
 };
 
 impl ClubScreen {
@@ -33,7 +33,8 @@ impl ClubScreen {
                     "Arène : {}, prestige {} / 5",
                     arena_name(rules.arena),
                     rules.prestige
-                ));
+                ))
+                .on_hover_text(arena_effect(rules.arena));
                 ui.label(format!(
                     "Inscription {}, prime de victoire {}, bonus champion {}",
                     rules.purses.entry_fee, rules.purses.win_prize, rules.purses.champion_bonus

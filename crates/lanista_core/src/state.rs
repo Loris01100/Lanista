@@ -12,6 +12,7 @@ use crate::calendar::{Date, SeasonPhase};
 use crate::colosseum::{
     Challenge, Colosseum, ColosseumId, Contender, Rosters, TitleNews, pick_opponent, title_kept,
 };
+use crate::combat::ArenaKind;
 use crate::design_data::DesignData;
 use crate::economy::{Flow, Transaction, Wealth};
 use crate::fighter::care::CareRules;
@@ -1229,7 +1230,12 @@ fn end_colosseum_weeks(
             _ => None,
         };
         if let Some((champion, challenger)) = defense {
-            let result = outsider_duel(state, champion, challenger, data);
+            let arena = data
+                .world
+                .colosseums
+                .get(c)
+                .map_or(ArenaKind::Sand, |r| r.arena);
+            let result = outsider_duel(state, champion, challenger, arena, data);
             let colosseum = &mut state.colosseums[c];
             colosseum.record_title_fight(champion, challenger, result, week, &data.world);
             news.push(TitleNews::Fight {
@@ -1258,13 +1264,14 @@ fn end_colosseum_weeks(
     titles
 }
 
-/// A title defense between outsiders `a`, the champion, and `b`, resolved by the
-/// statistical model; they take only fame, record and death from it. Returns `a`'s
-/// result.
+/// A title defense between outsiders `a`, the champion, and `b`, in an arena of
+/// `kind`, resolved by the statistical model; they take only fame, record and death
+/// from it. Returns `a`'s result.
 fn outsider_duel(
     state: &mut GameState,
     a: Contender,
     b: Contender,
+    kind: ArenaKind,
     data: &DesignData,
 ) -> FightResult {
     let (rivals, free_agents) = (&state.rivals, &state.free_agents);
@@ -1274,7 +1281,7 @@ fn outsider_duel(
     ) else {
         return FightResult::Unfinished;
     };
-    let [(outcome, _), _] = first.modelled_fame_and_death(&mut second, &mut state.rng, data);
+    let [(outcome, _), _] = first.modelled_fame_and_death(&mut second, kind, &mut state.rng, data);
     put_outsider(state, a, first);
     put_outsider(state, b, second);
     outcome.result
@@ -1480,10 +1487,10 @@ fn outsider_weeks(
         }
     }
     let mut done = fought.to_vec();
-    for (c, purses) in world
+    for (c, (purses, arena)) in world
         .colosseums
         .iter()
-        .map(|r| &r.purses)
+        .map(|r| (&r.purses, r.arena))
         .enumerate()
         .take(state.colosseums.len())
     {
@@ -1515,6 +1522,7 @@ fn outsider_weeks(
             let medicine = [a, b].map(|o| outsider_effects(&state.rivals, o).medicine);
             let result = first.modelled_fight(
                 &mut second,
+                arena,
                 FormEvent::Fight,
                 medicine,
                 &mut state.rng,
@@ -2937,11 +2945,13 @@ mod tests {
             .filter(|f| f.status == Status::Active && f.age <= rookie_age + 2)
             .count();
         assert!(young > 0);
-        // The clubs hired among the candidates, a poor one its recruiter first; their
-        // salaries, paid for every three fighters, keep their money within bounds (up
-        // to 26 000 without them).
+        // The clubs hired among the candidates, a poor one its recruiter first (it may
+        // not afford a trainer besides); their salaries, paid for every three fighters,
+        // keep their money within bounds (up to 26 000 without them).
         for rival in &state.rivals {
-            assert!(rival.staff.trainer.is_some());
+            let staff = &rival.staff;
+            let hired = staff.trainer.is_some() || staff.doctor.is_some();
+            assert!(hired || staff.recruiter.is_some(), "{staff:?}");
             if rival.wealth == Wealth::Poor {
                 assert!(rival.staff.recruiter.is_some());
             }

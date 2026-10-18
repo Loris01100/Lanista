@@ -60,15 +60,79 @@ pub struct Arena {
     pub stun: StunRules,
     /// How cutting hits sever; never, unless set with [`Arena::with_rules`].
     pub cut: CutRules,
+    /// Percentage of their speed fighters walk at: 100, unless set with
+    /// [`Arena::with_layout`].
+    pub speed_percent: u32,
+    /// What stands on the floor; nothing, unless set with [`Arena::with_layout`].
+    pub pillars: Vec<Pillar>,
 }
 
 /// Combat rules, from `data/combat.ron`.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct CombatRules {
     pub accuracy: AccuracyRules,
     pub stun: StunRules,
     pub cut: CutRules,
+    pub arenas: ArenaLayouts,
+}
+
+/// What a colosseum's arena does to the fight (see [`ArenaLayout`]).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Deserialize)]
+pub enum ArenaKind {
+    /// Slows everyone.
+    Sand,
+    /// Pillars block ranged spells and the way.
+    Pillars,
+    /// A small floor, where melee fighters close in fast.
+    Narrow,
+}
+
+impl ArenaKind {
+    pub const ALL: [Self; 3] = [Self::Sand, Self::Pillars, Self::Narrow];
+}
+
+/// A round pillar: fighters walk around it, and ranged spells do not go through it.
+#[derive(Debug, Clone, Copy, PartialEq, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct Pillar {
+    /// Center, in meters.
+    pub x: f64,
+    pub y: f64,
+    /// In meters.
+    pub radius: f64,
+}
+
+/// The floor of an arena kind, from `data/combat.ron`.
+#[derive(Debug, Clone, PartialEq, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct ArenaLayout {
+    /// In meters.
+    pub width: f64,
+    pub height: f64,
+    /// Percentage of their speed fighters walk at.
+    pub speed_percent: u32,
+    pub pillars: Vec<Pillar>,
+}
+
+/// The floor of each arena kind.
+#[derive(Debug, Clone, PartialEq, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct ArenaLayouts {
+    pub sand: ArenaLayout,
+    pub pillars: ArenaLayout,
+    pub narrow: ArenaLayout,
+}
+
+impl ArenaLayouts {
+    #[must_use]
+    pub fn get(&self, kind: ArenaKind) -> &ArenaLayout {
+        match kind {
+            ArenaKind::Sand => &self.sand,
+            ArenaKind::Pillars => &self.pillars,
+            ArenaKind::Narrow => &self.narrow,
+        }
+    }
 }
 
 /// How a hit may stun its target (see [`stun_chance`]), and how a stunned fighter gets
@@ -179,6 +243,8 @@ impl Arena {
             accuracy: AccuracyRules::ALWAYS,
             stun: StunRules::NEVER,
             cut: CutRules::NEVER,
+            speed_percent: 100,
+            pillars: Vec::new(),
         }
     }
 
@@ -191,10 +257,21 @@ impl Arena {
 
     /// This arena, where attacks hit, stun and sever following `rules`, as in real fights.
     #[must_use]
-    pub fn with_rules(mut self, rules: CombatRules) -> Self {
+    pub fn with_rules(mut self, rules: &CombatRules) -> Self {
         self.accuracy = rules.accuracy;
         self.stun = rules.stun;
         self.cut = rules.cut;
+        self
+    }
+
+    /// This arena on `layout`'s floor: its size, its pillars, and its ground slowing
+    /// fighters down to its speed percentage.
+    #[must_use]
+    pub fn with_layout(mut self, layout: &ArenaLayout) -> Self {
+        self.width = layout.width;
+        self.height = layout.height;
+        self.speed_percent = layout.speed_percent;
+        self.pillars.clone_from(&layout.pillars);
         self
     }
 
@@ -389,6 +466,83 @@ pub fn edge_distance(a: &Fighter, b: &Fighter) -> f64 {
     (offset.length() - 2.0 * RADIUS).max(0.0)
 }
 
+/// Whether a pillar stands across the line from `from` to `to`, blocking a ranged spell.
+#[must_use]
+pub fn shot_blocked(pillars: &[Pillar], from: Vec2, to: Vec2) -> bool {
+    pillars
+        .iter()
+        .any(|p| segment_distance(Vec2::new(p.x, p.y), from, to) < p.radius)
+}
+
+/// Distance from `point` to the segment from `a` to `b`.
+fn segment_distance(point: Vec2, a: Vec2, b: Vec2) -> f64 {
+    let along = Vec2::new(b.x - a.x, b.y - a.y);
+    let squared = along.x * along.x + along.y * along.y;
+    let t = if squared > 0.0 {
+        (((point.x - a.x) * along.x + (point.y - a.y) * along.y) / squared).clamp(0.0, 1.0)
+    } else {
+        0.0
+    };
+    Vec2::new(a.x + t * along.x - point.x, a.y + t * along.y - point.y).length()
+}
+
+/// Extra turn, in radians, past the edge of a pillar in the way: enough to clear it.
+const AROUND_PILLAR: f64 = 0.1;
+
+/// Which way a fighter at `from` walks to reach `to`: straight there, or, when a pillar
+/// it cannot walk through stands ahead in the way, past the edge of the nearest such
+/// pillar, on the side of `to`.
+#[must_use]
+pub fn path_direction(pillars: &[Pillar], from: Vec2, to: Vec2) -> Vec2 {
+    let straight = Vec2::new(to.x - from.x, to.y - from.y);
+    let length = straight.length();
+    if length <= 0.0 {
+        return straight;
+    }
+    // The pillar's center seen from `from`, how close one may walk by, how far ahead.
+    let mut nearest: Option<(Vec2, f64, f64)> = None;
+    for p in pillars {
+        let clearance = p.radius + RADIUS;
+        let center = Vec2::new(p.x - from.x, p.y - from.y);
+        let ahead = (center.x * straight.x + center.y * straight.y) / length;
+        let in_way = segment_distance(Vec2::new(p.x, p.y), from, to) < clearance;
+        if ahead > 0.0 && in_way && nearest.is_none_or(|(_, _, a)| ahead < a) {
+            nearest = Some((center, clearance, ahead));
+        }
+    }
+    let Some((center, clearance, _)) = nearest else {
+        return straight;
+    };
+    let distance = center.length();
+    let edge = if distance > clearance {
+        libm::asin(clearance / distance)
+    } else {
+        std::f64::consts::FRAC_PI_2
+    };
+    let turned = |side: f64| {
+        let angle = side * (edge + AROUND_PILLAR);
+        let (sin, cos) = (libm::sin(angle), libm::cos(angle));
+        Vec2::new(
+            center.x * cos - center.y * sin,
+            center.x * sin + center.y * cos,
+        )
+    };
+    // Turn towards the side of the line to the pillar where `to` lies. Right behind
+    // it, towards higher y, or higher x for a pillar straight up or down: of two
+    // fighters facing each other across a pillar, both go the same way round and
+    // meet, instead of chasing each other around it.
+    let cross = center.x * straight.y - center.y * straight.x;
+    if cross.abs() >= 1e-9 * length * length {
+        return turned(if cross > 0.0 { 1.0 } else { -1.0 });
+    }
+    let (left, right) = (turned(1.0), turned(-1.0));
+    if (left.y, left.x) >= (right.y, right.x) {
+        left
+    } else {
+        right
+    }
+}
+
 /// Counts down the ticks of every fighter down: at the last one, it gets back up with
 /// [`rise_percent`], drawn only below 100, or is knocked out of the fight.
 fn come_round(arena: &mut Arena) {
@@ -471,6 +625,10 @@ fn cast_spells(arena: &mut Arena) {
         if !caster.can_cast(spell) || edge_distance(caster, defender) > caster.spells[spell].reach {
             continue;
         }
+        let ranged = caster.spells[spell].range == Range::Ranged;
+        if ranged && shot_blocked(&arena.pillars, caster.position, defender.position) {
+            continue;
+        }
         let chance = hit_percent(&caster.stats, &defender.stats, &arena.accuracy);
         let missed = chance < 100 && arena.rng.random_range(0..100) >= chance;
         let amount = if missed {
@@ -543,12 +701,14 @@ fn cast_spells(arena: &mut Arena) {
     }
 }
 
+/// Moves every fighter standing that chose to, at its speed slowed by the ground.
 fn move_fighters(arena: &mut Arena) {
+    let ground = f64::from(arena.speed_percent) / 100.0;
     for f in arena.fighters.iter_mut().filter(|f| f.is_standing()) {
         if let Action::Move(direction) = f.action {
             let length = direction.length();
             if length > 0.0 {
-                let step = f64::from(f.stats.speed) * METERS_PER_SPEED * DT / length;
+                let step = f64::from(f.stats.speed) * METERS_PER_SPEED * ground * DT / length;
                 f.position.x += direction.x * step;
                 f.position.y += direction.y * step;
             }
@@ -593,8 +753,25 @@ fn separate(arena: &mut Arena) {
     }
 }
 
+/// Pushes every fighter out of the pillars, then back inside the walls.
 fn keep_inside(arena: &mut Arena) {
     for f in &mut arena.fighters {
+        for p in &arena.pillars {
+            let offset = Vec2::new(f.position.x - p.x, f.position.y - p.y);
+            let distance = offset.length();
+            let clearance = p.radius + RADIUS;
+            if distance >= clearance {
+                continue;
+            }
+            // On the center: no direction to push along, pick one.
+            let normal = if distance > 0.0 {
+                Vec2::new(offset.x / distance, offset.y / distance)
+            } else {
+                Vec2::new(1.0, 0.0)
+            };
+            f.position.x = p.x + normal.x * clearance;
+            f.position.y = p.y + normal.y * clearance;
+        }
         f.position.x = f.position.x.clamp(RADIUS, arena.width - RADIUS);
         f.position.y = f.position.y.clamp(RADIUS, arena.height - RADIUS);
     }
@@ -1201,6 +1378,117 @@ mod tests {
         let mut arena = Arena::new(10.0, 10.0, vec![fighter(0, 5.0, 5.0)], 0);
         play(&mut arena, &[Action::Move(Vec2::new(-1.0, 1.0))], 300);
         assert_eq!(arena.fighters[0].position, Vec2::new(RADIUS, 10.0 - RADIUS));
+    }
+
+    fn pillar(x: f64, y: f64, radius: f64) -> Pillar {
+        Pillar { x, y, radius }
+    }
+
+    #[test]
+    fn sand_slows_fighters_down() {
+        let floor = ArenaLayout {
+            width: 20.0,
+            height: 20.0,
+            speed_percent: 50,
+            pillars: Vec::new(),
+        };
+        let mut arena = Arena::new(1.0, 1.0, vec![fighter(0, 5.0, 5.0)], 0).with_layout(&floor);
+        assert_eq!((arena.width, arena.height), (20.0, 20.0));
+        play(&mut arena, &[Action::Move(Vec2::new(1.0, 0.0))], 30);
+        // Speed 30 → 3 m/s, halved, for one second.
+        assert!((arena.fighters[0].position.x - 6.5).abs() < 1e-9);
+    }
+
+    #[test]
+    fn a_fighter_cannot_walk_through_a_pillar() {
+        let mut arena = Arena::new(20.0, 20.0, vec![fighter(0, 5.0, 5.0)], 0);
+        arena.pillars = vec![pillar(8.0, 5.0, 1.0)];
+        play(&mut arena, &[Action::Move(Vec2::new(1.0, 0.0))], 60);
+        let position = arena.fighters[0].position;
+        assert!(
+            (position.x - (8.0 - 1.0 - RADIUS)).abs() < 1e-9,
+            "{position:?}"
+        );
+    }
+
+    #[test]
+    fn a_pillar_blocks_a_shot_but_not_one_beside_it() {
+        let pillars = [pillar(10.0, 10.0, 1.0)];
+        assert!(shot_blocked(
+            &pillars,
+            Vec2::new(3.0, 10.0),
+            Vec2::new(17.0, 10.0)
+        ));
+        assert!(shot_blocked(
+            &pillars,
+            Vec2::new(3.0, 9.5),
+            Vec2::new(17.0, 10.5)
+        ));
+        assert!(!shot_blocked(
+            &pillars,
+            Vec2::new(3.0, 12.0),
+            Vec2::new(17.0, 12.0)
+        ));
+        // Both on the same side, the pillar behind one of them.
+        assert!(!shot_blocked(
+            &pillars,
+            Vec2::new(3.0, 10.0),
+            Vec2::new(8.0, 10.0)
+        ));
+        assert!(!shot_blocked(
+            &[],
+            Vec2::new(3.0, 10.0),
+            Vec2::new(17.0, 10.0)
+        ));
+    }
+
+    #[test]
+    fn a_ranged_spell_does_not_go_through_a_pillar() {
+        let mut fighters = vec![fighter(0, 5.0, 5.0), fighter(1, 9.0, 5.0)];
+        fighters[0].spells[0].range = Range::Ranged;
+        fighters[0].spells[0].reach = 10.0;
+        let mut arena = Arena::new(20.0, 20.0, fighters, 0);
+        arena.pillars = vec![pillar(7.0, 5.0, 0.5)];
+        play(&mut arena, &[HIT, Action::Wait], 1);
+        assert_eq!(arena.fighters[1].hp, 100);
+        arena.pillars.clear();
+        play(&mut arena, &[HIT, Action::Wait], 1);
+        assert_eq!(arena.fighters[1].hp, 100 - HIT_DAMAGE);
+    }
+
+    #[test]
+    fn the_way_goes_straight_or_around_the_pillar_in_the_way() {
+        let (from, to) = (Vec2::new(3.0, 10.0), Vec2::new(17.0, 11.0));
+        assert_eq!(path_direction(&[], from, to), Vec2::new(14.0, 1.0));
+        // Behind the fighter, or off the way: straight.
+        let behind = [pillar(1.5, 10.0, 0.4)];
+        assert_eq!(path_direction(&behind, from, to), Vec2::new(14.0, 1.0));
+        let aside = [pillar(10.0, 15.0, 1.0)];
+        assert_eq!(path_direction(&aside, from, to), Vec2::new(14.0, 1.0));
+        // In the way, the target a little above it: round its top, clear of its edge.
+        let center = pillar(10.0, 10.0, 1.0);
+        let way = path_direction(&[center], from, to);
+        assert!(way.x > 0.0 && way.y > 0.0, "{way:?}");
+        let ahead = Vec2::new(from.x + way.x * 10.0, from.y + way.y * 10.0);
+        let closest = segment_distance(Vec2::new(center.x, center.y), from, ahead);
+        assert!(closest >= center.radius + RADIUS, "{closest}");
+    }
+
+    #[test]
+    fn fighters_facing_each_other_across_a_pillar_go_round_the_same_way() {
+        let pillars = [pillar(10.0, 10.0, 1.0)];
+        let (a, b) = (Vec2::new(3.0, 10.0), Vec2::new(17.0, 10.0));
+        let (from_a, from_b) = (
+            path_direction(&pillars, a, b),
+            path_direction(&pillars, b, a),
+        );
+        assert!(from_a.y > 0.0 && from_b.y > 0.0, "{from_a:?} {from_b:?}");
+        let (c, d) = (Vec2::new(10.0, 3.0), Vec2::new(10.0, 17.0));
+        let (from_c, from_d) = (
+            path_direction(&pillars, c, d),
+            path_direction(&pillars, d, c),
+        );
+        assert!(from_c.x > 0.0 && from_d.x > 0.0, "{from_c:?} {from_d:?}");
     }
 
     fn draws(arena: &mut Arena) -> [u64; 4] {

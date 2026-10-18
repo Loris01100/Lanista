@@ -1,12 +1,14 @@
-//! `calibrate --fights 20000`: plays real duels between varied fighters (seeds 0 to
-//! n - 1, in parallel), fits the statistical model on them and writes it to
-//! `data/stat_model.ron`, read by `lanista_core::stat_model`.
+//! `calibrate --fights 20000`: in each arena kind, plays real duels between varied
+//! fighters (seeds 0 to n - 1, in parallel), fits that arena's statistical model on them
+//! and writes the models to `data/stat_model.ron`, read by `lanista_core::stat_model`.
 
 use std::process::ExitCode;
 
+use lanista_core::combat::ArenaKind;
 use lanista_core::design_data::{DesignData, STAT_MODEL_FILE};
 use lanista_core::fighter::fame::FightResult;
 use lanista_core::fighter::injury::Location;
+use lanista_core::stat_model::{StatModel, StatModels};
 use rayon::prelude::*;
 use tools::calibration::{Sample, fit, record};
 use tools::{one_decimal, option};
@@ -31,13 +33,35 @@ fn main() -> ExitCode {
         }
     };
 
-    // Each fight is independent: parallel across fights, never inside one.
-    let samples: Vec<Sample> = (0..fights)
-        .into_par_iter()
-        .map(|seed| record(seed, &data))
-        .collect();
-    let model = fit(&samples, data.classes.len());
+    let models = StatModels::from_kinds(ArenaKind::ALL.map(|kind| {
+        // Each fight is independent: parallel across fights, never inside one.
+        let samples: Vec<Sample> = (0..fights)
+            .into_par_iter()
+            .map(|seed| record(seed, kind, &data))
+            .collect();
+        let model = fit(&samples, data.classes.len());
+        println!("{kind:?}: {fights} real duels (seeds 0 to {})", fights - 1);
+        report(&samples, &model, fights);
+        model
+    }));
 
+    let text = match models.to_ron() {
+        Ok(text) => text,
+        Err(e) => {
+            eprintln!("{e}");
+            return ExitCode::FAILURE;
+        }
+    };
+    if let Err(e) = std::fs::write(DesignData::path(STAT_MODEL_FILE), text) {
+        eprintln!("{STAT_MODEL_FILE}: {e}");
+        return ExitCode::FAILURE;
+    }
+    println!("written to {STAT_MODEL_FILE}");
+    ExitCode::SUCCESS
+}
+
+/// Prints how the `fights` duels of `samples` ended and the `model` fitted on them.
+fn report(samples: &[Sample], model: &StatModel, fights: u64) {
     let count = |f: &dyn Fn(&Sample) -> bool| samples.iter().filter(|s| f(s)).count() as u64;
     let with_winner = count(&|s| s.sides.iter().any(|d| d.result == FightResult::Won));
     let unfinished = count(&|s| s.sides[0].result == FightResult::Unfinished);
@@ -62,7 +86,6 @@ fn main() -> ExitCode {
             _ => false,
         }
     });
-    println!("{fights} real duels (seeds 0 to {})", fights - 1);
     println!(
         "  with a winner {} %, unfinished {} %, a death {} %",
         one_decimal(with_winner * 100, fights),
@@ -80,25 +103,14 @@ fn main() -> ExitCode {
         "  the regression foresees the winner of {} % of the fights with one",
         one_decimal(foreseen * 100, with_winner),
     );
-    println!("winner weights: {:?}", model.winner);
-    println!("unfinished by classes: {:?}", model.unfinished);
-    println!("knocked out by the winner's class: {:?}", model.knocked_out);
-    println!("lost limb by the winner's class: {:?}", model.lost_limb);
-    println!("beheaded by the winner's class: {:?}", model.beheaded);
-    println!("death by determination: {:?}", model.death);
-    println!("stunned by the opponent's class: {:?}", model.stunned);
-
-    let text = match model.to_ron() {
-        Ok(text) => text,
-        Err(e) => {
-            eprintln!("{e}");
-            return ExitCode::FAILURE;
-        }
-    };
-    if let Err(e) = std::fs::write(DesignData::path(STAT_MODEL_FILE), text) {
-        eprintln!("{STAT_MODEL_FILE}: {e}");
-        return ExitCode::FAILURE;
-    }
-    println!("written to {STAT_MODEL_FILE}");
-    ExitCode::SUCCESS
+    println!("  winner weights: {:?}", model.winner);
+    println!("  unfinished by classes: {:?}", model.unfinished);
+    println!(
+        "  knocked out by the winner's class: {:?}",
+        model.knocked_out
+    );
+    println!("  lost limb by the winner's class: {:?}", model.lost_limb);
+    println!("  beheaded by the winner's class: {:?}", model.beheaded);
+    println!("  death by determination: {:?}", model.death);
+    println!("  stunned by the opponent's class: {:?}", model.stunned);
 }

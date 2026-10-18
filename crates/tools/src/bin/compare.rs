@@ -1,10 +1,12 @@
-//! `compare --fights 20000 --tolerance 2`: plays the same fights between varied
-//! fighters (seeds from `--from`, 1 000 000 by default, away from the seeds `calibrate`
-//! fits on) as real duels and through the statistical model, prints the win, death and
-//! injury rates of both, and fails if one gap exceeds the tolerance in percentage points.
+//! `compare --fights 20000 --tolerance 2`: in each arena kind, plays the same fights
+//! between varied fighters (seeds from `--from`, 1 000 000 by default, away from the
+//! seeds `calibrate` fits on) as real duels and through that arena's statistical model,
+//! prints the win, death and injury rates of both, and fails if one gap exceeds the
+//! tolerance in percentage points.
 
 use std::process::ExitCode;
 
+use lanista_core::combat::ArenaKind;
 use lanista_core::design_data::DesignData;
 use rayon::prelude::*;
 use tools::comparison::{Pair, play, rates};
@@ -35,41 +37,41 @@ fn main() -> ExitCode {
         }
     };
 
-    // Each fight is independent: parallel across fights, never inside one.
-    let pairs: Vec<Pair> = (from..from.saturating_add(fights))
-        .into_par_iter()
-        .map(|seed| play(seed, &data))
-        .collect();
-    let names: Vec<String> = data.classes.iter().map(|c| c.name.clone()).collect();
-    let rates = rates(&pairs, &names);
-
     #[expect(clippy::cast_precision_loss, reason = "a tolerance of a few points")]
     let tolerance = tolerance as f64;
-    println!(
-        "{fights} fights (seeds {from} to {}), real duels against the model fitted on {} \
-         duels",
-        from.saturating_add(fights - 1),
-        data.stat_model.fights,
-    );
-    println!(
-        "{:<40} {:>7} {:>7} {:>6}",
-        "rate (%)", "real", "model", "gap"
-    );
+    let names: Vec<String> = data.classes.iter().map(|c| c.name.clone()).collect();
     let mut too_far = 0;
-    for rate in &rates {
-        let flag = if rate.gap() > tolerance {
-            too_far += 1;
-            "  too far"
-        } else {
-            ""
-        };
+    for kind in ArenaKind::ALL {
+        // Each fight is independent: parallel across fights, never inside one.
+        let pairs: Vec<Pair> = (from..from.saturating_add(fights))
+            .into_par_iter()
+            .map(|seed| play(seed, kind, &data))
+            .collect();
         println!(
-            "{:<40} {:>7.1} {:>7.1} {:>6.1}{flag}",
-            rate.name,
-            rate.real,
-            rate.model,
-            rate.gap(),
+            "{kind:?}: {fights} fights (seeds {from} to {}), real duels against the model \
+             fitted on {} duels",
+            from.saturating_add(fights - 1),
+            data.stat_model.get(kind).fights,
         );
+        println!(
+            "{:<40} {:>7} {:>7} {:>6}",
+            "rate (%)", "real", "model", "gap"
+        );
+        for rate in &rates(&pairs, &names) {
+            let flag = if rate.gap() > tolerance {
+                too_far += 1;
+                "  too far"
+            } else {
+                ""
+            };
+            println!(
+                "{:<40} {:>7.1} {:>7.1} {:>6.1}{flag}",
+                rate.name,
+                rate.real,
+                rate.model,
+                rate.gap(),
+            );
+        }
     }
     if too_far > 0 {
         println!("{too_far} rate(s) more than {tolerance} points apart: rerun calibrate");

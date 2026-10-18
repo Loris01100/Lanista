@@ -37,4 +37,25 @@
         arm_weight: 1,
         leg_weight: 1,
     ),
+    // Each colosseum's arena kind (data/world.ron) sets its floor: a size in meters,
+    // the percentage of their speed fighters walk at, and round pillars (center and
+    // radius in meters) that block the way and ranged spells, at least a fighter's
+    // width from the walls. A duel starts at 15 % and 85 % of the width, mid-height.
+    arenas: (
+        // Deep sand slows everyone: ranged fighters shoot longer before melee closes in.
+        sand: (width: 20.0, height: 20.0, speed_percent: 70, pillars: []),
+        // A row of pillars across the middle hides the fighters from each other's shots.
+        pillars: (
+            width: 20.0,
+            height: 20.0,
+            speed_percent: 100,
+            pillars: [
+                (x: 10.0, y: 4.0, radius: 1.2),
+                (x: 10.0, y: 10.0, radius: 1.2),
+                (x: 10.0, y: 16.0, radius: 1.2),
+            ],
+        ),
+        // A small floor: melee fighters reach their opponent fast.
+        narrow: (width: 8.0, height: 6.0, speed_percent: 100, pillars: []),
+    ),
 )

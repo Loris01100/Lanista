@@ -5,7 +5,7 @@ use serde::Deserialize;
 
 use crate::calendar::CalendarRules;
 use crate::colosseum::WorldRules;
-use crate::combat::{CombatRules, DamageKind, Range};
+use crate::combat::{ArenaKind, ArenaLayout, CombatRules, DamageKind, Pillar, RADIUS, Range};
 use crate::economy::EconomyRules;
 use crate::fighter::ClassId;
 use crate::fighter::care::CareRules;
@@ -18,7 +18,7 @@ use crate::fighter::morale::MoraleRules;
 use crate::fighter::personality::PersonalityRules;
 use crate::fighter::progression::ProgressionRules;
 use crate::fighter::retirement::RetirementRules;
-use crate::stat_model::StatModel;
+use crate::stat_model::StatModels;
 
 /// Everything read from `data/`. `ClassId(i)` is the class at index `i` of `classes`.
 #[derive(Debug, Clone, PartialEq)]
@@ -29,7 +29,7 @@ pub struct DesignData {
     pub calendar: CalendarRules,
     pub economy: EconomyRules,
     pub world: WorldRules,
-    pub stat_model: StatModel,
+    pub stat_model: StatModels,
 }
 
 /// Rules of the fighter's physical state, from `data/fighter.ron`.
@@ -359,6 +359,15 @@ impl DesignData {
                 problem: "above 100",
             });
         }
+        for kind in ArenaKind::ALL {
+            if let Some(problem) = layout_problem(self.combat.arenas.get(kind)) {
+                return Err(LoadError::Invalid {
+                    file: COMBAT_FILE,
+                    field: "arenas",
+                    problem,
+                });
+            }
+        }
         Ok(())
     }
 
@@ -366,6 +375,35 @@ impl DesignData {
     pub fn class(&self, id: ClassId) -> Option<&ClassData> {
         self.classes.get(usize::try_from(id.0).ok()?)
     }
+}
+
+/// What would break fights on `layout`: a floor too small for two fighters, no speed,
+/// or a pillar that is not round or leaves no way between it and a wall.
+fn layout_problem(layout: &ArenaLayout) -> Option<&'static str> {
+    // Two fighters side by side, with room to move.
+    let least = 8.0 * RADIUS;
+    if layout.width.is_nan() || layout.height.is_nan() {
+        return Some("a size not a number");
+    }
+    if layout.width < least || layout.height < least {
+        return Some("a floor smaller than 4 m");
+    }
+    if layout.speed_percent == 0 {
+        return Some("a speed percent of 0");
+    }
+    let gap = 2.0 * RADIUS;
+    let walled_in = |p: &Pillar| {
+        !(p.radius > 0.0
+            && p.x - p.radius >= gap
+            && p.x + p.radius <= layout.width - gap
+            && p.y - p.radius >= gap
+            && p.y + p.radius <= layout.height - gap)
+    };
+    layout
+        .pillars
+        .iter()
+        .any(walled_in)
+        .then_some("a pillar without radius or less than a fighter's width from a wall")
 }
 
 #[cfg(test)]
@@ -457,6 +495,18 @@ mod tests {
                 ..
             })
         ));
+        let combat_field = |combat: &str| match DesignData::from_ron(
+            CLASSES, combat, FIGHTER, CALENDAR, ECONOMY, WORLD, STAT_MODEL,
+        ) {
+            Err(LoadError::Invalid { field, .. }) => field,
+            other => panic!("expected an invalid field, got {other:?}"),
+        };
+        let stuck = COMBAT.replacen("speed_percent: 70", "speed_percent: 0", 1);
+        assert_eq!(combat_field(&stuck), "arenas");
+        let tiny = COMBAT.replacen("width: 8.0, height: 6.0", "width: 8.0, height: 3.0", 1);
+        assert_eq!(combat_field(&tiny), "arenas");
+        let against_the_wall = COMBAT.replacen("(x: 10.0, y: 4.0,", "(x: 10.0, y: 1.5,", 1);
+        assert_eq!(combat_field(&against_the_wall), "arenas");
         let not_free = WORLD.replacen("entry_fee: 0", "entry_fee: 5", 1);
         assert!(matches!(
             DesignData::from_ron(
