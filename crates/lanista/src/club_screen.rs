@@ -1402,6 +1402,65 @@ mod tests {
         std::fs::remove_dir_all(folder).unwrap();
     }
 
+    /// Phase 6 milestone: in the season's opening week, the club's three fighters fight
+    /// a melee of 20 in Capua and duels in Capua and Rome; the three fights are watched
+    /// together, each as the week played it, and the season goes on as without a screen.
+    #[test]
+    fn three_fights_are_watched_together_one_of_them_a_melee_of_twenty() {
+        let data = Rc::new(DesignData::load().unwrap());
+        let mut screen = screen(7);
+        let mut rng = ChaCha8Rng::seed_from_u64(9);
+        for _ in 0..2 {
+            screen
+                .state
+                .fighters
+                .push(CareerFighter::random(&mut rng, &data));
+            screen.histories.push(Vec::new());
+        }
+        let mut headless = screen.state.clone();
+        let plan = |activity| WeekPlan {
+            activity,
+            care: false,
+            refused: Refused::NONE,
+        };
+        let opening = Decisions {
+            plans: vec![
+                plan(Activity::Melee(ColosseumId(0))),
+                plan(Activity::Fight(ColosseumId(0))),
+                plan(Activity::Fight(ColosseumId(1))),
+            ],
+            ..Decisions::default()
+        };
+        screen.decisions = opening.clone();
+        screen.next_week();
+        next_week(&mut headless, &opening, &data);
+        assert_eq!(screen.state, headless);
+        assert_eq!(screen.to_watch.len(), 3);
+        let melee = &screen.to_watch[0];
+        assert_eq!(melee.arena.fighters.len(), 20);
+        assert_eq!(melee.cast.club, [screen.fights[0].fight.me]);
+        let fights = std::mem::take(&mut screen.to_watch);
+        let mut watching = CombatScreen::watch(Rc::clone(&data), fights, Bindings::new(Vec::new()));
+        let mut frame = 0;
+        while watching.running() {
+            // Uneven frames, as on screen: how a fight is shown never changes it.
+            watching.advance([1.0 / 60.0, 1.0 / 144.0, 0.05][frame % 3] * 1.5);
+            frame += 1;
+        }
+        for (view, report) in watching.views().iter().zip(&screen.fights) {
+            assert_eq!(Report::new(&view.arena), report.fight.report);
+            assert_eq!(view.arena.tick, report.fight.ticks);
+        }
+        // The rest of the season, on screen and without one.
+        for _ in 1..data.calendar.season_weeks() {
+            let decisions = screen.decisions.clone();
+            screen.next_week();
+            next_week(&mut headless, &decisions, &data);
+        }
+        assert_eq!(screen.state, headless);
+        assert!(screen.state.opens_season(&data));
+    }
+
     #[test]
     fn titles_are_told_in_the_menu() {
         let mut screen = screen(7);

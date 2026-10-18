@@ -4,7 +4,7 @@ A gladiator-management game: recruit fighters, train and heal them, send them in
 
 Written in Rust with macroquad and egui, for Windows and Linux (Steam Deck). Planned for a free release on Steam.
 
-> Early development (phase 5 of the [roadmap](docs/Gladiator_Manager_Feuille_de_route_Rust.md)): the headless duel engine works, nothing is playable yet.
+> Early development (phase 6 of the [roadmap](docs/Gladiator_Manager_Feuille_de_route_Rust.md) done): the game is playable with the scripted AI and placeholder graphics. You run a club week after week against rival clubs, in duels and a season-opening melee of up to 20, and watch your fights together. The learned AI comes next.
 
 ## Build
 

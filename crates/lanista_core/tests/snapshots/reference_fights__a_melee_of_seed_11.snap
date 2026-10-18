@@ -1,0 +1,78 @@
+---
+source: crates/lanista_core/tests/reference_fights.rs
+expression: reference_melee(11)
+---
+[    0] fighter 1 casts Éclair on fighter 2: 35 damage
+[    0] fighter 5 casts Éclair on fighter 6: 35 damage
+[    0] fighter 7 casts Éclair on fighter 6: 35 damage
+[    0] fighter 3 casts Éclair on fighter 4: missed
+[    6] fighter 7 casts Trait de feu on fighter 6: missed
+[    6] fighter 1 casts Trait de feu on fighter 2: missed
+[    6] fighter 3 casts Trait de feu on fighter 4: 19 damage
+[    6] fighter 5 casts Trait de feu on fighter 6: 19 damage
+[   54] fighter 3 casts Trait de feu on fighter 2: 19 damage
+[   54] fighter 7 casts Trait de feu on fighter 6: missed
+[   54] fighter 5 casts Trait de feu on fighter 6: 11 damage
+[   54] fighter 6 dies
+[   54] fighter 1 casts Trait de feu on fighter 0: 19 damage
+[   60] fighter 1 casts Coup de bâton on fighter 0: 12 damage
+[   60] fighter 0 casts Frappe brutale on fighter 1: 48 damage
+[   66] fighters 0 and 1 make a pact
+[   78] fighters 5 and 7 make a pact
+[  102] fighter 5 casts Trait de feu on fighter 4: missed
+[  102] fighter 1 casts Trait de feu on fighter 2: 19 damage
+[  102] fighter 3 casts Trait de feu on fighter 2: 19 damage
+[  120] fighter 7 casts Trait de feu on fighter 0: 19 damage
+[  150] fighter 3 casts Trait de feu on fighter 4: 19 damage
+[  150] fighter 5 casts Trait de feu on fighter 4: 19 damage
+[  150] fighter 1 casts Trait de feu on fighter 2: 8 damage
+[  150] fighter 2 dies
+[  168] fighter 7 casts Trait de feu on fighter 0: 19 damage
+[  186] fighter 7 casts Éclair on fighter 0: 31 damage
+[  186] fighter 0 dies
+[  186] fighter 3 casts Éclair on fighter 4: 35 damage
+[  186] fighter 5 casts Éclair on fighter 4: 8 damage
+[  186] fighter 4 dies
+[  210] fighter 1 casts Éclair on fighter 7: 35 damage
+[  288] fighter 5 casts Coup de bâton on fighter 3: 12 damage
+[  288] fighter 3 casts Coup de bâton on fighter 5: 12 damage
+[  324] fighter 3 casts Coup de bâton on fighter 5: 12 damage
+[  324] fighter 5 casts Coup de bâton on fighter 3: 12 damage
+[ 1014] the pact between fighters 5 and 7 ends
+[ 2556] fighters 1 and 3 make a pact
+[ 2610] fighters 5 and 7 make a pact
+[ 2652] fighter 5 casts Coup de bâton on fighter 3: 12 damage
+[ 2652] fighter 7 casts Coup de bâton on fighter 1: 12 damage
+[ 2652] fighter 3 casts Coup de bâton on fighter 5: 12 damage
+[ 2652] fighter 1 casts Coup de bâton on fighter 7: 12 damage
+[ 2688] fighter 7 casts Coup de bâton on fighter 1: 12 damage
+[ 2688] fighter 5 casts Coup de bâton on fighter 3: 12 damage
+[ 2688] fighter 1 casts Coup de bâton on fighter 7: 12 damage
+[ 2688] fighter 3 casts Coup de bâton on fighter 5: 12 damage
+[ 2724] fighter 1 casts Coup de bâton on fighter 7: 12 damage
+[ 2724] fighter 3 casts Coup de bâton on fighter 5: 12 damage
+[ 2724] fighter 5 is stunned
+[ 2724] fighter 7 casts Coup de bâton on fighter 1: 12 damage
+[ 2760] fighter 7 casts Coup de bâton on fighter 1: 12 damage
+[ 2760] fighter 3 casts Coup de bâton on fighter 7: 12 damage
+[ 2760] fighter 1 casts Coup de bâton on fighter 7: missed
+[ 2784] fighter 5 is knocked out
+[ 2784] the pact between fighters 1 and 3 ends
+[ 2796] fighter 7 casts Coup de bâton on fighter 1: 4 damage
+[ 2796] fighter 1 dies
+[ 2802] fighter 3 casts Coup de bâton on fighter 7: 12 damage
+[ 2832] fighter 7 casts Coup de bâton on fighter 3: 12 damage
+[ 2838] fighter 3 casts Coup de bâton on fighter 7: 5 damage
+[ 2838] fighter 7 dies
+
+over after 2839 ticks, winner: fighter 3
+fighter 0: 0/100 HP, dealt 48, taken 100, 1 spells cast, 0 missed
+fighter 1: 0/100 HP, dealt 164, taken 100, 11 spells cast, 2 missed
+fighter 2: 0/100 HP, dealt 0, taken 100, 0 spells cast, 0 missed
+fighter 3: 40/100 HP, dealt 200, taken 60, 14 spells cast, 1 missed
+fighter 4: 0/100 HP, dealt 0, taken 100, 0 spells cast, 0 missed
+fighter 5: 40/100 HP, dealt 140, taken 60, 10 spells cast, 1 missed, stunned once, knocked out
+fighter 6: 0/100 HP, dealt 0, taken 100, 0 spells cast, 0 missed
+fighter 7: 0/100 HP, dealt 168, taken 100, 12 spells cast, 2 missed
+
+places: [5, 3, 7, 1, 5, 4, 8, 2]

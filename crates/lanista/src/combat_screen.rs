@@ -102,8 +102,14 @@ impl CombatScreen {
         &self.views[self.focus]
     }
 
+    /// The fights on screen, the one shown big among them.
+    #[cfg(test)]
+    pub(crate) fn views(&self) -> &[FightView] {
+        &self.views
+    }
+
     /// Whether any fight is still going.
-    fn running(&self) -> bool {
+    pub(crate) fn running(&self) -> bool {
         self.views.iter().any(FightView::running)
     }
 
@@ -116,7 +122,7 @@ impl CombatScreen {
 
     /// Plays `dt` seconds of fight time in every fight; returns the sounds of the one
     /// shown big. No macroquad call, so tests can drive it.
-    fn advance(&mut self, dt: f32) -> Vec<&'static str> {
+    pub(crate) fn advance(&mut self, dt: f32) -> Vec<&'static str> {
         let mut heard = Vec::new();
         for (k, view) in self.views.iter_mut().enumerate() {
             let sounds = view.advance(dt);

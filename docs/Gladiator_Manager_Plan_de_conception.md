@@ -415,7 +415,7 @@ Le développement se fait en neuf phases, chacune terminée par un jalon jouable
 | 2. Le combattant complet | Forme, blessures, maladies, soins, personnalité, seuil d'abandon, mort, progression, âge, retraite | Un combattant enchaîne 10 semaines avec des effets visibles |
 | 3. Management | Calendrier, économie, filet de sécurité, menu général, liste et fiche combattant, sauvegarde | Une saison entière jouable avec un seul club |
 | 4. Le monde | Colisées, Elo, titres, défis, clubs rivaux, marché, personnel, modèle statistique calibré | Plusieurs saisons où les classements vivent sans le joueur |
-| 5. Formats et spectacle | Mêlée jusqu'à 20, King of the hill, équipement refusable, vue multi-combats, contrôles de vitesse | Regarder 4 combats du joueur en même temps |
+| 5. Formats et spectacle | Mêlée (King of the hill) jusqu'à 20 en ouverture de saison, équipement refusable, vue multi-combats, contrôles de vitesse | Regarder 3 combats du joueur en même temps |
 | 6. IA apprenante | Godot RL Agents, entraînement en duel, puis mêlée, puis équipe, export ONNX | Le modèle appris bat nettement l'IA scriptée |
 | 7. Grands événements | Championnat du monde, Inter-Coliseum en 5 contre 5, succès, tutoriel et manuel | Un cycle complet de 4 saisons avec les deux événements |
 | 8. Contenu et équilibrage | Nouvelles classes et sorts, arènes, équilibrage par simulations de masse, finitions | Taux de victoire par classe entre 45 et 55 % |

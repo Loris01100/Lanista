@@ -1,0 +1,81 @@
+---
+source: crates/lanista_core/tests/reference_fights.rs
+expression: reference_melee(3)
+---
+[    0] fighter 7 casts Éclair on fighter 6: 35 damage
+[    0] fighter 5 casts Éclair on fighter 6: missed
+[    0] fighter 3 casts Éclair on fighter 4: 35 damage
+[    0] fighter 1 casts Éclair on fighter 2: 35 damage
+[    6] fighter 7 casts Trait de feu on fighter 6: 19 damage
+[    6] fighter 3 casts Trait de feu on fighter 4: 19 damage
+[    6] fighter 5 casts Trait de feu on fighter 6: 19 damage
+[    6] fighter 1 casts Trait de feu on fighter 2: 19 damage
+[   54] fighter 7 casts Trait de feu on fighter 6: 19 damage
+[   54] fighter 3 casts Trait de feu on fighter 2: missed
+[   54] fighter 5 casts Trait de feu on fighter 6: 8 damage
+[   54] fighter 6 dies
+[   54] fighter 1 casts Trait de feu on fighter 0: 19 damage
+[   60] fighter 0 casts Frappe brutale on fighter 1: missed
+[   60] fighter 1 casts Coup de bâton on fighter 0: 12 damage
+[   60] fighter 0 is stunned
+[   90] fighter 7 casts Coup de bâton on fighter 5: 12 damage
+[   90] fighter 5 casts Coup de bâton on fighter 7: missed
+[  102] fighter 5 casts Trait de feu on fighter 7: 19 damage
+[  102] fighter 1 casts Trait de feu on fighter 2: 19 damage
+[  102] fighter 3 casts Trait de feu on fighter 2: 19 damage
+[  102] fighter 7 casts Trait de feu on fighter 5: missed
+[  120] fighter 0 gets up
+[  120] fighters 0 and 1 make a pact
+[  126] fighter 5 casts Coup de bâton on fighter 7: 12 damage
+[  126] fighter 7 casts Coup de bâton on fighter 5: 12 damage
+[  150] fighter 5 casts Trait de feu on fighter 7: 19 damage
+[  150] fighter 7 casts Trait de feu on fighter 5: 19 damage
+[  150] fighter 3 casts Trait de feu on fighter 2: 8 damage
+[  150] fighter 2 dies
+[  186] fighter 5 casts Éclair on fighter 4: 35 damage
+[  186] fighter 3 casts Éclair on fighter 4: 11 damage
+[  186] fighter 4 dies
+[  186] fighter 1 casts Éclair on fighter 3: 35 damage
+[  186] fighter 7 casts Éclair on fighter 5: missed
+[ 2040] fighter 1 casts Trait de feu on fighter 3: 19 damage
+[ 2574] fighters 3 and 5 make a pact
+[ 2604] fighter 3 casts Coup de bâton on fighter 1: missed
+[ 2604] fighter 1 casts Coup de bâton on fighter 3: missed
+[ 2640] fighter 3 casts Coup de bâton on fighter 1: 12 damage
+[ 2640] fighter 1 casts Coup de bâton on fighter 3: 12 damage
+[ 2652] fighter 0 casts Frappe brutale on fighter 3: 34 damage
+[ 2652] fighter 3 dies
+[ 2652] fighter 5 casts Coup de bâton on fighter 7: 12 damage
+[ 2652] fighter 7 casts Coup de bâton on fighter 0: 12 damage
+[ 2658] fighter 0 casts Coup de glaive on fighter 7: 19 damage
+[ 2670] fighters 5 and 7 make a pact
+[ 2676] fighter 1 casts Coup de bâton on fighter 5: 12 damage
+[ 2688] fighter 5 casts Coup de bâton on fighter 1: 12 damage
+[ 2688] fighter 7 casts Coup de bâton on fighter 0: 12 damage
+[ 2694] fighter 0 casts Coup de glaive on fighter 7: 19 damage
+[ 2694] fighter 7 dies
+[ 2700] the pact between fighters 0 and 1 ends
+[ 2712] fighter 1 casts Coup de bâton on fighter 0: 12 damage
+[ 2724] fighter 5 casts Coup de bâton on fighter 1: 12 damage
+[ 2730] fighter 0 casts Coup de glaive on fighter 1: 19 damage
+[ 2748] fighter 1 casts Coup de bâton on fighter 0: 12 damage
+[ 2760] fighter 5 casts Coup de bâton on fighter 1: 12 damage
+[ 2766] fighter 0 casts Coup de glaive on fighter 1: 19 damage
+[ 2784] fighter 1 casts Coup de bâton on fighter 0: 12 damage
+[ 2796] fighter 5 casts Coup de bâton on fighter 1: 12 damage
+[ 2820] fighter 1 casts Coup de bâton on fighter 0: 9 damage
+[ 2820] fighter 0 dies
+[ 2832] fighter 5 casts Coup de bâton on fighter 1: 2 damage
+[ 2832] fighter 1 dies
+
+over after 2833 ticks, winner: fighter 5
+fighter 0: 0/100 HP, dealt 110, taken 100, 6 spells cast, 1 missed, stunned once
+fighter 1: 0/100 HP, dealt 227, taken 100, 14 spells cast, 1 missed
+fighter 2: 0/100 HP, dealt 0, taken 100, 0 spells cast, 0 missed
+fighter 3: 0/100 HP, dealt 104, taken 100, 8 spells cast, 2 missed
+fighter 4: 0/100 HP, dealt 0, taken 100, 0 spells cast, 0 missed
+fighter 5: 45/100 HP, dealt 174, taken 55, 14 spells cast, 2 missed
+fighter 6: 0/100 HP, dealt 0, taken 100, 0 spells cast, 0 missed
+fighter 7: 0/100 HP, dealt 140, taken 100, 10 spells cast, 2 missed
+
+places: [3, 2, 7, 5, 6, 1, 8, 4]
