@@ -50,6 +50,16 @@ pub enum EventKind {
         fighter: FighterId,
         part: Location,
     },
+    /// `a` and `b` became allies, in a melee: they no longer aim at each other.
+    Pact {
+        a: FighterId,
+        b: FighterId,
+    },
+    /// The pact between `a` and `b` ended: betrayed, or too few left in the fight.
+    PactBroken {
+        a: FighterId,
+        b: FighterId,
+    },
 }
 
 /// Summary of a fight, built from its log.
@@ -131,7 +141,9 @@ impl Report {
                 | EventKind::Surrender { .. }
                 | EventKind::Rise { .. }
                 | EventKind::KnockedOut { .. }
-                | EventKind::Sever { .. } => {}
+                | EventKind::Sever { .. }
+                | EventKind::Pact { .. }
+                | EventKind::PactBroken { .. } => {}
             }
         }
         let over = arena.is_over();
@@ -269,6 +281,20 @@ pub fn log_text(arena: &Arena) -> String {
                     limb_name(part)
                 )
             }
+            EventKind::Pact { a, b } => {
+                writeln!(
+                    text,
+                    "[{:>5}] fighters {} and {} make a pact",
+                    event.tick, a.0, b.0
+                )
+            }
+            EventKind::PactBroken { a, b } => {
+                writeln!(
+                    text,
+                    "[{:>5}] the pact between fighters {} and {} ends",
+                    event.tick, a.0, b.0
+                )
+            }
         };
     }
     text
@@ -293,9 +319,11 @@ pub fn places(arena: &Arena) -> Vec<u32> {
                     | EventKind::Surrender { fighter }
                     | EventKind::KnockedOut { fighter }
                     | EventKind::Sever { fighter, .. } => fighter == f.id,
-                    EventKind::Cast { .. } | EventKind::Stun { .. } | EventKind::Rise { .. } => {
-                        false
-                    }
+                    EventKind::Cast { .. }
+                    | EventKind::Stun { .. }
+                    | EventKind::Rise { .. }
+                    | EventKind::Pact { .. }
+                    | EventKind::PactBroken { .. } => false,
                 })
                 .map_or(u64::MAX, |e| u64::from(e.tick))
         })

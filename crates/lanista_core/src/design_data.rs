@@ -19,6 +19,7 @@ use crate::fighter::morale::MoraleRules;
 use crate::fighter::personality::PersonalityRules;
 use crate::fighter::progression::ProgressionRules;
 use crate::fighter::retirement::RetirementRules;
+use crate::melee::MeleeRules;
 use crate::stat_model::StatModels;
 
 /// Everything read from `data/`. `ClassId(i)` is the class at index `i` of `classes`.
@@ -381,6 +382,13 @@ impl DesignData {
                 problem: "above 100",
             });
         }
+        if let Some((field, problem)) = melee_problem(&self.combat.melee) {
+            return Err(LoadError::Invalid {
+                file: COMBAT_FILE,
+                field,
+                problem,
+            });
+        }
         for kind in ArenaKind::ALL {
             if let Some(problem) = layout_problem(self.combat.arenas.get(kind)) {
                 return Err(LoadError::Invalid {
@@ -396,6 +404,40 @@ impl DesignData {
     #[must_use]
     pub fn class(&self, id: ClassId) -> Option<&ClassData> {
         self.classes.get(usize::try_from(id.0).ok()?)
+    }
+}
+
+/// The field and the problem of melee rules that would break a melee: fewer than two
+/// fighters, no room or time, a chance above 100, or pacts kept by the last two, who
+/// would then never fight.
+fn melee_problem(rules: &MeleeRules) -> Option<(&'static str, &'static str)> {
+    let pacts = &rules.pacts;
+    if rules.max_fighters < 2 {
+        Some(("melee.max_fighters", "below 2"))
+    } else if rules.square_meters_per_fighter.is_nan() || rules.square_meters_per_fighter <= 0.0 {
+        Some(("melee.square_meters_per_fighter", "not above 0"))
+    } else if rules.max_ticks == 0 {
+        Some(("melee.max_ticks", "0"))
+    } else if pacts.distance.is_nan() {
+        Some(("melee.pacts.distance", "not a number"))
+    } else if [
+        pacts.form_percent_least_cautious,
+        pacts.form_percent_most_cautious,
+        pacts.betrayal_percent_most_aggressive,
+    ]
+    .iter()
+    .any(|&p| p > 100)
+    {
+        Some(("melee.pacts", "a chance above 100"))
+    } else if pacts.break_fighting < 2 {
+        Some(("melee.pacts.break_fighting", "below 2"))
+    } else if rules.shrink.meters_per_second.is_nan() || rules.shrink.meters_per_second < 0.0 {
+        Some(("melee.shrink.meters_per_second", "below 0"))
+    } else if rules.shrink.min_side.is_nan() || rules.shrink.min_side < 4.0 * RADIUS {
+        // Two fighters side by side.
+        Some(("melee.shrink.min_side", "below two fighters' width"))
+    } else {
+        None
     }
 }
 
@@ -532,6 +574,10 @@ mod tests {
             Err(LoadError::Invalid { field, .. }) => field,
             other => panic!("expected an invalid field, got {other:?}"),
         };
+        let faithful = COMBAT.replacen("break_fighting: 3", "break_fighting: 1", 1);
+        assert_eq!(combat_field(&faithful), "melee.pacts.break_fighting");
+        let alone = COMBAT.replacen("max_fighters: 20", "max_fighters: 1", 1);
+        assert_eq!(combat_field(&alone), "melee.max_fighters");
         let stuck = COMBAT.replacen("speed_percent: 70", "speed_percent: 0", 1);
         assert_eq!(combat_field(&stuck), "arenas");
         let tiny = COMBAT.replacen("width: 8.0, height: 6.0", "width: 8.0, height: 3.0", 1);

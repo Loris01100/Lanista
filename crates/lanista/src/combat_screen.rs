@@ -46,6 +46,8 @@ const DEEP_SAND: Color = Color::new(0.66, 0.54, 0.36, 1.0);
 // ponytail: pillars drawn with shapes until the arenas get their sprites.
 const PILLAR: Color = Color::new(0.55, 0.53, 0.5, 1.0);
 const PILLAR_TOP: Color = Color::new(0.72, 0.7, 0.66, 1.0);
+/// Over the floor the walls of a melee have closed in on.
+const CLOSED: Color = Color::new(0.1, 0.08, 0.07, 0.55);
 const STANDS: Color = Color::new(0.16, 0.13, 0.11, 1.0);
 // ponytail: blood drawn with shapes until the real sprites bring a stain.
 // Opaque, so overlapping blots make one even stain.
@@ -420,6 +422,13 @@ impl Screen for CombatScreen {
             SAND
         };
         draw_rectangle(0.0, 0.0, width, height, floor);
+        let (x, y) = (to_f32(self.arena.inset.x), to_f32(self.arena.inset.y));
+        if x > 0.0 || y > 0.0 {
+            draw_rectangle(0.0, 0.0, width, y, CLOSED);
+            draw_rectangle(0.0, height - y, width, y, CLOSED);
+            draw_rectangle(0.0, y, x, height - 2.0 * y, CLOSED);
+            draw_rectangle(width - x, y, x, height - 2.0 * y, CLOSED);
+        }
         for pillar in &self.arena.pillars {
             let (x, y, radius) = (to_f32(pillar.x), to_f32(pillar.y), to_f32(pillar.radius));
             draw_circle(x, y, radius, PILLAR);

@@ -58,4 +58,28 @@
         // A small floor: melee fighters reach their opponent fast.
         narrow: (width: 8.0, height: 6.0, speed_percent: 100, pillars: []),
     ),
+    // The melee, or King of the hill: everyone at once in the colosseum's arena, grown
+    // so that each fighter has square_meters_per_fighter, starting on a circle, for at
+    // most max_ticks (30 per second).
+    melee: (
+        max_fighters: 20,
+        square_meters_per_fighter: 30.0,
+        max_ticks: 5400,
+        // Two standing fighters without an ally, within `distance` meters between their
+        // edges, make a pact at each decision (5 per second) with a chance from the
+        // caution of the less cautious (from 0 to 100); allies do not aim at each other.
+        // A pact is betrayed at each decision with a chance from the aggression of the
+        // more aggressive, and every pact breaks once break_fighting or fewer are left.
+        pacts: (
+            distance: 3.0,
+            form_percent_least_cautious: 0,
+            form_percent_most_cautious: 10,
+            betrayal_percent_most_aggressive: 2,
+            break_fighting: 3,
+        ),
+        // After after_ticks, the guards tighten the ring: each wall moves in at
+        // meters_per_second until the floor's shorter side is min_side, so that the
+        // last fighters, however wary, end up within reach of each other.
+        shrink: (after_ticks: 1800, meters_per_second: 0.3, min_side: 2.0),
+    ),
 )

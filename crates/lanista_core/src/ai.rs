@@ -1,6 +1,6 @@
 use crate::combat::{
-    AccuracyRules, Arena, RADIUS, Range, Vec2, edge_distance, hit_percent, path_direction,
-    shot_blocked, spell_damage,
+    AccuracyRules, Arena, Range, Vec2, edge_distance, hit_percent, path_direction, shot_blocked,
+    spell_damage,
 };
 use crate::design_data::SpellData;
 use crate::fighter::form::Form;
@@ -198,8 +198,9 @@ fn can_back_off(arena: &Arena, me: &Fighter, direction: Vec2) -> bool {
     if length <= 0.0 {
         return false;
     }
-    let x = (me.position.x + direction.x / length).clamp(RADIUS, arena.width - RADIUS);
-    let y = (me.position.y + direction.y / length).clamp(RADIUS, arena.height - RADIUS);
+    let (low, high) = arena.reachable();
+    let x = (me.position.x + direction.x / length).clamp(low.x, high.x);
+    let y = (me.position.y + direction.y / length).clamp(low.y, high.y);
     Vec2::new(x - me.position.x, y - me.position.y).length() >= 0.5
 }
 
@@ -214,14 +215,14 @@ fn best(scored: &[(Action, f64)]) -> Action {
     best.0
 }
 
-/// The closest other fighter standing, so a fighter down is left alone; on a tie, the
-/// lowest ID.
+/// The closest other fighter standing and not an ally, so a fighter down is left alone;
+/// on a tie, the lowest ID.
 fn nearest_enemy<'a>(arena: &'a Arena, me: &Fighter) -> Option<&'a Fighter> {
     let mut nearest: Option<(&Fighter, f64)> = None;
     for f in arena
         .fighters
         .iter()
-        .filter(|f| f.is_standing() && f.id != me.id)
+        .filter(|f| f.is_standing() && f.id != me.id && !arena.allied(me.id, f.id))
     {
         let distance = edge_distance(me, f);
         if nearest.is_none_or(|(_, d)| distance < d) {
@@ -234,7 +235,7 @@ fn nearest_enemy<'a>(arena: &'a Arena, me: &Fighter) -> Option<&'a Fighter> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::combat::tick;
+    use crate::combat::{RADIUS, tick};
     use crate::design_data::DesignData;
     use crate::duel::STATS;
     use crate::fighter::personality::TraitValue;

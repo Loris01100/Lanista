@@ -9,6 +9,7 @@ use crate::fighter::injury::{Location, Side};
 use crate::fighter::personality::Personality;
 use crate::fighter::{Fighter, FighterId, Stats, pick};
 use crate::log::{Event, EventKind};
+use crate::melee::{MeleeRules, PactRules, ShrinkRules, update_pacts};
 
 pub const TICKS_PER_SECOND: u32 = 30;
 /// Duration of a tick, in seconds.
@@ -65,6 +66,15 @@ pub struct Arena {
     pub speed_percent: u32,
     /// What stands on the floor; nothing, unless set with [`Arena::with_layout`].
     pub pillars: Vec<Pillar>,
+    /// How fighters make and break pacts; never, unless set with [`Arena::with_pacts`].
+    pub pact_rules: PactRules,
+    /// The pairs of allies, who do not aim at each other; each fighter has one at most.
+    pub pacts: Vec<(FighterId, FighterId)>,
+    /// How the walls close in; never, unless set with [`Arena::with_shrink`].
+    pub shrink: ShrinkRules,
+    /// How far the left and right walls (`x`), and the top and bottom ones (`y`), have
+    /// each moved in, in meters.
+    pub inset: Vec2,
 }
 
 /// Combat rules, from `data/combat.ron`.
@@ -75,6 +85,7 @@ pub struct CombatRules {
     pub stun: StunRules,
     pub cut: CutRules,
     pub arenas: ArenaLayouts,
+    pub melee: MeleeRules,
 }
 
 /// What a colosseum's arena does to the fight (see [`ArenaLayout`]).
@@ -245,6 +256,10 @@ impl Arena {
             cut: CutRules::NEVER,
             speed_percent: 100,
             pillars: Vec::new(),
+            pact_rules: PactRules::NEVER,
+            pacts: Vec::new(),
+            shrink: ShrinkRules::NEVER,
+            inset: Vec2::new(0.0, 0.0),
         }
     }
 
@@ -262,6 +277,36 @@ impl Arena {
         self.stun = rules.stun;
         self.cut = rules.cut;
         self
+    }
+
+    /// This arena, where fighters make and break pacts following `rules`: a melee.
+    #[must_use]
+    pub fn with_pacts(mut self, rules: PactRules) -> Self {
+        self.pact_rules = rules;
+        self
+    }
+
+    /// This arena, whose walls close in following `rules`: a melee.
+    #[must_use]
+    pub fn with_shrink(mut self, rules: ShrinkRules) -> Self {
+        self.shrink = rules;
+        self
+    }
+
+    /// The lowest and the highest center a fighter may stand at, inside the walls as
+    /// they stand.
+    #[must_use]
+    pub fn reachable(&self) -> (Vec2, Vec2) {
+        let (x, y) = (self.inset.x + RADIUS, self.inset.y + RADIUS);
+        (Vec2::new(x, y), Vec2::new(self.width - x, self.height - y))
+    }
+
+    /// Whether `a` and `b` are allies.
+    #[must_use]
+    pub fn allied(&self, a: FighterId, b: FighterId) -> bool {
+        self.pacts
+            .iter()
+            .any(|&pact| pact == (a, b) || pact == (b, a))
     }
 
     /// This arena on `layout`'s floor: its size, its pillars, and its ground slowing
@@ -295,7 +340,9 @@ impl Arena {
 pub fn tick(arena: &mut Arena, ais: &mut [Box<dyn CombatAi>]) {
     assert_eq!(arena.fighters.len(), ais.len(), "one AI per fighter");
     come_round(arena);
+    close_in(arena);
     if arena.tick.is_multiple_of(TICKS_PER_DECISION) {
+        update_pacts(arena);
         for (i, ai) in ais.iter_mut().enumerate() {
             let fighter = &arena.fighters[i];
             if fighter.is_standing() {
@@ -622,6 +669,9 @@ fn cast_spells(arena: &mut Arena) {
         if !caster.is_standing() || !defender.is_standing() || caster.id == target {
             continue;
         }
+        if arena.allied(caster.id, target) {
+            continue;
+        }
         if !caster.can_cast(spell) || edge_distance(caster, defender) > caster.spells[spell].reach {
             continue;
         }
@@ -753,9 +803,27 @@ fn separate(arena: &mut Arena) {
     }
 }
 
-/// Pushes every fighter out of the pillars, then back inside the walls.
+/// From `ShrinkRules::after_ticks`, moves every wall in by `meters_per_second`, each
+/// pair until the floor is `min_side` across, so that it ends a square.
+fn close_in(arena: &mut Arena) {
+    let rules = arena.shrink;
+    if arena.tick < rules.after_ticks {
+        return;
+    }
+    let step = rules.meters_per_second * DT;
+    let close =
+        |inset: f64, side: f64| (inset + step).min(((side - rules.min_side) / 2.0).max(0.0));
+    arena.inset = Vec2::new(
+        close(arena.inset.x, arena.width),
+        close(arena.inset.y, arena.height),
+    );
+}
+
+/// Pushes every fighter still in the fight out of the pillars, then back inside the
+/// walls as they stand; the others lie where they fell.
 fn keep_inside(arena: &mut Arena) {
-    for f in &mut arena.fighters {
+    let (low, high) = arena.reachable();
+    for f in arena.fighters.iter_mut().filter(|f| f.is_fighting()) {
         for p in &arena.pillars {
             let offset = Vec2::new(f.position.x - p.x, f.position.y - p.y);
             let distance = offset.length();
@@ -772,8 +840,8 @@ fn keep_inside(arena: &mut Arena) {
             f.position.x = p.x + normal.x * clearance;
             f.position.y = p.y + normal.y * clearance;
         }
-        f.position.x = f.position.x.clamp(RADIUS, arena.width - RADIUS);
-        f.position.y = f.position.y.clamp(RADIUS, arena.height - RADIUS);
+        f.position.x = f.position.x.clamp(low.x, high.x);
+        f.position.y = f.position.y.clamp(low.y, high.y);
     }
 }
 

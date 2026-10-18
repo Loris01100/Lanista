@@ -2,7 +2,8 @@
 
 use lanista_core::ai::{CombatAi, UtilityAi};
 use lanista_core::combat::{
-    AccuracyRules, Arena, ArenaKind, RADIUS, Range, Vec2, run, shot_blocked, tick,
+    AccuracyRules, Arena, ArenaKind, RADIUS, Range, TICKS_PER_DECISION, Vec2, run, shot_blocked,
+    tick,
 };
 use lanista_core::design_data::DesignData;
 use lanista_core::duel::{ARENA_SIZE, MAX_TICKS, STATS};
@@ -10,8 +11,9 @@ use lanista_core::fighter::injury::Location;
 use lanista_core::fighter::personality::{Personality, TraitValue};
 use lanista_core::fighter::{ClassId, Fighter, FighterId, Stats};
 use lanista_core::log::{EventKind, Report};
+use lanista_core::melee::melee_arena;
 use proptest::prelude::*;
-use rand::SeedableRng;
+use rand::{RngExt, SeedableRng};
 use rand_chacha::ChaCha8Rng;
 
 fn stats() -> impl Strategy<Value = Stats> {
@@ -64,8 +66,68 @@ fn duel(setup: Setup, stats: [Stats; 2], seed: u64) -> (Arena, Vec<Box<dyn Comba
     (arena, ais)
 }
 
+/// A melee of `count` fighters of random classes and personalities on `kind`'s floor.
+fn melee(kind: ArenaKind, count: u32, seed: u64) -> (Arena, Vec<Box<dyn CombatAi>>) {
+    let data = DesignData::load().unwrap();
+    let mut rng = ChaCha8Rng::seed_from_u64(seed);
+    let fighters = (0..count)
+        .map(|id| {
+            let class = ClassId(rng.random_range(0..2));
+            let class_data = data.class(class).unwrap();
+            let mut f = Fighter::new(FighterId(id), class, class_data, STATS, Vec2::new(0.0, 0.0));
+            f.condition.personality = Personality::random(&mut rng);
+            f
+        })
+        .collect();
+    let arena = melee_arena(fighters, kind, seed, &data.combat);
+    let ais = (0..count)
+        .map(|_| Box::new(UtilityAi) as Box<dyn CombatAi>)
+        .collect();
+    (arena, ais)
+}
+
 fn kind() -> impl Strategy<Value = ArenaKind> {
     prop::sample::select(ArenaKind::ALL.to_vec())
+}
+
+proptest! {
+    #![proptest_config(ProptestConfig::with_cases(32))]
+
+    /// In a melee, each fighter has one ally at most, a pact only binds two fighters
+    /// still fighting, allies never hit each other, HP stay in bounds, and everyone
+    /// stays inside the walls.
+    #[test]
+    fn a_melee_keeps_its_pacts_and_bounds(kind in kind(), count in 3..=20u32, seed: u64) {
+        let (mut arena, mut ais) = melee(kind, count, seed);
+        let rules = DesignData::load().unwrap().combat.melee;
+        let few = usize::try_from(rules.pacts.break_fighting).unwrap();
+        while !arena.is_over() && arena.tick < rules.max_ticks {
+            let logged = arena.log.len();
+            let decided = arena.tick.is_multiple_of(TICKS_PER_DECISION);
+            let fighting = arena.fighters.iter().filter(|f| f.is_fighting()).count();
+            tick(&mut arena, &mut ais);
+            // Pacts are updated at decisions: none once few are left.
+            if decided && fighting <= few {
+                prop_assert_eq!(&arena.pacts, &[]);
+            }
+            for (i, &(a, b)) in arena.pacts.iter().enumerate() {
+                prop_assert!(a != b);
+                for &(c, d) in &arena.pacts[i + 1..] {
+                    prop_assert!(a != c && a != d && b != c && b != d);
+                }
+            }
+            for event in &arena.log[logged..] {
+                if let EventKind::Cast { caster, target, .. } = event.kind {
+                    prop_assert!(!arena.allied(caster, target));
+                }
+            }
+            for f in &arena.fighters {
+                prop_assert!(f.hp <= f.stats.hp);
+                prop_assert!((RADIUS..=arena.width - RADIUS).contains(&f.position.x));
+                prop_assert!((RADIUS..=arena.height - RADIUS).contains(&f.position.y));
+            }
+        }
+    }
 }
 
 proptest! {
