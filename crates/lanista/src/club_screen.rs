@@ -14,7 +14,6 @@ use std::rc::Rc;
 
 use lanista_core::calendar::SeasonPhase;
 use lanista_core::colosseum::{Challenge, ColosseumId, Contender};
-use lanista_core::combat::Arena;
 use lanista_core::design_data::DesignData;
 use lanista_core::economy::{Flow, Wealth};
 use lanista_core::fighter::FighterId;
@@ -33,7 +32,8 @@ use macroquad::prelude::*;
 use reesch::{Assets, Audio, Bindings, Screen, Transition, egui};
 
 use crate::Action;
-use crate::combat_screen::CombatScreen;
+use crate::combat_screen::{CombatScreen, Watched};
+use crate::fight_view::Cast;
 use crate::saves;
 use crate::texts::{
     STAT_NAMES, activity_name, challenger_text, change, class_name, club_name, colosseum_name,
@@ -100,7 +100,7 @@ pub struct ClubScreen {
     fights: Vec<FightReport>,
     /// Fights still to watch, the next one last, each with those who survive a fatal
     /// blow in it.
-    to_watch: Vec<(Arena, Vec<FighterId>)>,
+    to_watch: Vec<Watched>,
     /// Folder of the save files; `None` saves nothing.
     saves: Option<PathBuf>,
     /// The outcome of the last save or load, for the player.
@@ -276,7 +276,7 @@ impl ClubScreen {
             )
         }));
         self.last_week = Some((week, overview));
-        self.to_watch = to_watch(&self.fights);
+        self.to_watch = to_watch(&self.fights, &self.state, data);
         // Free agents are new each week: the one on screen may be gone or replaced.
         if matches!(self.view, View::Outside(Target::FreeAgent(_))) {
             self.view = View::Market;
@@ -590,8 +590,8 @@ impl ClubScreen {
         });
     }
 
-    /// The fight summary; returns a fight to watch again.
-    fn fight_summary(&self, ui: &mut egui::Ui) -> Option<(Arena, Vec<FighterId>)> {
+    /// The fight summary; returns the seed of a fight to watch again.
+    fn fight_summary(&self, ui: &mut egui::Ui) -> Option<u64> {
         let data = &self.data;
         let mut again = None;
         ui.heading("Résumé des combats");
@@ -663,7 +663,7 @@ impl ClubScreen {
                     ));
                 }
                 if ui.button("Revoir le combat").clicked() {
-                    again = Some(watched(fight));
+                    again = Some(fight.seed);
                 }
                 ui.separator();
             }
@@ -687,17 +687,19 @@ impl ClubScreen {
         }
     }
 
-    fn watch(&self, (arena, survivors): (Arena, Vec<FighterId>)) -> Transition {
+    /// Watches all the week's `fights` at once.
+    fn watch(&self, fights: Vec<Watched>) -> Transition {
         let data = Rc::clone(&self.data);
-        let screen = CombatScreen::watch(data, arena, survivors, self.bindings.clone());
+        let screen = CombatScreen::watch(data, fights, self.bindings.clone());
         Transition::Push(Box::new(screen))
     }
 }
 
 impl Screen for ClubScreen {
     fn update(&mut self, ui: &egui::Context, _assets: &Assets, _audio: &mut Audio) -> Transition {
-        if let Some(fight) = self.to_watch.pop() {
-            return self.watch(fight);
+        if !self.to_watch.is_empty() {
+            let fights = std::mem::take(&mut self.to_watch);
+            return self.watch(fights);
         }
         if self.bindings.pressed(ui, &Action::Quit) {
             if self.view == View::Menu {
@@ -723,7 +725,9 @@ impl Screen for ClubScreen {
         if let Some(transition) = transition {
             return transition;
         }
-        if let Some(fight) = again {
+        if let Some(seed) = again {
+            let all = to_watch(&self.fights, &self.state, &self.data);
+            let fight: Vec<Watched> = all.into_iter().filter(|w| w.arena.seed == seed).collect();
             return self.watch(fight);
         }
         if play {
@@ -737,30 +741,57 @@ impl Screen for ClubScreen {
     }
 }
 
-/// The week's fights to watch, the last one first: a melee several of the club's
-/// fighters shared is watched once.
-fn to_watch(fights: &[FightReport]) -> Vec<(Arena, Vec<FighterId>)> {
+/// The week's fights to watch, in club order, each once, though several of the club's
+/// fighters shared a melee: the fight before its first tick, the club's fighters named
+/// and ringed, the others by their class, and those who fall at 0 HP but survive the
+/// fatal blow.
+fn to_watch(fights: &[FightReport], state: &GameState, data: &DesignData) -> Vec<Watched> {
     let mut seeds = Vec::new();
-    let once: Vec<&FightReport> = fights
-        .iter()
-        .filter(|f| {
-            let first = !seeds.contains(&f.fight.seed);
-            seeds.push(f.fight.seed);
-            first
-        })
-        .collect();
-    once.iter().rev().map(|f| watched(&f.fight)).collect()
-}
-
-/// What the combat screen needs to show `fight`: the fight before its first tick, and
-/// those who fall at 0 HP but survive the fatal blow.
-fn watched(fight: &FightSummary) -> (Arena, Vec<FighterId>) {
-    let survivors = (0..)
-        .zip(fight.survived_fatal_blow.iter().copied())
-        .filter(|&(_, survived)| survived)
-        .map(|(id, _)| FighterId(id))
-        .collect();
-    (fight.start.clone(), survivors)
+    let mut watched = Vec::new();
+    for report in fights {
+        let fight = &report.fight;
+        if seeds.contains(&fight.seed) {
+            continue;
+        }
+        seeds.push(fight.seed);
+        let mine: Vec<&FightReport> = fights
+            .iter()
+            .filter(|f| f.fight.seed == fight.seed)
+            .collect();
+        let names = (0..fight.start.fighters.len())
+            .map(|k| {
+                let id = FighterId(u32::try_from(k).unwrap_or(u32::MAX));
+                if let Some(club) = mine.iter().find(|f| f.fight.me == id) {
+                    let i = club.fighter;
+                    return state
+                        .fighters
+                        .get(i)
+                        .map_or_else(|| "?".into(), |f| fighter_name(i, f, data));
+                }
+                // The opponents skip the fighter whose summary this is.
+                let me = usize::try_from(fight.me.0).unwrap_or(0);
+                let other = if k < me { k } else { k - 1 };
+                fight
+                    .opponents
+                    .get(other)
+                    .map_or_else(|| "?".into(), |o| class_name(o, data))
+            })
+            .collect();
+        let survivors = (0..)
+            .zip(fight.survived_fatal_blow.iter().copied())
+            .filter(|&(_, survived)| survived)
+            .map(|(id, _)| FighterId(id))
+            .collect();
+        watched.push(Watched {
+            arena: fight.start.clone(),
+            cast: Cast {
+                names,
+                club: mine.iter().map(|f| f.fight.me).collect(),
+                survivors,
+            },
+        });
+    }
+    watched
 }
 
 /// A seed for a new game: the game, unlike `lanista_core`, may read the clock.
@@ -1015,7 +1046,11 @@ mod tests {
         );
         screen.next_week();
         assert_eq!(screen.view, View::Fights);
-        let (mut fight, survivors) = screen.to_watch.pop().unwrap();
+        let Watched {
+            arena: mut fight,
+            cast,
+        } = screen.to_watch.remove(0);
+        let survivors = cast.survivors;
         let report = &screen.fights[0];
         let melee = &report.fight;
         assert!(melee.is_melee());
@@ -1042,7 +1077,7 @@ mod tests {
             screen.next_week();
         }
         screen.next_week();
-        let (mut duel, _) = screen.to_watch.pop().unwrap();
+        let mut duel = screen.to_watch.remove(0).arena;
         let report = &screen.fights[0];
         assert!(!report.fight.is_melee() && report.fight.opponent().is_some());
         play(&mut duel);
@@ -1074,6 +1109,35 @@ mod tests {
         screen.decisions.plans[0].activity = Activity::Rest;
         screen.next_week();
         assert!(screen.to_watch.is_empty() && screen.fights.is_empty());
+    }
+
+    #[test]
+    fn a_melee_the_club_s_fighters_shared_is_watched_once_with_their_names() {
+        let mut screen = screen(3);
+        let mut rng = ChaCha8Rng::seed_from_u64(9);
+        for _ in 0..2 {
+            let f = CareerFighter::random(&mut rng, &screen.data);
+            screen.state.fighters.push(f);
+            screen.histories.push(Vec::new());
+        }
+        let melee = WeekPlan {
+            activity: Activity::Melee(ColosseumId(0)),
+            care: false,
+            refused: Refused::NONE,
+        };
+        screen.decisions.plans = vec![melee; 3];
+        screen.next_week();
+        assert_eq!(screen.fights.len(), 3);
+        assert_eq!(screen.to_watch.len(), 1);
+        let cast = &screen.to_watch[0].cast;
+        assert_eq!(cast.club.len(), 3);
+        assert_eq!(cast.names.len(), screen.to_watch[0].arena.fighters.len());
+        for report in &screen.fights {
+            let i = report.fighter;
+            let me = usize::try_from(report.fight.me.0).unwrap();
+            let name = fighter_name(i, &screen.state.fighters[i], &screen.data);
+            assert_eq!(cast.names[me], name);
+        }
     }
 
     #[test]

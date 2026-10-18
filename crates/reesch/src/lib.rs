@@ -6,6 +6,7 @@ pub mod audio;
 pub mod camera;
 pub mod fixed_step;
 pub mod input;
+pub mod render_target;
 pub mod screen;
 
 pub use animation::{Animation, AnimationEvent, AnimationPlayer, SpriteSheet};
@@ -17,6 +18,7 @@ pub use camera::{fit_camera, fit_view};
 pub use egui_macroquad::egui;
 pub use fixed_step::FixedStep;
 pub use input::{Bindings, Button};
+pub use render_target::{SceneTarget, target_camera};
 pub use screen::{Screen, ScreenStack, Transition};
 
 /// Screen height the UI is designed for (Steam Deck, 1280 × 800): the UI is

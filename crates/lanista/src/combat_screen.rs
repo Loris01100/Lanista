@@ -1,90 +1,33 @@
-//! Watching a fight, a standard duel or a career fight: the logic runs at its
-//! fixed tick rate, fighters are drawn as animated sprites at positions
-//! interpolated between the last two ticks.
+//! Watching fights: the standard duel, or the club's fights of the week, one shown big
+//! and the others in clickable thumbnails drawn into render targets. Speed and « Passer
+//! au résultat » are shared; each fight goes at its own pace and stops on its own.
 
 use std::rc::Rc;
 
-use lanista_core::ai::{self, CombatAi};
-use lanista_core::combat::{self, Arena};
 use lanista_core::design_data::DesignData;
-use lanista_core::duel::{random_duel, utility_ais};
-use lanista_core::fighter::FighterId;
-use lanista_core::fighter::injury::Location;
-use lanista_core::log::EventKind;
+use lanista_core::duel::random_duel;
 use macroquad::prelude::*;
-use reesch::{
-    Animation, AnimationEvent, AnimationPlayer, Assets, Audio, Bindings, FixedStep, Screen,
-    Transition, egui, fit_camera,
-};
+use reesch::{Assets, Audio, Bindings, SceneTarget, Screen, Transition, egui, fit_camera};
 
 use crate::Action;
-use crate::fighter_sprite::{Placement, SHEET, draw_fighter};
+use crate::fight_view::{Cast, FightView, STANDS};
 
-// ponytail: placeholder sounds; per-spell and per-class sounds in `data/` later.
-pub const HIT_SOUND: &str = "placeholder/hit.wav";
-pub const DEATH_SOUND: &str = "placeholder/death.wav";
+pub use crate::fight_view::{DEATH_SOUND, HIT_SOUND};
+// ponytail: placeholder music.
 pub const MUSIC: &str = "placeholder/music.wav";
 /// Fight speeds offered, with their labels.
 const SPEEDS: [(f32, &str); 3] = [(0.5, "x0,5"), (1.0, "x1"), (1.5, "x1,5")];
-const SAND: Color = Color::new(0.76, 0.66, 0.48, 1.0);
-/// The floor of an arena that slows fighters down: deeper, darker sand.
-const DEEP_SAND: Color = Color::new(0.66, 0.54, 0.36, 1.0);
-// ponytail: pillars drawn with shapes until the arenas get their sprites.
-const PILLAR: Color = Color::new(0.55, 0.53, 0.5, 1.0);
-const PILLAR_TOP: Color = Color::new(0.72, 0.7, 0.66, 1.0);
-/// Over the floor the walls of a melee have closed in on.
-const CLOSED: Color = Color::new(0.1, 0.08, 0.07, 0.55);
-const STANDS: Color = Color::new(0.16, 0.13, 0.11, 1.0);
-// ponytail: blood drawn with shapes until the real sprites bring a stain.
-// Opaque, so overlapping blots make one even stain.
-const BLOOD: Color = Color::new(0.45, 0.03, 0.03, 1.0);
-/// Seconds a blood stain takes to spread, at fight speed.
-const BLOOD_SPREAD_SECONDS: f32 = 1.2;
-/// Radius of a fully spread stain, in meters.
-const BLOOD_RADIUS: f32 = 0.7;
-/// The stain sits this far below the fighter's center, under the body lying down, in meters.
-const BLOOD_DROP: f32 = 0.25;
-/// Smaller blots around the stain: offset from its center and radius, as shares of
-/// `BLOOD_RADIUS`. Mirrored for every other fighter so two stains differ.
-const BLOOD_BLOTS: [(f32, f32, f32); 4] = [
-    (0.0, 0.0, 1.0),
-    (0.7, 0.35, 0.55),
-    (-0.55, 0.5, 0.45),
-    (0.2, -0.7, 0.4),
-];
-/// Brightness of a dead fighter's sprite once it lies down, a share of its tints.
-const DEAD_SHADE: f32 = 0.6;
+/// A thumbnail's width, a share of the screen's; 16:10, like its render target.
+const THUMBNAIL_SHARE: f32 = 0.24;
+/// Pixels of a thumbnail's render target.
+const THUMBNAIL_PIXELS: (u32, u32) = (384, 240);
+/// Gap around the thumbnails, in screen pixels.
+const MARGIN: f32 = 12.0;
+const THUMBNAIL_FRAME: Color = Color::new(0.9, 0.85, 0.7, 1.0);
+/// Over a thumbnail whose fight is over.
+const FINISHED: Color = Color::new(0.55, 0.55, 0.55, 1.0);
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-enum Pose {
-    Idle,
-    Move,
-    Cast,
-    Death,
-    /// Stunned, knocked out, maimed or left for dead: lying down, alive.
-    Down,
-}
-
-/// What a fighter is showing: its pose and how far into its animation.
-struct Look {
-    pose: Pose,
-    player: AnimationPlayer,
-    /// Seconds since the death was shown, for the blood stain; `None` while alive.
-    dead_for: Option<f32>,
-    /// The cast being shown missed: no hit sound at its impact.
-    missed: bool,
-}
-
-impl Look {
-    fn show(&mut self, pose: Pose) {
-        if self.pose != pose {
-            self.pose = pose;
-            self.player = AnimationPlayer::default();
-        }
-    }
-}
-
-/// What the fight on screen is.
+/// What the fights on screen are.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum Mode {
     /// A standard duel; another seed can be picked.
@@ -92,25 +35,27 @@ enum Mode {
         /// Seed of the next fight, edited in the controls.
         next_seed: u64,
     },
-    /// A career fight, watched once, fighter 0 being the player's.
+    /// The club's fights, watched once.
     Watch,
+}
+
+/// A fight to watch: before its first tick, with who is who.
+#[derive(Debug, Clone, PartialEq)]
+pub struct Watched {
+    pub arena: lanista_core::combat::Arena,
+    pub cast: Cast,
 }
 
 pub struct CombatScreen {
     data: Rc<DesignData>,
     mode: Mode,
-    arena: Arena,
-    /// Those the arena kills who survive the fatal blow, once the fight is over: they
-    /// fall and lie down alive, without bleeding out.
-    survivors: Vec<FighterId>,
-    ais: Vec<Box<dyn CombatAi>>,
-    step: FixedStep,
-    /// Fighter positions before the last tick, to interpolate from.
-    previous: Vec<combat::Vec2>,
-    /// Log events already turned into animations.
-    seen_events: usize,
-    looks: Vec<Look>,
-    animations: [Animation; 5],
+    views: Vec<FightView>,
+    /// The fight shown big.
+    focus: usize,
+    /// One per thumbnail, made at the first update: tests never draw.
+    targets: Vec<SceneTarget>,
+    /// The name under the pointer, shown at the next frame.
+    hovered: Option<String>,
     bindings: Bindings<Action>,
     /// Fight speed, a factor of real time: one of `SPEEDS`.
     speed: f32,
@@ -120,93 +65,88 @@ impl CombatScreen {
     /// The standard duel of `seed`, the same as `simulate --seed <seed>`; another
     /// seed can be picked on screen.
     pub fn new(data: Rc<DesignData>, seed: u64, bindings: Bindings<Action>) -> Self {
-        let arena = random_duel(&data, seed);
-        Self::with(data, arena, Mode::Free { next_seed: seed }, bindings)
+        let duel = FightView::new(random_duel(&data, seed), Cast::default());
+        Self::with(data, vec![duel], Mode::Free { next_seed: seed }, bindings)
     }
 
-    /// Watches the fight `arena`, from its first tick: a career fight, fighter 0
-    /// being the player's, where `survivors` fall at 0 HP but survive the fatal blow
-    /// (`FightSummary::survived_fatal_blow`). Once it is over, « Continuer » goes back.
-    pub fn watch(
+    /// Watches `fights` from their first tick, the first one big. Once all are over,
+    /// « Continuer » goes back.
+    pub fn watch(data: Rc<DesignData>, fights: Vec<Watched>, bindings: Bindings<Action>) -> Self {
+        let views = fights
+            .into_iter()
+            .map(|f| FightView::new(f.arena, f.cast))
+            .collect();
+        Self::with(data, views, Mode::Watch, bindings)
+    }
+
+    fn with(
         data: Rc<DesignData>,
-        arena: Arena,
-        survivors: Vec<FighterId>,
+        views: Vec<FightView>,
+        mode: Mode,
         bindings: Bindings<Action>,
     ) -> Self {
-        let mut screen = Self::with(data, arena, Mode::Watch, bindings);
-        screen.survivors = survivors;
-        screen
-    }
-
-    fn with(data: Rc<DesignData>, arena: Arena, mode: Mode, bindings: Bindings<Action>) -> Self {
-        let animation = |row: u16, frame_time, looping| Animation {
-            first: row * SHEET.columns,
-            frames: 4,
-            frame_time,
-            looping,
-            markers: Vec::new(),
-        };
-        let mut screen = Self {
+        Self {
             data,
             mode,
-            survivors: Vec::new(),
-            ais: Vec::new(),
-            previous: Vec::new(),
-            arena: arena.clone(),
-            step: FixedStep::new(combat::TICKS_PER_SECOND),
-            seen_events: 0,
-            looks: Vec::new(),
-            // Same order as `Pose`.
-            animations: [
-                animation(0, 0.25, true),
-                animation(1, 0.1, true),
-                Animation {
-                    markers: vec![(2, "impact".into())],
-                    ..animation(2, 0.06, false)
-                },
-                animation(3, 0.15, false),
-                // ponytail: the death row until the real sprites bring a stunned pose.
-                animation(3, 0.1, false),
-            ],
+            views,
+            focus: 0,
+            targets: Vec::new(),
+            hovered: None,
             bindings,
             speed: 1.0,
-        };
-        screen.show(arena);
-        screen
+        }
     }
 
-    /// Shows `arena` from where it is; the speed is kept.
-    fn show(&mut self, arena: Arena) {
-        self.arena = arena;
-        self.ais = utility_ais(&self.arena);
-        self.previous = positions(&self.arena);
-        self.step = FixedStep::new(combat::TICKS_PER_SECOND);
-        self.seen_events = 0;
-        self.looks = self
-            .arena
-            .fighters
-            .iter()
-            .map(|_| Look {
-                pose: Pose::Idle,
-                player: AnimationPlayer::default(),
-                dead_for: None,
-                missed: false,
-            })
-            .collect();
+    /// The fight shown big.
+    fn fight(&self) -> &FightView {
+        &self.views[self.focus]
     }
 
-    /// Plays the rest of the fight at once, without drawing it.
+    /// Whether any fight is still going.
+    fn running(&self) -> bool {
+        self.views.iter().any(FightView::running)
+    }
+
+    /// Plays the rest of every fight at once, without drawing them.
     fn skip(&mut self) {
-        let ticks = self.arena.max_ticks;
-        combat::run(&mut self.arena, &mut self.ais, ticks);
-        self.previous = positions(&self.arena);
-        // No cast animation for hits nobody saw.
-        self.seen_events = self.arena.log.len();
+        for view in &mut self.views {
+            view.skip();
+        }
     }
 
-    /// Speed buttons, then the result once the fight is over; the seed of the
-    /// next fight and « Retour » in the standard duel, or « Continuer » for a watched
-    /// fight. Returns whether to go back.
+    /// Plays `dt` seconds of fight time in every fight; returns the sounds of the one
+    /// shown big. No macroquad call, so tests can drive it.
+    fn advance(&mut self, dt: f32) -> Vec<&'static str> {
+        let mut heard = Vec::new();
+        for (k, view) in self.views.iter_mut().enumerate() {
+            let sounds = view.advance(dt);
+            if k == self.focus {
+                heard = sounds;
+            }
+        }
+        heard
+    }
+
+    /// The fights shown as thumbnails, in order: all but the one shown big.
+    fn thumbnailed(&self) -> Vec<usize> {
+        (0..self.views.len()).filter(|&k| k != self.focus).collect()
+    }
+
+    /// The world area the big view shows: its fight, with room on the left for the
+    /// thumbnails when there are any.
+    fn main_view(&self) -> Rect {
+        let world = self.fight().world();
+        if self.views.len() < 2 {
+            return world;
+        }
+        let room = THUMBNAIL_SHARE + 0.02;
+        let width = world.w / (1.0 - room);
+        Rect::new(world.x - width * room, world.y, width, world.h)
+    }
+
+    /// Speed buttons, then the result of the fight shown big once it is over; the
+    /// seed of the next fight and « Retour » in the standard duel, or « Continuer »
+    /// once every watched fight is over. Returns whether to go back.
     fn controls(&mut self, ui: &egui::Context) -> bool {
         let mut start = None;
         let mut done = false;
@@ -223,13 +163,14 @@ impl CombatScreen {
                         if ui.button("Passer au résultat").clicked() {
                             self.skip();
                         }
-                    } else {
-                        ui.label(self.result());
+                    }
+                    if !self.fight().running() {
+                        ui.label(self.fight().result());
                     }
                     match &mut self.mode {
                         Mode::Free { next_seed } => {
                             ui.separator();
-                            ui.label(format!("Graine {}", self.arena.seed));
+                            ui.label(format!("Graine {}", self.views[0].arena.seed));
                             ui.add(egui::DragValue::new(next_seed));
                             if ui.button("Lancer").clicked() {
                                 start = Some(*next_seed);
@@ -245,124 +186,49 @@ impl CombatScreen {
                 });
             });
         if let Some(seed) = start {
-            self.show(random_duel(&self.data, seed));
+            let duel = FightView::new(random_duel(&self.data, seed), Cast::default());
+            self.views = vec![duel];
+            self.focus = 0;
         }
         done
     }
 
-    /// How the result names fighter `id`.
-    fn name(&self, id: FighterId) -> String {
-        match (self.mode, id.0) {
-            (Mode::Watch, 0) => "votre combattant".into(),
-            (Mode::Watch, _) => "l'adversaire".into(),
-            (Mode::Free { .. }, n) => format!("combattant {n}"),
+    /// A click on a thumbnail shows its fight big; the name of the fighter under the
+    /// pointer in the big view is shown next to it.
+    fn point(&mut self, ui: &egui::Context) {
+        self.hovered = None;
+        if ui.is_pointer_over_area() {
+            return;
         }
-    }
-
-    fn result(&self) -> String {
-        if !self.arena.is_over() {
-            return "Temps écoulé, pas de vainqueur".into();
-        }
-        let winner = match self.arena.fighters.iter().find(|f| f.is_fighting()) {
-            Some(winner) => format!("Vainqueur : {}", self.name(winner.id)),
-            None => "Aucun vainqueur".into(),
-        };
-        let out = |how: &str, out: &dyn Fn(&lanista_core::fighter::Fighter) -> bool| {
-            let names: Vec<String> = self
-                .arena
-                .fighters
-                .iter()
-                .filter(|f| out(f))
-                .map(|f| self.name(f.id))
-                .collect();
-            (!names.is_empty()).then(|| format!("{how} : {}", names.join(", ")))
-        };
-        let reasons: Vec<String> = [
-            out("abandon", &|f| f.surrendered),
-            out("K.-O.", &|f| f.knocked_out),
-            out("laissé pour mort, survit", &|f| {
-                !f.is_alive() && self.survivors.contains(&f.id)
-            }),
-            out("décapité", &|f| f.severed == Some(Location::Head)),
-            out("membre tranché", &|f| {
-                f.severed.is_some_and(|part| part != Location::Head)
-            }),
-        ]
-        .into_iter()
-        .flatten()
-        .collect();
-        if reasons.is_empty() {
-            winner
-        } else {
-            format!("{winner} ({})", reasons.join(", "))
-        }
-    }
-
-    fn running(&self) -> bool {
-        !self.arena.is_over() && self.arena.tick < self.arena.max_ticks
-    }
-
-    /// Plays the ticks due after `dt` seconds of fight time, then animates;
-    /// returns the sounds to play. No macroquad call, so tests can drive it.
-    fn advance(&mut self, dt: f32) -> Vec<&'static str> {
-        for _ in 0..self.step.advance(f64::from(dt)) {
-            if !self.running() {
-                break;
+        let mouse = Vec2::from(mouse_position());
+        let rects = thumbnail_rects(self.views.len() - 1, screen_width());
+        if let Some(slot) = rects.iter().position(|r| r.contains(mouse)) {
+            if is_mouse_button_pressed(MouseButton::Left) {
+                self.focus = self.thumbnailed()[slot];
             }
-            self.previous = positions(&self.arena);
-            combat::tick(&mut self.arena, &mut self.ais);
+            return;
         }
-        if !self.running() {
-            // Nothing moves any more: stop interpolating.
-            self.previous = positions(&self.arena);
-        }
-        self.animate(dt)
+        let world = fit_camera(self.main_view()).screen_to_world(mouse);
+        self.hovered = self
+            .fight()
+            .fighter_at(world)
+            .map(|id| self.fight().name(id));
     }
+}
 
-    /// Returns the sounds to play: a hit at each impact frame of a cast that hit,
-    /// a cry at each death. A survivor of the fatal blow falls without one.
-    fn animate(&mut self, dt: f32) -> Vec<&'static str> {
-        let mut sounds = Vec::new();
-        // A cast resolves within one tick: the log, not `action`, shows it.
-        for event in &self.arena.log[self.seen_events..] {
-            if let EventKind::Cast { caster, missed, .. } = event.kind
-                && let Some(look) = index(caster.0).and_then(|i| self.looks.get_mut(i))
-            {
-                look.pose = Pose::Cast;
-                look.player = AnimationPlayer::default();
-                look.missed = missed;
-            }
-        }
-        self.seen_events = self.arena.log.len();
-
-        for (fighter, look) in self.arena.fighters.iter().zip(&mut self.looks) {
-            let casting = look.pose == Pose::Cast && !look.player.is_finished(&self.animations[2]);
-            let survives = self.survivors.contains(&fighter.id);
-            let pose = if !fighter.is_alive() && !survives {
-                Pose::Death
-            } else if !fighter.is_alive() || (!fighter.is_standing() && !fighter.surrendered) {
-                Pose::Down
-            } else if casting {
-                Pose::Cast
-            } else if matches!(fighter.action, ai::Action::Move(_)) {
-                Pose::Move
-            } else {
-                Pose::Idle
-            };
-            if pose == Pose::Death && look.pose != Pose::Death {
-                sounds.push(DEATH_SOUND);
-            }
-            if pose == Pose::Death {
-                look.dead_for = Some(look.dead_for.map_or(0.0, |t| t + dt));
-            }
-            look.show(pose);
-            let events = look.player.advance(&self.animations[pose as usize], dt);
-            if events.contains(&AnimationEvent::Marker("impact")) && !look.missed {
-                sounds.push(HIT_SOUND);
-            }
-        }
-        sounds
-    }
+/// Where the `count` thumbnails go on a screen `width` pixels wide: down the left side,
+/// each `THUMBNAIL_SHARE` of the width, 16:10.
+#[must_use]
+fn thumbnail_rects(count: usize, width: f32) -> Vec<Rect> {
+    let w = width * THUMBNAIL_SHARE;
+    let h = w * 10.0 / 16.0;
+    (0..count)
+        .map(|i| {
+            #[expect(clippy::cast_precision_loss, reason = "three thumbnails at most")]
+            let i = i as f32;
+            Rect::new(MARGIN, MARGIN + i * (h + MARGIN), w, h)
+        })
+        .collect()
 }
 
 impl Screen for CombatScreen {
@@ -385,6 +251,21 @@ impl Screen for CombatScreen {
         if self.controls(ui) {
             return Transition::Pop;
         }
+        while self.targets.len() + 1 < self.views.len() {
+            let (w, h) = THUMBNAIL_PIXELS;
+            self.targets.push(SceneTarget::new(w, h));
+        }
+        self.point(ui);
+        if let Some(name) = &self.hovered
+            && let Some(at) = ui.pointer_hover_pos()
+        {
+            egui::Area::new(egui::Id::new("fighter_name"))
+                .fixed_pos(at + egui::vec2(14.0, 14.0))
+                .interactable(false)
+                .show(ui, |ui| {
+                    egui::Frame::popup(ui.style()).show(ui, |ui| ui.label(name));
+                });
+        }
         volumes(ui, audio);
         audio.play_music(assets, MUSIC);
         // Speed scales time: more or fewer ticks per frame, animations alike.
@@ -395,67 +276,22 @@ impl Screen for CombatScreen {
     }
 
     fn draw(&self, assets: &Assets) {
+        // The thumbnails first: drawing into a target changes the camera.
+        let shown = self.thumbnailed();
+        for (target, &k) in self.targets.iter().zip(&shown) {
+            let view = &self.views[k];
+            target.draw(view.world(), STANDS, || view.draw(assets, &self.data));
+        }
         clear_background(STANDS);
-        let (width, height) = (to_f32(self.arena.width), to_f32(self.arena.height));
-        set_camera(&fit_camera(Rect::new(
-            -1.0,
-            -1.0,
-            width + 2.0,
-            height + 2.0,
-        )));
-        let floor = if self.arena.speed_percent < 100 {
-            DEEP_SAND
-        } else {
-            SAND
-        };
-        draw_rectangle(0.0, 0.0, width, height, floor);
-        let (x, y) = (to_f32(self.arena.inset.x), to_f32(self.arena.inset.y));
-        if x > 0.0 || y > 0.0 {
-            draw_rectangle(0.0, 0.0, width, y, CLOSED);
-            draw_rectangle(0.0, height - y, width, y, CLOSED);
-            draw_rectangle(0.0, y, x, height - 2.0 * y, CLOSED);
-            draw_rectangle(width - x, y, x, height - 2.0 * y, CLOSED);
-        }
-        for pillar in &self.arena.pillars {
-            let (x, y, radius) = (to_f32(pillar.x), to_f32(pillar.y), to_f32(pillar.radius));
-            draw_circle(x, y, radius, PILLAR);
-            draw_circle(x, y, radius * 0.75, PILLAR_TOP);
-        }
-        // Blood under everyone.
-        for (fighter, look) in self.arena.fighters.iter().zip(&self.looks) {
-            if let Some(dead_for) = look.dead_for {
-                let x = to_f32(fighter.position.x);
-                let y = to_f32(fighter.position.y) + BLOOD_DROP;
-                draw_blood(x, y, blood_spread(dead_for), fighter.id.0 % 2 == 1);
-            }
-        }
-
-        let looks = &self.data.fighter.appearance;
-        let alpha = self.step.alpha();
-        // The dead first, so the living walk over them.
-        let mut order: Vec<usize> = (0..self.arena.fighters.len()).collect();
-        order.sort_by_key(|&i| self.arena.fighters[i].is_alive());
-        for i in order {
-            let fighter = &self.arena.fighters[i];
-            let look = &self.looks[i];
-            let (from, to) = (self.previous[i], fighter.position);
-            let x = to_f32(from.x + (to.x - from.x) * alpha);
-            let y = to_f32(from.y + (to.y - from.y) * alpha);
-            // Sprites face right: turn toward the other fighters' side.
-            let others = self.arena.fighters.iter().filter(|f| f.id != fighter.id);
-            let flip_x = others.map(|f| f.position.x - to.x).sum::<f64>() < 0.0;
-            let animation = &self.animations[look.pose as usize];
-            let lying = look.pose == Pose::Death && look.player.is_finished(animation);
-            let at = Placement {
-                x,
-                y,
-                frame: look.player.frame(animation),
-                flip_x,
-                shade: if lying { DEAD_SHADE } else { 1.0 },
-            };
-            draw_fighter(assets, looks, &fighter.appearance, &at);
-        }
+        set_camera(&fit_camera(self.main_view()));
+        self.fight().draw(assets, &self.data);
         set_default_camera();
+        let rects = thumbnail_rects(shown.len(), screen_width());
+        for ((target, &k), rect) in self.targets.iter().zip(&shown).zip(rects) {
+            let over = !self.views[k].running();
+            target.show(rect, if over { FINISHED } else { WHITE });
+            draw_rectangle_lines(rect.x, rect.y, rect.w, rect.h, 2.0, THUMBNAIL_FRAME);
+        }
     }
 }
 
@@ -483,56 +319,30 @@ fn volumes(ui: &egui::Context, audio: &mut Audio) {
         });
 }
 
-/// How far a blood stain has spread `dead_for` seconds after the death, from 0 to 1:
-/// fast at first, then slowing down (ease-out).
-fn blood_spread(dead_for: f32) -> f32 {
-    let t = (dead_for / BLOOD_SPREAD_SECONDS).clamp(0.0, 1.0);
-    1.0 - (1.0 - t) * (1.0 - t)
-}
-
-/// A blood stain centered on (`x`, `y`), `spread` of its full size, mirrored if `mirror`.
-fn draw_blood(x: f32, y: f32, spread: f32, mirror: bool) {
-    let side = if mirror { -1.0 } else { 1.0 };
-    let radius = BLOOD_RADIUS * spread;
-    for (dx, dy, size) in BLOOD_BLOTS {
-        draw_circle(
-            x + side * dx * radius,
-            y + dy * radius,
-            size * radius,
-            BLOOD,
-        );
-    }
-}
-
-fn positions(arena: &Arena) -> Vec<combat::Vec2> {
-    arena.fighters.iter().map(|f| f.position).collect()
-}
-
-fn index(id: u32) -> Option<usize> {
-    usize::try_from(id).ok()
-}
-
-#[expect(
-    clippy::cast_possible_truncation,
-    reason = "screen coordinates, in meters: f32 is plenty"
-)]
-fn to_f32(meters: f64) -> f32 {
-    meters as f32
-}
-
 #[cfg(test)]
 mod tests {
+    use lanista_core::combat::Arena;
     use lanista_core::duel::play;
+    use lanista_core::fighter::FighterId;
     use lanista_core::fighter::equipment::Refused;
-    use lanista_core::log::{Report, log_text};
+    use lanista_core::log::{EventKind, Report, log_text};
 
     use super::*;
+    use crate::fight_view::Pose;
 
     /// Seed 15 has stuns and a knock-out.
     const SEEDS: [u64; 5] = [42, 0, 1, 7, 15];
 
-    /// The first week of career 7 is a fight its fighter gives up: watched frame
-    /// by frame, it is the very fight the career played.
+    /// A career duel against an opponent, as the club screen names them.
+    fn named() -> Cast {
+        Cast {
+            names: vec!["votre combattant".into(), "l'adversaire".into()],
+            club: vec![FighterId(0)],
+            survivors: Vec::new(),
+        }
+    }
+
+    /// A career fight, watched frame by frame, is the very fight the career played.
     #[test]
     fn a_watched_career_fight_is_the_one_the_career_played() {
         use lanista_core::colosseum::ColosseumId;
@@ -554,33 +364,63 @@ mod tests {
             .unwrap()
             .fight
             .unwrap();
-        let mut screen = CombatScreen::watch(
-            Rc::new(data),
-            fight.start.clone(),
-            Vec::new(),
-            Bindings::new(Vec::new()),
-        );
+        let watched = Watched {
+            arena: fight.start.clone(),
+            cast: named(),
+        };
+        let mut screen =
+            CombatScreen::watch(Rc::new(data), vec![watched], Bindings::new(Vec::new()));
         // Past the one-minute limit.
         for _ in 0..60 * 70 {
             screen.advance(1.0 / 60.0);
         }
         let mut expected = fight.start;
         play(&mut expected);
-        assert_eq!(log_text(&screen.arena), log_text(&expected));
-        assert_eq!(screen.arena.tick, fight.ticks);
-        assert_eq!(
-            screen.result(),
-            "Vainqueur : l'adversaire (abandon : votre combattant)"
-        );
+        assert_eq!(log_text(&screen.fight().arena), log_text(&expected));
+        assert_eq!(screen.fight().arena.tick, fight.ticks);
+        assert!(screen.fight().result().starts_with("Vainqueur : "));
+        assert!(!screen.running());
+    }
+
+    /// Three fights at once go each at its own pace, all as simulated, and stop on
+    /// their own; a click focus aside, they all play on.
+    #[test]
+    fn three_fights_watched_together_are_the_simulated_ones() {
+        let data = Rc::new(DesignData::load().unwrap());
+        let fights: Vec<Watched> = [42, 0, 15]
+            .map(|seed| Watched {
+                arena: random_duel(&data, seed),
+                cast: Cast::default(),
+            })
+            .into();
+        let mut screen = CombatScreen::watch(Rc::clone(&data), fights, Bindings::new(Vec::new()));
+        assert_eq!(screen.thumbnailed(), [1, 2]);
+        screen.focus = 2;
+        assert_eq!(screen.thumbnailed(), [0, 1]);
+        while screen.running() {
+            screen.advance(1.0 / 60.0);
+        }
+        for (view, seed) in screen.views.iter().zip([42, 0, 15]) {
+            assert_eq!(
+                log_text(&view.arena),
+                log_text(&simulated(seed)),
+                "seed {seed}"
+            );
+        }
+        // The big view leaves room for the thumbnails on its left.
+        let main = screen.main_view();
+        let world = screen.fight().world();
+        assert!(main.x < world.x && (main.right() - world.right()).abs() < 1e-4);
     }
 
     #[test]
-    fn blood_spreads_fast_then_slows_and_stops() {
-        assert!(blood_spread(0.0).abs() < f32::EPSILON);
-        let (early, late) = (blood_spread(0.3), blood_spread(0.9));
-        assert!(early > 0.3 && late > early && late < 1.0, "{early} {late}");
-        assert!((blood_spread(BLOOD_SPREAD_SECONDS) - 1.0).abs() < f32::EPSILON);
-        assert!((blood_spread(10.0) - 1.0).abs() < f32::EPSILON);
+    fn thumbnails_go_down_the_left_side() {
+        let rects = thumbnail_rects(2, 1280.0);
+        assert_eq!(rects.len(), 2);
+        assert!((rects[0].w - 1280.0 * THUMBNAIL_SHARE).abs() < 1e-3);
+        assert!((rects[0].h * 16.0 / 10.0 - rects[0].w).abs() < 1e-3);
+        assert!(rects[1].y > rects[0].bottom());
+        assert!(rects.iter().all(|r| (r.x - MARGIN).abs() < 1e-6));
     }
 
     /// The loser of seed 42 dies: its stain starts at the death and keeps
@@ -590,23 +430,29 @@ mod tests {
         let mut screen = screen(42);
         // The fight lasts 133 ticks, under 5 s.
         for _ in 0..60 * 5 {
-            if screen.looks.iter().any(|look| look.dead_for.is_some()) {
+            if screen
+                .fight()
+                .looks
+                .iter()
+                .any(|look| look.dead_for.is_some())
+            {
                 break;
             }
             screen.advance(1.0 / 60.0);
         }
         let dead = screen
+            .fight()
             .arena
             .fighters
             .iter()
             .position(|f| !f.is_alive())
             .unwrap();
-        assert_eq!(screen.looks[dead].dead_for, Some(0.0));
+        assert_eq!(screen.fight().looks[dead].dead_for, Some(0.0));
         for _ in 0..60 {
             screen.advance(1.0 / 60.0);
         }
-        assert!((screen.looks[dead].dead_for.unwrap() - 1.0).abs() < 1e-3);
-        assert!(screen.looks[1 - dead].dead_for.is_none());
+        assert!((screen.fight().looks[dead].dead_for.unwrap() - 1.0).abs() < 1e-3);
+        assert!(screen.fight().looks[1 - dead].dead_for.is_none());
     }
 
     /// In the standard duel of seed 15, fighter 0 is knocked out: it lies down, alive,
@@ -617,10 +463,16 @@ mod tests {
         while screen.running() {
             screen.advance(1.0 / 60.0);
         }
-        assert_eq!(screen.looks[0].pose, Pose::Down);
-        assert!(screen.looks.iter().all(|look| look.dead_for.is_none()));
+        assert_eq!(screen.fight().looks[0].pose, Pose::Down);
+        assert!(
+            screen
+                .fight()
+                .looks
+                .iter()
+                .all(|look| look.dead_for.is_none())
+        );
         assert_eq!(
-            screen.result(),
+            screen.fight().result(),
             "Vainqueur : combattant 1 (K.-O. : combattant 0)"
         );
     }
@@ -633,10 +485,16 @@ mod tests {
         let dead = fallen.fighters.iter().position(|f| !f.is_alive()).unwrap();
         let id = fallen.fighters[dead].id;
         fallen = random_duel(&DesignData::load().unwrap(), 42);
+        let watched = Watched {
+            arena: fallen,
+            cast: Cast {
+                survivors: vec![id],
+                ..named()
+            },
+        };
         let mut screen = CombatScreen::watch(
             Rc::new(DesignData::load().unwrap()),
-            fallen,
-            vec![id],
+            vec![watched],
             Bindings::new(Vec::new()),
         );
         let mut sounds = Vec::new();
@@ -646,17 +504,17 @@ mod tests {
         for _ in 0..60 {
             sounds.extend(screen.advance(1.0 / 60.0));
         }
-        assert!(!screen.arena.fighters[dead].is_alive());
-        assert_eq!(screen.looks[dead].pose, Pose::Down);
-        assert!(screen.looks.iter().all(|look| look.dead_for.is_none()));
+        let view = screen.fight();
+        assert!(!view.arena.fighters[dead].is_alive());
+        assert_eq!(view.looks[dead].pose, Pose::Down);
+        assert!(view.looks.iter().all(|look| look.dead_for.is_none()));
         assert!(!sounds.contains(&DEATH_SOUND));
-        let name = screen.name(id);
+        let name = view.name(id);
         assert!(
-            screen
-                .result()
+            view.result()
                 .contains(&format!("laissé pour mort, survit : {name}")),
             "{}",
-            screen.result()
+            view.result()
         );
     }
 
@@ -667,10 +525,16 @@ mod tests {
         while screen.running() {
             screen.advance(1.0 / 60.0);
         }
-        assert_eq!(screen.looks[1].pose, Pose::Down);
-        assert!(screen.looks.iter().all(|look| look.dead_for.is_none()));
+        assert_eq!(screen.fight().looks[1].pose, Pose::Down);
+        assert!(
+            screen
+                .fight()
+                .looks
+                .iter()
+                .all(|look| look.dead_for.is_none())
+        );
         assert_eq!(
-            screen.result(),
+            screen.fight().result(),
             "Vainqueur : combattant 0 (membre tranché : combattant 1)"
         );
     }
@@ -692,12 +556,9 @@ mod tests {
 
     fn assert_same_fight(screen: &CombatScreen, seed: u64) {
         let expected = simulated(seed);
-        assert_eq!(log_text(&screen.arena), log_text(&expected), "seed {seed}");
-        assert_eq!(
-            Report::new(&screen.arena),
-            Report::new(&expected),
-            "seed {seed}"
-        );
+        let arena = &screen.fight().arena;
+        assert_eq!(log_text(arena), log_text(&expected), "seed {seed}");
+        assert_eq!(Report::new(arena), Report::new(&expected), "seed {seed}");
     }
 
     /// Phase 2 milestone: frame rate and speed change how the fight is shown,
@@ -728,16 +589,16 @@ mod tests {
             sounds.extend(screen.advance(1.0 / 60.0));
         }
         let count = |sound| sounds.iter().filter(|&&s| s == sound).count();
+        let arena = &screen.fight().arena;
         let casts = |winner_only: bool| {
-            screen
-                .arena
+            arena
                 .log
                 .iter()
                 .filter(|e| match e.kind {
                     EventKind::Cast { caster, missed, .. } => {
                         !missed
                             && (!winner_only
-                                || screen.arena.fighters[index(caster.0).unwrap()].is_fighting())
+                                || arena.fighters[usize::try_from(caster.0).unwrap()].is_fighting())
                     }
                     _ => false,
                 })
