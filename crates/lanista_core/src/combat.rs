@@ -9,7 +9,7 @@ use crate::fighter::injury::{Location, Side};
 use crate::fighter::personality::Personality;
 use crate::fighter::{Fighter, FighterId, Stats, pick};
 use crate::log::{Event, EventKind};
-use crate::melee::{MeleeRules, PactRules, ShrinkRules, update_pacts};
+use crate::melee::{MeleeRules, PactRules, QuotaRules, enforce_quota, update_pacts};
 
 pub const TICKS_PER_SECOND: u32 = 30;
 /// Duration of a tick, in seconds.
@@ -70,11 +70,9 @@ pub struct Arena {
     pub pact_rules: PactRules,
     /// The pairs of allies, who do not aim at each other; each fighter has one at most.
     pub pacts: Vec<(FighterId, FighterId)>,
-    /// How the walls close in; never, unless set with [`Arena::with_shrink`].
-    pub shrink: ShrinkRules,
-    /// How far the left and right walls (`x`), and the top and bottom ones (`y`), have
-    /// each moved in, in meters.
-    pub inset: Vec2,
+    /// How much damage each fighter must deal between two checks; none, unless set
+    /// with [`Arena::with_quota`].
+    pub quota: QuotaRules,
     /// Ticks the fight lasts at most: a duel's minute (`duel::MAX_TICKS`), unless set
     /// with [`Arena::with_max_ticks`].
     pub max_ticks: u32,
@@ -261,8 +259,7 @@ impl Arena {
             pillars: Vec::new(),
             pact_rules: PactRules::NEVER,
             pacts: Vec::new(),
-            shrink: ShrinkRules::NEVER,
-            inset: Vec2::new(0.0, 0.0),
+            quota: QuotaRules::NEVER,
             max_ticks: crate::duel::MAX_TICKS,
         }
     }
@@ -297,19 +294,21 @@ impl Arena {
         self
     }
 
-    /// This arena, whose walls close in following `rules`: a melee.
+    /// This arena, where a fighter who deals too little damage between two checks is
+    /// out, following `rules`: a melee.
     #[must_use]
-    pub fn with_shrink(mut self, rules: ShrinkRules) -> Self {
-        self.shrink = rules;
+    pub fn with_quota(mut self, rules: QuotaRules) -> Self {
+        self.quota = rules;
         self
     }
 
-    /// The lowest and the highest center a fighter may stand at, inside the walls as
-    /// they stand.
+    /// The lowest and the highest center a fighter may stand at, inside the walls.
     #[must_use]
     pub fn reachable(&self) -> (Vec2, Vec2) {
-        let (x, y) = (self.inset.x + RADIUS, self.inset.y + RADIUS);
-        (Vec2::new(x, y), Vec2::new(self.width - x, self.height - y))
+        (
+            Vec2::new(RADIUS, RADIUS),
+            Vec2::new(self.width - RADIUS, self.height - RADIUS),
+        )
     }
 
     /// Whether `a` and `b` are allies.
@@ -351,7 +350,7 @@ impl Arena {
 pub fn tick(arena: &mut Arena, ais: &mut [Box<dyn CombatAi>]) {
     assert_eq!(arena.fighters.len(), ais.len(), "one AI per fighter");
     come_round(arena);
-    close_in(arena);
+    enforce_quota(arena);
     if arena.tick.is_multiple_of(TICKS_PER_DECISION) {
         update_pacts(arena);
         for (i, ai) in ais.iter_mut().enumerate() {
@@ -759,6 +758,8 @@ fn cast_spells(arena: &mut Arena) {
         } else if stunned {
             arena.log.push(event(EventKind::Stun { fighter: target }));
         }
+        let caster = &mut arena.fighters[i];
+        caster.round_damage = caster.round_damage.saturating_add(damage);
     }
 }
 
@@ -814,24 +815,8 @@ fn separate(arena: &mut Arena) {
     }
 }
 
-/// From `ShrinkRules::after_ticks`, moves every wall in by `meters_per_second`, each
-/// pair until the floor is `min_side` across, so that it ends a square.
-fn close_in(arena: &mut Arena) {
-    let rules = arena.shrink;
-    if arena.tick < rules.after_ticks {
-        return;
-    }
-    let step = rules.meters_per_second * DT;
-    let close =
-        |inset: f64, side: f64| (inset + step).min(((side - rules.min_side) / 2.0).max(0.0));
-    arena.inset = Vec2::new(
-        close(arena.inset.x, arena.width),
-        close(arena.inset.y, arena.height),
-    );
-}
-
 /// Pushes every fighter still in the fight out of the pillars, then back inside the
-/// walls as they stand; the others lie where they fell.
+/// walls; the others lie where they fell.
 fn keep_inside(arena: &mut Arena) {
     let (low, high) = arena.reachable();
     for f in arena.fighters.iter_mut().filter(|f| f.is_fighting()) {

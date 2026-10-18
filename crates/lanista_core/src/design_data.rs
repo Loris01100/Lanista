@@ -456,11 +456,8 @@ fn melee_problem(rules: &MeleeRules) -> Option<(&'static str, &'static str)> {
         Some(("melee.pacts", "a chance above 100"))
     } else if pacts.break_fighting < 2 {
         Some(("melee.pacts.break_fighting", "below 2"))
-    } else if rules.shrink.meters_per_second.is_nan() || rules.shrink.meters_per_second < 0.0 {
-        Some(("melee.shrink.meters_per_second", "below 0"))
-    } else if rules.shrink.min_side.is_nan() || rules.shrink.min_side < 4.0 * RADIUS {
-        // Two fighters side by side.
-        Some(("melee.shrink.min_side", "below two fighters' width"))
+    } else if rules.quota.every_ticks == 0 {
+        Some(("melee.quota.every_ticks", "0"))
     } else {
         None
     }

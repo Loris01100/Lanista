@@ -94,8 +94,8 @@ proptest! {
     #![proptest_config(ProptestConfig::with_cases(32))]
 
     /// In a melee, each fighter has one ally at most, a pact only binds two fighters
-    /// still fighting, allies never hit each other, HP stay in bounds, and everyone
-    /// stays inside the walls.
+    /// still fighting, allies never hit each other, HP stay in bounds, everyone stays
+    /// inside the walls, and it ends on one standing before its time limit.
     #[test]
     fn a_melee_keeps_its_pacts_and_bounds(kind in kind(), count in 3..=20u32, seed: u64) {
         let (mut arena, mut ais) = melee(kind, count, seed);
@@ -127,6 +127,8 @@ proptest! {
                 prop_assert!((RADIUS..=arena.height - RADIUS).contains(&f.position.y));
             }
         }
+        prop_assert!(arena.is_over());
+        prop_assert_eq!(arena.fighters.iter().filter(|f| f.is_fighting()).count(), 1);
     }
 }
 

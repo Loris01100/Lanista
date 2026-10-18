@@ -3326,7 +3326,7 @@ mod tests {
     #[test]
     fn three_seasons_live_without_the_player() {
         let data = shipped_data();
-        let mut state = GameState::new(7, &data);
+        let mut state = GameState::new(1, &data);
         state.fighters[0].status = Status::Retired;
         let start = state.clone();
         let season = u64::from(data.calendar.season_weeks());
@@ -3358,7 +3358,7 @@ mod tests {
         }
         // Every title changed hands, and the first ranks are not those of the first season.
         assert!(title_changes.iter().all(|&n| n > 0), "{title_changes:?}");
-        assert_ne!(leaders[0], leaders[2]);
+        assert_ne!(leaders[0], leaders[2], "{leaders:?}");
         // The clubs replaced those who died, retired or were released in the off-season.
         // Fighters released at `release_age` are worth signing, so the clubs seldom buy
         // from one another (none here).

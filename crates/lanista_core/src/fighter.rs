@@ -184,6 +184,11 @@ pub struct Fighter {
     pub knocked_out: bool,
     /// What a cutting hit severed: its head, dead, or a limb, out of the fight alive.
     pub severed: Option<Location>,
+    /// Dealt too little damage before a melee's check: out of the fight alive, a defeat
+    /// (see `melee::QuotaRules`).
+    pub eliminated: bool,
+    /// Damage dealt since the melee's last check.
+    pub round_damage: u32,
     /// The fighter's state outside the fight, read by the AI so that an injured or
     /// fearful fighter fights differently. `stats` already include its effects.
     pub condition: Condition,
@@ -242,6 +247,8 @@ impl Fighter {
             stuns: 0,
             knocked_out: false,
             severed: None,
+            eliminated: false,
+            round_damage: 0,
             condition: Condition::default(),
             appearance: Appearance::default(),
         }
@@ -252,11 +259,15 @@ impl Fighter {
         self.hp > 0
     }
 
-    /// Alive, has not given up, was not knocked out and has all its limbs; maybe down
-    /// for now.
+    /// Alive, has not given up, was not knocked out nor eliminated and has all its
+    /// limbs; maybe down for now.
     #[must_use]
     pub fn is_fighting(&self) -> bool {
-        self.is_alive() && !self.surrendered && !self.knocked_out && self.severed.is_none()
+        self.is_alive()
+            && !self.surrendered
+            && !self.knocked_out
+            && !self.eliminated
+            && self.severed.is_none()
     }
 
     /// Fighting and not down: acts, and can be hit.

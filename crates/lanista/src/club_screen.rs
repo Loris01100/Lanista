@@ -1038,8 +1038,10 @@ mod tests {
 
     #[test]
     fn a_fight_week_queues_the_fight_and_sums_it_up() {
-        let mut screen = screen(7);
-        // The season opens with Capua's melee, where seed 7's fighter would have fought.
+        // A world whose fighter lives to a duel and a challenge.
+        const SEED: u64 = 2;
+        let mut screen = screen(SEED);
+        // The season opens with Capua's melee, where its fighter would have fought.
         assert_eq!(
             screen.decisions.plans[0].activity,
             Activity::Melee(ColosseumId(0))
@@ -1060,7 +1062,7 @@ mod tests {
         assert_eq!(survivors.len(), survived);
         let me = usize::try_from(melee.me.0).unwrap();
         assert_eq!(fight.fighters[me].stats, {
-            let mut rng = ChaCha8Rng::seed_from_u64(7);
+            let mut rng = ChaCha8Rng::seed_from_u64(SEED);
             let f = CareerFighter::random(&mut rng, &screen.data);
             let at = Vec2::new(0.0, 0.0);
             f.combat_fighter(melee.me, Refused::NONE, &screen.data, at)

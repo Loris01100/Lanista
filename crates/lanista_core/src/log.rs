@@ -60,6 +60,10 @@ pub enum EventKind {
         a: FighterId,
         b: FighterId,
     },
+    /// `fighter` dealt too little damage before a melee's check: out, alive.
+    Eliminated {
+        fighter: FighterId,
+    },
 }
 
 /// Summary of a fight, built from its log.
@@ -91,6 +95,8 @@ pub struct FighterReport {
     pub knocked_out: bool,
     /// What a cutting hit severed: the head, or a limb.
     pub severed: Option<Location>,
+    /// Put out of a melee for dealing too little damage.
+    pub eliminated: bool,
 }
 
 impl Report {
@@ -111,6 +117,7 @@ impl Report {
                 surrendered: f.surrendered,
                 knocked_out: f.knocked_out,
                 severed: f.severed,
+                eliminated: f.eliminated,
             })
             .collect();
         let index = |id: FighterId| usize::try_from(id.0).ok();
@@ -143,7 +150,8 @@ impl Report {
                 | EventKind::KnockedOut { .. }
                 | EventKind::Sever { .. }
                 | EventKind::Pact { .. }
-                | EventKind::PactBroken { .. } => {}
+                | EventKind::PactBroken { .. }
+                | EventKind::Eliminated { .. } => {}
             }
         }
         let over = arena.is_over();
@@ -194,6 +202,7 @@ impl fmt::Display for Report {
                 Some(limb) => format!(", lost its {}", limb_name(limb)),
                 None if r.surrendered => ", gave up".to_owned(),
                 None if r.knocked_out => ", knocked out".to_owned(),
+                None if r.eliminated => ", eliminated".to_owned(),
                 None => String::new(),
             };
             writeln!(f, "{out}")?;
@@ -295,6 +304,13 @@ pub fn log_text(arena: &Arena) -> String {
                     event.tick, a.0, b.0
                 )
             }
+            EventKind::Eliminated { fighter } => {
+                writeln!(
+                    text,
+                    "[{:>5}] fighter {} is out for dealing too little damage",
+                    event.tick, fighter.0
+                )
+            }
         };
     }
     text
@@ -318,6 +334,7 @@ pub fn places(arena: &Arena) -> Vec<u32> {
                     EventKind::Death { fighter }
                     | EventKind::Surrender { fighter }
                     | EventKind::KnockedOut { fighter }
+                    | EventKind::Eliminated { fighter }
                     | EventKind::Sever { fighter, .. } => fighter == f.id,
                     EventKind::Cast { .. }
                     | EventKind::Stun { .. }

@@ -23,8 +23,6 @@ const DEEP_SAND: Color = Color::new(0.66, 0.54, 0.36, 1.0);
 // ponytail: pillars drawn with shapes until the arenas get their sprites.
 const PILLAR: Color = Color::new(0.55, 0.53, 0.5, 1.0);
 const PILLAR_TOP: Color = Color::new(0.72, 0.7, 0.66, 1.0);
-/// Over the floor the walls of a melee have closed in on.
-const CLOSED: Color = Color::new(0.1, 0.08, 0.07, 0.55);
 /// Around the floor.
 pub const STANDS: Color = Color::new(0.16, 0.13, 0.11, 1.0);
 /// The ring under the club's fighters.
@@ -50,6 +48,8 @@ const BLOOD_BLOTS: [(f32, f32, f32); 4] = [
 ];
 /// Brightness of a dead fighter's sprite once it lies down, a share of its tints.
 const DEAD_SHADE: f32 = 0.6;
+/// Brightness of a fighter out of the fight standing: it gave up or was eliminated.
+const OUT_SHADE: f32 = 0.75;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Pose {
@@ -201,7 +201,9 @@ impl FightView {
             let survives = self.cast.survivors.contains(&fighter.id);
             let pose = if !fighter.is_alive() && !survives {
                 Pose::Death
-            } else if !fighter.is_alive() || (!fighter.is_standing() && !fighter.surrendered) {
+            } else if !fighter.is_alive()
+                || (!fighter.is_standing() && !fighter.surrendered && !fighter.eliminated)
+            {
                 Pose::Down
             } else if casting {
                 Pose::Cast
@@ -234,7 +236,8 @@ impl FightView {
             .unwrap_or_else(|| format!("combattant {}", id.0))
     }
 
-    /// The fight's outcome, in words: its winner and how the others went out.
+    /// The fight's outcome, in words: its winner and how the others went out, named in
+    /// a duel, counted in a melee.
     #[must_use]
     pub fn result(&self) -> String {
         if !self.arena.is_over() {
@@ -244,6 +247,7 @@ impl FightView {
             Some(winner) => format!("Vainqueur : {}", self.name(winner.id)),
             None => "Aucun vainqueur".into(),
         };
+        let melee = self.arena.fighters.len() > 2;
         let out = |how: &str, out: &dyn Fn(&lanista_core::fighter::Fighter) -> bool| {
             let names: Vec<String> = self
                 .arena
@@ -252,10 +256,19 @@ impl FightView {
                 .filter(|f| out(f))
                 .map(|f| self.name(f.id))
                 .collect();
-            (!names.is_empty()).then(|| format!("{how} : {}", names.join(", ")))
+            let told = if melee {
+                names.len().to_string()
+            } else {
+                names.join(", ")
+            };
+            (!names.is_empty()).then(|| format!("{how} : {told}"))
         };
         let reasons: Vec<String> = [
+            out("mort", &|f| {
+                melee && !f.is_alive() && !self.cast.survivors.contains(&f.id)
+            }),
             out("abandon", &|f| f.surrendered),
+            out("éliminé faute de coups", &|f| f.eliminated),
             out("K.-O.", &|f| f.knocked_out),
             out("laissé pour mort, survit", &|f| {
                 !f.is_alive() && self.cast.survivors.contains(&f.id)
@@ -311,8 +324,8 @@ impl FightView {
     }
 
     /// Draws the fight in world coordinates, a camera on it: the floor of its arena kind
-    /// (deep sand, pillars, the ground the walls closed in on), blood, the lines between
-    /// allies, the rings under the club's fighters, then the fighters, the dead first.
+    /// (deep sand, pillars), blood, the lines between allies, the rings under the club's
+    /// fighters, then the fighters, the dead first, those out of the fight dimmed.
     pub fn draw(&self, assets: &Assets, data: &DesignData) {
         let (width, height) = (to_f32(self.arena.width), to_f32(self.arena.height));
         let floor = if self.arena.speed_percent < 100 {
@@ -321,13 +334,6 @@ impl FightView {
             SAND
         };
         draw_rectangle(0.0, 0.0, width, height, floor);
-        let (x, y) = (to_f32(self.arena.inset.x), to_f32(self.arena.inset.y));
-        if x > 0.0 || y > 0.0 {
-            draw_rectangle(0.0, 0.0, width, y, CLOSED);
-            draw_rectangle(0.0, height - y, width, y, CLOSED);
-            draw_rectangle(0.0, y, x, height - 2.0 * y, CLOSED);
-            draw_rectangle(width - x, y, x, height - 2.0 * y, CLOSED);
-        }
         for pillar in &self.arena.pillars {
             let (x, y, radius) = (to_f32(pillar.x), to_f32(pillar.y), to_f32(pillar.radius));
             draw_circle(x, y, radius, PILLAR);
@@ -365,12 +371,19 @@ impl FightView {
             let look = &self.looks[i];
             let animation = &self.animations[look.pose as usize];
             let lying = look.pose == Pose::Death && look.player.is_finished(animation);
+            let aside = fighter.surrendered || fighter.eliminated;
             let placement = Placement {
                 x: at[i].x,
                 y: at[i].y,
                 frame: look.player.frame(animation),
                 flip_x: self.faces_left(i),
-                shade: if lying { DEAD_SHADE } else { 1.0 },
+                shade: if lying {
+                    DEAD_SHADE
+                } else if aside {
+                    OUT_SHADE
+                } else {
+                    1.0
+                },
             };
             draw_fighter(assets, rules, &fighter.appearance, &placement);
         }

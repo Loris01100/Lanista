@@ -23,56 +23,51 @@ expression: reference_melee(11)
 [  102] fighter 1 casts Trait de feu on fighter 2: 19 damage
 [  102] fighter 3 casts Trait de feu on fighter 2: 19 damage
 [  120] fighter 7 casts Trait de feu on fighter 0: 19 damage
-[  150] fighter 3 casts Trait de feu on fighter 4: 19 damage
-[  150] fighter 5 casts Trait de feu on fighter 4: 19 damage
-[  150] fighter 1 casts Trait de feu on fighter 2: 8 damage
+[  150] fighter 3 casts Trait de feu on fighter 2: 8 damage
 [  150] fighter 2 dies
+[  150] fighter 5 casts Trait de feu on fighter 4: 19 damage
 [  168] fighter 7 casts Trait de feu on fighter 0: 19 damage
+[  186] fighter 5 casts Éclair on fighter 4: 35 damage
 [  186] fighter 7 casts Éclair on fighter 0: 31 damage
 [  186] fighter 0 dies
-[  186] fighter 3 casts Éclair on fighter 4: 35 damage
-[  186] fighter 5 casts Éclair on fighter 4: 8 damage
+[  186] fighter 3 casts Éclair on fighter 4: 27 damage
 [  186] fighter 4 dies
-[  210] fighter 1 casts Éclair on fighter 7: 35 damage
-[  288] fighter 5 casts Coup de bâton on fighter 3: 12 damage
-[  288] fighter 3 casts Coup de bâton on fighter 5: 12 damage
-[  324] fighter 3 casts Coup de bâton on fighter 5: 12 damage
-[  324] fighter 5 casts Coup de bâton on fighter 3: 12 damage
-[ 1014] the pact between fighters 5 and 7 ends
-[ 2556] fighters 1 and 3 make a pact
-[ 2610] fighters 5 and 7 make a pact
-[ 2652] fighter 5 casts Coup de bâton on fighter 3: 12 damage
-[ 2652] fighter 7 casts Coup de bâton on fighter 1: 12 damage
-[ 2652] fighter 3 casts Coup de bâton on fighter 5: 12 damage
-[ 2652] fighter 1 casts Coup de bâton on fighter 7: 12 damage
-[ 2688] fighter 7 casts Coup de bâton on fighter 1: 12 damage
-[ 2688] fighter 5 casts Coup de bâton on fighter 3: 12 damage
-[ 2688] fighter 1 casts Coup de bâton on fighter 7: 12 damage
-[ 2688] fighter 3 casts Coup de bâton on fighter 5: 12 damage
-[ 2724] fighter 1 casts Coup de bâton on fighter 7: 12 damage
-[ 2724] fighter 3 casts Coup de bâton on fighter 5: 12 damage
-[ 2724] fighter 5 is stunned
-[ 2724] fighter 7 casts Coup de bâton on fighter 1: 12 damage
-[ 2760] fighter 7 casts Coup de bâton on fighter 1: 12 damage
-[ 2760] fighter 3 casts Coup de bâton on fighter 7: 12 damage
-[ 2760] fighter 1 casts Coup de bâton on fighter 7: missed
-[ 2784] fighter 5 is knocked out
-[ 2784] the pact between fighters 1 and 3 ends
-[ 2796] fighter 7 casts Coup de bâton on fighter 1: 4 damage
-[ 2796] fighter 1 dies
-[ 2802] fighter 3 casts Coup de bâton on fighter 7: 12 damage
-[ 2832] fighter 7 casts Coup de bâton on fighter 3: 12 damage
-[ 2838] fighter 3 casts Coup de bâton on fighter 7: 5 damage
-[ 2838] fighter 7 dies
+[  210] fighter 1 casts Éclair on fighter 7: missed
+[  216] fighter 1 casts Trait de feu on fighter 7: 19 damage
+[  294] fighter 3 casts Coup de bâton on fighter 5: 12 damage
+[  294] fighter 5 casts Coup de bâton on fighter 3: 12 damage
+[  312] fighter 7 casts Coup de bâton on fighter 1: 12 damage
+[  312] fighter 1 casts Coup de bâton on fighter 7: 12 damage
+[  330] fighter 5 casts Coup de bâton on fighter 3: 12 damage
+[  330] fighter 3 is stunned
+[  390] fighter 3 is knocked out
+[  390] the pact between fighters 5 and 7 ends
+[  564] fighter 5 casts Coup de bâton on fighter 7: 12 damage
+[  564] fighter 7 is stunned
+[  624] fighter 7 gets up
+[  666] fighter 5 casts Coup de bâton on fighter 7: 12 damage
+[  666] fighter 7 casts Coup de bâton on fighter 5: 12 damage
+[  858] fighter 5 casts Coup de bâton on fighter 7: 12 damage
+[  858] fighter 7 casts Coup de bâton on fighter 5: 12 damage
+[  900] fighter 1 is out for dealing too little damage
+[ 1254] fighter 7 casts Coup de bâton on fighter 5: missed
+[ 1254] fighter 5 casts Coup de bâton on fighter 7: 12 damage
+[ 1290] fighter 7 casts Coup de bâton on fighter 5: 12 damage
+[ 1290] fighter 5 casts Coup de bâton on fighter 7: missed
+[ 1326] fighter 7 casts Coup de bâton on fighter 5: 12 damage
+[ 1326] fighter 5 casts Coup de bâton on fighter 7: 12 damage
+[ 1758] fighter 7 casts Coup de bâton on fighter 5: 12 damage
+[ 1758] fighter 5 casts Coup de bâton on fighter 7: 9 damage
+[ 1758] fighter 7 dies
 
-over after 2839 ticks, winner: fighter 3
+over after 1759 ticks, winner: fighter 5
 fighter 0: 0/100 HP, dealt 48, taken 100, 1 spells cast, 0 missed
-fighter 1: 0/100 HP, dealt 164, taken 100, 11 spells cast, 2 missed
+fighter 1: 40/100 HP, dealt 116, taken 60, 8 spells cast, 2 missed, eliminated
 fighter 2: 0/100 HP, dealt 0, taken 100, 0 spells cast, 0 missed
-fighter 3: 40/100 HP, dealt 200, taken 60, 14 spells cast, 1 missed
+fighter 3: 76/100 HP, dealt 104, taken 24, 7 spells cast, 1 missed, stunned once, knocked out
 fighter 4: 0/100 HP, dealt 0, taken 100, 0 spells cast, 0 missed
-fighter 5: 40/100 HP, dealt 140, taken 60, 10 spells cast, 1 missed, stunned once, knocked out
+fighter 5: 28/100 HP, dealt 212, taken 72, 15 spells cast, 2 missed
 fighter 6: 0/100 HP, dealt 0, taken 100, 0 spells cast, 0 missed
-fighter 7: 0/100 HP, dealt 168, taken 100, 12 spells cast, 2 missed
+fighter 7: 0/100 HP, dealt 176, taken 100, 13 spells cast, 3 missed, stunned once
 
-places: [5, 3, 7, 1, 5, 4, 8, 2]
+places: [5, 3, 7, 4, 5, 1, 8, 2]
