@@ -1,6 +1,7 @@
-//! Money: what comes in (prizes, receipts, a patron's gift) and goes out (upkeep, care,
-//! training, entry fees, staff salaries), and a club's wealth: poor, modest or rich, which
-//! sets its patron's gift and changes with its money at each off-season.
+//! Money: what comes in (prizes, receipts, sales: only the fighters bring it) and goes
+//! out (upkeep, care, training, entry fees, staff salaries), and a club's wealth: poor,
+//! modest or rich, which sets its starting money and changes with its money at each
+//! off-season.
 
 use serde::{Deserialize, Serialize};
 
@@ -12,7 +13,7 @@ use crate::staff::StaffRules;
 #[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct EconomyRules {
-    /// A club's starting money and patron by wealth, and when its wealth changes.
+    /// A club's starting money by wealth, and when its wealth changes.
     pub wealth: WealthRules,
     /// Most fighters in activity a club may have.
     pub max_fighters: u32,
@@ -24,7 +25,7 @@ pub struct EconomyRules {
     pub market: MarketRules,
 }
 
-/// How rich a club is: its patron gives more to a richer club, and a rival club plays by
+/// How rich a club is: a richer club starts with more money, and a rival club plays by
 /// it (`rivals`). It changes at the start of each off-season (`Wealth::next`).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
 pub enum Wealth {
@@ -68,8 +69,6 @@ impl Wealth {
 pub struct WealthLevel {
     /// A club's money at the start of a game.
     pub starting_money: u32,
-    /// Given every week by the club's patron.
-    pub patron: u32,
     /// A club with this much money at the start of an off-season rises to this level;
     /// one at this level with less than half falls to the one below.
     pub from: u32,
@@ -151,14 +150,12 @@ pub enum Flow {
     Sale,
     /// A staff member's weekly salary.
     Salary,
-    /// The patron's weekly gift, by the club's wealth.
-    Patron,
 }
 
 /// Money in (positive) or out (negative) for one of the club's fighters, or for the club.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct Transaction {
-    /// Index of the fighter in the club; `None` for the club's own: its staff, its patron.
+    /// Index of the fighter in the club; `None` for the club's own: its staff.
     pub fighter: Option<usize>,
     pub flow: Flow,
     pub amount: i64,
@@ -191,7 +188,6 @@ mod tests {
     fn wealth_rises_from_the_next_level_and_falls_below_half_its_own() {
         let level = |from| WealthLevel {
             starting_money: 0,
-            patron: 0,
             from,
         };
         let rules = WealthRules {

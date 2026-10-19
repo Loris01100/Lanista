@@ -44,7 +44,7 @@ pub struct GameState {
     /// The club's money; below 0 when upkeep ran it into debt.
     pub money: i64,
     /// Chosen at the start, then changing with the money at each off-season
-    /// (`Wealth::next`); sets the patron's gift.
+    /// (`Wealth::next`).
     pub wealth: Wealth,
     /// The player's club; a fighter's index is its place here. One who leaves keeps
     /// its place, with its status.
@@ -562,7 +562,7 @@ pub struct WeekSummary {
 }
 
 /// Plays one week for the whole club: the market moves and the change of staff before
-/// the week, the staff's salaries and the patron's gift, then each fighter's week in
+/// the week, the staff's salaries, then each fighter's week in
 /// club order, paid for, then the week of the rival clubs and the free agents, the
 /// answer to the player's offer, each club's new wealth at the start of the off-season
 /// and the rival clubs' market, then the colosseums' titles, and moves to the next
@@ -1026,8 +1026,7 @@ fn wealth_changes(state: &mut GameState, data: &DesignData) -> Option<Wealth> {
 /// Each rival club's changes of staff this week, in club order, among the candidates
 /// the club and the clubs before it left (`rivals::staff_moves`, the posts of its
 /// wealth, with its money for each share of the salaries), then its salaries, paid
-/// once for every `fighters_per_salary` fighters in activity, even into debt, and its
-/// patron's gift. The market's week ends with them: no one else hires before the next.
+/// once for every `fighters_per_salary` fighters in activity, even into debt. The market's week ends with them: no one else hires before the next.
 fn rival_staff(state: &mut GameState, data: &DesignData) {
     let market = &mut state.staff_market;
     for (club, rival) in state.rivals.iter_mut().enumerate() {
@@ -1040,7 +1039,6 @@ fn rival_staff(state: &mut GameState, data: &DesignData) {
         }
         let salaries: u32 = rival.staff.salaries().sum();
         rival.money -= i64::from(salaries) * shares;
-        rival.money += i64::from(data.economy.wealth.get(rival.wealth).patron);
     }
     staff::age_market(market);
 }
@@ -1069,7 +1067,7 @@ fn met<'a>(
 /// The changes of staff `moves` made before the week, the first for each post, each
 /// if still allowed at its turn (`GameState::may_staff`), then the salaries paid in
 /// `ledger`, post by post, as many times as the club's fighters make it, even into
-/// debt, and the patron's gift; returns the changes made.
+/// debt; returns the changes made.
 fn staff_week(
     state: &mut GameState,
     moves: &[StaffMove],
@@ -1090,15 +1088,6 @@ fn staff_week(
             fighter: None,
             flow: Flow::Salary,
             amount,
-        });
-    }
-    let patron = i64::from(data.economy.wealth.get(state.wealth).patron);
-    if patron != 0 {
-        state.money += patron;
-        ledger.push(Transaction {
-            fighter: None,
-            flow: Flow::Patron,
-            amount: patron,
         });
     }
     made
@@ -2061,18 +2050,7 @@ mod tests {
     use crate::rivals::Profile;
     use crate::staff::{Person, Role};
 
-    /// The design data, without patrons: most tests follow the club's money flow by
-    /// flow, and the patron's gift would come into each.
     fn data() -> DesignData {
-        let mut data = shipped_data();
-        let wealth = &mut data.economy.wealth;
-        for level in [&mut wealth.poor, &mut wealth.modest, &mut wealth.rich] {
-            level.patron = 0;
-        }
-        data
-    }
-
-    fn shipped_data() -> DesignData {
         DesignData::load().unwrap()
     }
 
@@ -2276,25 +2254,20 @@ mod tests {
 
     #[test]
     fn upkeep_and_training_are_paid() {
-        let data = shipped_data();
+        let data = data();
         let economy = &data.economy;
         let mut state = GameState::new(7, &data);
         let summary = next_week(&mut state, &plan(Activity::Train, false), &data);
         let cost = i64::from(economy.training_cost);
         let upkeep = i64::from(economy.upkeep);
         let modest = &economy.wealth.modest;
-        let patron = i64::from(modest.patron);
         assert_eq!(
             flows(&summary),
-            [
-                (Flow::Patron, patron),
-                (Flow::Training, -cost),
-                (Flow::Upkeep, -upkeep)
-            ]
+            [(Flow::Training, -cost), (Flow::Upkeep, -upkeep)]
         );
         assert_eq!(
             state.money,
-            i64::from(modest.starting_money) + patron - cost - upkeep
+            i64::from(modest.starting_money) - cost - upkeep
         );
     }
 
@@ -3042,17 +3015,15 @@ mod tests {
     }
 
     #[test]
-    fn wealth_follows_money_at_the_off_season_and_sets_the_patron() {
-        let data = shipped_data();
+    fn wealth_follows_money_at_the_off_season_with_no_patron() {
+        let data = data();
         let rules = &data.economy.wealth;
         let mut state = GameState::with_wealth(7, Wealth::Poor, &data);
         assert_eq!(state.money, i64::from(rules.poor.starting_money));
         state.fighters[0].status = Status::Retired;
         let summary = next_week(&mut state, &Decisions::default(), &data);
-        assert_eq!(
-            flows(&summary),
-            [(Flow::Patron, i64::from(rules.poor.patron))]
-        );
+        // Without fighters, no money comes in.
+        assert_eq!(flows(&summary), []);
         assert_eq!(summary.wealth, None);
         up_to_the_off_season(&mut state, &data);
         // Rich enough to rise, while the rich rival club is ruined.
@@ -3063,10 +3034,7 @@ mod tests {
         assert_eq!(state.wealth, Wealth::Modest);
         assert_eq!(state.rivals[0].wealth, Wealth::Modest);
         let summary = next_week(&mut state, &Decisions::default(), &data);
-        assert_eq!(
-            flows(&summary),
-            [(Flow::Patron, i64::from(rules.modest.patron))]
-        );
+        assert_eq!(flows(&summary), []);
         assert_eq!(summary.wealth, None);
     }
 
@@ -3325,8 +3293,8 @@ mod tests {
     /// markets change without the player.
     #[test]
     fn three_seasons_live_without_the_player() {
-        let data = shipped_data();
-        let mut state = GameState::new(4, &data);
+        let data = data();
+        let mut state = GameState::new(1, &data);
         state.fighters[0].status = Status::Retired;
         let start = state.clone();
         let season = u64::from(data.calendar.season_weeks());

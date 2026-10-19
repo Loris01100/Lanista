@@ -199,11 +199,11 @@ Chaque combat a une graine (seed). Pour que la même graine redonne exactement l
 
 ## Économie, marché et personnel
 
-L'argent vient des combats et d'un mécène, et sert à entretenir, soigner, entraîner et inscrire les combattants. Il n'y a pas de sponsor, et l'équipement est gratuit.
+L'argent ne vient que des combattants : leurs combats et leur vente. Il sert à entretenir, soigner, entraîner et inscrire les combattants. Il n'y a pas de sponsor, et l'équipement est gratuit.
 
 ### Niveaux de richesse
 
-Chaque club, celui du joueur comme les clubs rivaux, est pauvre, modeste ou riche. Le niveau fixe l'argent de départ et le don du mécène chaque semaine (plus il est riche, plus le mécène donne). Au début d'une partie, le joueur choisit un club pauvre, modeste ou riche. À chaque intersaison, le niveau suit l'argent du club, donc ses résultats et ses choix : un club monte d'un niveau s'il a assez d'argent, et redescend d'un niveau s'il en a moins de la moitié. Un club ne change que d'un niveau par saison. Le joueur ne voit pas l'argent des clubs rivaux, seulement leur niveau.
+Chaque club, celui du joueur comme les clubs rivaux, est pauvre, modeste ou riche. Le niveau fixe l'argent de départ ; il n'y a pas de mécène, et aucun argent n'arrive chaque semaine sans combat. Au début d'une partie, le joueur choisit un club pauvre, modeste ou riche. À chaque intersaison, le niveau suit l'argent du club, donc ses résultats et ses choix : un club monte d'un niveau s'il a assez d'argent, et redescend d'un niveau s'il en a moins de la moitié. Un club ne change que d'un niveau par saison. Le joueur ne voit pas l'argent des clubs rivaux, seulement leur niveau.
 
 - Un club riche achète à volonté : chaque semaine, il cherche un combattant nettement meilleur que son plus faible, chez un club pas plus riche que lui, et libère son plus faible quand son effectif est plein. À l'intersaison, il libère à tout âge les combattants qui ne performent plus.
 - Un club pauvre mise sur le recrutement : il engage un recruteur avant tout autre personnel, signe les rookies et les free agents du meilleur potentiel que voit son recruteur, et n'achète à personne. Il espère trouver un diamant et le revendre cher à un club plus riche.
@@ -219,7 +219,6 @@ Un club ne vend qu'à un club au moins aussi riche que lui, et n'achète qu'en g
 | Entrée | Recettes du combat | Renommée des combattants, format (une mêlée à 20 attire plus) |
 | Entrée | Bonus champion | Versé à chaque défense de titre réussie |
 | Entrée | Vente d'un combattant | Prix négocié sur le marché |
-| Entrée | Mécène | Hebdomadaire, selon le niveau de richesse du club |
 | Sortie | Entretien | Coût hebdomadaire par combattant |
 | Sortie | Soins | Gravité de la blessure ou maladie, niveau du médecin |
 | Sortie | Entraînement | Par séance, niveau de l'entraîneur |

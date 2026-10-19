@@ -1,12 +1,11 @@
 // Prices: placeholder values, to tune while balancing.
 (
-    // A club's wealth: its money at the start of a game, its patron's gift each week,
-    // and from how much money at the start of an off-season it rises to that level
+    // A club's wealth: its money at the start of a game, and from how much money at the start of an off-season it rises to that level
     // (one level a season; it falls back below half of its level's).
     wealth: (
-        poor: (starting_money: 300, patron: 20, from: 0),
-        modest: (starting_money: 800, patron: 50, from: 3000),
-        rich: (starting_money: 10000, patron: 120, from: 10000),
+        poor: (starting_money: 300, from: 0),
+        modest: (starting_money: 800, from: 3000),
+        rich: (starting_money: 10000, from: 10000),
     ),
     // Most fighters in activity a club may have; the dead and retired leave a place.
     max_fighters: 3,

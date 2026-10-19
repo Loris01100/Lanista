@@ -411,10 +411,9 @@ pub fn wealth_name(wealth: Wealth) -> &'static str {
     }
 }
 
-/// "Club modeste, mécène 50 par semaine": the club's wealth and what its patron gives.
-pub fn wealth_text(wealth: Wealth, data: &DesignData) -> String {
-    let patron = data.economy.wealth.get(wealth).patron;
-    format!("Club {}, mécène {patron} par semaine", wealth_name(wealth))
+/// "Club modeste": the club's wealth.
+pub fn wealth_text(wealth: Wealth) -> String {
+    format!("Club {}", wealth_name(wealth))
 }
 
 /// The name of rival club `club`.
@@ -612,7 +611,6 @@ pub fn money_line(before: i64, after: i64, ledger: &[Transaction]) -> String {
                 Flow::Purchase => "achat",
                 Flow::Sale => "vente",
                 Flow::Salary => "salaires",
-                Flow::Patron => "mécène",
             };
             format!("{name} {:+}", t.amount)
         })

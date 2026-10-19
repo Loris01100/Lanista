@@ -202,11 +202,7 @@ impl ClubScreen {
             .resize_with(self.state.fighters.len(), Vec::new);
         let mut overview = vec![money_line(money, self.state.money, &summary.ledger)];
         if let Some(wealth) = summary.wealth {
-            overview.push(format!(
-                "Le club devient {} : {}",
-                wealth_name(wealth),
-                wealth_text(wealth, data)
-            ));
+            overview.push(format!("Le club devient {}", wealth_name(wealth)));
         }
         overview.extend(summary.staff.iter().map(|&m| staff_news_text(m)));
         overview.extend(
@@ -336,7 +332,7 @@ impl ClubScreen {
     /// The general menu; returns whether to play the week.
     fn menu(&mut self, ui: &mut egui::Ui) -> bool {
         ui.heading("Menu général");
-        ui.label(wealth_text(self.state.wealth, &self.data));
+        ui.label(wealth_text(self.state.wealth));
         let alerts = self.alerts();
         if !alerts.is_empty() {
             ui.add_space(6.0);
@@ -1320,15 +1316,10 @@ mod tests {
         let money = screen.state.money;
         screen.next_week();
         let (_, overview) = screen.last_week.as_ref().unwrap();
-        let patron = i64::from(data.economy.wealth.modest.patron);
-        let gain = i64::from(offer.price) + patron;
+        let gain = i64::from(offer.price);
         assert_eq!(
             overview[0],
-            format!(
-                "Argent {} (+{gain}) : vente +{}, mécène +{patron}",
-                money + gain,
-                offer.price
-            )
+            format!("Argent {} (+{gain}) : vente +{gain}", money + gain)
         );
         assert_eq!(
             overview[1],
