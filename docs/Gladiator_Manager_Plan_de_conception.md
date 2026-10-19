@@ -222,13 +222,13 @@ Un club ne vend qu'à un club au moins aussi riche que lui, et n'achète qu'en g
 | Sortie | Entretien | Coût hebdomadaire par combattant |
 | Sortie | Soins | Gravité de la blessure ou maladie, niveau du médecin |
 | Sortie | Entraînement | Par séance, niveau de l'entraîneur |
-| Sortie | Inscription | Un frais par combattant inscrit |
+| Sortie | Inscription | Un frais par combattant inscrit, plus le voyage sur un autre continent |
 | Sortie | Salaires du personnel | Hebdomadaire, une fois par tranche de 3 combattants en activité |
 | Sortie | Achat d'un combattant | Prix du marché |
 
 ### Filet de sécurité
 
-Le joueur ne peut jamais être bloqué. Le marché contient toujours des free agents disponibles, et il existe au moins un colisée de bas niveau à entrée gratuite. Même sans argent, le joueur peut donc toujours recruter un combattant et le faire combattre pour remonter la pente.
+Le joueur ne peut jamais être bloqué. Le marché contient toujours des free agents disponibles, et chaque continent a au moins un colisée de bas niveau à entrée gratuite. Même sans argent, le joueur peut donc toujours recruter un combattant et le faire combattre pour remonter la pente.
 
 ### Marché et recrutement
 
@@ -251,6 +251,8 @@ Le personnel s'engage au marché parmi des candidats, les mêmes pour le joueur 
 ## Colisées, classements et compétitions
 
 Chaque colisée a son type d'arène, son prestige, son classement et son champion. Un même combattant peut figurer dans plusieurs classements et détenir plusieurs titres, au prix de défenses plus fréquentes et donc de plus de fatigue.
+
+Les colisées sont répartis sur cinq continents. Chacun a un colisée majeur, au prestige le plus haut : Rome (Europe), Karakorum (Asie), Tenochtitlan (Amériques), Musumba (Afrique) et Ngāpuhi (Océanie). Autour de lui, un ou deux colisées mineurs, dont un à entrée gratuite : Capoue et Pompéi en Europe, Samarcande et Chang'an en Asie, Cahokia et Cuzco dans les Amériques, Mbanza Kongo en Afrique, Nan Madol en Océanie. Le joueur choisit son continent en commençant une partie ; chaque club rival a le sien, celui de sa culture. Un club combat surtout chez lui : s'inscrire sur un autre continent coûte en plus le voyage. Un club rival ne part à l'étranger que si aucun colisée de chez lui ne lui convient.
 
 ### Classement
 
@@ -282,12 +284,12 @@ Les clubs rivaux sont gérés par une IA à règles, et leurs combats sont réso
 
 ### IA des managers rivaux
 
-Les clubs rivaux sont tirés au début de la partie, une quarantaine, de toutes les cultures du monde : Rome, Grèce, Celtes, Germains, steppe, Asie de l'Est, Inde, Asie de l'Ouest, monde arabe, tribus d'Afrique, d'Amérique et d'Océanie. Le nom d'un club suit sa culture (un ludus à Rome, une palestre en Grèce, un ordu dans la steppe, un whare en Océanie). Beaucoup sont pauvres, peu sont riches.
+Les clubs rivaux sont tirés au début de la partie, une quarantaine, de toutes les cultures du monde : Rome, Grèce, Celtes, Germains, steppe, Asie de l'Est, Inde, Asie de l'Ouest, monde arabe, tribus d'Afrique, d'Amérique et d'Océanie. Chaque continent en a sa part, et un club a une culture de son continent. Le nom d'un club suit sa culture (un ludus à Rome, une palestre en Grèce, un ordu dans la steppe, un whare en Océanie). Beaucoup sont pauvres, peu sont riches.
 
 Chaque club rival a un profil (prudent, agressif, marchand) qui règle ses seuils. Chaque semaine, pour chaque combattant, il applique des règles simples :
 
 - Forme sous le seuil ou blessure : repos, et soins si le budget le permet et si la blessure le justifie.
-- Forme correcte : inscription au colisée où ses chances sont les meilleures, sinon entraînement.
+- Forme correcte : inscription au colisée de son continent où ses chances sont les meilleures, à l'étranger seulement si aucun ne convient chez lui, sinon entraînement. Un club qui ne peut plus payer l'entraînement inscrit ses combattants au colisée gratuit de chez lui : les recettes sont son seul revenu.
 - Défis : en proposer à des adversaires d'Elo proche, accepter ceux du joueur si la chance de victoire estimée dépasse son seuil.
 - Marché : acheter si l'effectif est trop petit et le budget suffisant, libérer ou vendre les combattants âgés ou en déclin, selon son niveau de richesse (voir « Niveaux de richesse »).
 - Personnel : engager parmi les candidats du marché le meilleur entraîneur puis le meilleur médecin (le moins cher à niveau égal) dont il peut payer les salaires assez longtemps (plus ou moins selon son profil), et les garder tant qu'il peut encore les payer moitié moins longtemps, sauf si un candidat d'un meilleur niveau se présente. Leurs effets valent pour ses combattants comme pour ceux du joueur. Un club pauvre engage d'abord un recruteur, pour voir le potentiel des rookies et des free agents ; les autres n'en engagent pas, jugeant un combattant sur ce qu'il montre.
@@ -354,7 +356,7 @@ Le plan Godot (C#, Godot RL Agents) est abandonné pour un moteur maison en Rust
 
 ### Points encore ouverts
 
-- [ ] Taille du monde : nombre de colisées et de clubs rivaux (2 colisées et 40 clubs générés pour l'instant).
+- [ ] Taille du monde : nombre de colisées et de clubs rivaux (13 colisées sur cinq continents et 40 clubs générés pour l'instant).
 - [ ] Liste des classes et de leurs sorts.
 - [ ] Calendrier des grands événements : confirmer l'Inter-Coliseum aux saisons impaires, ou revenir à la règle du report.
 

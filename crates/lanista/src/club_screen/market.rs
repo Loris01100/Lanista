@@ -9,6 +9,7 @@ use lanista_core::staff::Scouting;
 use lanista_core::state::GameState;
 use reesch::egui;
 
+use super::colosseums::NOT_RANKED;
 use super::{ClubScreen, View};
 use crate::texts::{
     STAT_NAMES, club_name, colosseum_name, condition_text, fighter_name, free_agent_name,
@@ -30,8 +31,15 @@ impl ClubScreen {
     /// club's fighters to sell or release. Stats out of the club are hidden or seen as
     /// ranges until observed; a name opens what the club sees of the fighter.
     pub(super) fn market(&mut self, ui: &mut egui::Ui) {
+        // In the colosseums of the club's continent.
+        let home: Vec<usize> = (0..self.data.world.colosseums.len())
+            .filter(|&c| self.data.world.colosseums[c].continent == self.state.continent)
+            .collect();
         let free_standings: Vec<Vec<String>> = (0..self.state.free_agents.len())
-            .map(|a| self.standings(Contender::FreeAgent(a)))
+            .map(|a| {
+                let all = self.standings(Contender::FreeAgent(a));
+                home.iter().map(|&c| all[c].clone()).collect()
+            })
             .collect();
         let data = &self.data;
         let state = &self.state;
@@ -164,9 +172,21 @@ impl ClubScreen {
         };
         ui.add_space(8.0);
         ui.strong("Colisées");
+        let mut ranked = false;
         for (c, standing) in (0..).zip(self.standings(contender)) {
-            let place = colosseum_name(ColosseumId(c), data);
-            ui.label(format!("{place} : {standing}"));
+            let id = ColosseumId(c);
+            let home = data
+                .world
+                .colosseum(id)
+                .is_some_and(|r| r.continent == self.state.continent);
+            // Abroad, only where it is ranked.
+            if home || standing != NOT_RANKED {
+                ranked = true;
+                ui.label(format!("{} : {standing}", colosseum_name(id, data)));
+            }
+        }
+        if !ranked {
+            ui.label(NOT_RANKED);
         }
         ui.add_space(8.0);
         let moves = &mut self.decisions.moves;
@@ -274,8 +294,9 @@ fn outside_cells(
 
 const OUTSIDE: [&str; 4] = ["Combattant", "Âge", "Renommée", "Bilan"];
 
-/// The free agents on the market, with their standing in each colosseum
-/// (`standings`, by index in `GameState::free_agents`); returns the one to open.
+/// The free agents on the market, with their standing in each colosseum of the club's
+/// continent (`standings`, by index in `GameState::free_agents`); returns the one to
+/// open.
 fn free_agent_grid(
     ui: &mut egui::Ui,
     state: &GameState,
@@ -288,7 +309,13 @@ fn free_agent_grid(
     ui.strong("Free agents (gratuits ; ils combattent dans les colisées sans droit d'entrée)");
     egui::Grid::new("free agents").striped(true).show(ui, |ui| {
         let mut last = vec!["Potentiel", "Personnalité"];
-        last.extend(data.world.colosseums.iter().map(|c| c.name.as_str()));
+        last.extend(
+            data.world
+                .colosseums
+                .iter()
+                .filter(|c| c.continent == state.continent)
+                .map(|c| c.name.as_str()),
+        );
         last.extend(["", ""]);
         market_header(ui, &OUTSIDE, &last);
         let scouting = state.scouting();

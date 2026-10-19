@@ -4,8 +4,8 @@
     // (one level a season; it falls back below half of its level's).
     wealth: (
         poor: (starting_money: 300, from: 0),
-        modest: (starting_money: 800, from: 3000),
-        rich: (starting_money: 10000, from: 10000),
+        modest: (starting_money: 800, from: 5000),
+        rich: (starting_money: 10000, from: 12000),
     ),
     // Most fighters in activity a club may have; the dead and retired leave a place.
     max_fighters: 3,
@@ -68,7 +68,7 @@
         min_free_agents: 20,
         max_free_agents: 60,
         // Arriving at the start of each off-season.
-        rookies: 8,
+        rookies: 16,
         rookie_age: 20,
         // Value: so much per point of trained stats and of fame, per fight won and
         // drawn, less per fight lost; never below a tenth of the stats' part. The rival

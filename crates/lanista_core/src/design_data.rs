@@ -4,7 +4,7 @@
 use serde::Deserialize;
 
 use crate::calendar::CalendarRules;
-use crate::colosseum::WorldRules;
+use crate::colosseum::{Continent, WorldRules};
 use crate::combat::{ArenaKind, ArenaLayout, CombatRules, DamageKind, Pillar, RADIUS, Range};
 use crate::economy::EconomyRules;
 use crate::fighter::ClassId;
@@ -261,61 +261,7 @@ impl DesignData {
                 problem: "a club of no fighter",
             });
         }
-        let world = |field, problem| LoadError::Invalid {
-            file: WORLD_FILE,
-            field,
-            problem,
-        };
-        if !self
-            .world
-            .colosseums
-            .iter()
-            .any(|c| c.purses.entry_fee == 0)
-        {
-            return Err(world("colosseums", "none free to enter"));
-        }
-        if self.world.colosseums.iter().any(|c| c.residents == 0) {
-            return Err(world("residents", "a colosseum without opponents"));
-        }
-        let clubs = &self.world.clubs;
-        if clubs.count == 0 {
-            return Err(world("clubs.count", "no rival club to own the residents"));
-        }
-        let weighed = |weights: &mut dyn Iterator<Item = u32>| weights.sum::<u32>() > 0;
-        if !weighed(&mut clubs.profiles.iter().map(|(w, _)| *w)) {
-            return Err(world("clubs.profiles", "no weight"));
-        }
-        if !weighed(&mut clubs.wealth.iter().map(|(w, _)| *w)) {
-            return Err(world("clubs.wealth", "no weight"));
-        }
-        if !weighed(&mut clubs.cultures.iter().map(|(w, _)| *w)) {
-            return Err(world("clubs.cultures", "no weight"));
-        }
-        if clubs
-            .cultures
-            .iter()
-            .any(|(_, key)| self.culture(key).is_none())
-        {
-            return Err(world(
-                "clubs.cultures",
-                "a culture missing from data/names.ron",
-            ));
-        }
-        let unnamed = |c: &Culture| {
-            c.names.is_empty()
-                || c.clubs.is_empty()
-                || c.clubs.iter().any(|p| !p.contains(names::NAME))
-        };
-        if self.cultures.iter().any(unnamed) {
-            return Err(LoadError::Invalid {
-                file: NAMES_FILE,
-                field: "cultures",
-                problem: "no name, no pattern or a pattern without {name}",
-            });
-        }
-        if self.world.roster.max < self.world.roster.wanted {
-            return Err(world("roster", "fewer places than fighters wanted"));
-        }
+        self.validate_world()?;
         let market = &self.economy.market;
         if market.max_free_agents < market.min_free_agents {
             return Err(LoadError::Invalid {
@@ -333,6 +279,88 @@ impl DesignData {
         }
         self.validate_combat()?;
         self.validate_fighter()
+    }
+
+    /// The world's colosseums and clubs, and the cultures that name them.
+    fn validate_world(&self) -> Result<(), LoadError> {
+        let world = |field, problem| LoadError::Invalid {
+            file: WORLD_FILE,
+            field,
+            problem,
+        };
+        let clubs = &self.world.clubs;
+        let homes: Vec<Continent> = clubs
+            .continents
+            .iter()
+            .filter(|(w, _)| *w > 0)
+            .map(|&(_, c)| c)
+            .collect();
+        let free_at = |home: Continent| {
+            self.world
+                .colosseums
+                .iter()
+                .any(|c| c.continent == home && c.purses.entry_fee == 0)
+        };
+        if !homes.iter().all(|&home| free_at(home)) {
+            return Err(world(
+                "colosseums",
+                "a continent of clubs without a colosseum free to enter",
+            ));
+        }
+        if self.world.colosseums.iter().any(|c| c.residents == 0) {
+            return Err(world("residents", "a colosseum without opponents"));
+        }
+        if clubs.count == 0 {
+            return Err(world("clubs.count", "no rival club to own the residents"));
+        }
+        let weighed = |weights: &mut dyn Iterator<Item = u32>| weights.sum::<u32>() > 0;
+        if !weighed(&mut clubs.profiles.iter().map(|(w, _)| *w)) {
+            return Err(world("clubs.profiles", "no weight"));
+        }
+        if !weighed(&mut clubs.wealth.iter().map(|(w, _)| *w)) {
+            return Err(world("clubs.wealth", "no weight"));
+        }
+        if homes.is_empty() {
+            return Err(world("clubs.continents", "no weight"));
+        }
+        if clubs
+            .cultures
+            .iter()
+            .any(|(_, key)| self.culture(key).is_none())
+        {
+            return Err(world(
+                "clubs.cultures",
+                "a culture missing from data/names.ron",
+            ));
+        }
+        let cultured = |home: Continent| {
+            clubs
+                .cultures
+                .iter()
+                .any(|(w, key)| *w > 0 && self.culture(key).is_some_and(|c| c.continent == home))
+        };
+        if !homes.iter().all(|&home| cultured(home)) {
+            return Err(world(
+                "clubs.cultures",
+                "a continent of clubs without a culture",
+            ));
+        }
+        let unnamed = |c: &Culture| {
+            c.names.is_empty()
+                || c.clubs.is_empty()
+                || c.clubs.iter().any(|p| !p.contains(names::NAME))
+        };
+        if self.cultures.iter().any(unnamed) {
+            return Err(LoadError::Invalid {
+                file: NAMES_FILE,
+                field: "cultures",
+                problem: "no name, no pattern or a pattern without {name}",
+            });
+        }
+        if self.world.roster.max < self.world.roster.wanted {
+            return Err(world("roster", "fewer places than fighters wanted"));
+        }
+        Ok(())
     }
 
     fn validate_fighter(&self) -> Result<(), LoadError> {
@@ -573,9 +601,17 @@ mod tests {
             assert_eq!(class.spells.len(), 3, "{}", class.name);
         }
         assert_eq!(data.calendar.season_weeks(), 30);
-        // Two colosseums, the first free to enter: the safety net.
-        assert_eq!(data.world.colosseums.len(), 2);
-        assert_eq!(data.world.colosseums[0].purses.entry_fee, 0);
+        // Five continents, each with its major colosseum and one or two minor ones, one
+        // of them free to enter: the safety net; Capoue first, where one starts.
+        let world = &data.world;
+        for continent in Continent::ALL {
+            let here: Vec<_> = world.colosseums_of(continent).collect();
+            assert!((2..=3).contains(&here.len()), "{continent:?}");
+            let first = world.colosseum(world.first_colosseum(continent)).unwrap();
+            assert_eq!((first.continent, first.purses.entry_fee), (continent, 0));
+        }
+        assert_eq!(world.colosseums[0].name, "Capoue");
+        assert_eq!(world.first_colosseum(Continent::Europe).0, 0);
     }
 
     #[test]
@@ -671,6 +707,10 @@ mod tests {
         assert_eq!(combat_field(&tiny), "arenas");
         let against_the_wall = COMBAT.replacen("(x: 10.0, y: 4.0,", "(x: 10.0, y: 1.5,", 1);
         assert_eq!(combat_field(&against_the_wall), "arenas");
+    }
+
+    #[test]
+    fn rejects_a_world_the_game_could_not_play() {
         let not_free = WORLD.replacen("entry_fee: 0", "entry_fee: 5", 1);
         assert!(matches!(
             DesignData::from_ron(
@@ -693,6 +733,33 @@ mod tests {
         assert_eq!(world_field(WORLD, &nameless), "cultures");
         let empty = WORLD.replacen("count: 40", "count: 0", 1);
         assert_eq!(world_field(&empty, NAMES), "clubs.count");
+        // Oceania's clubs with no culture of their own, or no free colosseum.
+        let uprooted = NAMES.replacen("continent: Oceania", "continent: Europe", 1);
+        assert_eq!(world_field(WORLD, &uprooted), "clubs.cultures");
+        let dear = WORLD.replacen(
+            r#"name: "Nan Madol",
+            continent: Oceania,
+            arena: Sand,
+            prestige: 1,
+            residents: 8,
+            purses: (entry_fee: 0"#,
+            r#"name: "Nan Madol",
+            continent: Oceania,
+            arena: Sand,
+            prestige: 1,
+            residents: 8,
+            purses: (entry_fee: 5"#,
+            1,
+        );
+        assert_ne!(dear, WORLD);
+        assert_eq!(world_field(&dear, NAMES), "colosseums");
+        let nowhere = WORLD.replacen("(1, Oceania)", "(0, Oceania)", 1);
+        assert!(
+            DesignData::from_ron(
+                CLASSES, COMBAT, FIGHTER, CALENDAR, ECONOMY, &nowhere, &uprooted, STAT_MODEL,
+            )
+            .is_ok()
+        );
     }
 
     #[test]

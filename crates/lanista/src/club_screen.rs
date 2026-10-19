@@ -13,7 +13,7 @@ use std::path::PathBuf;
 use std::rc::Rc;
 
 use lanista_core::calendar::SeasonPhase;
-use lanista_core::colosseum::{Challenge, ColosseumId, Contender};
+use lanista_core::colosseum::{Challenge, ColosseumId, Contender, Continent};
 use lanista_core::design_data::DesignData;
 use lanista_core::economy::{Flow, Wealth};
 use lanista_core::fighter::FighterId;
@@ -38,9 +38,10 @@ use crate::fight_view::Cast;
 use crate::saves;
 use crate::texts::{
     STAT_NAMES, activity_name, challenger_text, change, class_name, club_name, colosseum_name,
-    condition_text, contender_name, fight_text, fighter_name, illness_text, injury_text,
-    market_news_text, money_line, move_text, personality_text, rival_fighter_name, staff_move_text,
-    staff_news_text, title_news_text, wealth_name, wealth_text, week_lines,
+    condition_text, contender_name, continent_name, fight_text, fighter_name, illness_text,
+    injury_text, market_news_text, money_line, move_text, personality_text, priced,
+    rival_fighter_name, staff_move_text, staff_news_text, title_news_text, wealth_name,
+    wealth_text, week_lines,
 };
 
 /// Seed of the standard duel offered from the club.
@@ -108,6 +109,10 @@ pub struct ClubScreen {
     message: Option<String>,
     /// The offer being written on the market: the rival fighter and the price.
     offer_draft: Option<(RivalId, u32)>,
+    /// The continent the colosseums view shows, the club's at first.
+    shown_continent: Continent,
+    /// Where a new game starts.
+    new_continent: Continent,
     bindings: Bindings<Action>,
 }
 
@@ -145,6 +150,8 @@ impl ClubScreen {
         Self {
             decisions: state.suggested_decisions(&data),
             histories: vec![Vec::new(); state.fighters.len()],
+            shown_continent: state.continent,
+            new_continent: state.continent,
             data,
             state,
             view: View::Menu,
@@ -332,7 +339,11 @@ impl ClubScreen {
     /// The general menu; returns whether to play the week.
     fn menu(&mut self, ui: &mut egui::Ui) -> bool {
         ui.heading("Menu général");
-        ui.label(wealth_text(self.state.wealth));
+        ui.label(format!(
+            "{}, en {}",
+            wealth_text(self.state.wealth),
+            continent_name(self.state.continent)
+        ));
         let alerts = self.alerts();
         if !alerts.is_empty() {
             ui.add_space(6.0);
@@ -376,13 +387,26 @@ impl ClubScreen {
                     self.load();
                 }
                 ui.label("Nouvelle partie :");
+                egui::ComboBox::from_id_salt("new continent")
+                    .selected_text(continent_name(self.new_continent))
+                    .show_ui(ui, |ui| {
+                        for continent in Continent::ALL {
+                            ui.selectable_value(
+                                &mut self.new_continent,
+                                continent,
+                                continent_name(continent),
+                            );
+                        }
+                    });
                 for wealth in Wealth::ALL {
                     if ui.button(format!("club {}", wealth_name(wealth))).clicked() {
                         let seed = new_seed();
-                        self.replace(GameState::with_wealth(seed, wealth, &self.data));
+                        let start = (wealth, self.new_continent);
+                        self.replace(GameState::start(seed, start, &self.data));
                         self.message = Some(format!(
-                            "Nouvelle partie, club {}, graine {seed}",
-                            wealth_name(wealth)
+                            "Nouvelle partie, club {} en {}, graine {seed}",
+                            wealth_name(wealth),
+                            continent_name(start.1)
                         ));
                     }
                 }
@@ -458,23 +482,18 @@ impl ClubScreen {
     }
 
     /// The title fights the club's fighter `i` may have this week, the challenges it
-    /// received and, in the season's opening week, each colosseum's melee, with their
-    /// names.
+    /// received and, in the season's opening week, the melee of each colosseum of the
+    /// club's continent, with their names.
     fn special_fights(&self, i: usize) -> Vec<(Activity, String)> {
         let data = &self.data;
-        let melees = (0..data.world.colosseums.len())
+        let melees = data
+            .world
+            .colosseums_of(self.state.continent)
             .filter(|_| self.state.opens_season(data))
-            .filter_map(|c| u32::try_from(c).ok().map(ColosseumId))
             .map(|id| {
                 let activity = Activity::Melee(id);
-                let fee = data.world.colosseum(id).map_or(0, |c| c.purses.entry_fee);
-                let name = activity_name(activity, data);
-                let name = if fee > 0 {
-                    format!("{name} ({fee})")
-                } else {
-                    name
-                };
-                (activity, name)
+                let fee = self.state.entry_fee(id, data).unwrap_or(0);
+                (activity, priced(activity, fee, data))
             });
         let titles = (0..data.world.colosseums.len())
             .filter_map(|c| u32::try_from(c).ok().map(ColosseumId))
@@ -501,7 +520,6 @@ impl ClubScreen {
     fn roster(&mut self, ui: &mut egui::Ui) {
         ui.heading("Combattants");
         let data = &self.data;
-        let money = self.state.money;
         let care = self.state.care_rules(data);
         let special: Vec<_> = (0..self.state.fighters.len())
             .map(|i| self.special_fights(i))
@@ -537,7 +555,8 @@ impl ClubScreen {
                     ui.label(condition_text(f));
                     if f.status == Status::Active {
                         ui.horizontal(|ui| {
-                            plan_editor(ui, plan, f, &special[i], (money, &care), data);
+                            let club = (&self.state, &care);
+                            plan_editor(ui, plan, f, &special[i], club, data);
                         });
                     } else {
                         ui.label("");
@@ -566,7 +585,7 @@ impl ClubScreen {
                 && let Some(plan) = self.decisions.plans.get_mut(index)
             {
                 let care = self.state.care_rules(data);
-                plan_editor(ui, plan, f, &special, (self.state.money, &care), data);
+                plan_editor(ui, plan, f, &special, (&self.state, &care), data);
                 challenge_picker(ui, plan, index, &self.state, data);
             } else {
                 ui.label("Carrière terminée");
@@ -798,36 +817,53 @@ fn new_seed() -> u64 {
         .map_or(0, |d| d.as_secs())
 }
 
-/// A fighter's week, in one line: rest, training, a fight, a title fight or a received
-/// challenge (in `special`, with their names), and care at the price of the club's
-/// `care`, all within its `money`.
+/// A fighter's week, in one line: rest, training, a fight at home or, in a list, abroad,
+/// a title fight or a received challenge (in `special`, with their names), and care at
+/// the price of the club's `care`, all within the money of the club's `state`.
 fn plan_editor(
     ui: &mut egui::Ui,
     plan: &mut WeekPlan,
     fighter: &CareerFighter,
     special: &[(Activity, String)],
-    (money, care): (i64, &CareRules),
+    (state, care): (&GameState, &CareRules),
     data: &DesignData,
 ) {
+    let money = state.money;
     for activity in [Activity::Rest, Activity::Train] {
         ui.selectable_value(&mut plan.activity, activity, activity_name(activity, data));
     }
-    for (i, rules) in data.world.colosseums.iter().enumerate() {
-        let activity = Activity::Fight(ColosseumId(u32::try_from(i).unwrap_or(u32::MAX)));
-        let fee = rules.purses.entry_fee;
-        let mut name = activity_name(activity, data);
-        if fee > 0 {
-            name = format!("{name} ({fee})");
-        }
+    let mut abroad = Vec::new();
+    for (id, rules) in (0..).map(ColosseumId).zip(&data.world.colosseums) {
+        let activity = Activity::Fight(id);
+        let fee = state.entry_fee(id, data).unwrap_or(0);
+        let name = priced(activity, fee, data);
         // The week would turn into rest: `next_week` drops what the club cannot pay.
         let affordable = i64::from(fee) <= money;
         if !affordable && plan.activity == activity {
             plan.activity = Activity::Rest;
         }
-        ui.add_enabled_ui(affordable, |ui| {
-            ui.selectable_value(&mut plan.activity, activity, name);
-        });
+        if rules.continent == state.continent {
+            ui.add_enabled_ui(affordable, |ui| {
+                ui.selectable_value(&mut plan.activity, activity, name);
+            });
+        } else {
+            abroad.push((activity, name, affordable));
+        }
     }
+    let chosen = abroad.iter().find(|(a, ..)| *a == plan.activity);
+    let text = chosen.map_or_else(
+        || format!("À l'étranger (voyage {})", data.world.travel_fee),
+        |(_, name, _)| name.clone(),
+    );
+    egui::ComboBox::from_id_salt("abroad")
+        .selected_text(text)
+        .show_ui(ui, |ui| {
+            for (activity, name, affordable) in abroad {
+                ui.add_enabled_ui(affordable, |ui| {
+                    ui.selectable_value(&mut plan.activity, activity, name);
+                });
+            }
+        });
     // A challenge the fighter sent is chosen in its sheet.
     if matches!(plan.activity, Activity::TitleFight(_) | Activity::Melee(_))
         && !special.iter().any(|(a, _)| *a == plan.activity)
@@ -870,8 +906,9 @@ fn plan_editor(
     }
 }
 
-/// The challenges the club's fighter `i` may send, one list per colosseum: the
-/// residents, best ranked first, those who would refuse greyed.
+/// The challenges the club's fighter `i` may send, one list per colosseum of the club's
+/// continent or where it is ranked: the residents, best ranked first, those who would
+/// refuse greyed.
 fn challenge_picker(
     ui: &mut egui::Ui,
     plan: &mut WeekPlan,
@@ -883,7 +920,18 @@ fn challenge_picker(
         ui.label("Défier :");
         for (c, colosseum) in (0..).zip(&state.colosseums) {
             let id = ColosseumId(c);
-            let fee = data.world.colosseum(id).map_or(0, |r| r.purses.entry_fee);
+            let home = data
+                .world
+                .colosseum(id)
+                .is_some_and(|r| r.continent == state.continent);
+            let ranked = colosseum
+                .ranking
+                .iter()
+                .any(|r| r.contender == Contender::Club(i));
+            if !home && !ranked {
+                continue;
+            }
+            let fee = state.entry_fee(id, data).unwrap_or(0);
             let chosen = match plan.activity {
                 Activity::Challenge(at, rival) if at == id => challenger_text(
                     Challenge {
@@ -1492,9 +1540,9 @@ mod tests {
         assert_eq!(
             lines[..3],
             [
-                "Clan de Cassivellaunos (Celtes), agressif et riche : 10 combattants",
-                "Maison de l'Aigle de Tecún (Mésoamérique), prudent et pauvre : 10 combattants",
-                "Halle d'Arioviste (Germains), prudent et modeste : 10 combattants",
+                "Familia Crassus (Rome), agressif et riche : 10 combattants",
+                "Dar Khawla (Monde arabe), prudent et pauvre : 10 combattants",
+                "Clan de Tatanka (Tribus amérindiennes), prudent et modeste : 10 combattants",
             ]
         );
     }
@@ -1542,10 +1590,9 @@ mod tests {
             club: 0,
             fighter: 999,
         };
-        assert_eq!(
-            screen.standings(Contender::Rival(gone)),
-            ["non classé", "non classé"]
-        );
+        let standings = screen.standings(Contender::Rival(gone));
+        assert_eq!(standings.len(), screen.state.colosseums.len());
+        assert!(standings.iter().all(|s| s == "non classé"));
     }
 
     #[test]

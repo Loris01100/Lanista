@@ -1,6 +1,6 @@
-//! Colosseums: each has its arena type, prestige and purses (from `data/world.ron`),
-//! and in the game its Elo ranking and its champion. Its fighters come from the clubs
-//! and the market.
+//! Colosseums: each has its continent, arena type, prestige and purses (from
+//! `data/world.ron`), and in the game its Elo ranking and its champion. Its fighters
+//! come from the clubs and the market.
 
 use std::cmp::{Ordering, Reverse};
 
@@ -37,6 +37,8 @@ pub struct WorldRules {
     pub roster: RosterRules,
     /// How the rival clubs are drawn.
     pub clubs: ClubRules,
+    /// Added to the entry fee of a colosseum on another continent than the club's.
+    pub travel_fee: u32,
     /// `ColosseumId(i)` is the colosseum at index `i`.
     pub colosseums: Vec<ColosseumData>,
 }
@@ -53,6 +55,58 @@ impl WorldRules {
     pub fn arena(&self, id: ColosseumId) -> ArenaKind {
         self.colosseum(id).map_or(ArenaKind::Sand, |c| c.arena)
     }
+
+    /// What a club of `home` pays to register a fighter in colosseum `id`: its entry
+    /// fee, and the journey (`travel_fee`) if it is on another continent. `None` for a
+    /// colosseum missing from the data.
+    #[must_use]
+    pub fn entry_fee(&self, id: ColosseumId, home: Continent) -> Option<u32> {
+        let colosseum = self.colosseum(id)?;
+        let travel = if colosseum.continent == home {
+            0
+        } else {
+            self.travel_fee
+        };
+        Some(colosseum.purses.entry_fee.saturating_add(travel))
+    }
+
+    /// Where a club of `home` starts: the first colosseum of its continent free to
+    /// enter, or else the first one.
+    #[must_use]
+    pub fn first_colosseum(&self, home: Continent) -> ColosseumId {
+        (0..)
+            .zip(&self.colosseums)
+            .find(|(_, c)| c.continent == home && c.purses.entry_fee == 0)
+            .map_or(ColosseumId(0), |(id, _)| ColosseumId(id))
+    }
+
+    /// The colosseums of `continent`.
+    pub fn colosseums_of(&self, continent: Continent) -> impl Iterator<Item = ColosseumId> + '_ {
+        (0..)
+            .zip(&self.colosseums)
+            .filter(move |(_, c)| c.continent == continent)
+            .map(|(id, _)| ColosseumId(id))
+    }
+}
+
+/// The continents of the world, each with its colosseums and its clubs.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
+pub enum Continent {
+    Europe,
+    Asia,
+    Americas,
+    Africa,
+    Oceania,
+}
+
+impl Continent {
+    pub const ALL: [Self; 5] = [
+        Self::Europe,
+        Self::Asia,
+        Self::Americas,
+        Self::Africa,
+        Self::Oceania,
+    ];
 }
 
 /// Challenges between the club's fighters and the rival fighters; how often they are
@@ -71,6 +125,7 @@ pub struct ChallengeRules {
 pub struct ColosseumData {
     /// Shown to the player.
     pub name: String,
+    pub continent: Continent,
     pub arena: ArenaKind,
     /// From 1 to 5: the higher, the stronger the fighters generated for it.
     pub prestige: u32,
@@ -512,6 +567,7 @@ mod tests {
         let rivals = vec![Rival {
             name: "Ludus Magnus".into(),
             culture: "rome".into(),
+            continent: Continent::Europe,
             profile: Profile::Cautious,
             money: 0,
             fighters,

@@ -4,6 +4,8 @@
 use rand::{Rng, RngExt};
 use serde::Deserialize;
 
+use crate::colosseum::Continent;
+
 /// A culture of the world, from `data/names.ron`.
 #[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -12,6 +14,8 @@ pub struct Culture {
     pub key: String,
     /// Shown to the player.
     pub name: String,
+    /// Where its clubs are at home.
+    pub continent: Continent,
     /// Names a club may take; at least one.
     pub names: Vec<String>,
     /// Patterns of a club's name, each with `{name}`; at least one.
@@ -86,6 +90,7 @@ mod tests {
         Culture {
             key: "test".into(),
             name: "Test".into(),
+            continent: Continent::Europe,
             names: names.iter().map(|&n| n.into()).collect(),
             clubs: clubs.iter().map(|&c| c.into()).collect(),
         }

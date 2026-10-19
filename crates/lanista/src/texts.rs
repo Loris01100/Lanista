@@ -1,7 +1,9 @@
 //! What the player reads, in French: fighters, injuries, illnesses, fights,
 //! weeks, money, colosseums, the market and the staff.
 
-use lanista_core::colosseum::{Challenge, ColosseumId, Contender, TitleNews, title_kept};
+use lanista_core::colosseum::{
+    Challenge, ColosseumId, Contender, Continent, TitleNews, title_kept,
+};
 use lanista_core::combat::ArenaKind;
 use lanista_core::design_data::DesignData;
 use lanista_core::economy::{Flow, Transaction, Wealth};
@@ -408,6 +410,27 @@ pub fn wealth_name(wealth: Wealth) -> &'static str {
         Wealth::Poor => "pauvre",
         Wealth::Modest => "modeste",
         Wealth::Rich => "riche",
+    }
+}
+
+/// "Europe", "Asie", "Amériques", "Afrique" or "Océanie".
+pub fn continent_name(continent: Continent) -> &'static str {
+    match continent {
+        Continent::Europe => "Europe",
+        Continent::Asia => "Asie",
+        Continent::Americas => "Amériques",
+        Continent::Africa => "Afrique",
+        Continent::Oceania => "Océanie",
+    }
+}
+
+/// "Combat à Rome (60)": `activity` with its entry `fee`, if any.
+pub fn priced(activity: Activity, fee: u32, data: &DesignData) -> String {
+    let name = activity_name(activity, data);
+    if fee > 0 {
+        format!("{name} ({fee})")
+    } else {
+        name
     }
 }
 

@@ -41,35 +41,48 @@
     // buys no one.
     roster: (wanted: 10, max: 12),
     // The rival clubs, drawn when the world opens: `count` of them (at least one), each
-    // with a profile, a wealth and a culture drawn by these weights, (weight, value).
-    // A club starts with its wealth's money (data/economy.ron) and the colosseums' first
-    // residents, shared out among the clubs in turn; it is named by its culture
-    // (data/names.ron). Wealth changes with money at each off-season: a rich club buys
-    // at will and lets go whoever no longer performs, a poor one hires a recruiter
-    // first and signs the free agents of the best potential it sees.
+    // with a profile and a wealth drawn by these weights, (weight, value); each
+    // continent has its share of them by its weight, and a club's culture is drawn by
+    // weight among those of its continent (data/names.ron), which names it.
+    // A club starts with its wealth's money (data/economy.ron) and the first residents
+    // of its continent's colosseums, shared out among its clubs in turn, then
+    // generated fighters up to `roster.wanted`. Wealth changes with money at each
+    // off-season: a rich club buys at will and lets go whoever no longer performs, a
+    // poor one hires a recruiter first and signs the free agents of the best potential
+    // it sees.
     clubs: (
         count: 40,
         profiles: [(1, Cautious), (1, Aggressive), (1, Merchant)],
         // Many poor, few rich.
         wealth: [(5, Poor), (3, Modest), (1, Rich)],
-        // Rome more often while every colosseum is in Europe.
+        continents: [(1, Europe), (1, Asia), (1, Americas), (1, Africa), (1, Oceania)],
         cultures: [
-            (6, "rome"), (2, "grece"), (2, "celtes"), (2, "germains"), (2, "steppe"),
-            (2, "asie_est"), (2, "inde"), (2, "asie_ouest"), (2, "arabe"), (2, "afrique"),
-            (2, "amerindiens"), (2, "mesoamerique"), (2, "amerique_sud"), (2, "oceanie"),
+            (4, "rome"), (2, "grece"), (2, "celtes"), (2, "germains"),
+            (2, "steppe"), (2, "asie_est"), (2, "inde"), (2, "asie_ouest"), (2, "arabe"),
+            (2, "amerindiens"), (2, "mesoamerique"), (2, "amerique_sud"),
+            (2, "afrique"),
+            (2, "oceanie"),
         ],
     ),
-    // At least one must be free to enter: the safety net of a club without money.
+    // Added to the entry fee of a colosseum on another continent than the club's: the
+    // journey. A club fights at home, abroad only when no colosseum at home suits it.
+    travel_fee: 40,
+    // Each continent has a major colosseum, of the highest prestige, and one or two
+    // minor ones around it, where prestige-2 ones ask a small fee; on each continent
+    // where clubs live, at least one must be free to enter: the safety net of a club
+    // without money. Capoue, in Europe, is where one starts by default.
     colosseums: [
         (
             name: "Capoue",
+            continent: Europe,
             // Its floor is in data/combat.ron (arenas): sand slows, pillars block shots
             // and the way, narrow is small, so melee closes in fast.
             arena: Sand,
             // 1 to 5.
             prestige: 1,
-            // Rival fighters ranked here at the opening, as strong as its prestige.
-            residents: 15,
+            // Rival fighters ranked here at the opening, as strong as its prestige,
+            // shared out among the clubs of its continent.
+            residents: 8,
             purses: (
                 entry_fee: 0,
                 win_prize: 50,
@@ -86,18 +99,99 @@
         ),
         (
             name: "Rome",
+            continent: Europe,
             arena: Pillars,
             prestige: 3,
-            residents: 15,
-            purses: (
-                entry_fee: 20,
-                win_prize: 150,
-                receipts_base: 40,
-                receipts_per_fame: 2,
-                champion_bonus: 100,
-                melee_prize: 450,
-                receipts_per_fighter: 6,
-            ),
+            residents: 10,
+            purses: (entry_fee: 20, win_prize: 150, receipts_base: 40, receipts_per_fame: 1, champion_bonus: 100, melee_prize: 450, receipts_per_fighter: 6),
+        ),
+        (
+            name: "Pompéi",
+            continent: Europe,
+            arena: Narrow,
+            prestige: 2,
+            residents: 8,
+            purses: (entry_fee: 10, win_prize: 100, receipts_base: 30, receipts_per_fame: 1, champion_bonus: 60, melee_prize: 300, receipts_per_fighter: 4),
+        ),
+        (
+            name: "Samarcande",
+            continent: Asia,
+            arena: Sand,
+            prestige: 1,
+            residents: 8,
+            purses: (entry_fee: 0, win_prize: 50, receipts_base: 20, receipts_per_fame: 1, champion_bonus: 30, melee_prize: 150, receipts_per_fighter: 3),
+        ),
+        (
+            name: "Chang'an",
+            continent: Asia,
+            arena: Narrow,
+            prestige: 2,
+            residents: 8,
+            purses: (entry_fee: 10, win_prize: 100, receipts_base: 30, receipts_per_fame: 1, champion_bonus: 60, melee_prize: 300, receipts_per_fighter: 4),
+        ),
+        (
+            name: "Karakorum",
+            continent: Asia,
+            arena: Pillars,
+            prestige: 3,
+            residents: 10,
+            purses: (entry_fee: 20, win_prize: 150, receipts_base: 40, receipts_per_fame: 1, champion_bonus: 100, melee_prize: 450, receipts_per_fighter: 6),
+        ),
+        (
+            name: "Cahokia",
+            continent: Americas,
+            arena: Sand,
+            prestige: 1,
+            residents: 8,
+            purses: (entry_fee: 0, win_prize: 50, receipts_base: 20, receipts_per_fame: 1, champion_bonus: 30, melee_prize: 150, receipts_per_fighter: 3),
+        ),
+        (
+            name: "Cuzco",
+            continent: Americas,
+            arena: Narrow,
+            prestige: 2,
+            residents: 8,
+            purses: (entry_fee: 10, win_prize: 100, receipts_base: 30, receipts_per_fame: 1, champion_bonus: 60, melee_prize: 300, receipts_per_fighter: 4),
+        ),
+        (
+            name: "Tenochtitlan",
+            continent: Americas,
+            arena: Pillars,
+            prestige: 3,
+            residents: 10,
+            purses: (entry_fee: 20, win_prize: 150, receipts_base: 40, receipts_per_fame: 1, champion_bonus: 100, melee_prize: 450, receipts_per_fighter: 6),
+        ),
+        (
+            name: "Mbanza Kongo",
+            continent: Africa,
+            arena: Sand,
+            prestige: 1,
+            residents: 8,
+            purses: (entry_fee: 0, win_prize: 50, receipts_base: 20, receipts_per_fame: 1, champion_bonus: 30, melee_prize: 150, receipts_per_fighter: 3),
+        ),
+        (
+            name: "Musumba",
+            continent: Africa,
+            arena: Pillars,
+            prestige: 3,
+            residents: 10,
+            purses: (entry_fee: 20, win_prize: 150, receipts_base: 40, receipts_per_fame: 1, champion_bonus: 100, melee_prize: 450, receipts_per_fighter: 6),
+        ),
+        (
+            name: "Nan Madol",
+            continent: Oceania,
+            arena: Sand,
+            prestige: 1,
+            residents: 8,
+            purses: (entry_fee: 0, win_prize: 50, receipts_base: 20, receipts_per_fame: 1, champion_bonus: 30, melee_prize: 150, receipts_per_fighter: 3),
+        ),
+        (
+            name: "Ngāpuhi",
+            continent: Oceania,
+            arena: Pillars,
+            prestige: 3,
+            residents: 10,
+            purses: (entry_fee: 20, win_prize: 150, receipts_base: 40, receipts_per_fame: 1, champion_bonus: 100, melee_prize: 450, receipts_per_fighter: 6),
         ),
     ],
 )

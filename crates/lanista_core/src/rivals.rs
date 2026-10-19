@@ -7,7 +7,7 @@ use std::cmp::Reverse;
 use rand::Rng;
 use serde::{Deserialize, Serialize};
 
-use crate::colosseum::ColosseumId;
+use crate::colosseum::{ColosseumId, Continent};
 use crate::design_data::DesignData;
 use crate::economy::Wealth;
 use crate::fighter::career::{Activity, CareerFighter, Status, WeekPlan, badly_hurt_or_ill};
@@ -82,7 +82,9 @@ pub struct ClubRules {
     pub profiles: Vec<(u32, Profile)>,
     /// At the start of a game.
     pub wealth: Vec<(u32, Wealth)>,
-    /// Keys of `data/names.ron`'s cultures.
+    /// A club's home, drawn first.
+    pub continents: Vec<(u32, Continent)>,
+    /// Keys of `data/names.ron`'s cultures, drawn among those of the club's continent.
     pub cultures: Vec<(u32, String)>,
 }
 
@@ -111,6 +113,8 @@ pub struct Rival {
     pub name: String,
     /// The key of its culture in `data/names.ron`, which named it.
     pub culture: String,
+    /// Its home, its culture's: it fights mostly in the colosseums there.
+    pub continent: Continent,
     pub profile: Profile,
     /// Below 0 when upkeep ran it into debt, like the player's.
     pub money: i64,
@@ -140,31 +144,59 @@ impl Rival {
     }
 }
 
-/// A new rival club: profile, wealth and culture drawn by `data/world.ron`'s `clubs`
-/// weights, named by its culture unlike any of `others`, with its wealth's starting
-/// money, neither fighters nor staff.
+/// A new rival club: profile and wealth drawn by `data/world.ron`'s `clubs` weights,
+/// the continent furthest below its share of the clubs (`home`), then a culture of
+/// that continent drawn by its weight, named by its culture unlike any of
+/// `others`, with its wealth's starting money, neither fighters nor staff.
 pub fn random_club<R: Rng + ?Sized>(rng: &mut R, others: &[Rival], data: &DesignData) -> Rival {
     let rules = &data.world.clubs;
     let profile = pick(rng, &rules.profiles);
     let wealth = pick(rng, &rules.wealth);
+    let continent = home(others, data);
     let cultures: Vec<(u32, usize)> = (0..)
         .zip(&rules.cultures)
+        .filter(|(_, (_, key))| data.culture(key).is_some_and(|c| c.continent == continent))
         .map(|(i, (weight, _))| (*weight, i))
         .collect();
-    let key = &rules.cultures[pick(rng, &cultures)].1;
+    // Loading makes sure each continent drawn has a culture.
+    let key = if cultures.iter().any(|&(w, _)| w > 0) {
+        rules.cultures[pick(rng, &cultures)].1.clone()
+    } else {
+        String::new()
+    };
     let taken: Vec<&str> = others.iter().map(|r| r.name.as_str()).collect();
     let name = data
-        .culture(key)
+        .culture(&key)
         .map_or_else(|| key.clone(), |c| names::club_name(rng, c, &taken));
     Rival {
         name,
-        culture: key.clone(),
+        culture: key,
+        continent,
         profile,
         money: i64::from(data.economy.wealth.get(wealth).starting_money),
         fighters: Vec::new(),
         staff: Staff::default(),
         wealth,
     }
+}
+
+/// The home of a new club among `others`: the continent furthest below its share of
+/// `clubs.count` by `clubs.continents`' weights, the first of equals, so that each
+/// continent has its share whatever the draws.
+fn home(others: &[Rival], data: &DesignData) -> Continent {
+    let rules = &data.world.clubs;
+    let total: i64 = rules.continents.iter().map(|&(w, _)| i64::from(w)).sum();
+    let count = i64::from(rules.count);
+    (0..)
+        .zip(&rules.continents)
+        .filter(|(_, (weight, _))| *weight > 0)
+        .max_by_key(|&(i, &(weight, continent))| {
+            let have = others.iter().filter(|r| r.continent == continent).count();
+            let have = i64::try_from(have).unwrap_or(i64::MAX);
+            // Its share less what it has, both times `total`.
+            (i64::from(weight) * count - have * total, Reverse(i))
+        })
+        .map_or(Continent::Europe, |(_, &(_, continent))| continent)
 }
 
 /// The posts a rival club of `wealth` fills, in order. A poor club, which bets on
@@ -236,19 +268,32 @@ pub fn staff_moves(
     moves
 }
 
+/// A colosseum as a rival manager sees it for one fighter.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct Venue {
+    /// The chance, from 0 to 1, Elo gives the fighter against the others there.
+    pub chance: f64,
+    /// What registering costs, the journey included.
+    pub fee: u32,
+    /// Whether it is on the club's continent.
+    pub home: bool,
+}
+
 /// A rival manager's week for one fighter, with `money` left to spend this week, which
 /// the plan's costs come out of: rest below the profile's form or when badly hurt or
 /// ill, with care if the club keeps its reserve after paying; otherwise a fight in the
-/// colosseum where Elo gives it the best chance against the others (`chances`, from 0
-/// to 1, in colosseum order) among those it can pay the fee of, if that chance reaches
-/// `fight_percent`; else training if it can pay for it, else rest. Care and training
-/// are at the prices of the club's `staff`.
+/// colosseum (`venues`, in colosseum order) where Elo gives it the best chance against
+/// the others, among those it can pay the fee of where that chance reaches
+/// `fight_percent`, at home if one is, abroad only otherwise; else training if it can
+/// pay for it; else, if it `earns` its receipts, a fight in the best free colosseum at
+/// home whatever its chance, as receipts are a club's only income; else rest. Care and
+/// training are at the prices of the club's `staff`.
 #[must_use]
 pub fn plan(
     fighter: &CareerFighter,
-    chances: &[f64],
+    venues: &[Venue],
     money: &mut i64,
-    (rules, staff): (&ProfileRules, &Staff),
+    (rules, staff, earns): (&ProfileRules, &Staff, bool),
     data: &DesignData,
 ) -> WeekPlan {
     let hurt = badly_hurt_or_ill(fighter);
@@ -258,24 +303,30 @@ pub fn plan(
     if care {
         *money -= care_cost;
     }
-    let best = chances
-        .iter()
-        .zip(&data.world.colosseums)
-        .zip(0..)
-        .filter(|((_, c), _)| i64::from(c.purses.entry_fee) <= *money)
-        .map(|((&chance, c), id)| (chance, i64::from(c.purses.entry_fee), ColosseumId(id)))
-        .reduce(|best, next| if next.0 > best.0 { next } else { best });
+    let best = |chosen: &dyn Fn(&Venue) -> bool| {
+        venues
+            .iter()
+            .zip(0..)
+            .filter(|(v, _)| chosen(v))
+            .reduce(|best, next| {
+                let better = (next.0.home, next.0.chance) > (best.0.home, best.0.chance);
+                if better { next } else { best }
+            })
+    };
+    let chosen =
+        best(&|v| i64::from(v.fee) <= *money && v.chance * 100.0 >= f64::from(rules.fight_percent));
+    let free = best(&|v| v.home && v.fee == 0);
     let training = i64::from(staff.training_cost(data.economy.training_cost));
     let activity = if hurt || fighter.form.value() < rules.rest_form {
         Activity::Rest
-    } else if let Some((_, fee, id)) =
-        best.filter(|&(chance, ..)| chance * 100.0 >= f64::from(rules.fight_percent))
-    {
-        *money -= fee;
-        Activity::Fight(id)
+    } else if let Some((venue, id)) = chosen {
+        *money -= i64::from(venue.fee);
+        Activity::Fight(ColosseumId(id))
     } else if training <= *money {
         *money -= training;
         Activity::Train
+    } else if let Some((_, id)) = free.filter(|_| earns) {
+        Activity::Fight(ColosseumId(id))
     } else {
         Activity::Rest
     };
@@ -295,6 +346,19 @@ mod tests {
     use rand::SeedableRng;
     use rand_chacha::ChaCha8Rng;
 
+    /// The colosseums of `data` at these chances, all at home, at their entry fees.
+    fn at(chances: &[f64], data: &DesignData) -> Vec<Venue> {
+        chances
+            .iter()
+            .zip(&data.world.colosseums)
+            .map(|(&chance, c)| Venue {
+                chance,
+                fee: c.purses.entry_fee,
+                home: true,
+            })
+            .collect()
+    }
+
     #[test]
     fn each_profile_rests_fights_or_trains_by_its_thresholds() {
         let data = DesignData::load().unwrap();
@@ -307,9 +371,9 @@ mod tests {
         for profile in [Profile::Cautious, Profile::Aggressive, Profile::Merchant] {
             let plan = plan(
                 &fighter,
-                &[0.4, 0.5],
+                &at(&[0.4, 0.5], &data),
                 &mut money,
-                (profiles.get(profile), &none),
+                (profiles.get(profile), &none, true),
                 &data,
             );
             assert_eq!(plan.activity, rome);
@@ -319,49 +383,123 @@ mod tests {
         let cautious = &profiles.cautious;
         let behind = [0.3, 0.2];
         assert_eq!(
-            plan(&fighter, &behind, &mut money, (cautious, &none), &data).activity,
+            plan(
+                &fighter,
+                &at(&behind, &data),
+                &mut money,
+                (cautious, &none, true),
+                &data
+            )
+            .activity,
             Activity::Train
         );
         let aggressive = &profiles.aggressive;
         assert_eq!(
-            plan(&fighter, &behind, &mut money, (aggressive, &none), &data).activity,
-            Activity::Fight(ColosseumId(0))
-        );
-        // Tired: only the aggressive club sends it in.
-        fighter.form = Form::new(50);
-        assert_eq!(
-            plan(&fighter, &[0.5, 0.5], &mut money, (cautious, &none), &data).activity,
-            Activity::Rest
-        );
-        assert_eq!(
             plan(
                 &fighter,
-                &[0.5, 0.5],
+                &at(&behind, &data),
                 &mut money,
-                (aggressive, &none),
+                (aggressive, &none, true),
                 &data
             )
             .activity,
             Activity::Fight(ColosseumId(0))
         );
-        // Without the fee, the free colosseum; without money, training only if paid for.
+        // Tired: only the aggressive club sends it in.
+        fighter.form = Form::new(50);
+        assert_eq!(
+            plan(
+                &fighter,
+                &at(&[0.5, 0.5], &data),
+                &mut money,
+                (cautious, &none, true),
+                &data
+            )
+            .activity,
+            Activity::Rest
+        );
+        assert_eq!(
+            plan(
+                &fighter,
+                &at(&[0.5, 0.5], &data),
+                &mut money,
+                (aggressive, &none, true),
+                &data
+            )
+            .activity,
+            Activity::Fight(ColosseumId(0))
+        );
+    }
+
+    #[test]
+    fn without_money_a_club_fights_for_the_receipts() {
+        let data = DesignData::load().unwrap();
+        let none = Staff::default();
+        let aggressive = &data.world.profiles.aggressive;
+        let fighter = CareerFighter::random(&mut ChaCha8Rng::seed_from_u64(1), &data);
+        // Without the fee, the free colosseum; without money, training only if paid
+        // for, else a fight for the receipts in the free colosseum, whatever the chance;
+        // a free agent, who earns none, rests.
         let mut five = 5;
         assert_eq!(
-            plan(&fighter, &[0.4, 0.5], &mut five, (aggressive, &none), &data).activity,
+            plan(
+                &fighter,
+                &at(&[0.4, 0.5], &data),
+                &mut five,
+                (aggressive, &none, true),
+                &data
+            )
+            .activity,
             Activity::Fight(ColosseumId(0))
         );
         let mut broke = 4;
         assert_eq!(
             plan(
                 &fighter,
-                &[0.1, 0.1],
+                &at(&[0.1, 0.1], &data),
                 &mut broke,
-                (aggressive, &none),
+                (aggressive, &none, true),
+                &data
+            )
+            .activity,
+            Activity::Fight(ColosseumId(0))
+        );
+        assert_eq!(
+            plan(
+                &fighter,
+                &at(&[0.1, 0.1], &data),
+                &mut broke,
+                (aggressive, &none, false),
                 &data
             )
             .activity,
             Activity::Rest
         );
+        assert_eq!(broke, 4);
+    }
+
+    #[test]
+    fn a_club_fights_abroad_only_when_nothing_at_home_suits_it() {
+        let data = DesignData::load().unwrap();
+        let fighter = CareerFighter::random(&mut ChaCha8Rng::seed_from_u64(1), &data);
+        let rules = (&data.world.profiles.cautious, &Staff::default(), true);
+        let venue = |chance, fee, home| Venue { chance, fee, home };
+        // Better off abroad, but a fight at home suits it: at home.
+        let mut money = 1000;
+        let venues = [venue(0.5, 0, true), venue(0.9, 60, false)];
+        let week = plan(&fighter, &venues, &mut money, rules, &data);
+        assert_eq!(week.activity, Activity::Fight(ColosseumId(0)));
+        // Nothing at home suits it: abroad, journey paid.
+        let venues = [venue(0.3, 0, true), venue(0.6, 60, false)];
+        let week = plan(&fighter, &venues, &mut money, rules, &data);
+        assert_eq!(
+            (week.activity, money),
+            (Activity::Fight(ColosseumId(1)), 940)
+        );
+        // Unless it cannot pay the journey.
+        let mut money = 50;
+        let week = plan(&fighter, &venues, &mut money, rules, &data);
+        assert_eq!(week.activity, Activity::Train);
     }
 
     #[test]
@@ -381,9 +519,9 @@ mod tests {
         let mut money = cost + 100;
         let cautious = plan(
             &fighter,
-            &even,
+            &at(&even, &data),
             &mut money,
-            (&profiles.cautious, &none),
+            (&profiles.cautious, &none, true),
             &data,
         );
         assert_eq!(
@@ -398,9 +536,9 @@ mod tests {
         let mut money = cost + 100;
         let merchant = plan(
             &fighter,
-            &even,
+            &at(&even, &data),
             &mut money,
-            (&profiles.merchant, &none),
+            (&profiles.merchant, &none, true),
             &data,
         );
         assert_eq!(
@@ -419,9 +557,9 @@ mod tests {
         let mut money = dear + 100;
         let cared = plan(
             &fighter,
-            &even,
+            &at(&even, &data),
             &mut money,
-            (&profiles.cautious, &doctor),
+            (&profiles.cautious, &doctor, true),
             &data,
         );
         assert!(cared.care);
@@ -435,8 +573,8 @@ mod tests {
         let trainer = Staff::of_levels(&[(Role::Trainer, 5)], &data.economy.staff);
         let price = i64::from(data.economy.staff.trainer(5).unwrap().training_cost);
         let mut money = 1000;
-        let rules = (&data.world.profiles.cautious, &trainer);
-        let week = plan(&fighter, &[0.1, 0.1], &mut money, rules, &data);
+        let rules = (&data.world.profiles.cautious, &trainer, true);
+        let week = plan(&fighter, &at(&[0.1, 0.1], &data), &mut money, rules, &data);
         assert_eq!(week.activity, Activity::Train);
         assert_eq!(money, 1000 - price);
     }
