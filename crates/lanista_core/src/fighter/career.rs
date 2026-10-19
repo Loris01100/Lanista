@@ -21,7 +21,7 @@ use crate::fighter::injury::{
 use crate::fighter::morale::{Morale, MoraleEvent};
 use crate::fighter::personality::Personality;
 use crate::fighter::progression::{ProgressEvent, age_decline, progress, random_potential};
-use crate::fighter::retirement::decides_to_retire;
+use crate::fighter::retirement::{decides_to_retire, too_maimed};
 use crate::fighter::{ClassId, Condition, Fighter, FighterId, Stats};
 use crate::log::{Report, places};
 use crate::rivals::RivalId;
@@ -31,7 +31,8 @@ use crate::stat_model::Ending;
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum Status {
     Active,
-    /// Decided to stop; only the fighter decides.
+    /// Stopped: decided by the fighter only, or forced by too many limbs lost
+    /// (`retirement::too_maimed`).
     Retired,
     Dead,
     /// Sold to another club: the fighter goes on there, and this entry is its past here.
@@ -570,8 +571,8 @@ impl CareerFighter {
 
     /// What a fight `taken` leaves a survivor: morale, an injury (returned, with whether
     /// `medicine` kept it from leaving an after-effect): the wound of a fatal blow
-    /// survived or of a stun, else a possible one; form (`form`'s cost), illness
-    /// worsening and progression.
+    /// survived or of a stun, else a possible one, retiring at once if it leaves too many
+    /// limbs lost (`too_maimed`); form (`form`'s cost), illness worsening and progression.
     pub(crate) fn after_fight<R: Rng + ?Sized>(
         &mut self,
         taken: Taken,
@@ -611,6 +612,9 @@ impl CareerFighter {
         };
         if let Some(injury) = injury {
             self.take_injury(injury, rules);
+            if too_maimed(&self.injuries, &rules.retirement) {
+                self.status = Status::Retired;
+            }
         }
         self.form = self.form.after(form, &rules.form);
         self.illness = self
@@ -1339,9 +1343,19 @@ mod tests {
             maimed.after_fight(taken, FormEvent::Fight, medicine, &mut rng, rules);
         assert_eq!((injury, spared), (Some(severed_limb_wound(arm)), false));
         assert!(maimed.injuries[0].is_lost());
+        assert_eq!(maimed.status, Status::Active);
         // The model may cut the same arm again: a stump, no second lost arm.
         let taken = maimed.take_side(cut(arm), false, 0, &mut rng, rules);
         assert_eq!(taken.wound, None);
+        // A leg too: it fights on. The other arm: it retires at once.
+        for (limb, status) in [
+            (Location::Leg(Side::Left), Status::Active),
+            (Location::Arm(Side::Right), Status::Retired),
+        ] {
+            let taken = maimed.take_side(cut(limb), false, 0, &mut rng, rules);
+            maimed.after_fight(taken, FormEvent::Fight, medicine, &mut rng, rules);
+            assert_eq!(maimed.status, status);
+        }
     }
 
     #[test]

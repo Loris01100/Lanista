@@ -167,6 +167,10 @@
         per_permanent_injury: 15,
         // Determination 0 raises the chance by this percentage of it, 100 lowers it as much.
         determination_percent: 50,
+        // An arm and a leg lost are the most a fighter fights on without: a second arm
+        // or a second leg lost, and it retires at once.
+        max_lost_arms: 1,
+        max_lost_legs: 1,
     ),
     career: (
         // Generated fighters: age, stats within this percentage of the standard

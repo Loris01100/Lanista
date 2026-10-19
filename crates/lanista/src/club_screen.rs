@@ -25,6 +25,7 @@ use lanista_core::fighter::form::Form;
 use lanista_core::fighter::illness::IllnessLevel;
 use lanista_core::fighter::injury::{Injury, Severity, Side};
 use lanista_core::fighter::morale::Morale;
+use lanista_core::fighter::retirement::too_maimed;
 use lanista_core::market::Target;
 use lanista_core::rivals::RivalId;
 use lanista_core::state::{Decisions, GameState, next_week};
@@ -939,6 +940,9 @@ fn sheet(ui: &mut egui::Ui, index: usize, f: &CareerFighter, data: &DesignData) 
     ui.label(hand);
     match f.status {
         Status::Active => {}
+        Status::Retired if too_maimed(&f.injuries, &rules.retirement) => {
+            ui.colored_label(egui::Color32::GOLD, "A pris sa retraite, trop mutilé");
+        }
         Status::Retired => {
             ui.colored_label(egui::Color32::GOLD, "A pris sa retraite");
         }

@@ -14,6 +14,7 @@ use lanista_core::fighter::fame::FightResult;
 use lanista_core::fighter::illness::{Illness, IllnessLevel};
 use lanista_core::fighter::injury::{Injury, Location, Severity, Side};
 use lanista_core::fighter::personality::Personality;
+use lanista_core::fighter::retirement::too_maimed;
 use lanista_core::market::{
     MarketNews, Move, Target, personality_seen, potential_range, stat_ranges,
 };
@@ -678,6 +679,9 @@ pub fn week_lines(
     }
     match after.status {
         Status::Active | Status::Dead | Status::Sold | Status::Released => {}
+        Status::Retired if too_maimed(&after.injuries, &data.fighter.retirement) => {
+            lines.push("Prend sa retraite : trop mutilé pour combattre".into());
+        }
         Status::Retired => lines.push(format!("Prend sa retraite à {} ans", after.age)),
     }
     lines

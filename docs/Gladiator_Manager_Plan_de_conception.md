@@ -107,7 +107,7 @@ Chaque blessure a une localisation et une gravité (légère, moyenne, grave, pe
 | Bras secondaire | Baisse de DC (bouclier) | Bras estropié : DC réduite définitivement |
 | Jambe (G ou D) | Baisse de VIT | Boiterie : VIT réduite définitivement |
 
-Un coup tranchant peut aussi couper un membre : il est perdu, et cela se voit à l'écran, le combattant étant dessiné sans lui dès le coup et dans tous ses combats suivants. Il prend plus qu'une séquelle : le bras dominant, beaucoup d'AC et d'AL et un peu de précision (le combattant doit changer de style) ; le bras secondaire, beaucoup de DC et de DL (plus de bouclier) ; une jambe, la moitié de la VIT et un peu de DC. Aucun médecin ne le rend, mais il n'impose pas la retraite : c'est au combattant de décider, une blessure permanente de plus pesant sur sa décision. La tête tranchée tue sur le coup, et le corps reste sans tête.
+Un coup tranchant peut aussi couper un membre : il est perdu, et cela se voit à l'écran, le combattant étant dessiné sans lui dès le coup et dans tous ses combats suivants. Il prend plus qu'une séquelle : le bras dominant, beaucoup d'AC et d'AL et un peu de précision (le combattant doit changer de style) ; le bras secondaire, beaucoup de DC et de DL (plus de bouclier) ; une jambe, la moitié de la VIT et un peu de DC. Aucun médecin ne le rend, et une blessure permanente de plus pèse sur la décision du combattant de partir. Un combattant peut perdre au plus un bras et une jambe : s'il perd son deuxième bras ou sa deuxième jambe, il prend sa retraite aussitôt. La tête tranchée tue sur le coup, et le corps reste sans tête.
 
 ### Maladies
 

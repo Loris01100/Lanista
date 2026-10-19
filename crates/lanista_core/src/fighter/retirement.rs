@@ -1,9 +1,11 @@
-//! Retirement, decided only by the fighter, from their personality, age and condition.
-//! The player can't force it; releasing a fighter sends them to the market instead.
+//! Retirement, decided only by the fighter, from their personality, age and condition,
+//! unless it lost too many limbs to fight on. The player can't force it; releasing a
+//! fighter sends them to the market instead.
 
 use rand::{Rng, RngExt};
 use serde::Deserialize;
 
+use crate::fighter::injury::{Injury, Location};
 use crate::fighter::personality::Personality;
 
 /// Chance, in percent, that a fighter retires at this year's check (once a year, off-season).
@@ -40,6 +42,21 @@ pub fn decides_to_retire<R: Rng + ?Sized>(
     rng.random_range(0..100) < retirement_chance(age, personality, permanent_injuries, rules)
 }
 
+/// Whether `injuries` leave the fighter more limbs lost than it fights on without:
+/// more than `max_lost_arms` arms or `max_lost_legs` legs. It then retires at once.
+#[must_use]
+pub fn too_maimed(injuries: &[Injury], rules: &RetirementRules) -> bool {
+    let lost = |limb: fn(Location) -> bool| {
+        let count = injuries
+            .iter()
+            .filter(|i| i.is_lost() && limb(i.location))
+            .count();
+        u32::try_from(count).unwrap_or(u32::MAX)
+    };
+    lost(|l| matches!(l, Location::Arm(_))) > rules.max_lost_arms
+        || lost(|l| matches!(l, Location::Leg(_))) > rules.max_lost_legs
+}
+
 /// Retirement odds, read from `data/fighter.ron`.
 #[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -52,6 +69,9 @@ pub struct RetirementRules {
     pub per_permanent_injury: u32,
     /// How much determination moves the chance, in percent of it.
     pub determination_percent: u32,
+    /// Most arms, then legs, a fighter fights on without; one more and it retires.
+    pub max_lost_arms: u32,
+    pub max_lost_legs: u32,
 }
 
 #[cfg(test)]
@@ -67,7 +87,28 @@ mod tests {
         per_year: 5,
         per_permanent_injury: 15,
         determination_percent: 50,
+        max_lost_arms: 1,
+        max_lost_legs: 1,
     };
+
+    #[test]
+    fn an_arm_and_a_leg_lost_are_the_most_a_fighter_fights_on_without() {
+        use crate::fighter::injury::{Side, severed_limb_wound};
+
+        let lost = |l| severed_limb_wound(l);
+        let arm = lost(Location::Arm(Side::Left));
+        let leg = lost(Location::Leg(Side::Right));
+        assert!(!too_maimed(&[], &RULES));
+        assert!(!too_maimed(&[arm, leg], &RULES));
+        assert!(too_maimed(&[arm, lost(Location::Arm(Side::Right))], &RULES));
+        assert!(too_maimed(&[leg, lost(Location::Leg(Side::Left))], &RULES));
+        // A crippled limb is not a lost one.
+        let crippled = Injury {
+            severity: crate::fighter::injury::Severity::Permanent,
+            ..lost(Location::Arm(Side::Right))
+        };
+        assert!(!too_maimed(&[arm, crippled], &RULES));
+    }
 
     fn determined(determination: u32) -> Personality {
         Personality {
