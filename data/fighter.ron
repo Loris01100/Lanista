@@ -158,6 +158,16 @@
         // From 40, stats lose these percentages every year, speed most, then accuracy.
         decline_from_age: 40,
         decline_percent: (hp: 2, melee_attack: 2, ranged_attack: 2, accuracy: 3, speed: 5, melee_defense: 2, ranged_defense: 2),
+        // At the end of each year (its birthday), the year's record brings gains, each
+        // the `gain` of a stat drawn among those below potential: points per win and
+        // draw, less per loss, one gain every `points_per_gain`, at most `max_gains`.
+        season: (
+            win_points: 2,
+            draw_points: 1,
+            loss_points: 1,
+            points_per_gain: 3,
+            max_gains: 6,
+        ),
     ),
     retirement: (
         // Checked once a year; decided by the fighter only.

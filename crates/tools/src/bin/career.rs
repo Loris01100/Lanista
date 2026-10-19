@@ -187,6 +187,9 @@ fn week_text(
     }
     if report.birthday {
         let _ = writeln!(text, "  one year older: {}", after.age);
+        if report.season_gains > 0 {
+            let _ = writeln!(text, "  season's record: {} gains", report.season_gains);
+        }
     }
     let _ = writeln!(
         text,

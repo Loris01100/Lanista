@@ -655,6 +655,12 @@ pub fn week_lines(
     }
     if report.birthday {
         lines.push(format!("Un an de plus : {} ans", after.age));
+        if report.season_gains > 0 {
+            lines.push(format!(
+                "Bilan de la saison : {} progrès",
+                report.season_gains
+            ));
+        }
     }
     lines.push(format!(
         "{}, {}, {}",

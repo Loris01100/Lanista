@@ -1,11 +1,13 @@
 //! Progression without levels: stats change right after each training session and
 //! each fight, capped by a hidden potential, at a pace set by age and morale.
+//! At the end of each year, a good season's record brings a few more points.
 //! From a given age, stats decline every year, speed first.
 
 use rand::{Rng, RngExt};
 use serde::Deserialize;
 
 use crate::fighter::Stats;
+use crate::fighter::career::Record;
 use crate::fighter::morale::Morale;
 
 /// What can make a fighter progress.
@@ -83,6 +85,45 @@ pub fn progress<R: Rng + ?Sized>(
     Stats::from_array(stats)
 }
 
+/// Gains a season's `record` earns: its points (`rules.win_points` a win,
+/// `draw_points` a draw, less `loss_points` a loss, never below 0), one gain for every
+/// `points_per_gain`, at most `max_gains`.
+#[must_use]
+pub fn season_gains(record: Record, rules: &SeasonRules) -> u32 {
+    let points = (u64::from(record.wins) * u64::from(rules.win_points)
+        + u64::from(record.draws) * u64::from(rules.draw_points))
+    .saturating_sub(u64::from(record.losses) * u64::from(rules.loss_points));
+    let gains = points / u64::from(rules.points_per_gain.max(1));
+    u32::try_from(gains)
+        .unwrap_or(u32::MAX)
+        .min(rules.max_gains)
+}
+
+/// Stats after `gains` season gains: each one adds its `rules.gain` to a stat drawn
+/// among those below their potential, never past it.
+pub fn season_progress<R: Rng + ?Sized>(
+    rng: &mut R,
+    stats: Stats,
+    potential: Stats,
+    gains: u32,
+    rules: &ProgressionRules,
+) -> Stats {
+    let mut stats = stats.to_array();
+    let caps = potential.to_array();
+    let points = rules.gain.to_array();
+    for _ in 0..gains {
+        let open: Vec<usize> = (0..stats.len()).filter(|&i| stats[i] < caps[i]).collect();
+        let Some(top) = open.len().checked_sub(1) else {
+            break;
+        };
+        let top = u32::try_from(top).unwrap_or(0);
+        let drawn = usize::try_from(rng.random_range(0..=top)).unwrap_or(0);
+        let i = open[drawn];
+        stats[i] = stats[i].saturating_add(points[i]).min(caps[i]);
+    }
+    Stats::from_array(stats)
+}
+
 /// Stats after a year at `age`: from `rules.decline_from_age`, each stat loses
 /// `rules.decline_percent` of its value, rounded up, so the decline always shows.
 #[must_use]
@@ -118,6 +159,24 @@ pub struct ProgressionRules {
     pub decline_from_age: u32,
     /// Percentage of each stat lost per year from `decline_from_age`.
     pub decline_percent: Stats,
+    /// The gains a year's record brings at its end.
+    pub season: SeasonRules,
+}
+
+/// What a season's record is worth in stats, read from `data/fighter.ron`.
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct SeasonRules {
+    /// Points per win.
+    pub win_points: u32,
+    /// Points per draw.
+    pub draw_points: u32,
+    /// Points taken off per loss (given up included).
+    pub loss_points: u32,
+    /// Points for one gain of `ProgressionRules::gain` on a drawn stat.
+    pub points_per_gain: u32,
+    /// The most gains a season brings.
+    pub max_gains: u32,
 }
 
 #[cfg(test)]
@@ -152,6 +211,13 @@ mod tests {
                 speed: 5,
                 melee_defense: 2,
                 ranged_defense: 2,
+            },
+            season: SeasonRules {
+                win_points: 2,
+                draw_points: 1,
+                loss_points: 1,
+                points_per_gain: 3,
+                max_gains: 6,
             },
         }
     }
@@ -243,6 +309,36 @@ mod tests {
         assert_eq!(age_decline(STATS, 39, &rules()), STATS);
         let old = age_decline(STATS, 40, &rules());
         assert_eq!((old.hp, old.melee_attack, old.speed), (98, 19, 28));
+    }
+
+    fn record(wins: u32, losses: u32, draws: u32) -> Record {
+        Record {
+            wins,
+            losses,
+            draws,
+        }
+    }
+
+    #[test]
+    fn a_better_season_brings_more_gains() {
+        let season = &rules().season;
+        assert_eq!(season_gains(record(0, 0, 0), season), 0);
+        assert_eq!(season_gains(record(2, 6, 0), season), 0);
+        assert_eq!(season_gains(record(5, 5, 1), season), 2);
+        assert_eq!(season_gains(record(8, 2, 0), season), 4);
+        assert_eq!(season_gains(record(20, 0, 0), season), 6);
+    }
+
+    #[test]
+    fn season_gains_add_up_to_potential() {
+        let mut rng = ChaCha8Rng::seed_from_u64(5);
+        let potential = STATS.map(|v| v * 10);
+        let after = season_progress(&mut rng, STATS, potential, 4, &rules());
+        let total = |s: Stats| s.to_array().iter().sum::<u32>();
+        assert!((4..=8).contains(&(total(after) - total(STATS))));
+        let capped = Stats { hp: 101, ..STATS };
+        let after = season_progress(&mut rng, STATS, capped, 6, &rules());
+        assert_eq!(after, capped);
     }
 
     proptest! {

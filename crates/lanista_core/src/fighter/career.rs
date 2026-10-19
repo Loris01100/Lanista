@@ -20,7 +20,9 @@ use crate::fighter::injury::{
 };
 use crate::fighter::morale::{Morale, MoraleEvent};
 use crate::fighter::personality::Personality;
-use crate::fighter::progression::{ProgressEvent, age_decline, progress, random_potential};
+use crate::fighter::progression::{
+    ProgressEvent, age_decline, progress, random_potential, season_gains, season_progress,
+};
 use crate::fighter::retirement::{decides_to_retire, too_maimed};
 use crate::fighter::{ClassId, Condition, Fighter, FighterId, Stats};
 use crate::log::{Report, places};
@@ -82,6 +84,9 @@ pub struct CareerFighter {
     pub status: Status,
     #[serde(default)]
     pub record: Record,
+    /// The record since the last birthday, worth stats at the next one.
+    #[serde(default)]
+    pub season_record: Record,
     /// Weeks the player's club observed it: the more, the more of its stats are seen,
     /// and the narrower (`market::stat_ranges`).
     #[serde(default)]
@@ -132,6 +137,7 @@ impl CareerFighter {
             illness: None,
             status: Status::Active,
             record: Record::default(),
+            season_record: Record::default(),
             observed_weeks: 0,
             appearance,
         }
@@ -410,6 +416,7 @@ impl CareerFighter {
         let fame_change = outcome.fame_change(&rules.fame).saturating_add(bonus);
         self.fame = self.fame.changed_by(fame_change);
         self.record.add(outcome.result);
+        self.season_record.add(outcome.result);
         let mut wound = None;
         if side.severed == Some(Location::Head) {
             self.status = Status::Dead;
@@ -667,6 +674,16 @@ impl CareerFighter {
             self.weeks_this_year = 0;
             self.age += 1;
             report.birthday = true;
+            let progression = &rules.progression;
+            report.season_gains = season_gains(self.season_record, &progression.season);
+            self.stats = season_progress(
+                rng,
+                self.stats,
+                self.potential,
+                report.season_gains,
+                progression,
+            );
+            self.season_record = Record::default();
             self.stats = age_decline(self.stats, self.age, &rules.progression);
             let permanent = self.permanent_injuries();
             if decides_to_retire(
@@ -770,8 +787,11 @@ pub struct WeekReport {
     pub healed_injuries: Vec<Injury>,
     pub new_illness: Option<Illness>,
     pub illness_healed: bool,
-    /// A year went by: one year older, decline from 40, retirement decision.
+    /// A year went by: the season's gains, one year older, decline from 40,
+    /// retirement decision.
     pub birthday: bool,
+    /// Stat gains the year's record brought at the birthday.
+    pub season_gains: u32,
 }
 
 impl WeekReport {
@@ -786,6 +806,7 @@ impl WeekReport {
             new_illness: None,
             illness_healed: false,
             birthday: false,
+            season_gains: 0,
         }
     }
 }
@@ -1099,6 +1120,36 @@ mod tests {
             birthdays += u32::from(report.birthday);
         }
         assert_eq!((birthdays, f.age, f.weeks_this_year), (1, age + 1, 0));
+    }
+
+    #[test]
+    fn a_good_season_brings_stats_at_the_birthday() {
+        let data = data();
+        let mut rng = ChaCha8Rng::seed_from_u64(3);
+        let mut f = fighter(7);
+        f.age = 25;
+        f.potential = f.stats.map(|v| v * 2);
+        f.weeks_this_year = data.calendar.season_weeks() - 1;
+        f.season_record = Record {
+            wins: 8,
+            losses: 2,
+            draws: 0,
+        };
+        let before = f.stats;
+        let report = f
+            .play_week(
+                plan(Activity::Rest),
+                None,
+                StaffEffects::default(),
+                &mut rng,
+                &data,
+            )
+            .unwrap();
+        assert!(report.birthday);
+        assert!(report.season_gains > 0);
+        let total = |s: Stats| s.to_array().iter().sum::<u32>();
+        assert!(total(f.stats) >= total(before) + report.season_gains);
+        assert_eq!(f.season_record, Record::default());
     }
 
     #[test]
