@@ -1,7 +1,8 @@
 // Prototype classes: placeholder values, to balance with mass simulations.
 // ClassId(i) is the i-th class of this list.
 // reach: meters between the fighters' edges. power: % of the damage formula.
-// cooldown: ticks, 30 per second.
+// cooldown: ticks, 30 per second. mana_per_second, endurance_per_second: recovered
+// each second of a fight, up to the max.
 // damage_kind: Blunt stuns three times as often as Cutting, which may sever a limb or
 // the head instead (data/combat.ron); Neutral (spells without an element yet) does neither.
 [
@@ -9,6 +10,8 @@
         name: "Mirmillon",
         max_mana: 0,
         max_endurance: 100,
+        mana_per_second: 0,
+        endurance_per_second: 3,
         spells: [
             (
                 name: "Coup de glaive",
@@ -43,6 +46,8 @@
         name: "Augure",
         max_mana: 100,
         max_endurance: 50,
+        mana_per_second: 4,
+        endurance_per_second: 2,
         spells: [
             (
                 name: "Coup de bâton",

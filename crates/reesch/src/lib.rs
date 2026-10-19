@@ -12,7 +12,7 @@ pub mod screen;
 pub use animation::{Animation, AnimationEvent, AnimationPlayer, SpriteSheet};
 pub use assets::Assets;
 pub use audio::Audio;
-pub use camera::{fit_camera, fit_view};
+pub use camera::{fit_camera, fit_view, pixel_camera, pixel_view};
 /// The egui version egui-macroquad was built with: use this one, never a
 /// separate egui dependency.
 pub use egui_macroquad::egui;

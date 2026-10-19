@@ -145,12 +145,23 @@ pub(crate) fn pick<R: Rng + ?Sized, T: Copy>(rng: &mut R, choices: &[(u32, T)]) 
 pub struct Gauge {
     pub current: u32,
     pub max: u32,
+    /// Points recovered each second of the fight, up to `max`.
+    pub per_second: u32,
 }
 
 impl Gauge {
     #[must_use]
-    pub fn full(max: u32) -> Self {
-        Self { current: max, max }
+    pub fn full(max: u32, per_second: u32) -> Self {
+        Self {
+            current: max,
+            max,
+            per_second,
+        }
+    }
+
+    /// One second's recovery.
+    pub fn recover(&mut self) {
+        self.current = self.current.saturating_add(self.per_second).min(self.max);
     }
 }
 
@@ -235,8 +246,8 @@ impl Fighter {
             class,
             stats,
             hp: stats.hp,
-            mana: Gauge::full(class_data.max_mana),
-            endurance: Gauge::full(class_data.max_endurance),
+            mana: Gauge::full(class_data.max_mana, class_data.mana_per_second),
+            endurance: Gauge::full(class_data.max_endurance, class_data.endurance_per_second),
             spells: class_data.spells.clone(),
             cooldowns: vec![0; class_data.spells.len()],
             position,
@@ -328,7 +339,8 @@ impl Fighter {
 }
 
 /// A fighter for tests: 100 HP, 10 in every other stat but accuracy and speed 30,
-/// and one blunt melee spell (reach 1 m, power 100, cooldown 30, 10 endurance out of 50).
+/// and one blunt melee spell (reach 1 m, power 100, cooldown 30, 10 endurance out of 50,
+/// none recovered).
 #[cfg(test)]
 pub(crate) fn test_fighter(id: u32, x: f64, y: f64) -> Fighter {
     use crate::combat::{DamageKind, Range};
@@ -337,6 +349,8 @@ pub(crate) fn test_fighter(id: u32, x: f64, y: f64) -> Fighter {
         name: "Test".into(),
         max_mana: 50,
         max_endurance: 50,
+        mana_per_second: 0,
+        endurance_per_second: 0,
         spells: vec![SpellData {
             name: "Coup".into(),
             range: Range::Melee,

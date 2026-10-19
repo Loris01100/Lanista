@@ -1,5 +1,6 @@
 ---
 source: crates/lanista_core/tests/reference_fights.rs
+assertion_line: 144
 expression: reference_melee(11)
 ---
 [    0] fighter 1 casts Éclair on fighter 2: 35 damage
@@ -41,29 +42,24 @@ expression: reference_melee(11)
 [  192] fighter 7 casts Éclair on fighter 2: 35 damage
 [  204] fighter 5 casts Éclair on fighter 3: 33 damage
 [  204] fighter 3 dies
-[  306] fighter 7 casts Coup de bâton on fighter 2: 12 damage
-[  306] fighter 2 casts Frappe brutale on fighter 7: 33 damage
-[  306] fighter 7 is beheaded
-[  306] fighter 7 dies
-[  312] the pact between fighters 1 and 2 ends
-[  449] fighter 2 is out for dealing too little damage
-[  534] fighter 5 casts Coup de bâton on fighter 1: 12 damage
-[  534] fighter 1 casts Coup de bâton on fighter 5: 12 damage
-[  534] fighter 5 is stunned
-[  594] fighter 5 gets up
-[  594] fighter 1 casts Coup de bâton on fighter 5: 12 damage
-[  594] fighter 5 casts Coup de bâton on fighter 1: missed
-[  630] fighter 5 casts Coup de bâton on fighter 1: 11 damage
-[  630] fighter 1 dies
+[  210] fighter 7 casts Trait de feu on fighter 2: 19 damage
+[  258] fighter 7 casts Trait de feu on fighter 2: 11 damage
+[  258] fighter 2 dies
+[  306] fighter 1 casts Trait de feu on fighter 7: 19 damage
+[  306] fighter 7 casts Trait de feu on fighter 1: 19 damage
+[  354] fighter 7 casts Trait de feu on fighter 1: 4 damage
+[  354] fighter 1 dies
+[  390] fighter 5 casts Éclair on fighter 7: 14 damage
+[  390] fighter 7 dies
 
-over after 631 ticks, winner: fighter 5
+over after 391 ticks, winner: fighter 5
 fighter 0: 0/100 HP, dealt 77, taken 100, 2 spells cast, 0 missed
-fighter 1: 0/100 HP, dealt 121, taken 100, 9 spells cast, 2 missed
-fighter 2: 18/100 HP, dealt 33, taken 82, 1 spells cast, 0 missed, eliminated
+fighter 1: 0/100 HP, dealt 116, taken 100, 8 spells cast, 2 missed
+fighter 2: 0/100 HP, dealt 0, taken 100, 0 spells cast, 0 missed
 fighter 3: 0/100 HP, dealt 81, taken 100, 6 spells cast, 1 missed
 fighter 4: 0/100 HP, dealt 67, taken 100, 4 spells cast, 1 missed
-fighter 5: 57/100 HP, dealt 148, taken 43, 9 spells cast, 2 missed, stunned once
+fighter 5: 81/100 HP, dealt 139, taken 19, 7 spells cast, 1 missed
 fighter 6: 0/100 HP, dealt 48, taken 100, 1 spells cast, 0 missed
-fighter 7: 0/100 HP, dealt 150, taken 100, 8 spells cast, 1 missed, beheaded
+fighter 7: 0/100 HP, dealt 191, taken 100, 11 spells cast, 1 missed
 
-places: [6, 2, 3, 5, 7, 1, 8, 4]
+places: [6, 3, 4, 5, 7, 1, 8, 2]

@@ -1,5 +1,6 @@
 ---
 source: crates/lanista_core/tests/reference_fights.rs
+assertion_line: 139
 expression: reference_melee(3)
 ---
 [    0] fighter 7 casts Éclair on fighter 6: 35 damage
@@ -45,26 +46,23 @@ expression: reference_melee(3)
 [  192] fighter 1 casts Coup de bâton on fighter 0: 12 damage
 [  192] fighter 0 casts Coup de glaive on fighter 1: 19 damage
 [  204] fighter 5 casts Éclair on fighter 0: missed
+[  216] fighter 1 casts Trait de feu on fighter 0: 15 damage
+[  216] fighter 0 dies
 [  216] fighter 3 casts Éclair on fighter 1: 4 damage
 [  216] fighter 1 dies
-[  378] fighter 0 casts Charge au bouclier on fighter 5: 29 damage
-[  378] fighter 5 casts Coup de bâton on fighter 0: 12 damage
-[  414] fighter 5 casts Coup de bâton on fighter 0: 3 damage
-[  414] fighter 0 dies
-[  456] fighter 3 casts Trait de feu on fighter 5: 19 damage
-[  504] fighter 3 casts Coup de bâton on fighter 5: 12 damage
-[  504] fighter 5 casts Coup de bâton on fighter 3: 12 damage
-[  540] fighter 3 casts Coup de bâton on fighter 5: 9 damage
-[  540] fighter 5 dies
+[  258] fighter 3 casts Trait de feu on fighter 5: 19 damage
+[  258] fighter 5 casts Trait de feu on fighter 3: 19 damage
+[  306] fighter 5 casts Trait de feu on fighter 3: 4 damage
+[  306] fighter 3 dies
 
-over after 541 ticks, winner: fighter 3
-fighter 0: 0/100 HP, dealt 140, taken 100, 5 spells cast, 0 missed
-fighter 1: 0/100 HP, dealt 170, taken 100, 8 spells cast, 0 missed
+over after 307 ticks, winner: fighter 5
+fighter 0: 0/100 HP, dealt 111, taken 100, 4 spells cast, 0 missed
+fighter 1: 0/100 HP, dealt 185, taken 100, 9 spells cast, 0 missed
 fighter 2: 0/100 HP, dealt 0, taken 100, 1 spells cast, 1 missed
-fighter 3: 11/100 HP, dealt 144, taken 89, 9 spells cast, 0 missed
+fighter 3: 0/100 HP, dealt 123, taken 100, 7 spells cast, 0 missed
 fighter 4: 0/100 HP, dealt 77, taken 100, 2 spells cast, 0 missed
-fighter 5: 0/100 HP, dealt 113, taken 100, 11 spells cast, 2 missed
+fighter 5: 50/100 HP, dealt 109, taken 50, 10 spells cast, 2 missed
 fighter 6: 0/100 HP, dealt 48, taken 100, 1 spells cast, 0 missed
 fighter 7: 0/100 HP, dealt 97, taken 100, 6 spells cast, 1 missed
 
-places: [3, 4, 7, 1, 6, 2, 8, 5]
+places: [3, 3, 7, 2, 6, 1, 8, 5]

@@ -60,6 +60,9 @@ pub struct ClassData {
     pub name: String,
     pub max_mana: u32,
     pub max_endurance: u32,
+    /// Mana, then endurance, recovered each second of a fight.
+    pub mana_per_second: u32,
+    pub endurance_per_second: u32,
     pub spells: Vec<SpellData>,
 }
 
@@ -534,7 +537,7 @@ mod tests {
 
     #[test]
     fn rejects_unknown_fields() {
-        let typo = r#"[(name: "X", max_mana: 0, max_endurance: 0, spels: [])]"#;
+        let typo = r#"[(name: "X", max_mana: 0, max_endurance: 0, mana_per_second: 0, endurance_per_second: 0, spels: [])]"#;
         assert!(matches!(
             DesignData::from_ron(typo, COMBAT, FIGHTER, CALENDAR, ECONOMY, WORLD, STAT_MODEL),
             Err(LoadError::Ron {

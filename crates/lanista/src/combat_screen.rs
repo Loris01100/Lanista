@@ -7,10 +7,11 @@ use std::rc::Rc;
 use lanista_core::design_data::DesignData;
 use lanista_core::duel::random_duel;
 use macroquad::prelude::*;
-use reesch::{Assets, Audio, Bindings, SceneTarget, Screen, Transition, egui, fit_camera};
+use reesch::{Assets, Audio, Bindings, SceneTarget, Screen, Transition, egui, pixel_camera};
 
 use crate::Action;
 use crate::fight_view::{Cast, FightView, STANDS};
+use crate::fighter_sprite::PIXELS_PER_METRE;
 
 pub use crate::fight_view::{DEATH_SOUND, HIT_SOUND};
 // ponytail: placeholder music.
@@ -140,6 +141,11 @@ impl CombatScreen {
 
     /// The world area the big view shows: its fight, with room on the left for the
     /// thumbnails when there are any.
+    /// The camera of the fight shown big: its art's pixels enlarged by a whole factor.
+    fn main_camera(&self) -> Camera2D {
+        pixel_camera(self.main_view(), PIXELS_PER_METRE)
+    }
+
     fn main_view(&self) -> Rect {
         let world = self.fight().world();
         if self.views.len() < 2 {
@@ -214,7 +220,7 @@ impl CombatScreen {
             }
             return;
         }
-        let world = fit_camera(self.main_view()).screen_to_world(mouse);
+        let world = self.main_camera().screen_to_world(mouse);
         self.hovered = self
             .fight()
             .fighter_at(world)
@@ -309,7 +315,7 @@ impl Screen for CombatScreen {
             target.draw(view.world(), STANDS, || view.draw(assets, &self.data));
         }
         clear_background(STANDS);
-        set_camera(&fit_camera(self.main_view()));
+        set_camera(&self.main_camera());
         self.fight().draw(assets, &self.data);
         set_default_camera();
         let rects = thumbnail_rects(shown.len(), screen_width());

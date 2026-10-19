@@ -1,6 +1,6 @@
 # Gladiator Manager — Plan de conception
 
-Version du 27 septembre 2026
+Version du 19 octobre 2026
 
 ## Cadre du projet
 
@@ -16,7 +16,7 @@ Gladiator Manager est un projet passion et d'apprentissage, sans objectif commer
 
 ## Vision et piliers
 
-Un jeu de management de gladiateurs en 2D, sous Godot (version .NET), où le joueur dirige un club sans jamais contrôler les combats. Il prépare, inscrit et soigne ses combattants, puis regarde en spectateur une IA les faire combattre. Le joueur ne peut pas perdre : il vise la complétion de tous les succès, et chaque combattant perdu l'oblige à remonter la pente.
+Un jeu de management de gladiateurs en 2D, en Rust sur un moteur maison (voir la [feuille de route technique](Gladiator_Manager_Feuille_de_route_Rust.md)), où le joueur dirige un club sans jamais contrôler les combats. Il prépare, inscrit et soigne ses combattants, puis regarde en spectateur une IA les faire combattre. Le joueur ne peut pas perdre : il vise la complétion de tous les succès, et chaque combattant perdu l'oblige à remonter la pente.
 
 Quatre piliers guident toutes les décisions :
 
@@ -152,7 +152,7 @@ Les combats se déroulent en temps réel dans une arène 2D vue de dessus, pilot
 
 ### Classes, sorts et équipement
 
-Chaque classe a son propre jeu de sorts, avec un temps de recharge et un coût en ressource (mana ou endurance). Pour le prototype : 2 classes et 3 sorts chacune, puis élargir. La liste définitive des classes et des sorts reste à écrire.
+Chaque classe a son propre jeu de sorts, avec un temps de recharge et un coût en ressource (mana ou endurance). Le mana et l'endurance remontent un peu à chaque seconde du combat, chaque classe à son rythme : un combattant à court doit patienter avant de frapper de nouveau, mais n'est jamais à sec pour de bon. Pour le prototype : 2 classes et 3 sorts chacune, puis élargir. La liste définitive des classes et des sorts reste à écrire.
 
 L'équipement est fourni par le colisée et identique pour tous. Un combattant peut refuser tout ou partie de l'équipement. Chaque pièce refusée réduit ses capacités et rapporte un bonus de renommée proportionnel au risque : combattre sans arme rapporte plus que combattre sans armure.
 
@@ -164,7 +164,7 @@ L'équipement est fourni par le colisée et identique pour tous. Un combattant p
 
 ### Armes et étourdissement
 
-Chaque coup frappe avec un type de dégâts, qui vient de l'arme ou du sort. Une arme contondante (bouclier, bâton, et plus tard les mains nues) étourdit plus souvent. Une arme tranchante (glaive) étourdit rarement, mais favorisera la perte d'un membre et la mort (pas encore fait). Les sorts sans élément pour l'instant (feu, éclair) n'étourdissent pas.
+Chaque coup frappe avec un type de dégâts, qui vient de l'arme ou du sort. Une arme contondante (bouclier, bâton, ou les mains nues d'un combattant qui refuse son arme) étourdit plus souvent. Une arme tranchante (glaive) étourdit rarement, mais peut trancher un membre ou la tête. Les sorts sans élément pour l'instant (feu, éclair) n'étourdissent pas.
 
 Plus le coup est fort, plus il risque d'étourdir, et une blessure à la tête augmente encore ce risque. Un combattant étourdi tombe : il ne fait plus rien et son adversaire attend qu'il se relève. Sa détermination décide s'il se relève, de moins en moins à chaque nouvel étourdissement du même combat. S'il se relève, le combat reprend et l'adversaire attaque de nouveau. Sinon, il est mis K.-O. : le combat s'arrête sur sa défaite, sans la honte d'un abandon, et il survit. Un combattant étourdi, relevé ou non, peut garder une blessure grave à la tête après le combat.
 
@@ -183,7 +183,7 @@ Chaque colisée a un type d'arène qui change la tactique : sable qui ralentit, 
 ### IA de combat en deux étapes
 
 1. **IA scriptée (utility AI).** Chaque action reçoit un score selon la situation, l'IA joue la meilleure. Elle sert à valider les règles, de secours, et d'adversaire d'entraînement pour le ML.
-2. **IA apprenante (Godot RL Agents, algorithme PPO).** Un modèle par classe, entraîné en self-play, puis exporté au format ONNX et exécuté dans le jeu en C#.
+2. **IA apprenante (algorithme PPO).** Un modèle par classe, entraîné en self-play en Python sur le moteur de combat du jeu, puis exporté au format ONNX et exécuté dans le jeu.
 
 Entrées du modèle : ses stats, sa forme, ses blessures, sa maladie, sa personnalité, son moral, son équipement, le type d'arène, l'état de ses ressources et sorts, puis la position et l'état des adversaires et alliés les plus proches. Limiter l'observation aux 4 adversaires et 4 alliés les plus proches permet de gérer du duel au 20 joueurs avec le même modèle.
 
@@ -191,11 +191,11 @@ Ordre d'entraînement conseillé : duel, puis mêlée, puis équipe. L'expérien
 
 ### Regarder plusieurs combats en même temps
 
-C'est faisable dans Godot avec des SubViewports : chaque combat affiché est rendu dans sa propre fenêtre, disposées en grille. Proposition : un combat en grand, les autres combats du joueur en vignettes cliquables pour changer de focus, avec vitesse x0,5, x1, x1,5 et un bouton « passer au résultat ». Seuls les combats du joueur sont affichés ; tous les autres tournent sans rendu.
+Chaque combat affiché est rendu dans sa propre texture (render target) : un combat en grand, les autres combats du joueur en vignettes cliquables pour changer de focus, avec vitesse x0,5, x1, x1,5 et un bouton « passer au résultat ». Seuls les combats du joueur sont affichés ; tous les autres tournent sans rendu.
 
 ### Reproductibilité
 
-Chaque combat a une graine (seed). Pour que la même graine redonne exactement le même combat, les déplacements et collisions sont calculés par notre propre code à pas de temps fixe, pas par le moteur physique de Godot. L'IA choisit son action de façon déterministe (l'action la plus probable, le hasard passant par la graine).
+Chaque combat a une graine (seed). Pour que la même graine redonne exactement le même combat, les déplacements et collisions sont calculés par notre propre code à pas de temps fixe, sans moteur physique. L'IA choisit son action de façon déterministe (l'action la plus probable, le hasard passant par la graine).
 
 ## Économie, marché et personnel
 
@@ -325,103 +325,15 @@ Pour chaque combattant : dégâts infligés, dégâts reçus, sorts utilisés, b
 
 ### Sauvegarde
 
-Une sauvegarde automatique après chaque combat regardé, plus une sauvegarde manuelle. Format : un fichier JSON avec un numéro de version, pour que les anciennes sauvegardes restent lisibles quand le jeu évolue. Les graines permettent de ne stocker que les résultats, pas les combats entiers.
+Une sauvegarde automatique après chaque semaine, plus une sauvegarde manuelle. Format : un fichier JSON avec un numéro de version, pour que les anciennes sauvegardes restent lisibles quand le jeu évolue, à partir de la sortie sur Steam ; d'ici là, une sauvegarde ancienne peut devenir illisible et la partie recommence. Les graines permettent de ne stocker que les résultats, pas les combats entiers.
 
 ### Tutoriel et manuel
 
 Chaque fonctionnalité est débloquée progressivement, présentée par une pop-up à sa première apparition, puis inscrite dans le manuel du jeu. Ordre de déblocage proposé : combat et compte rendu, repos et entraînement, blessures et soins, marché, personnel, défis, mêlées, titres de champion, puis les grands événements.
 
-## Architecture technique Godot
+## Architecture technique et feuille de route
 
-Le projet part sur Godot 4.7.2 en version .NET (C#), indispensable pour exécuter les modèles ONNX de Godot RL Agents. La règle d'or : la logique du jeu est du C# pur, séparée de l'affichage, pour pouvoir simuler sans rendu, entraîner l'IA et tester.
-
-```mermaid
-flowchart TD
-  D[Données<br/>combattants, colisées, clubs] --> W[Logique du monde<br/>calendrier, économie, marché]
-  W --> C[Moteur de combat<br/>C# pur, pas de temps fixe]
-  C --> A[IA de combat<br/>scriptée ou ONNX]
-  W --> R[IA des rivaux<br/>règles]
-  C --> V[Affichage<br/>scènes, sprites, SubViewports]
-  W --> U[Interface<br/>8 écrans]
-```
-
-L'affichage ne fait que lire l'état du moteur de combat à chaque image : il ne décide jamais de rien. Le même moteur tourne donc à l'écran, en arrière-plan et pendant l'entraînement.
-
-### Modules
-
-| Module | Responsabilité |
-| --- | --- |
-| GameState (autoload) | État global de la partie, point d'entrée de la sauvegarde |
-| Calendar | Semaines, saisons, grands événements, intersaison |
-| FighterSystem | Forme, blessures, maladies, soins, progression, âge, retraite, mort |
-| CombatEngine | Déplacements, collisions, dégâts, sorts, équipement, graine aléatoire |
-| CombatAI | Interface commune : utility AI ou modèle ONNX |
-| StatModel | Résolution statistique des combats entre rivaux |
-| RivalAI | Décisions hebdomadaires des clubs rivaux |
-| Economy, Market, Staff | Argent, achats, ventes et libérations, personnel |
-| Rankings | Elo par colisée, titres, défis, compétitions |
-| SaveSystem | JSON versionné, auto et manuel |
-| Achievements | Succès du jeu, reliés aux succès Steam |
-| UI | Écrans, pop-ups, manuel |
-
-### Environnement d'entraînement
-
-Une scène dédiée fait tourner plusieurs dizaines d'arènes en parallèle, en mode sans rendu et accéléré. Côté Python, Godot RL Agents pilote l'entraînement avec Stable-Baselines3. Les stats, blessures, personnalités, équipements et arènes sont tirés au hasard à chaque combat pour que le modèle s'adapte à tout.
-
-## Outils et environnement
-
-Le poste de travail tient en cinq outils gratuits : Godot 4.7.2 .NET, le SDK .NET, JetBrains Rider, Git avec Git LFS, et un dépôt GitHub. Ni serveur de base de données ni Docker au départ.
-
-| Besoin | Choix | Remarque |
-| --- | --- | --- |
-| Moteur | Godot 4.7.2 .NET | Figer la version pendant la production, n'appliquer que les correctifs 4.7.x |
-| IDE | JetBrains Rider | Gratuit en usage non commercial ; alternative : VS Code + C# Dev Kit + godot-tools |
-| Versionnage | Git + GitHub | Branche `main` toujours fonctionnelle, une branche par fonctionnalité, un tag par phase |
-| Fichiers binaires | Git LFS | Sprites, sons, fichiers Aseprite ; surveiller le quota gratuit |
-| Données de design | Resources Godot (`.tres`) ou JSON | Classes, sorts, arènes, noms pour la génération |
-| Sauvegardes | JSON avec `System.Text.Json` | Dans `user://`, compressé en GZip si besoin |
-| Historique volumineux | SQLite (Microsoft.Data.Sqlite) | Seulement si le JSON devient trop lourd |
-| Intégration Steam | Steamworks.NET ou Facepunch.Steamworks | Succès Steam, sauvegarde cloud |
-| Tests | xUnit ou NUnit sur la logique C# pure | Rendu possible par la séparation logique / affichage |
-| Entraînement ML | Environnement virtuel Python (venv ou conda) | Plus simple que Docker, surtout sous Windows |
-| Intégration continue | GitHub Actions + image Godot headless | Optionnel, plus tard : build, tests, envoi sur une branche bêta Steam |
-
-### Git avec Godot
-
-À versionner : `project.godot`, les scènes (`.tscn`), les ressources (`.tres`), les scripts C#, le `.csproj`, le `.sln`, les fichiers `.import` et les fichiers `.uid` (sans eux, les références aux scripts cassent). À ignorer :
-
-```
-.godot/
-bin/
-obj/
-.vs/
-.idea/
-*.user
-export/
-```
-
-Ajouter un `.gitattributes` avec `* text=auto eol=lf` pour éviter les soucis de fins de ligne. Éviter de modifier la même scène dans deux branches en parallèle, car les conflits dans les `.tscn` sont pénibles à résoudre.
-
-### Support et communauté
-
-Documentation officielle, forum officiel, Discord officiel et r/godot pour Godot ; la communauté Chickensoft pour Godot en C# ; le Discord et les issues GitHub de Godot RL Agents pour la partie ML.
-
-## Feuille de route
-
-Le développement se fait en neuf phases, chacune terminée par un jalon jouable. À la fin de la phase 4, le jeu est complet avec l'IA scriptée ; le machine learning arrive ensuite comme amélioration.
-
-| Phase | Contenu | Jalon (comment savoir que c'est fini) |
-| --- | --- | --- |
-| 0. Préparation | Godot 4.7.2 .NET, Rider, dépôt Git avec LFS, sprites gratuits (Kenney.nl, OpenGameArt) | Un projet vide qui compile en C# et se lance depuis Rider |
-| 1. Combat de base | Moteur de combat en duel, 2 classes, 3 sorts chacune, utility AI, graines, compte rendu simple | Deux combattants s'affrontent ; la même graine redonne le même combat |
-| 2. Le combattant complet | Forme, blessures, maladies, soins, personnalité, seuil d'abandon, mort, progression, âge, retraite | Un combattant enchaîne 10 semaines avec des effets visibles |
-| 3. Management | Calendrier, économie, filet de sécurité, menu général, liste et fiche combattant, sauvegarde | Une saison entière jouable avec un seul club |
-| 4. Le monde | Colisées, Elo, titres, défis, clubs rivaux, marché, personnel, modèle statistique calibré | Plusieurs saisons où les classements vivent sans le joueur |
-| 5. Formats et spectacle | Mêlée (King of the hill) jusqu'à 20 en ouverture de saison, équipement refusable, vue multi-combats, contrôles de vitesse | Regarder 3 combats du joueur en même temps |
-| 6. IA apprenante | Godot RL Agents, entraînement en duel, puis mêlée, puis équipe, export ONNX | Le modèle appris bat nettement l'IA scriptée |
-| 7. Grands événements | Championnat du monde, Inter-Coliseum en 5 contre 5, succès, tutoriel et manuel | Un cycle complet de 4 saisons avec les deux événements |
-| 8. Contenu et équilibrage | Nouvelles classes et sorts, arènes, équilibrage par simulations de masse, finitions | Taux de victoire par classe entre 45 et 55 % |
-| 9. Publication Steam | Compte Steamworks, page du magasin, succès Steam, builds Windows et Linux, test Steam Deck | Le jeu est disponible gratuitement sur Steam |
+Le plan Godot (C#, Godot RL Agents) est abandonné pour un moteur maison en Rust. La pile technique, l'architecture, les règles de déterminisme, les outils et les phases du développement, avec leurs jalons, sont tenus dans la [feuille de route technique](Gladiator_Manager_Feuille_de_route_Rust.md), qui fait foi. La règle d'or reste celle du départ : la logique du jeu est séparée de l'affichage, pour pouvoir simuler sans rendu, entraîner l'IA et tester ; le même moteur de combat tourne à l'écran, en arrière-plan et pendant l'entraînement. Le jeu est complet avec l'IA scriptée à la fin de la phase 6 ; le machine learning arrive ensuite comme amélioration.
 
 ## Décisions prises et points ouverts
 
@@ -432,7 +344,7 @@ Le développement se fait en neuf phases, chacune terminée par un jalon jouable
 | Filet de sécurité | Toujours des free agents disponibles, et un colisée de bas niveau à entrée gratuite |
 | Retraite | Décidée uniquement par le combattant ; le joueur peut le libérer du club |
 | Soins | Choisis par le joueur, jamais automatiques |
-| Durée de la compétition | 25 semaines par saison |
+| Durée de la compétition | 22 semaines par saison, puis 4 de grand événement et 4 d'intersaison |
 | Titre de champion | Défense au minimum toutes les 4 semaines, plus souvent si le champion le souhaite |
 | Combat sans équipement | Malus et bonus selon la pièce refusée ; refuser l'arme rapporte plus que refuser l'armure |
 | Refus de défi | Perte de renommée et d'Elo si le combattant ne combat pas assez |
@@ -441,7 +353,7 @@ Le développement se fait en neuf phases, chacune terminée par un jalon jouable
 
 ### Points encore ouverts
 
-- [ ] Taille du monde : nombre de colisées et de clubs rivaux.
+- [ ] Taille du monde : nombre de colisées et de clubs rivaux (2 colisées et 3 clubs rivaux pour l'instant).
 - [ ] Liste des classes et de leurs sorts.
 - [ ] Calendrier des grands événements : confirmer l'Inter-Coliseum aux saisons impaires, ou revenir à la règle du report.
 
@@ -450,8 +362,7 @@ Le développement se fait en neuf phases, chacune terminée par un jalon jouable
 | Risque | Conséquence | Parade |
 | --- | --- | --- |
 | Équilibrage difficile entre classes, sorts et malus | Une classe domine, les autres sont inutiles | Mode de simulation de masse dès la phase 1, suivi des taux de victoire |
-| Entraînement ML lent ou instable | Phase 6 qui s'éternise | Jeu complet avec l'IA scriptée ; self-play contre d'anciennes versions et contre l'IA scriptée |
-| Maintenance ralentie de Godot RL Agents | Incompatibilité avec Godot 4.7 | Tester tôt sur un mini-projet ; garder l'IA derrière une interface commune pour pouvoir la désactiver |
+| Entraînement ML lent ou instable | Phase 7 qui s'éternise | Jeu complet avec l'IA scriptée ; self-play contre d'anciennes versions et contre l'IA scriptée |
 | Récompenses mal conçues | Comportements absurdes (fuite permanente) | Récompenser dégâts et victoire, légère pénalité de temps, revoir les combats régulièrement |
 | Performances en mêlée à 20 avec vue multi-combats | Ralentissements | IA appelée quelques fois par seconde, pas à chaque image ; limiter le nombre de vignettes |
 | Écart entre modèle statistique et vrais combats | Résultats incohérents entre joueur et rivaux | Recalibrer après chaque changement d'équilibrage |

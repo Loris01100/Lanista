@@ -6,7 +6,7 @@ Ce document fixe les formats des sprites, arènes, effets et sons du jeu, et la 
 
 - PNG RGBA, fond transparent.
 - Pixel art sans anticrénelage : le jeu affiche les textures en filtrage `Nearest`, un bord adouci devient un halo.
-- Échelle unique : **1 m = 20 px**. Combattants, sols, taches et décors sont dessinés à cette échelle ; le jeu agrandit l'ensemble à l'affichage.
+- Échelle unique : **1 m = 20 px**. Combattants, sols, taches et décors sont dessinés à cette échelle ; le jeu agrandit l'ensemble à l'affichage d'un facteur entier (voir « Agrandissement »).
 - Palette limitée (16 à 32 couleurs, par exemple « Endesga 32 » sur Lospec), commune à tout le jeu.
 - Les fichiers exportés vont dans `assets/` (chargés par le jeu) ; les fichiers sources `.aseprite` vont dans `art/` (non livrés). Git LFS suit les deux.
 
@@ -79,8 +79,9 @@ Un personnage unique est dessiné à la main, sans calques générés ni teintes
 
 ## Arènes
 
-- Sol : 20 × 20 m, soit **400 × 400 px**, une image par type d'arène. La taille des arènes de mêlée sera fixée en phase 6, toujours à 20 px/m.
-- Autour du sol, le jeu montre 1 m de marge puis des gradins jusqu'au bord de l'écran, dont la largeur dépend du format (environ 35 m en 16:10, davantage en ultra-large). Les gradins sont une **texture répétable**, par exemple 64 × 64 px.
+- Sol d'un duel : une image par type d'arène, à 20 px/m : 20 × 20 m, soit **400 × 400 px**, pour le sable et les piliers ; 8 × 6 m, soit **160 × 120 px**, pour l'arène étroite (`arenas` dans `data/combat.ron`).
+- En mêlée, le sol grandit avec le nombre de combattants (30 m² chacun, `melee` dans `data/combat.ron`) : environ 24,5 m de côté à 20, soit près de 490 px, piliers compris. Le sol d'une mêlée doit donc se répéter ou s'étirer sans se voir, ou exister en plusieurs tailles.
+- Autour du sol, le jeu montre 1 m de marge puis des gradins jusqu'au bord de l'écran, dont la largeur dépend de l'écran et de l'agrandissement (64 × 40 m en tout sur un écran de 1280 × 800 px, autour d'un duel de 20 m). Les gradins sont une **texture répétable**, par exemple 64 × 64 px.
 
 ## Effets
 
@@ -120,6 +121,6 @@ File > Export Sprite Sheet, une exportation par calque :
 
 Pour la tête et les cheveux, exporter seulement la première image des calques `head` et `hair` (File > Export As, Frames = 1).
 
-## Point ouvert
+## Agrandissement
 
-Sur un écran de 800 px de haut, l'arène est affichée à environ 36 px/m, soit ×1,8 : un agrandissement non entier donne des pixels de tailles inégales. Caler l'agrandissement sur un entier est prévu avec les render targets de la phase 6 ; cela ne change rien aux dessins.
+Le combat en grand est agrandi d'un facteur entier, le plus grand qui montre toute l'arène et sa marge (`reesch::pixel_view`) : chaque pixel d'un dessin couvre le même nombre de pixels d'écran. Autour d'un duel de 20 m, cela donne ×1 sur un écran de 800 px de haut (Steam Deck), ×2 en 1080p et ×3 en 1440p ; le reste de l'écran montre plus de gradins. Un écran trop petit pour montrer l'arène à ×1 la réduit sans facteur entier, comme les vignettes de la vue multi-combats. Cela ne change rien aux dessins.

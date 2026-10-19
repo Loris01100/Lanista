@@ -34,8 +34,8 @@ impl Fame {
 }
 
 /// What a fight meant for one fighter's fame.
-// ponytail: flights and King of the hill come with the phases that add them; refused
-// equipment brings its bonus apart (`equipment::Refused::fame_bonus`).
+// ponytail: flights come with the phase that adds them; a melee's place (`melee::place_fame`)
+// and refused equipment (`equipment::Refused::fame_bonus`) bring their share apart.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct FightOutcome {
     pub result: FightResult,

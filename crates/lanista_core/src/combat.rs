@@ -361,6 +361,7 @@ pub fn tick(arena: &mut Arena, ais: &mut [Box<dyn CombatAi>]) {
         }
     }
     cool_down(arena);
+    recover(arena);
     move_fighters(arena);
     separate(arena);
     keep_inside(arena);
@@ -628,6 +629,18 @@ fn come_round(arena: &mut Arena) {
     }
 }
 
+/// At the end of each second, every fighter still in the fight recovers mana and
+/// endurance: none is left without a spell for long.
+fn recover(arena: &mut Arena) {
+    if arena.tick == 0 || !arena.tick.is_multiple_of(TICKS_PER_SECOND) {
+        return;
+    }
+    for f in arena.fighters.iter_mut().filter(|f| f.is_fighting()) {
+        f.mana.recover();
+        f.endurance.recover();
+    }
+}
+
 fn cool_down(arena: &mut Arena) {
     for f in &mut arena.fighters {
         for c in &mut f.cooldowns {
@@ -848,7 +861,7 @@ mod tests {
     use rand_chacha::rand_core::Rng;
 
     use super::*;
-    use crate::fighter::{FighterId, Stats, test_fighter as fighter};
+    use crate::fighter::{FighterId, Gauge, Stats, test_fighter as fighter};
 
     struct Fixed(Action);
 
@@ -879,6 +892,25 @@ mod tests {
         assert_eq!(arena.fighters[0].endurance.current, 40);
         assert_eq!(arena.fighters[0].cooldowns[0], 30);
         assert_eq!(arena.fighters[0].action, Action::Wait);
+    }
+
+    #[test]
+    fn mana_and_endurance_come_back_each_second_up_to_the_max() {
+        let mut arena = duel(2.0);
+        for f in &mut arena.fighters {
+            f.mana = Gauge::full(50, 4);
+            f.endurance = Gauge::full(50, 3);
+            f.mana.current = 0;
+            f.endurance.current = 48;
+        }
+        arena.fighters[1].surrendered = true;
+        play(&mut arena, &[Action::Wait, Action::Wait], TICKS_PER_SECOND);
+        assert_eq!(arena.fighters[0].mana.current, 0, "not a whole second yet");
+        play(&mut arena, &[Action::Wait, Action::Wait], 1);
+        assert_eq!(arena.fighters[0].mana.current, 4);
+        assert_eq!(arena.fighters[0].endurance.current, 50);
+        // Out of the fight, it recovers nothing.
+        assert_eq!(arena.fighters[1].mana.current, 0);
     }
 
     #[test]

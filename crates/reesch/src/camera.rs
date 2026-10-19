@@ -16,6 +16,16 @@ pub fn fit_camera(view: Rect) -> Camera2D {
     camera
 }
 
+/// Like `fit_camera`, for pixel art drawn `pixels_per_unit` pixels a world unit: see
+/// `pixel_view`.
+#[must_use]
+pub fn pixel_camera(view: Rect, pixels_per_unit: f32) -> Camera2D {
+    let shown = pixel_view(view, vec2(screen_width(), screen_height()), pixels_per_unit);
+    let mut camera = Camera2D::from_display_rect(shown);
+    camera.zoom.y = -camera.zoom.y;
+    camera
+}
+
 /// Smallest area with the screen's aspect ratio that contains `view`, centred
 /// on it: the extra space shows more of the world instead of black bars.
 #[must_use]
@@ -23,7 +33,35 @@ pub fn fit_view(view: Rect, screen: Vec2) -> Rect {
     if screen.x <= 0.0 || screen.y <= 0.0 {
         return view; // minimised window
     }
-    let scale = (screen.x / view.w).min(screen.y / view.h);
+    centred(view, screen, fit_scale(view, screen))
+}
+
+/// The area of the world shown when pixel art drawn `pixels_per_unit` pixels a world
+/// unit is enlarged by the largest whole factor that still shows all of `view`, so that
+/// every pixel of the art takes as many pixels of the screen; more of the world shows
+/// around it. A screen too small to show `view` unenlarged shrinks it as `fit_view`.
+#[must_use]
+pub fn pixel_view(view: Rect, screen: Vec2, pixels_per_unit: f32) -> Rect {
+    if screen.x <= 0.0 || screen.y <= 0.0 {
+        return view;
+    }
+    let fit = fit_scale(view, screen);
+    let factor = (fit / pixels_per_unit).floor();
+    let scale = if factor >= 1.0 {
+        factor * pixels_per_unit
+    } else {
+        fit
+    };
+    centred(view, screen, scale)
+}
+
+/// Screen pixels per world unit that show all of `view`, as large as possible.
+fn fit_scale(view: Rect, screen: Vec2) -> f32 {
+    (screen.x / view.w).min(screen.y / view.h)
+}
+
+/// The area of `screen` pixels, `scale` pixels a world unit, centred on `view`.
+fn centred(view: Rect, screen: Vec2, scale: f32) -> Rect {
     let size = screen / scale;
     Rect::new(
         view.center().x - size.x / 2.0,
@@ -64,5 +102,40 @@ mod tests {
     #[test]
     fn minimised_window_keeps_the_view() {
         assert_eq!(fit_view(ARENA, Vec2::ZERO), ARENA);
+        assert_eq!(pixel_view(ARENA, Vec2::ZERO, 20.0), ARENA);
+    }
+
+    /// 20 m of arena and 1 m on each side, drawn 20 px a metre.
+    const WITH_MARGIN: Rect = Rect {
+        x: -1.0,
+        y: -1.0,
+        w: 22.0,
+        h: 22.0,
+    };
+
+    #[test]
+    fn pixel_art_is_enlarged_by_a_whole_factor() {
+        // 800 px high: 36 px a metre would fit, ×1 (20 px) is shown, 64 × 40 m.
+        assert_eq!(
+            pixel_view(WITH_MARGIN, vec2(1280.0, 800.0), 20.0),
+            Rect::new(-22.0, -10.0, 64.0, 40.0)
+        );
+        // 1080 px high: ×2, 40 px a metre, 48 × 27 m.
+        assert_eq!(
+            pixel_view(WITH_MARGIN, vec2(1920.0, 1080.0), 20.0),
+            Rect::new(-14.0, -3.5, 48.0, 27.0)
+        );
+        // 1440 px high: ×3.
+        let shown = pixel_view(WITH_MARGIN, vec2(2560.0, 1440.0), 20.0);
+        assert!((shown.h - 24.0).abs() < 1e-4);
+    }
+
+    #[test]
+    fn too_small_a_screen_shrinks_the_art_to_fit() {
+        let screen = vec2(400.0, 300.0);
+        assert_eq!(
+            pixel_view(WITH_MARGIN, screen, 20.0),
+            fit_view(WITH_MARGIN, screen)
+        );
     }
 }

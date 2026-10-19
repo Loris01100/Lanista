@@ -15,7 +15,9 @@ pub const SHEET: SpriteSheet = SpriteSheet {
     frame_width: 32.0,
     frame_height: 32.0,
 };
-/// Drawn size of a fighter, in meters (its body is 1 m wide): 20 px a meter.
+/// The art's scale: pixels a meter (`docs/Formats_graphiques.md`).
+pub const PIXELS_PER_METRE: f32 = 20.0;
+/// Drawn size of a fighter, in meters (its body is 1 m wide): 32 px.
 pub const SPRITE_SIZE: f32 = 1.6;
 /// Pixels on a side of a fighter's image.
 const PIXELS: f32 = 32.0;
