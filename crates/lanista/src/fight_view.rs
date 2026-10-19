@@ -13,7 +13,7 @@ use lanista_core::melee::{in_danger, in_final, next_cut};
 use macroquad::prelude::*;
 use reesch::{Animation, AnimationEvent, AnimationPlayer, Assets, FixedStep};
 
-use crate::fighter_sprite::{Placement, SHEET, SPRITE_SIZE, draw_fighter};
+use crate::fighter_sprite::{Missing, Placement, SHEET, SPRITE_SIZE, draw_fighter};
 
 // ponytail: placeholder sounds; per-spell and per-class sounds in `data/` later.
 pub const HIT_SOUND: &str = "placeholder/hit.wav";
@@ -427,11 +427,12 @@ impl FightView {
             let animation = &self.animations[look.pose as usize];
             let lying = look.pose == Pose::Death && look.player.is_finished(animation);
             let aside = fighter.surrendered || fighter.eliminated;
+            let flip_x = self.faces_left(i);
             let placement = Placement {
                 x: at[i].x,
                 y: at[i].y,
                 frame: look.player.frame(animation),
-                flip_x: self.faces_left(i),
+                flip_x,
                 shade: if lying {
                     DEAD_SHADE
                 } else if aside {
@@ -439,6 +440,7 @@ impl FightView {
                 } else {
                     1.0
                 },
+                missing: Missing::of(fighter, flip_x),
             };
             draw_fighter(assets, rules, &fighter.appearance, &placement);
         }

@@ -454,8 +454,8 @@ pub fn stun_chance(damage: u32, kind: DamageKind, target: &Fighter, rules: &Stun
 /// What a cutting hit taking `damage` HP severs of `target`, as the hit left it: its
 /// head with `fatal_head_percent` if the hit brought it to 0 HP, else with
 /// `head_hundredths` per tenth of its max HP the hit takes; then, if it still fights,
-/// a limb with `limb_hundredths` per tenth (see [`severed_limb`]). Each chance is
-/// drawn only above 0.
+/// a limb with `limb_hundredths` per tenth (see [`severed_limb`]); a limb it already
+/// lost is a stump, and nothing is severed. Each chance is drawn only above 0.
 pub fn severed_part<R: rand::Rng + ?Sized>(
     rng: &mut R,
     damage: u32,
@@ -474,7 +474,9 @@ pub fn severed_part<R: rand::Rng + ?Sized>(
         return Some(Location::Head);
     }
     let limb = per_tenth(rules.limb_hundredths, damage, target.stats.hp);
-    (target.is_fighting() && draw(rng, limb)).then(|| severed_limb(rng, rules))
+    (target.is_fighting() && draw(rng, limb))
+        .then(|| severed_limb(rng, rules))
+        .filter(|&part| !target.has_lost(part))
 }
 
 /// Which limb a cutting hit severs: an arm or a leg by `arm_weight` and `leg_weight`,
@@ -1318,6 +1320,29 @@ mod tests {
             .filter(|_| severed_part(&mut rng, 10, &target, &CUT).is_some())
             .count();
         assert!(cut.abs_diff(250) < 60, "{cut}");
+    }
+
+    #[test]
+    fn a_limb_lost_before_is_a_stump_nothing_is_cut_off() {
+        use crate::fighter::injury::severed_limb_wound;
+
+        let arms_only = CutRules {
+            limb_hundredths: 10_000,
+            head_hundredths: 0,
+            leg_weight: 0,
+            ..CUT
+        };
+        let mut target = fighter(1, 0.0, 0.0);
+        target.condition.injuries = vec![severed_limb_wound(Location::Arm(Side::Left))];
+        assert!(target.has_lost(Location::Arm(Side::Left)));
+        assert!(!target.has_lost(Location::Arm(Side::Right)));
+        let mut rng = ChaCha8Rng::seed_from_u64(4);
+        let cuts: Vec<Option<Location>> = (0..200)
+            .map(|_| severed_part(&mut rng, 10, &target, &arms_only))
+            .collect();
+        assert!(cuts.contains(&Some(Location::Arm(Side::Right))));
+        assert!(cuts.contains(&None));
+        assert!(!cuts.contains(&Some(Location::Arm(Side::Left))));
     }
 
     #[test]

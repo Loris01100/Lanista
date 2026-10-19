@@ -270,6 +270,12 @@ impl Fighter {
             && self.severed.is_none()
     }
 
+    /// Whether it no longer has `part`: cut off in this fight, or a limb lost before.
+    #[must_use]
+    pub fn has_lost(&self, part: Location) -> bool {
+        self.severed == Some(part) || injury::has_lost(&self.condition.injuries, part)
+    }
+
     /// Fighting and not down: acts, and can be hit.
     #[must_use]
     pub fn is_standing(&self) -> bool {

@@ -477,6 +477,10 @@ pub fn injury_text(injury: Injury, dominant: Side) -> String {
         Severity::Medium => "moyenne",
         Severity::Severe => "grave",
         Severity::Permanent => return format!("{location} : séquelle définitive"),
+        Severity::Lost if matches!(injury.location, Location::Leg(_)) => {
+            return format!("{location} : perdue");
+        }
+        Severity::Lost => return format!("{location} : perdu"),
     };
     format!("{location} : {severity}, {}", weeks(injury.weeks_left))
 }
@@ -723,6 +727,19 @@ mod tests {
         assert_eq!(
             injury_text(arm, Side::Left),
             "Bras gauche (dominant) : séquelle définitive"
+        );
+        let lost = |location| Injury {
+            location,
+            severity: Severity::Lost,
+            weeks_left: 0,
+        };
+        assert_eq!(
+            injury_text(lost(Location::Arm(Side::Left)), Side::Left),
+            "Bras gauche (dominant) : perdu"
+        );
+        assert_eq!(
+            injury_text(lost(Location::Leg(Side::Right)), Side::Left),
+            "Jambe droite : perdue"
         );
         assert_eq!(
             location_name(Location::Arm(Side::Right), Side::Left),

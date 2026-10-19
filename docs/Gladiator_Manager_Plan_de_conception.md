@@ -103,9 +103,11 @@ Chaque blessure a une localisation et une gravité (légère, moyenne, grave, pe
 | Tête | Baisse de précision, risque d'étourdissement accru | Séquelle : malus de précision définitif |
 
 | Corps | Baisse de PV max et de DC | Baisse de PV définitive |
-| Bras dominant | Baisse d'AC et d'AL | Perte du bras : le combattant doit changer de style |
-| Bras secondaire | Baisse de DC (bouclier) | Perte du bras |
+| Bras dominant | Baisse d'AC et d'AL | Bras estropié : AC et AL réduites définitivement |
+| Bras secondaire | Baisse de DC (bouclier) | Bras estropié : DC réduite définitivement |
 | Jambe (G ou D) | Baisse de VIT | Boiterie : VIT réduite définitivement |
+
+Un coup tranchant peut aussi couper un membre : il est perdu, et cela se voit à l'écran, le combattant étant dessiné sans lui dès le coup et dans tous ses combats suivants. Il prend plus qu'une séquelle : le bras dominant, beaucoup d'AC et d'AL et un peu de précision (le combattant doit changer de style) ; le bras secondaire, beaucoup de DC et de DL (plus de bouclier) ; une jambe, la moitié de la VIT et un peu de DC. Aucun médecin ne le rend, mais il n'impose pas la retraite : c'est au combattant de décider, une blessure permanente de plus pesant sur sa décision. La tête tranchée tue sur le coup, et le corps reste sans tête.
 
 ### Maladies
 
@@ -242,7 +244,7 @@ Le prix d'un combattant dépend de ses stats, de sa renommée et de son bilan (v
 | Poste | Effet | Idée d'évolution |
 | --- | --- | --- |
 | Entraîneur | Gains d'entraînement plus élevés, moins de perte de forme à l'entraînement | Niveaux 1 à 5, salaire croissant |
-| Médecin | Guérison plus rapide, moins de séquelles ; ne peut rien contre une blessure permanente (perte d'un bras) | Niveaux 1 à 5 |
+| Médecin | Guérison plus rapide, moins de séquelles ; ne peut rien contre une blessure permanente ni rendre un membre perdu | Niveaux 1 à 5 |
 | Recruteur | Fourchettes plus précises, estimation du potentiel, détection de la personnalité | Niveaux 1 à 5 |
 
 Le personnel s'engage au marché parmi des candidats, les mêmes pour le joueur et les clubs rivaux, qui repartent au bout de quelques semaines. Chaque candidat a un niveau ; ses stats et son salaire varient autour de ceux de ce niveau. À niveau égal, l'un coûte moins cher, un autre soigne mieux mais coûte plus. Ses stats se voient sans observation.

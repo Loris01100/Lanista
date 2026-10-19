@@ -3,7 +3,9 @@
 //! the head and hair are one image each, moved and turned image by image to follow the
 //! body. Formats: `docs/Formats_graphiques.md`.
 
+use lanista_core::fighter::Fighter;
 use lanista_core::fighter::appearance::{Appearance, AppearanceRules, Tint};
+use lanista_core::fighter::injury::{Location, Side};
 use macroquad::prelude::*;
 use reesch::{Assets, SpriteSheet};
 
@@ -85,6 +87,55 @@ pub struct Placement {
     pub flip_x: bool,
     /// Brightness, from 0 to 1: dimmer once dead.
     pub shade: f32,
+    /// The parts it no longer has, left undrawn.
+    pub missing: Missing,
+}
+
+/// The parts of a fighter not drawn, cut off in the fight or lost before: the head
+/// takes the hair with it, and the front limbs are the right ones of a fighter facing
+/// right, the left ones once it faces left.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+#[expect(
+    clippy::struct_excessive_bools,
+    reason = "one flag per part a fighter may lose"
+)]
+pub struct Missing {
+    pub head: bool,
+    pub arm_front: bool,
+    pub arm_back: bool,
+    pub leg_front: bool,
+    pub leg_back: bool,
+}
+
+impl Missing {
+    /// What `fighter` has lost, drawn facing left if `flip_x`.
+    #[must_use]
+    pub fn of(fighter: &Fighter, flip_x: bool) -> Self {
+        let (front, back) = if flip_x {
+            (Side::Left, Side::Right)
+        } else {
+            (Side::Right, Side::Left)
+        };
+        Self {
+            head: fighter.has_lost(Location::Head),
+            arm_front: fighter.has_lost(Location::Arm(front)),
+            arm_back: fighter.has_lost(Location::Arm(back)),
+            leg_front: fighter.has_lost(Location::Leg(front)),
+            leg_back: fighter.has_lost(Location::Leg(back)),
+        }
+    }
+
+    /// Whether the layer `name` is gone.
+    fn hides(self, name: &str) -> bool {
+        match name {
+            "head" | "hair" => self.head,
+            "arm_front" => self.arm_front,
+            "arm_back" => self.arm_back,
+            "leg_front" => self.leg_front,
+            "leg_back" => self.leg_back,
+            _ => false,
+        }
+    }
 }
 
 /// The hair shape of a layered `look` and its tints, in `Paint` order; the first of
@@ -120,8 +171,8 @@ fn colors<'a>(rules: &'a AppearanceRules, look: &Appearance) -> (&'a str, [Tint;
     (shape, tints)
 }
 
-/// Draws a fighter of `look` as `at` says. A unique character missing from the assets
-/// is drawn as the default layered look.
+/// Draws a fighter of `look` as `at` says, without the parts it lost. A unique
+/// character missing from the assets is drawn as the default layered look, and whole.
 pub fn draw_fighter(assets: &Assets, rules: &AppearanceRules, look: &Appearance, at: &Placement) {
     let dest = vec2(SPRITE_SIZE, SPRITE_SIZE);
     let (left, top) = (at.x - SPRITE_SIZE / 2.0, at.y - SPRITE_SIZE / 2.0);
@@ -150,6 +201,9 @@ pub fn draw_fighter(assets: &Assets, rules: &AppearanceRules, look: &Appearance,
     let untinted = color((255, 255, 255), at.shade);
     let build = rules.build.as_str();
     let layer = |(name, tint): (&str, Paint)| {
+        if at.missing.hides(name) {
+            return;
+        }
         if let Some(texture) = assets.try_texture(&layer_path(name, build)) {
             sheet(texture, color(paint(tint), at.shade));
         }
@@ -194,6 +248,9 @@ pub fn draw_fighter(assets: &Assets, rules: &AppearanceRules, look: &Appearance,
         );
     };
     for (name, variant, tint) in [("head", build, Paint::Skin), ("hair", shape, Paint::Hair)] {
+        if at.missing.hides(name) {
+            continue;
+        }
         if let Some(texture) = assets.try_texture(&layer_path(name, variant)) {
             head(texture, color(paint(tint), at.shade));
         }
@@ -222,6 +279,28 @@ mod tests {
         }
         assert!(required.contains(&"fighters/hair/long.png".to_owned()));
         assert!(details.contains(&"fighters/head/average_detail.png".to_owned()));
+    }
+
+    #[test]
+    fn a_lost_part_is_left_undrawn_on_the_side_it_faces() {
+        use lanista_core::fighter::injury::severed_limb_wound;
+
+        let data = DesignData::load().unwrap();
+        let standard = lanista_core::duel::random_duel(&data, 1);
+        let mut fighter = standard.fighters[0].clone();
+        assert_eq!(Missing::of(&fighter, false), Missing::default());
+        // A right arm lost before, a left leg cut off now.
+        fighter.condition.injuries = vec![severed_limb_wound(Location::Arm(Side::Right))];
+        fighter.severed = Some(Location::Leg(Side::Left));
+        let right = Missing::of(&fighter, false);
+        assert!(right.arm_front && right.leg_back && !right.arm_back && !right.leg_front);
+        assert!(right.hides("arm_front") && !right.hides("body") && !right.hides("hair"));
+        let left = Missing::of(&fighter, true);
+        assert!(left.arm_back && left.leg_front && !left.arm_front && !left.leg_back);
+        // Beheaded: no head, no hair.
+        fighter.severed = Some(Location::Head);
+        let beheaded = Missing::of(&fighter, false);
+        assert!(beheaded.head && beheaded.hides("head") && beheaded.hides("hair"));
     }
 
     #[test]

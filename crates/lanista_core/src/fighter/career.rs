@@ -15,8 +15,8 @@ use crate::fighter::fame::{Fame, FightOutcome, FightResult};
 use crate::fighter::form::{Form, FormEvent};
 use crate::fighter::illness::{Illness, IllnessLevel, roll_illness};
 use crate::fighter::injury::{
-    Injury, Location, Severity, Side, fatal_blow_wound, heal_week, injured_stats, roll_injury,
-    severed_limb_wound, spare_after_effect, stun_wound,
+    Injury, Location, Severity, Side, fatal_blow_wound, has_lost, heal_week, injured_stats,
+    roll_injury, severed_limb_wound, spare_after_effect, stun_wound,
 };
 use crate::fighter::morale::{Morale, MoraleEvent};
 use crate::fighter::personality::Personality;
@@ -419,7 +419,8 @@ impl CareerFighter {
                 self.status = Status::Dead;
             }
         } else if let Some(limb) = side.severed {
-            wound = Some(severed_limb_wound(limb));
+            // A stump: nothing more to lose.
+            wound = (!has_lost(&self.injuries, limb)).then(|| severed_limb_wound(limb));
         } else if side.stunned && rng.random_bool(rules.injury.stun_wound_chance) {
             wound = Some(stun_wound(rng, &rules.injury));
         }
@@ -1337,7 +1338,10 @@ mod tests {
         let (injury, spared) =
             maimed.after_fight(taken, FormEvent::Fight, medicine, &mut rng, rules);
         assert_eq!((injury, spared), (Some(severed_limb_wound(arm)), false));
-        assert!(maimed.injuries[0].is_permanent());
+        assert!(maimed.injuries[0].is_lost());
+        // The model may cut the same arm again: a stump, no second lost arm.
+        let taken = maimed.take_side(cut(arm), false, 0, &mut rng, rules);
+        assert_eq!(taken.wound, None);
     }
 
     #[test]

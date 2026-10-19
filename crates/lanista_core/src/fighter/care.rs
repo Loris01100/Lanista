@@ -37,7 +37,7 @@ impl Injury {
             Severity::Light => rules.injury_cost.light,
             Severity::Medium => rules.injury_cost.medium,
             Severity::Severe => rules.injury_cost.severe,
-            Severity::Permanent => return None,
+            Severity::Permanent | Severity::Lost => return None,
         };
         (rules.weeks_after_care(self.weeks_left) < self.weeks_left).then_some(cost)
     }

@@ -28,8 +28,11 @@ pub enum Severity {
     Light,
     Medium,
     Severe,
-    /// Never heals: a lasting after-effect, or a lost arm.
+    /// Never heals: a lasting after-effect.
     Permanent,
+    /// The limb is gone, severed by a cutting hit: never heals, no doctor spares it,
+    /// and it takes off more than an after-effect (`InjuryRules::lost`).
+    Lost,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -41,14 +44,30 @@ pub struct Injury {
 }
 
 impl Injury {
+    /// Never heals: an after-effect or a lost limb.
     #[must_use]
     pub fn is_permanent(&self) -> bool {
-        self.severity == Severity::Permanent
+        matches!(self.severity, Severity::Permanent | Severity::Lost)
+    }
+
+    /// A limb the fighter no longer has.
+    #[must_use]
+    pub fn is_lost(&self) -> bool {
+        self.severity == Severity::Lost
     }
 
     /// Percentage of each stat this injury takes off, for a fighter whose dominant hand is `dominant`.
     #[must_use]
     pub fn malus(&self, dominant: Side, rules: &InjuryRules) -> Stats {
+        if self.is_lost() {
+            let lost = &rules.lost;
+            return match self.location {
+                Location::Arm(side) if side == dominant => lost.dominant_arm,
+                Location::Arm(_) => lost.off_arm,
+                Location::Leg(_) => lost.leg,
+                Location::Head | Location::Body => Stats::default(),
+            };
+        }
         let maluses = if self.is_permanent() {
             &rules.permanent
         } else {
@@ -65,7 +84,7 @@ impl Injury {
             Severity::Light => rules.severity_percent.light,
             Severity::Medium => rules.severity_percent.medium,
             Severity::Severe => rules.severity_percent.severe,
-            Severity::Permanent => 100,
+            Severity::Permanent | Severity::Lost => 100,
         };
         base.map(|value| value.saturating_mul(percent) / 100)
     }
@@ -97,7 +116,7 @@ pub fn roll_injury<R: Rng + ?Sized>(
         Severity::Light => rules.healing_weeks.light,
         Severity::Medium => rules.healing_weeks.medium,
         Severity::Severe => rules.healing_weeks.severe,
-        Severity::Permanent => (0, 0),
+        Severity::Permanent | Severity::Lost => (0, 0),
     };
     Some(Injury {
         location,
@@ -127,13 +146,12 @@ pub fn stun_wound<R: Rng + ?Sized>(rng: &mut R, rules: &InjuryRules) -> Injury {
     }
 }
 
-/// The permanent injury of a limb a cutting hit severed: a lost arm, or a leg's
-/// after-effect.
+/// What a cutting hit leaves of a limb it severed: the limb lost.
 #[must_use]
 pub fn severed_limb_wound(location: Location) -> Injury {
     Injury {
         location,
-        severity: Severity::Permanent,
+        severity: Severity::Lost,
         weeks_left: 0,
     }
 }
@@ -159,14 +177,17 @@ fn roll_location<R: Rng + ?Sized>(rng: &mut R, rules: &InjuryRules) -> Location 
 
 /// `injury` as a doctor leaves it: one that would leave an after-effect is only severe
 /// with a chance of `spared_percent`, healing in the weeks of a severe one. Draws
-/// nothing for a temporary injury or without a doctor (`spared_percent` 0).
+/// nothing for a temporary injury, a lost limb or without a doctor (`spared_percent` 0).
 pub fn spare_after_effect<R: Rng + ?Sized>(
     rng: &mut R,
     injury: Injury,
     spared_percent: u32,
     rules: &InjuryRules,
 ) -> Injury {
-    if !injury.is_permanent() || spared_percent == 0 || rng.random_range(0..100) >= spared_percent {
+    if injury.severity != Severity::Permanent
+        || spared_percent == 0
+        || rng.random_range(0..100) >= spared_percent
+    {
         return injury;
     }
     let (min, max) = rules.healing_weeks.severe;
@@ -175,6 +196,12 @@ pub fn spare_after_effect<R: Rng + ?Sized>(
         weeks_left: rng.random_range(min..=max),
         ..injury
     }
+}
+
+/// Whether `injuries` count `part` as a lost limb.
+#[must_use]
+pub fn has_lost(injuries: &[Injury], part: Location) -> bool {
+    injuries.iter().any(|i| i.is_lost() && i.location == part)
 }
 
 /// One week of natural healing: every temporary injury gets a week closer to healed,
@@ -219,8 +246,10 @@ pub struct InjuryRules {
     pub severity_percent: BySeverity<u32>,
     /// Percentage of each stat a medium injury takes off, by location.
     pub temporary: LocationMaluses,
-    /// Percentage of each stat a permanent injury takes off, by location.
+    /// Percentage of each stat an after-effect takes off, by location.
     pub permanent: LocationMaluses,
+    /// Percentage of each stat a lost limb takes off.
+    pub lost: LimbMaluses,
     /// Highest percentage of a stat all injuries together can take off.
     pub max_malus: u32,
     /// Chance that a fighter brought to 0 HP survives, with a severe injury.
@@ -256,6 +285,15 @@ pub struct BySeverity<T> {
     pub light: T,
     pub medium: T,
     pub severe: T,
+}
+
+/// Stat maluses of a lost limb, in percent; the arms depend on the dominant hand.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct LimbMaluses {
+    pub dominant_arm: Stats,
+    pub off_arm: Stats,
+    pub leg: Stats,
 }
 
 /// Stat maluses, in percent, by location; the arms depend on the dominant hand.
@@ -319,6 +357,11 @@ mod tests {
                 dominant_arm: only(0, 60, 0),
                 ..maluses
             },
+            lost: LimbMaluses {
+                dominant_arm: only(0, 70, 0),
+                off_arm: only(0, 10, 0),
+                leg: only(0, 0, 50),
+            },
             max_malus: 80,
             fatal_blow_survival: 0.5,
             stun_wound_chance: 0.5,
@@ -370,8 +413,30 @@ mod tests {
 
     #[test]
     fn permanent_injuries_use_their_own_maluses() {
-        let lost_arm = injury(Location::Arm(Side::Right), Severity::Permanent, 0);
-        assert_eq!(lost_arm.malus(Side::Right, &rules()).melee_attack, 60);
+        let crippled = injury(Location::Arm(Side::Right), Severity::Permanent, 0);
+        assert_eq!(crippled.malus(Side::Right, &rules()).melee_attack, 60);
+    }
+
+    #[test]
+    fn a_lost_limb_takes_off_more_than_an_after_effect_and_never_heals() {
+        let rules = rules();
+        let lost_leg = severed_limb_wound(Location::Leg(Side::Left));
+        assert!(lost_leg.is_lost() && lost_leg.is_permanent());
+        assert_eq!(lost_leg.malus(Side::Right, &rules).speed, 50);
+        let limp = injury(Location::Leg(Side::Left), Severity::Permanent, 0);
+        assert_eq!(limp.malus(Side::Right, &rules).speed, 20);
+        let lost_arm = severed_limb_wound(Location::Arm(Side::Right));
+        assert_eq!(lost_arm.malus(Side::Right, &rules).melee_attack, 70);
+        assert_eq!(lost_arm.malus(Side::Left, &rules).melee_attack, 10);
+        let mut injuries = vec![lost_leg];
+        heal_week(&mut injuries);
+        assert_eq!(injuries, vec![lost_leg]);
+        // No doctor gives a limb back.
+        let mut rng = ChaCha8Rng::seed_from_u64(1);
+        assert_eq!(
+            spare_after_effect(&mut rng, lost_arm, 100, &rules),
+            lost_arm
+        );
     }
 
     #[test]
@@ -482,7 +547,7 @@ mod tests {
                     Severity::Light => rules.healing_weeks.light,
                     Severity::Medium => rules.healing_weeks.medium,
                     Severity::Severe => rules.healing_weeks.severe,
-                    Severity::Permanent => (0, 0),
+                    Severity::Permanent | Severity::Lost => (0, 0),
                 };
                 prop_assert!((min..=max).contains(&injury.weeks_left));
             }

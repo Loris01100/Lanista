@@ -30,13 +30,20 @@
             off_arm: (melee_defense: 15),
             leg: (speed: 15),
         ),
-        // After-effects: accuracy, lost HP, lost arm (dominant or shield), limp.
+        // After-effects: accuracy, lost HP, a crippled arm (dominant or shield), limp.
         permanent: (
             head: (accuracy: 20),
             body: (hp: 15),
-            dominant_arm: (melee_attack: 50, ranged_attack: 50),
-            off_arm: (melee_defense: 40),
+            dominant_arm: (melee_attack: 30, ranged_attack: 30),
+            off_arm: (melee_defense: 25),
             leg: (speed: 25),
+        ),
+        // A limb severed in a fight, lost for good: the weapon arm, the shield arm,
+        // a leg (half the speed, and less dodging in melee).
+        lost: (
+            dominant_arm: (melee_attack: 60, ranged_attack: 60, accuracy: 10),
+            off_arm: (melee_defense: 50, ranged_defense: 30),
+            leg: (speed: 50, melee_defense: 15),
         ),
         // Highest percentage of a stat all injuries together can take off.
         max_malus: 80,

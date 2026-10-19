@@ -3294,7 +3294,7 @@ mod tests {
     #[test]
     fn rival_clubs_play_their_weeks_without_the_player() {
         let data = data();
-        let mut state = GameState::new(3, &data);
+        let mut state = GameState::new(4, &data);
         state.fighters[0].status = Status::Retired;
         let start = state.clone();
         for _ in 0..60 {
@@ -3326,7 +3326,7 @@ mod tests {
     #[test]
     fn three_seasons_live_without_the_player() {
         let data = shipped_data();
-        let mut state = GameState::new(1, &data);
+        let mut state = GameState::new(4, &data);
         state.fighters[0].status = Status::Retired;
         let start = state.clone();
         let season = u64::from(data.calendar.season_weeks());
