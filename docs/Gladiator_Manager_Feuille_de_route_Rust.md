@@ -171,7 +171,7 @@ La logique avance à cadence fixe (par exemple 30 ticks par seconde), l'IA déci
 
 ## Feuille de route
 
-Le développement se fait en onze phases (0 à 10), plus la phase 5 bis, chacune terminée par un jalon vérifiable. Par rapport au plan Godot, une phase est ajoutée (phase 2 : le socle du moteur). À la fin de la phase 6, le jeu est complet avec l'IA scriptée ; le machine learning arrive ensuite comme amélioration.
+Le développement se fait en onze phases (0 à 10), plus les phases 5 bis et 6 bis, chacune terminée par un jalon vérifiable. Par rapport au plan Godot, une phase est ajoutée (phase 2 : le socle du moteur). À la fin de la phase 6, le jeu est complet avec l'IA scriptée ; le machine learning arrive ensuite comme amélioration.
 
 | Phase | Contenu | Jalon |
 | --- | --- | --- |
@@ -183,6 +183,7 @@ Le développement se fait en onze phases (0 à 10), plus la phase 5 bis, chacune
 | 5. Le monde | Colisées, Elo, rivaux, marché, personnel, modèle statistique | Plusieurs saisons où les classements vivent sans le joueur |
 | 5 bis. Précision et personnel | Précision en combat, blessures à la tête sur la précision, étourdissement selon l'arme, personnel sur le marché et chez les rivaux, mortalité revue, free agents qui combattent, niveaux de richesse des clubs | Une blessure à la tête fait rater des coups ; les rivaux engagent du personnel sur le marché ; les libérations de l'intersaison arrivent |
 | 6. Formats et spectacle | Mêlée (King of the hill) d'ouverture de saison, équipement refusable, types d'arène, apparence, vue multi-combats | Regarder 3 combats du joueur en même temps, dont une mêlée à 20 |
+| 6 bis. Un monde vivant | Des dizaines de clubs générés aux influences du monde entier, colisées sur cinq continents, relations entre clubs, rivalités déclarées, accords | Trois saisons où un club devient rival du joueur par ce qui s'est passé entre eux, et où un club ferme et un autre se crée |
 | 7. IA apprenante | PyO3, Gymnasium, PPO en self-play, export et inférence ONNX | Le modèle appris bat nettement l'IA scriptée |
 | 8. Grands événements | Championnat du monde, Inter-Coliseum, succès, tutoriel | Un cycle complet de 4 saisons avec les deux événements |
 | 9. Contenu et équilibrage | Classes, sorts, arènes, simulations de masse, finitions | Taux de victoire par classe entre 45 et 55 % |
@@ -319,6 +320,47 @@ Ajouté après la vérification du jalon, sur les retours du jeu : un club compt
 
 **Jalon :** regarder 4 combats du joueur en même temps, dont une mêlée à 20, sans ralentissement. **Le jeu est complet avec l'IA scriptée.** Ramené à 3 combats, le maximum avec 3 combattants en activité (une mêlée où le club en inscrit plusieurs ne compte que pour un combat). Vérifié par `three_fights_are_watched_together_one_of_them_a_melee_of_twenty` dans `club_screen.rs` : la semaine d'ouverture, les trois combattants du club font une mêlée à 20 à Capoue et des duels à Capoue et à Rome ; les trois combats, regardés ensemble à des cadences d'image irrégulières, sont ceux que la semaine a joués, et la saison se poursuit à l'identique de `next_week` sans écran. Mesure de fluidité ci-dessus.
 
+### Phase 6 bis — Un monde vivant
+
+Trois clubs écrits à la main et appelés « rivaux » d'office ne suffisent pas à animer le monde. Cette phase le peuple de clubs générés, venus de toutes les cultures, et remplace l'hostilité de principe par des relations qui se construisent semaine après semaine. Dans le code, les « rivaux » (`rivals`, `Rival`, `RivalId`) deviennent des « clubs » ; un rival n'est plus qu'un statut.
+
+**Étape 1 — Des clubs générés, cosmopolites.**
+- `data/world.ron` ne liste plus les clubs un par un : il donne leur nombre (40 pour commencer, valeur provisoire), la répartition des profils et des richesses (beaucoup de pauvres, peu de riches) et des **cultures**. Les clubs sont tirés à l'ouverture du monde sur le générateur de la partie.
+- Chaque culture a ses listes de noms et ses gabarits de nom de club, dans un nouveau fichier `data/names.ron` : Rome et Europe, Asie de l'Est, Asie de l'Ouest, monde arabe, tribus amérindiennes, tribus d'Afrique, tribus d'Océanie, tribus d'Amérique du Sud, etc. Le nom d'un club suit sa culture : on ne dit pas « Ludus » partout.
+- Nouveaux profils à côté de prudent, agressif et marchand, par exemple formateur (fait signer des jeunes et les revend), vétéran (garde ses anciens) et spectacle (vise la renommée), chacun avec ses seuils dans `data/world.ron`.
+- Chaque club a une culture et un continent d'attache, qui fixent les colisées où il combat surtout.
+- Le modèle statistique résout déjà les combats entre clubs de l'ordinateur : 40 clubs restent légers. Mesurer quand même une saison entière et la taille de la sauvegarde.
+
+**Étape 2 — Des colisées sur cinq continents.**
+- Cinq colisées majeurs, un par continent, au prestige le plus haut : **Rome** (Europe), **Karakorum** (Asie), **Tenochtitlan** (Amériques), **Musumba** (Afrique), **Ngāpuhi** (Océanie).
+- Autour de chacun, des colisées mineurs (un ou deux par continent pour commencer, valeur provisoire), aux noms de lieux de ce continent ; Capoue reste le colisée mineur gratuit de l'Europe, où l'on débute.
+- Un club combat surtout dans les colisées de son continent et de son niveau ; s'inscrire sur un autre continent est possible, à un prix plus élevé (voyage). Le joueur choisit son continent de départ en commençant la partie.
+- Recaler les Elo, les bourses et le marché pour ce monde plus grand (`calibrate`, `compare`, l'outil `career` et des saisons simulées).
+
+**Étape 3 — La vie et la mort des clubs.**
+- Un club ruiné longtemps ferme : ses combattants vont au marché, son entrée reste dans l'historique. À l'intersaison, de nouveaux clubs se créent pour garder le monde à sa taille.
+- La richesse monte et descend déjà (`Wealth::next`).
+- Un fil de nouvelles du monde, lisible depuis le menu général : achats de champions, fermetures, créations, titres.
+
+**Étape 4 — Les relations.**
+- Chaque club a une relation avec celui du joueur, de −100 à +100, partant de 0 (une table par identifiant de club, `BTreeMap`). Les relations entre clubs de l'ordinateur viendront plus tard.
+- Elle bouge avec les événements, aux valeurs dans `data/world.ron` : un combattant tué (forte baisse), des victoires répétées ou un titre pris (baisse), un défi refusé (baisse), une vente ou un achat conclu à un prix correct (hausse), un pacte tenu en mêlée (hausse), une trahison en mêlée (forte baisse). Elle revient lentement vers 0 avec le temps. Le profil du club pèse : un club agressif s'irrite vite, un marchand pardonne si le prix y est.
+- Chaque changement garde sa raison, pour l'afficher (« −15 : vous avez tué Marcus »).
+- Statuts selon la note : Allié, Ami, Neutre, Tendu, **Rival**.
+- Premiers effets : les prix au marché (meilleurs avec un ami ; un club hostile refuse de traiter) et la fréquence des défis (un club hostile en envoie plus et accepte plus volontiers ceux du joueur).
+
+**Étape 5 — Les rivalités déclarées.**
+- En dessous d'un seuil, un club se déclare rival du joueur, avec une alerte. Un combat entre rivaux attire plus de public : plus de recettes et de renommée (règles dans `data/world.ron`).
+- En mêlée, les combattants d'un club rival visent en priorité ceux du joueur, ceux d'un club ami s'allient plus volontiers avec eux (poids dans les pactes de `melee`).
+
+**Étape 6 — Les accords.**
+- Au-dessus d'un seuil de relation, des accords se débloquent : prêt d'un combattant pour quelques semaines, échange d'un combattant contre un autre, combat d'exhibition sans mort. Un club peut aussi les proposer au joueur.
+- Plus tard, peut-être : relations entre clubs de l'ordinateur, alliances de clubs, coups bas (débauchage du personnel).
+
+**Écran.** La vue des rivaux devient une vue « Clubs », filtrable par continent et par colisée, avec la richesse et la relation de chaque club ; la page d'un club montre l'historique entre lui et le joueur et les accords possibles ; les alertes du menu général annoncent rivalités et propositions.
+
+**Jalon :** trois saisons jouées où un club devient rival du joueur par ce qui s'est passé entre eux, où un club ferme et un autre se crée, et dont la vue « Clubs » montre la raison de chaque relation.
+
 ### Phase 7 — IA apprenante
 
 - `gladiator_py` expose une classe `Environment` : `reset(seed)`, `step(actions)`, observation, récompense, fin de combat. Compilée avec `maturin` en mode `abi3` pour ne pas dépendre d'une version précise de Python.
@@ -381,11 +423,12 @@ Ajouté après la vérification du jalon, sur les retours du jeu : un club compt
 | Récompenses mal conçues | Comportements absurdes | Récompenses simples, revoir des combats régulièrement |
 | Performances en mêlée à 20 avec multi-vue | Ralentissements | IA à basse fréquence, mesures `criterion`, nombre de vignettes limité |
 | Écart entre modèle statistique et vrais combats | Résultats incohérents | Outil `compare`, recalibrage après chaque changement d'équilibrage |
+| Monde de 40 clubs et jusqu'à 15 colisées | Saisons lentes, sauvegarde lourde, équilibre perdu | Combats entre clubs de l'ordinateur par le modèle statistique, mesure d'une saison, recalibrage par étapes |
 | Temps de compilation | Itérations lentes | Workspace découpé, profil dev optimisé pour les dépendances, données en RON hors du code |
 
 ## Points encore ouverts
 
-- [ ] Taille du monde : nombre de colisées et de clubs rivaux (2 colisées et 3 clubs rivaux pour l'instant, dans `data/world.ron`).
+- [ ] Taille du monde : nombre de colisées et de clubs (2 colisées et 3 clubs rivaux pour l'instant, dans `data/world.ron`). Décidé pour la phase 6 bis : un colisée majeur par continent (Rome, Karakorum, Tenochtitlan, Musumba, Ngāpuhi), des colisées mineurs autour, une quarantaine de clubs générés de toutes cultures ; les nombres exacts restent à caler.
 - [ ] Liste des classes et de leurs sorts.
 - [ ] Calendrier des grands événements : confirmer l'Inter-Coliseum aux saisons impaires.
 - [x] `ort` ou `tract` pour l'inférence : `tract`, tranché en phase 0.
