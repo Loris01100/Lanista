@@ -4,6 +4,7 @@
 
 use std::cmp::Reverse;
 
+use rand::Rng;
 use serde::{Deserialize, Serialize};
 
 use crate::colosseum::ColosseumId;
@@ -11,10 +12,12 @@ use crate::design_data::DesignData;
 use crate::economy::Wealth;
 use crate::fighter::career::{Activity, CareerFighter, Status, WeekPlan, badly_hurt_or_ill};
 use crate::fighter::equipment::Refused;
+use crate::fighter::pick;
+use crate::names;
 use crate::staff::{Candidate, Role, Staff, StaffMove};
 
 /// How a rival manager plays.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum Profile {
     Cautious,
     Aggressive,
@@ -69,15 +72,18 @@ impl Profiles {
     }
 }
 
-/// A rival club, from `data/world.ron`.
+/// How the rival clubs are drawn when the world opens, from `data/world.ron`: each
+/// list holds (weight, value) pairs.
 #[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
 #[serde(deny_unknown_fields)]
-pub struct RivalData {
-    /// Shown to the player.
-    pub name: String,
-    pub profile: Profile,
+pub struct ClubRules {
+    /// How many; at least one.
+    pub count: u32,
+    pub profiles: Vec<(u32, Profile)>,
     /// At the start of a game.
-    pub wealth: Wealth,
+    pub wealth: Vec<(u32, Wealth)>,
+    /// Keys of `data/names.ron`'s cultures.
+    pub cultures: Vec<(u32, String)>,
 }
 
 /// The size of the rival clubs' rosters.
@@ -98,9 +104,14 @@ pub struct RivalId {
     pub fighter: usize,
 }
 
-/// A rival club in the game, in the order of `data/world.ron`.
+/// A rival club in the game, drawn when the world opens (`random_club`).
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct Rival {
+    /// Shown to the player; no two clubs share it.
+    pub name: String,
+    /// The key of its culture in `data/names.ron`, which named it.
+    pub culture: String,
+    pub profile: Profile,
     /// Below 0 when upkeep ran it into debt, like the player's.
     pub money: i64,
     /// Its fighters; like the player's, one who leaves keeps its place here.
@@ -113,6 +124,12 @@ pub struct Rival {
 }
 
 impl Rival {
+    /// Its profile's thresholds.
+    #[must_use]
+    pub fn rules<'a>(&self, data: &'a DesignData) -> &'a ProfileRules {
+        data.world.profiles.get(self.profile)
+    }
+
     /// Fighters neither retired, dead nor gone.
     #[must_use]
     pub fn active(&self) -> usize {
@@ -120,6 +137,33 @@ impl Rival {
             .iter()
             .filter(|f| f.status == Status::Active)
             .count()
+    }
+}
+
+/// A new rival club: profile, wealth and culture drawn by `data/world.ron`'s `clubs`
+/// weights, named by its culture unlike any of `others`, with its wealth's starting
+/// money, neither fighters nor staff.
+pub fn random_club<R: Rng + ?Sized>(rng: &mut R, others: &[Rival], data: &DesignData) -> Rival {
+    let rules = &data.world.clubs;
+    let profile = pick(rng, &rules.profiles);
+    let wealth = pick(rng, &rules.wealth);
+    let cultures: Vec<(u32, usize)> = (0..)
+        .zip(&rules.cultures)
+        .map(|(i, (weight, _))| (*weight, i))
+        .collect();
+    let key = &rules.cultures[pick(rng, &cultures)].1;
+    let taken: Vec<&str> = others.iter().map(|r| r.name.as_str()).collect();
+    let name = data
+        .culture(key)
+        .map_or_else(|| key.clone(), |c| names::club_name(rng, c, &taken));
+    Rival {
+        name,
+        culture: key.clone(),
+        profile,
+        money: i64::from(data.economy.wealth.get(wealth).starting_money),
+        fighters: Vec::new(),
+        staff: Staff::default(),
+        wealth,
     }
 }
 

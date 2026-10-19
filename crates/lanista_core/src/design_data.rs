@@ -1,5 +1,5 @@
-//! Design data (classes, spells, combat rules, fighter rules, calendar, economy, colosseums, statistical
-//! model) read from the RON files of `data/`.
+//! Design data (classes, spells, combat rules, fighter rules, calendar, economy, colosseums, cultures,
+//! statistical model) read from the RON files of `data/`.
 
 use serde::Deserialize;
 
@@ -21,6 +21,7 @@ use crate::fighter::personality::PersonalityRules;
 use crate::fighter::progression::ProgressionRules;
 use crate::fighter::retirement::RetirementRules;
 use crate::melee::MeleeRules;
+use crate::names::{self, Culture};
 use crate::stat_model::StatModels;
 
 /// Everything read from `data/`. `ClassId(i)` is the class at index `i` of `classes`.
@@ -32,6 +33,8 @@ pub struct DesignData {
     pub calendar: CalendarRules,
     pub economy: EconomyRules,
     pub world: WorldRules,
+    /// The world's cultures, from `data/names.ron`.
+    pub cultures: Vec<Culture>,
     pub stat_model: StatModels,
 }
 
@@ -99,6 +102,7 @@ const FIGHTER_FILE: &str = "data/fighter.ron";
 const CALENDAR_FILE: &str = "data/calendar.ron";
 const ECONOMY_FILE: &str = "data/economy.ron";
 const WORLD_FILE: &str = "data/world.ron";
+const NAMES_FILE: &str = "data/names.ron";
 /// Written by the `calibrate` tool.
 pub const STAT_MODEL_FILE: &str = "data/stat_model.ron";
 
@@ -148,12 +152,15 @@ impl std::error::Error for LoadError {
 
 impl DesignData {
     /// Reads the content of `data/classes.ron`, `data/combat.ron`, `data/fighter.ron`,
-    /// `data/calendar.ron`, `data/economy.ron`, `data/world.ron` and `data/stat_model.ron`.
+    /// `data/calendar.ron`, `data/economy.ron`, `data/world.ron`, `data/names.ron` and
+    /// `data/stat_model.ron`.
     ///
     /// # Errors
     /// If a text is not valid RON or does not match the expected fields, or if a value
     /// would make the game panic later (no class, a range upside down, a chance outside 0 to 1,
-    /// a season of no week, no free colosseum, a model's chance outside 0 to 1).
+    /// a season of no week, no free colosseum, a culture without names, a model's chance outside
+    /// 0 to 1).
+    #[expect(clippy::too_many_arguments, reason = "one text for each file of data/")]
     pub fn from_ron(
         classes: &str,
         combat: &str,
@@ -161,6 +168,7 @@ impl DesignData {
         calendar: &str,
         economy: &str,
         world: &str,
+        names: &str,
         stat_model: &str,
     ) -> Result<Self, LoadError> {
         let data = Self {
@@ -186,6 +194,10 @@ impl DesignData {
             })?,
             world: ron::from_str(world).map_err(|source| LoadError::Ron {
                 file: WORLD_FILE,
+                source,
+            })?,
+            cultures: ron::from_str(names).map_err(|source| LoadError::Ron {
+                file: NAMES_FILE,
                 source,
             })?,
             stat_model: ron::from_str(stat_model).map_err(|source| LoadError::Ron {
@@ -222,6 +234,7 @@ impl DesignData {
             &read(CALENDAR_FILE)?,
             &read(ECONOMY_FILE)?,
             &read(WORLD_FILE)?,
+            &read(NAMES_FILE)?,
             &read(STAT_MODEL_FILE)?,
         )
     }
@@ -264,8 +277,41 @@ impl DesignData {
         if self.world.colosseums.iter().any(|c| c.residents == 0) {
             return Err(world("residents", "a colosseum without opponents"));
         }
-        if self.world.rivals.is_empty() {
-            return Err(world("rivals", "no rival club to own the residents"));
+        let clubs = &self.world.clubs;
+        if clubs.count == 0 {
+            return Err(world("clubs.count", "no rival club to own the residents"));
+        }
+        let weighed = |weights: &mut dyn Iterator<Item = u32>| weights.sum::<u32>() > 0;
+        if !weighed(&mut clubs.profiles.iter().map(|(w, _)| *w)) {
+            return Err(world("clubs.profiles", "no weight"));
+        }
+        if !weighed(&mut clubs.wealth.iter().map(|(w, _)| *w)) {
+            return Err(world("clubs.wealth", "no weight"));
+        }
+        if !weighed(&mut clubs.cultures.iter().map(|(w, _)| *w)) {
+            return Err(world("clubs.cultures", "no weight"));
+        }
+        if clubs
+            .cultures
+            .iter()
+            .any(|(_, key)| self.culture(key).is_none())
+        {
+            return Err(world(
+                "clubs.cultures",
+                "a culture missing from data/names.ron",
+            ));
+        }
+        let unnamed = |c: &Culture| {
+            c.names.is_empty()
+                || c.clubs.is_empty()
+                || c.clubs.iter().any(|p| !p.contains(names::NAME))
+        };
+        if self.cultures.iter().any(unnamed) {
+            return Err(LoadError::Invalid {
+                file: NAMES_FILE,
+                field: "cultures",
+                problem: "no name, no pattern or a pattern without {name}",
+            });
         }
         if self.world.roster.max < self.world.roster.wanted {
             return Err(world("roster", "fewer places than fighters wanted"));
@@ -433,6 +479,12 @@ impl DesignData {
     pub fn class(&self, id: ClassId) -> Option<&ClassData> {
         self.classes.get(usize::try_from(id.0).ok()?)
     }
+
+    /// The culture `key` of `data/names.ron`.
+    #[must_use]
+    pub fn culture(&self, key: &str) -> Option<&Culture> {
+        self.cultures.iter().find(|c| c.key == key)
+    }
 }
 
 /// The field and the problem of melee rules that would break a melee: fewer than two
@@ -507,12 +559,13 @@ mod tests {
     const CALENDAR: &str = include_str!("../../../data/calendar.ron");
     const ECONOMY: &str = include_str!("../../../data/economy.ron");
     const WORLD: &str = include_str!("../../../data/world.ron");
+    const NAMES: &str = include_str!("../../../data/names.ron");
     const STAT_MODEL: &str = include_str!("../../../data/stat_model.ron");
 
     #[test]
     fn shipped_data_loads() {
         let data = DesignData::from_ron(
-            CLASSES, COMBAT, FIGHTER, CALENDAR, ECONOMY, WORLD, STAT_MODEL,
+            CLASSES, COMBAT, FIGHTER, CALENDAR, ECONOMY, WORLD, NAMES, STAT_MODEL,
         )
         .unwrap();
         assert_eq!(data.classes.len(), 2);
@@ -528,7 +581,7 @@ mod tests {
     #[test]
     fn finds_a_class_by_id() {
         let data = DesignData::from_ron(
-            CLASSES, COMBAT, FIGHTER, CALENDAR, ECONOMY, WORLD, STAT_MODEL,
+            CLASSES, COMBAT, FIGHTER, CALENDAR, ECONOMY, WORLD, NAMES, STAT_MODEL,
         )
         .unwrap();
         assert_eq!(data.class(ClassId(1)), data.classes.get(1));
@@ -539,7 +592,9 @@ mod tests {
     fn rejects_unknown_fields() {
         let typo = r#"[(name: "X", max_mana: 0, max_endurance: 0, mana_per_second: 0, endurance_per_second: 0, spels: [])]"#;
         assert!(matches!(
-            DesignData::from_ron(typo, COMBAT, FIGHTER, CALENDAR, ECONOMY, WORLD, STAT_MODEL),
+            DesignData::from_ron(
+                typo, COMBAT, FIGHTER, CALENDAR, ECONOMY, WORLD, NAMES, STAT_MODEL
+            ),
             Err(LoadError::Ron {
                 file: CLASSES_FILE,
                 ..
@@ -550,7 +605,7 @@ mod tests {
     #[test]
     fn rejects_values_the_game_would_panic_on() {
         let field = |classes: &str, fighter: &str| match DesignData::from_ron(
-            classes, COMBAT, fighter, CALENDAR, ECONOMY, WORLD, STAT_MODEL,
+            classes, COMBAT, fighter, CALENDAR, ECONOMY, WORLD, NAMES, STAT_MODEL,
         ) {
             Err(LoadError::Invalid { field, .. }) => field,
             other => panic!("expected an invalid field, got {other:?}"),
@@ -576,7 +631,7 @@ mod tests {
         let no_week = "(competition_weeks: 0, great_event_weeks: 0, off_season_weeks: 0)";
         assert!(matches!(
             DesignData::from_ron(
-                CLASSES, COMBAT, FIGHTER, no_week, ECONOMY, WORLD, STAT_MODEL
+                CLASSES, COMBAT, FIGHTER, no_week, ECONOMY, WORLD, NAMES, STAT_MODEL
             ),
             Err(LoadError::Invalid {
                 field: "season",
@@ -592,6 +647,7 @@ mod tests {
                 CALENDAR,
                 ECONOMY,
                 WORLD,
+                NAMES,
                 STAT_MODEL
             ),
             Err(LoadError::Invalid {
@@ -600,7 +656,7 @@ mod tests {
             })
         ));
         let combat_field = |combat: &str| match DesignData::from_ron(
-            CLASSES, combat, FIGHTER, CALENDAR, ECONOMY, WORLD, STAT_MODEL,
+            CLASSES, combat, FIGHTER, CALENDAR, ECONOMY, WORLD, NAMES, STAT_MODEL,
         ) {
             Err(LoadError::Invalid { field, .. }) => field,
             other => panic!("expected an invalid field, got {other:?}"),
@@ -618,19 +674,31 @@ mod tests {
         let not_free = WORLD.replacen("entry_fee: 0", "entry_fee: 5", 1);
         assert!(matches!(
             DesignData::from_ron(
-                CLASSES, COMBAT, FIGHTER, CALENDAR, ECONOMY, &not_free, STAT_MODEL
+                CLASSES, COMBAT, FIGHTER, CALENDAR, ECONOMY, &not_free, NAMES, STAT_MODEL
             ),
             Err(LoadError::Invalid {
                 field: "colosseums",
                 ..
             })
         ));
+        let world_field = |world: &str, names: &str| match DesignData::from_ron(
+            CLASSES, COMBAT, FIGHTER, CALENDAR, ECONOMY, world, names, STAT_MODEL,
+        ) {
+            Err(LoadError::Invalid { field, .. }) => field,
+            other => panic!("expected an invalid field, got {other:?}"),
+        };
+        let unknown = WORLD.replacen(r#"(2, "oceanie")"#, r#"(2, "atlantide")"#, 1);
+        assert_eq!(world_field(&unknown, NAMES), "clubs.cultures");
+        let nameless = NAMES.replacen(r#""Whare {name}", "#, r#""Whare", "#, 1);
+        assert_eq!(world_field(WORLD, &nameless), "cultures");
+        let empty = WORLD.replacen("count: 40", "count: 0", 1);
+        assert_eq!(world_field(&empty, NAMES), "clubs.count");
     }
 
     #[test]
     fn shipped_form_rules_triple_risk_at_form_0() {
         let data = DesignData::from_ron(
-            CLASSES, COMBAT, FIGHTER, CALENDAR, ECONOMY, WORLD, STAT_MODEL,
+            CLASSES, COMBAT, FIGHTER, CALENDAR, ECONOMY, WORLD, NAMES, STAT_MODEL,
         )
         .unwrap();
         assert!((data.fighter.form.risk_factor - 2.0).abs() < f64::EPSILON);

@@ -9,7 +9,8 @@ use reesch::egui;
 use super::{ClubScreen, RANKS_SHOWN, View};
 use crate::texts::{
     arena_effect, arena_name, club_name, colosseum_name, condition_text, contender_name,
-    profile_name, record_text, rival_fighter_name, staff_text, wealth_name,
+    culture_name, culture_text, profile_name, record_text, rival_fighter_name, staff_text,
+    wealth_name,
 };
 
 impl ClubScreen {
@@ -76,7 +77,7 @@ impl ClubScreen {
                                     }
                                     match c {
                                         Contender::Rival(id) => {
-                                            if ui.link(club_name(id.club, data)).clicked() {
+                                            if ui.link(club_name(id.club, state)).clicked() {
                                                 goto = Some(View::Rival(id.club));
                                             }
                                         }
@@ -99,19 +100,18 @@ impl ClubScreen {
         }
     }
 
-    /// "Ludus Magnus, prudent et riche : 10 combattants" for each rival club; its money
-    /// stays hidden.
+    /// "Ludus Magnus (Rome), prudent et riche : 10 combattants" for each rival club;
+    /// its money stays hidden.
     pub(super) fn rival_lines(&self) -> Vec<String> {
-        self.data
-            .world
+        self.state
             .rivals
             .iter()
-            .zip(&self.state.rivals)
-            .map(|(rules, rival)| {
+            .map(|rival| {
                 format!(
-                    "{}, {} et {} : {} combattants",
-                    rules.name,
-                    profile_name(rules.profile),
+                    "{} ({}), {} et {} : {} combattants",
+                    rival.name,
+                    culture_name(&rival.culture, &self.data),
+                    profile_name(rival.profile),
                     wealth_name(rival.wealth),
                     rival.active()
                 )
@@ -168,15 +168,15 @@ impl ClubScreen {
         self.back_button(ui);
         let data = &self.data;
         let state = &self.state;
-        let (Some(rules), Some(rival)) = (data.world.rivals.get(club), state.rivals.get(club))
-        else {
+        let Some(rival) = state.rivals.get(club) else {
             return;
         };
-        ui.heading(&rules.name);
+        ui.heading(&rival.name);
         ui.label(format!(
-            "Club {} et {}, {} combattants en activité (au plus {})",
-            profile_name(rules.profile),
+            "Club {} et {}, {}, {} combattants en activité (au plus {})",
+            profile_name(rival.profile),
             wealth_name(rival.wealth),
+            culture_text(&rival.culture, data),
             rival.active(),
             data.world.roster.max
         ));

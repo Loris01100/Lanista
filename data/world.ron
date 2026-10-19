@@ -40,16 +40,25 @@
     // A rival club below `wanted` fighters in activity signs free agents; at `max`, it
     // buys no one.
     roster: (wanted: 10, max: 12),
-    // The rival clubs, starting with their wealth's money (data/economy.ron) and the
-    // colosseums' first residents, shared out among them in turn. At least one. Wealth
-    // changes with money at each off-season: a rich club buys at will and lets go
-    // whoever no longer performs, a poor one hires a recruiter first and signs the free
-    // agents of the best potential it sees.
-    rivals: [
-        (name: "Ludus Magnus", profile: Cautious, wealth: Rich),
-        (name: "Ludus Gallicus", profile: Aggressive, wealth: Poor),
-        (name: "Ludus Dacicus", profile: Merchant, wealth: Modest),
-    ],
+    // The rival clubs, drawn when the world opens: `count` of them (at least one), each
+    // with a profile, a wealth and a culture drawn by these weights, (weight, value).
+    // A club starts with its wealth's money (data/economy.ron) and the colosseums' first
+    // residents, shared out among the clubs in turn; it is named by its culture
+    // (data/names.ron). Wealth changes with money at each off-season: a rich club buys
+    // at will and lets go whoever no longer performs, a poor one hires a recruiter
+    // first and signs the free agents of the best potential it sees.
+    clubs: (
+        count: 40,
+        profiles: [(1, Cautious), (1, Aggressive), (1, Merchant)],
+        // Many poor, few rich.
+        wealth: [(5, Poor), (3, Modest), (1, Rich)],
+        // Rome more often while every colosseum is in Europe.
+        cultures: [
+            (6, "rome"), (2, "grece"), (2, "celtes"), (2, "germains"), (2, "steppe"),
+            (2, "asie_est"), (2, "inde"), (2, "asie_ouest"), (2, "arabe"), (2, "afrique"),
+            (2, "amerindiens"), (2, "mesoamerique"), (2, "amerique_sud"), (2, "oceanie"),
+        ],
+    ),
     // At least one must be free to enter: the safety net of a club without money.
     colosseums: [
         (

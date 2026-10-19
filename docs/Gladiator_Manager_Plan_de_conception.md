@@ -282,6 +282,8 @@ Les clubs rivaux sont gérés par une IA à règles, et leurs combats sont réso
 
 ### IA des managers rivaux
 
+Les clubs rivaux sont tirés au début de la partie, une quarantaine, de toutes les cultures du monde : Rome, Grèce, Celtes, Germains, steppe, Asie de l'Est, Inde, Asie de l'Ouest, monde arabe, tribus d'Afrique, d'Amérique et d'Océanie. Le nom d'un club suit sa culture (un ludus à Rome, une palestre en Grèce, un ordu dans la steppe, un whare en Océanie). Beaucoup sont pauvres, peu sont riches.
+
 Chaque club rival a un profil (prudent, agressif, marchand) qui règle ses seuils. Chaque semaine, pour chaque combattant, il applique des règles simples :
 
 - Forme sous le seuil ou blessure : repos, et soins si le budget le permet et si la blessure le justifie.
@@ -352,7 +354,7 @@ Le plan Godot (C#, Godot RL Agents) est abandonné pour un moteur maison en Rust
 
 ### Points encore ouverts
 
-- [ ] Taille du monde : nombre de colisées et de clubs rivaux (2 colisées et 3 clubs rivaux pour l'instant).
+- [ ] Taille du monde : nombre de colisées et de clubs rivaux (2 colisées et 40 clubs générés pour l'instant).
 - [ ] Liste des classes et de leurs sorts.
 - [ ] Calendrier des grands événements : confirmer l'Inter-Coliseum aux saisons impaires, ou revenir à la règle du report.
 

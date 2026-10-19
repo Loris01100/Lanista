@@ -1,0 +1,135 @@
+// The world's cultures, from data/world.ron's `clubs.cultures`: the names a club of
+// that culture may take, and how it is named, each `{name}` in a pattern replaced by a
+// drawn name ("de" before a vowel becoming "d'"). Player-facing, in French.
+[
+    (
+        key: "rome",
+        name: "Rome",
+        names: [
+            "Magnus", "Gallicus", "Dacicus", "Matutinus", "Maximus", "Flavius", "Aurelius",
+            "Varro", "Crassus", "Scaurus", "Tullius", "Cornelius", "Septimius", "Valerius",
+            "Claudius", "Fabius", "Marcellus", "Lucullus", "Capito", "Gracchus",
+        ],
+        clubs: ["Ludus {name}", "Familia {name}", "Domus {name}"],
+    ),
+    (
+        key: "grece",
+        name: "Grèce",
+        names: [
+            "Achille", "Ajax", "Léonidas", "Milon", "Théagène", "Diagoras", "Polydamas",
+            "Arrhichion", "Créugas", "Damoxène", "Mélankomas", "Kléomédès", "Phayllos",
+            "Hipposthénès",
+        ],
+        clubs: ["Palestre de {name}", "Gymnase de {name}"],
+    ),
+    (
+        key: "celtes",
+        name: "Celtes",
+        names: [
+            "Vercingétorix", "Ambiorix", "Brennus", "Dumnorix", "Orgétorix",
+            "Cassivellaunos", "Boudicca", "Commios", "Indutiomare", "Lugotorix",
+            "Teutomatos", "Caratacos",
+        ],
+        clubs: ["Clan de {name}", "Tribu de {name}"],
+    ),
+    (
+        key: "germains",
+        name: "Germains",
+        names: [
+            "Arminius", "Marbod", "Arioviste", "Ségeste", "Civilis", "Thusnelda",
+            "Fritigern", "Alaric", "Genséric", "Odoacre", "Thorgrim", "Hrolf",
+        ],
+        clubs: ["Halle de {name}", "Bande de {name}"],
+    ),
+    (
+        key: "steppe",
+        name: "Steppe",
+        names: [
+            "Temüjin", "Subötaï", "Djebé", "Batu", "Kubilaï", "Tolui", "Ögödei", "Bayan",
+            "Toghril", "Mukhali", "Börte", "Khutulun",
+        ],
+        clubs: ["Ordu de {name}", "Horde de {name}"],
+    ),
+    (
+        key: "asie_est",
+        name: "Asie de l'Est",
+        names: [
+            "Guan Yu", "Zhao Yun", "Lü Bu", "Xiang Yu", "Miyamoto", "Tomoe", "Minamoto",
+            "Taira", "Kusunoki", "Gyebaek", "Eulji", "Gwanggaeto",
+        ],
+        clubs: ["Dōjō {name}", "Maison {name}", "École {name}"],
+    ),
+    (
+        key: "inde",
+        name: "Inde",
+        names: [
+            "Arjuna", "Bhima", "Karna", "Drona", "Chandragupta", "Ashoka", "Poros",
+            "Vikrama", "Rudra", "Abhimanyu", "Ghatotkacha", "Prithviraj",
+        ],
+        clubs: ["Akhara de {name}", "Ashram de {name}"],
+    ),
+    (
+        key: "asie_ouest",
+        name: "Asie de l'Ouest",
+        names: [
+            "Rostam", "Sohrab", "Esfandiyar", "Kaveh", "Arash", "Babak", "Gilgamesh",
+            "Enkidu", "Tigrane", "Mithridate", "Cyrus", "Darius",
+        ],
+        clubs: ["Zourkhaneh de {name}", "Maison de {name}"],
+    ),
+    (
+        key: "arabe",
+        name: "Monde arabe",
+        names: [
+            "Antar", "Khalid", "Hamza", "Zubayr", "Saladin", "Baybars", "Tariq", "Amr",
+            "Zénobie", "Qutuz", "Sayf", "Khawla",
+        ],
+        clubs: ["Dar {name}", "Bayt {name}"],
+    ),
+    (
+        key: "afrique",
+        name: "Tribus d'Afrique",
+        names: [
+            "Soundiata", "Chaka", "Mwata", "Lueji", "Chibinda", "Ilunga", "Nzinga", "Kimpa",
+            "Askia", "Sonni", "Moshoeshoe", "Makeda", "Ezana", "Dingane",
+        ],
+        clubs: ["Kraal de {name}", "Lignée de {name}", "Maison de {name}"],
+    ),
+    (
+        key: "amerindiens",
+        name: "Tribus amérindiennes",
+        names: [
+            "Tecumseh", "Pontiac", "Tatanka", "Tashunka", "Goyathlay", "Cochise", "Osceola",
+            "Metacom", "Hiawatha", "Mangas", "Ouray", "Sequoyah",
+        ],
+        clubs: ["Clan de {name}", "Loge de {name}", "Cercle de {name}"],
+    ),
+    (
+        key: "mesoamerique",
+        name: "Mésoamérique",
+        names: [
+            "Cuauhtémoc", "Moctezuma", "Ahuitzotl", "Itzcóatl", "Tlacaélel",
+            "Nezahualcóyotl", "Pakal", "Xicoténcatl", "Cuitláhuac", "Axayácatl", "Tízoc",
+            "Tecún",
+        ],
+        clubs: ["Maison de l'Aigle de {name}", "Maison du Jaguar de {name}", "Calmecac de {name}"],
+    ),
+    (
+        key: "amerique_sud",
+        name: "Tribus d'Amérique du Sud",
+        names: [
+            "Pachacutec", "Túpac", "Atahualpa", "Manco", "Rumiñahui", "Lautaro",
+            "Caupolicán", "Galvarino", "Pelantaro", "Sepé", "Cunhambebe", "Arariboia",
+        ],
+        clubs: ["Ayllu de {name}", "Clan de {name}"],
+    ),
+    (
+        key: "oceanie",
+        name: "Tribus d'Océanie",
+        names: [
+            "Hongi Hika", "Te Rauparaha", "Kamehameha", "Hōne Heke", "Kiwa", "Tāwhaki",
+            "Māui", "Rata", "Tangaroa", "Malietoa", "Kahekili", "Hinemoa",
+        ],
+        clubs: ["Whare {name}", "Pā de {name}"],
+    ),
+]

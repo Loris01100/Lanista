@@ -51,7 +51,7 @@ pub struct GameState {
     pub fighters: Vec<CareerFighter>,
     /// In the order of `data/world.ron`.
     pub colosseums: Vec<Colosseum>,
-    /// The rival clubs and their fighters, in the order of `data/world.ron`.
+    /// The rival clubs and their fighters, drawn when the world opens.
     pub rivals: Vec<Rival>,
     /// The rival fighters' challenges to the club's fighters, to accept or refuse this week.
     pub challenges: Vec<Challenge>,
@@ -111,21 +111,19 @@ impl GameState {
 
     /// Opens the rival clubs and the colosseums of `data` the game does not have yet:
     /// all of them in a new game, those added to `data/world.ron` since an older save.
-    /// A new rival club starts with its wealth and that wealth's starting money; a new
+    /// Rival clubs are drawn up to `clubs.count` (`rivals::random_club`); a new
     /// colosseum with its `residents`, fighters as strong as its prestige shared out
-    /// among the rival clubs in turn, all ranked there. Then brings the free agents up
+    /// among the rival clubs in turn, all ranked there; then each new club gets
+    /// generated fighters up to `roster.wanted`, ranked nowhere yet. Then brings the free agents up
     /// to their fewest, and the staff candidates up to `StaffMarketRules::candidates`
     /// for each post.
     pub fn open_world(&mut self, data: &DesignData) {
-        let opened = self.rivals.len();
-        let wealth = &data.economy.wealth;
-        self.rivals
-            .extend(data.world.rivals.iter().skip(opened).map(|rules| Rival {
-                money: i64::from(wealth.get(rules.wealth).starting_money),
-                fighters: Vec::new(),
-                staff: Staff::default(),
-                wealth: rules.wealth,
-            }));
+        let drawn = self.rivals.len();
+        let count = usize::try_from(data.world.clubs.count).unwrap_or(0);
+        while self.rivals.len() < count {
+            let club = rivals::random_club(&mut self.rng, &self.rivals, data);
+            self.rivals.push(club);
+        }
         let clubs = self.rivals.len();
         for (c, rules) in data.world.colosseums.iter().enumerate() {
             if c < self.colosseums.len() || clubs == 0 {
@@ -154,6 +152,13 @@ impl GameState {
                 .collect();
             let colosseum = Colosseum::open(&ranked, self.week, &data.world);
             self.colosseums.push(colosseum);
+        }
+        let wanted = usize::try_from(data.world.roster.wanted).unwrap_or(0);
+        for club in drawn..self.rivals.len() {
+            while self.rivals[club].active() < wanted {
+                let fighter = CareerFighter::random(&mut self.rng, data);
+                self.rivals[club].fighters.push(fighter);
+            }
         }
         let fewest = usize::try_from(data.economy.market.min_free_agents).unwrap_or(0);
         while self.available_free_agents() < fewest {
@@ -243,7 +248,7 @@ impl GameState {
             .enumerate()
             .map(|(club, rival)| {
                 let mut left = rival.money;
-                let profile = data.world.profile(club);
+                let profile = Some(rival.rules(data));
                 (0..)
                     .zip(&rival.fighters)
                     .map(|(fighter, f)| match profile {
@@ -383,7 +388,7 @@ impl GameState {
                 .ok()
                 .and_then(|c| self.colosseums.get(c));
             colosseum
-                .zip(data.world.profile(rival.club))
+                .zip(self.rivals.get(rival.club).map(|r| r.rules(data)))
                 .is_some_and(|(colosseum, profile)| {
                     colosseum.accepts_challenge(rival, i, profile.accept_percent, &data.world)
                 })
@@ -415,7 +420,7 @@ impl GameState {
         let fighter = self
             .rival_fighter(id)
             .filter(|f| f.status == Status::Active)?;
-        let profile = data.world.profile(id.club)?;
+        let profile = self.rivals.get(id.club)?.rules(data);
         Some(percent_of(
             value(fighter, &data.economy.market),
             profile.sell_percent,
@@ -1029,14 +1034,12 @@ fn wealth_changes(state: &mut GameState, data: &DesignData) -> Option<Wealth> {
 /// once for every `fighters_per_salary` fighters in activity, even into debt. The market's week ends with them: no one else hires before the next.
 fn rival_staff(state: &mut GameState, data: &DesignData) {
     let market = &mut state.staff_market;
-    for (club, rival) in state.rivals.iter_mut().enumerate() {
+    for rival in &mut state.rivals {
         let shares = i64::from(data.economy.staff.salary_shares(rival.active()));
         let money = rival.money / shares;
-        if let Some(profile) = data.world.profile(club) {
-            let rules = (profile, rivals::staff_posts(rival.wealth));
-            let moves = rivals::staff_moves(&rival.staff, money, rules, market);
-            staff::make_moves(&mut rival.staff, market, &moves, money);
-        }
+        let rules = (rival.rules(data), rivals::staff_posts(rival.wealth));
+        let moves = rivals::staff_moves(&rival.staff, money, rules, market);
+        staff::make_moves(&mut rival.staff, market, &moves, money);
         let salaries: u32 = rival.staff.salaries().sum();
         rival.money -= i64::from(salaries) * shares;
     }
@@ -1305,9 +1308,7 @@ fn rival_market(state: &mut GameState, data: &DesignData) {
         };
         let worth = value(fighter, market);
         for (k, rival) in state.rivals.iter().enumerate() {
-            let Some(profile) = data.world.profile(k) else {
-                continue;
-            };
+            let profile = rival.rules(data);
             let price = percent_of(worth, profile.buy_percent);
             let place = u32::try_from(rival.active()).is_ok_and(|n| n < data.world.roster.max);
             if place && rival.money - i64::from(price) >= i64::from(profile.care_reserve) {
@@ -1454,10 +1455,7 @@ fn buy_from_rival(
     let money = state.rivals[buyer].money;
     let wealth = state.rivals[buyer].wealth;
     let level = i64::from(data.economy.wealth.get(wealth).from) / 2;
-    let reserve = data
-        .world
-        .profile(buyer)
-        .map(|p| i64::from(p.care_reserve).max(level))?;
+    let reserve = i64::from(state.rivals[buyer].rules(data).care_reserve).max(level);
     let best = state
         .rivals
         .iter()
@@ -1681,7 +1679,7 @@ fn receive_challenges(state: &mut GameState, data: &DesignData) {
         }
         for (id, colosseum) in (0..).zip(&state.colosseums) {
             if let Some(rival) = colosseum.challenger(i, rosters)
-                && let Some(profile) = data.world.profile(rival.club)
+                && let Some(profile) = state.rivals.get(rival.club).map(|r| r.rules(data))
                 && state.rng.random_range(0..100) < profile.challenge_percent
             {
                 state.challenges.push(Challenge {
@@ -2050,8 +2048,34 @@ mod tests {
     use crate::rivals::Profile;
     use crate::staff::{Person, Role};
 
+    /// The shipped data with three rival clubs, the world most tests were written for.
     fn data() -> DesignData {
-        DesignData::load().unwrap()
+        let mut data = DesignData::load().unwrap();
+        data.world.clubs.count = 3;
+        data
+    }
+
+    /// A game from `seed` with a modest club (see `game_of`).
+    fn game(seed: u64, data: &DesignData) -> GameState {
+        game_of(seed, Wealth::Modest, data)
+    }
+
+    /// A game from `seed` with a club of `wealth`, whose rival clubs are, in order, a
+    /// cautious and rich one, an aggressive and poor one, then a modest merchant, each
+    /// with its wealth's starting money.
+    fn game_of(seed: u64, wealth: Wealth, data: &DesignData) -> GameState {
+        let mut state = GameState::with_wealth(seed, wealth, data);
+        let clubs = [
+            (Profile::Cautious, Wealth::Rich),
+            (Profile::Aggressive, Wealth::Poor),
+            (Profile::Merchant, Wealth::Modest),
+        ];
+        for (rival, (profile, wealth)) in state.rivals.iter_mut().zip(clubs) {
+            rival.profile = profile;
+            rival.wealth = wealth;
+            rival.money = i64::from(data.economy.wealth.get(wealth).starting_money);
+        }
+        state
     }
 
     fn plan(activity: Activity, care: bool) -> Decisions {
@@ -2080,7 +2104,7 @@ mod tests {
     #[test]
     fn the_season_opens_with_a_melee_in_every_colosseum_even_without_the_club() {
         let data = data();
-        let mut state = GameState::new(3, &data);
+        let mut state = game(3, &data);
         assert!(state.opens_season(&data));
         let before = state.clone();
         let summary = next_week(&mut state, &plan(Activity::Rest, false), &data);
@@ -2116,7 +2140,7 @@ mod tests {
     #[test]
     fn the_club_s_fighters_share_a_melee_and_pay_and_earn_for_it() {
         let data = data();
-        let mut state = GameState::new(3, &data);
+        let mut state = game(1, &data);
         let mut rng = ChaCha8Rng::seed_from_u64(11);
         state.fighters.push(CareerFighter::random(&mut rng, &data));
         let capua = Activity::Melee(ColosseumId(0));
@@ -2169,7 +2193,7 @@ mod tests {
     #[test]
     fn a_new_game_starts_at_week_one_with_the_seed_s_fighter() {
         let data = data();
-        let state = GameState::new(7, &data);
+        let state = game(7, &data);
         assert_eq!(state.week, 1);
         assert_eq!(state.date(&data), Date { season: 1, week: 1 });
         let wealth = &data.economy.wealth;
@@ -2178,15 +2202,15 @@ mod tests {
         let fighter = CareerFighter::random(&mut ChaCha8Rng::seed_from_u64(7), &data);
         assert_eq!(state.fighters, [fighter]);
         // A rich club starts with more money, and the same fighter.
-        let rich = GameState::with_wealth(7, Wealth::Rich, &data);
+        let rich = game_of(7, Wealth::Rich, &data);
         assert_eq!(rich.money, i64::from(wealth.rich.starting_money));
         assert_eq!(rich.fighters, state.fighters);
-        // The rival clubs start with the wealth of data/world.ron.
-        for (rival, rules) in state.rivals.iter().zip(&data.world.rivals) {
-            assert_eq!(rival.wealth, rules.wealth);
+        // The rival clubs start with their wealth's money.
+        let state = GameState::new(7, &data);
+        for rival in &state.rivals {
             assert_eq!(
                 rival.money,
-                i64::from(wealth.get(rules.wealth).starting_money)
+                i64::from(wealth.get(rival.wealth).starting_money)
             );
         }
     }
@@ -2194,7 +2218,7 @@ mod tests {
     #[test]
     fn the_rival_clubs_open_with_the_colosseums_fighters() {
         let data = data();
-        let state = GameState::new(7, &data);
+        let state = game(7, &data);
         // Fifteen in each colosseum, shared out in turn: ten for each club.
         assert!(state.rivals.iter().all(|r| r.fighters.len() == 10));
         for colosseum in &state.colosseums {
@@ -2215,9 +2239,51 @@ mod tests {
     }
 
     #[test]
+    fn the_world_opens_with_clubs_drawn_from_every_culture() {
+        let data = DesignData::load().unwrap();
+        let state = GameState::new(7, &data);
+        let clubs = &data.world.clubs;
+        assert_eq!(state.rivals.len(), usize::try_from(clubs.count).unwrap());
+        let wanted = usize::try_from(data.world.roster.wanted).unwrap();
+        let mut names = Vec::new();
+        let mut cultures = Vec::new();
+        for rival in &state.rivals {
+            // Named by its culture, unlike any other, with a full roster.
+            let culture = data.culture(&rival.culture).unwrap();
+            assert!(
+                culture
+                    .names
+                    .iter()
+                    .any(|n| rival.name.contains(n.as_str())),
+                "{}",
+                rival.name
+            );
+            assert!(rival.active() >= wanted);
+            assert_eq!(
+                rival.money,
+                i64::from(data.economy.wealth.get(rival.wealth).starting_money)
+            );
+            names.push(rival.name.as_str());
+            cultures.push(rival.culture.as_str());
+        }
+        names.sort_unstable();
+        names.dedup();
+        assert_eq!(names.len(), state.rivals.len());
+        cultures.sort_unstable();
+        cultures.dedup();
+        assert!(cultures.len() > 5, "{cultures:?}");
+        // Many poor clubs, few rich ones.
+        let count = |wealth| state.rivals.iter().filter(|r| r.wealth == wealth).count();
+        assert!(count(Wealth::Poor) > count(Wealth::Rich));
+        assert!(count(Wealth::Rich) > 0);
+        // The same seed draws the same world.
+        assert_eq!(GameState::new(7, &data).rivals, state.rivals);
+    }
+
+    #[test]
     fn a_week_follows_the_decisions_and_moves_on() {
         let data = data();
-        let mut state = GameState::new(7, &data);
+        let mut state = game(7, &data);
         let decisions = plan(Activity::Rest, false);
         let summary = next_week(&mut state, &decisions, &data);
         assert_eq!(summary.reports.len(), 1);
@@ -2231,7 +2297,7 @@ mod tests {
     #[test]
     fn missing_plans_follow_the_suggestion() {
         let data = data();
-        let mut by_default = GameState::new(7, &data);
+        let mut by_default = game(7, &data);
         let mut suggested = by_default.clone();
         let decisions = suggested.suggested_decisions(&data);
         next_week(&mut by_default, &Decisions::default(), &data);
@@ -2242,7 +2308,7 @@ mod tests {
     #[test]
     fn the_week_goes_on_without_active_fighters() {
         let data = data();
-        let mut state = GameState::new(7, &data);
+        let mut state = game(7, &data);
         state.fighters[0].status = Status::Dead;
         let before = state.clone();
         let summary = next_week(&mut state, &Decisions::default(), &data);
@@ -2256,7 +2322,7 @@ mod tests {
     fn upkeep_and_training_are_paid() {
         let data = data();
         let economy = &data.economy;
-        let mut state = GameState::new(7, &data);
+        let mut state = game(7, &data);
         let summary = next_week(&mut state, &plan(Activity::Train, false), &data);
         let cost = i64::from(economy.training_cost);
         let upkeep = i64::from(economy.upkeep);
@@ -2284,7 +2350,7 @@ mod tests {
     #[test]
     fn a_trainer_is_paid_every_week_and_sets_the_session_s_price() {
         let data = data();
-        let mut state = GameState::new(7, &data);
+        let mut state = game(7, &data);
         let trainer = data.economy.staff.trainer(3).unwrap();
         let mut train = plan(Activity::Train, false);
         train.staff = vec![StaffMove::Hire(offered(
@@ -2318,7 +2384,7 @@ mod tests {
     #[test]
     fn a_candidate_on_the_market_is_hired_only_with_a_first_salary() {
         let data = data();
-        let mut state = GameState::new(7, &data);
+        let mut state = game(7, &data);
         let first = offered(&mut state, Role::Trainer, 1, &data);
         assert!(state.may_staff(StaffMove::Hire(first), &data));
         assert!(!state.may_staff(StaffMove::Hire(first + 1), &data));
@@ -2341,7 +2407,7 @@ mod tests {
     #[test]
     fn a_trainer_spares_form_at_training() {
         let data = data();
-        let mut alone = GameState::new(7, &data);
+        let mut alone = game(7, &data);
         let mut coached = alone.clone();
         coached.staff = Staff::of_levels(&[(Role::Trainer, 5)], &data.economy.staff);
         next_week(&mut alone, &plan(Activity::Train, false), &data);
@@ -2356,7 +2422,7 @@ mod tests {
     #[test]
     fn a_broke_club_rests_without_care_and_runs_into_debt() {
         let data = data();
-        let mut state = GameState::new(7, &data);
+        let mut state = game(7, &data);
         state.money = 0;
         state.fighters[0].injuries.push(Injury {
             location: Location::Body,
@@ -2372,7 +2438,7 @@ mod tests {
     #[test]
     fn each_post_is_hired_once_a_week_and_paid_in_turn() {
         let data = data();
-        let mut state = GameState::new(7, &data);
+        let mut state = game(7, &data);
         let staff = &data.economy.staff;
         let mut week = plan(Activity::Rest, false);
         week.staff = vec![
@@ -2415,7 +2481,7 @@ mod tests {
     #[test]
     fn the_doctor_sets_the_price_of_care() {
         let data = data();
-        let mut state = GameState::new(7, &data);
+        let mut state = game(7, &data);
         state.staff = Staff::of_levels(&[(Role::Doctor, 5)], &data.economy.staff);
         state.fighters[0].injuries.push(Injury {
             location: Location::Body,
@@ -2439,7 +2505,7 @@ mod tests {
     #[test]
     fn care_is_paid_when_the_club_can() {
         let data = data();
-        let mut state = GameState::new(7, &data);
+        let mut state = game(7, &data);
         state.fighters[0].injuries.push(Injury {
             location: Location::Body,
             severity: Severity::Medium,
@@ -2456,7 +2522,7 @@ mod tests {
         let data = data();
         let colosseum = &data.world.colosseums[0].purses;
         // Even a broke club can fight: the first colosseum is free.
-        let mut state = GameState::new(2, &data);
+        let mut state = game(2, &data);
         state.money = 0;
         let mut won = false;
         for _ in 0..20 {
@@ -2482,7 +2548,7 @@ mod tests {
     fn a_fight_meets_a_rival_fighter_and_moves_both_elo() {
         let data = data();
         let rules = &data.world;
-        let mut state = GameState::new(7, &data);
+        let mut state = game(7, &data);
         // Past the season's opening, whose melees keep the rival fighters busy.
         state.week = 2;
         let rome = ColosseumId(1);
@@ -2503,7 +2569,7 @@ mod tests {
 
     /// A game of seed 7 whose fighter leads Rome's ranking.
     fn top_of_rome(data: &DesignData) -> GameState {
-        let mut state = GameState::new(7, data);
+        let mut state = game(7, data);
         state.colosseums[1].ranking.insert(
             0,
             crate::colosseum::Rating {
@@ -2597,7 +2663,7 @@ mod tests {
     #[test]
     fn the_suggestion_defends_a_title_before_its_deadline() {
         let data = data();
-        let mut state = GameState::new(7, &data);
+        let mut state = game(7, &data);
         state.colosseums[1].champion = Some(Contender::Club(0));
         let deadline = state.colosseums[1].defense_deadline(&data.world);
         // The season opens with its melee, where it would have fought.
@@ -2619,7 +2685,7 @@ mod tests {
     #[test]
     fn rival_champions_defend_without_the_player() {
         let data = data();
-        let mut state = GameState::new(7, &data);
+        let mut state = game(7, &data);
         let rest = plan(Activity::Rest, false);
         let mut fights = 0;
         for _ in 0..12 {
@@ -2727,6 +2793,8 @@ mod tests {
     fn rival_fighters_challenge_the_ranked_fighters_fit_to_fight() {
         let data = data();
         let mut state = top_of_rome(&data);
+        // The challenger's club, the first one, challenges 40 % of the weeks.
+        state.rivals[0].profile = Profile::Aggressive;
         let mut received = 0;
         for _ in 0..20 {
             state.fighters[0].form = crate::fighter::form::Form::full();
@@ -2738,7 +2806,6 @@ mod tests {
                 && Some(ch.rival) == state.colosseums[1].challenger(0, state.rosters())));
             received += state.challenges.len();
         }
-        // Between 10 % and 40 % each week, by the challenger's club.
         assert!(
             (1..=14).contains(&received),
             "{received} challenges in 20 weeks"
@@ -2752,7 +2819,7 @@ mod tests {
     #[test]
     fn a_club_that_cannot_pay_rome_rests() {
         let data = data();
-        let mut state = GameState::new(7, &data);
+        let mut state = game(7, &data);
         state.money = 0;
         let summary = next_week(
             &mut state,
@@ -2778,7 +2845,7 @@ mod tests {
     #[test]
     fn a_free_agent_joins_for_nothing_and_plays_the_week() {
         let data = data();
-        let mut state = GameState::new(7, &data);
+        let mut state = game(7, &data);
         state.fighters[0].status = Status::Dead;
         state.money = -100;
         let agent = state.free_agents[2].clone();
@@ -2796,7 +2863,7 @@ mod tests {
     #[test]
     fn a_full_club_signs_no_one() {
         let data = data();
-        let mut state = GameState::new(7, &data);
+        let mut state = game(7, &data);
         // The first free agent on the market.
         let hire = |state: &GameState| {
             let a = (0..state.free_agents.len())
@@ -2818,7 +2885,7 @@ mod tests {
         next_week(&mut state, &decisions, &data);
         assert_eq!(state.active_fighters(), max);
         // Several signings in a week sign the free agents chosen, in order.
-        let mut state = GameState::new(7, &data);
+        let mut state = game(7, &data);
         let (first, third) = (state.free_agents[0].clone(), state.free_agents[2].clone());
         next_week(&mut state, &moves(&[Move::Sign(2), Move::Sign(0)]), &data);
         assert_eq!(state.fighters[1].potential, third.potential);
@@ -2828,7 +2895,7 @@ mod tests {
     #[test]
     fn a_rival_fighter_is_bought_by_negotiation() {
         let data = data();
-        let mut state = GameState::new(7, &data);
+        let mut state = game(7, &data);
         state.money = 10_000;
         let target = RivalId {
             club: 2,
@@ -2882,7 +2949,7 @@ mod tests {
     #[test]
     fn a_listed_fighter_fights_on_until_sold() {
         let data = data();
-        let mut state = GameState::new(7, &data);
+        let mut state = game(7, &data);
         let list = moves(&[Move::List(0)]);
         let train = Decisions {
             plans: vec![WeekPlan {
@@ -2908,8 +2975,13 @@ mod tests {
         assert_eq!(offer.price, percent_of(worth, aggressive.buy_percent));
         // A full club makes none, even if some of its fighters die this week.
         let mut full = state.clone();
-        let extra = full.rivals[1].fighters[0].clone();
-        full.rivals[1].fighters.extend(vec![extra; 4]);
+        let roster = &full.rivals[1].fighters;
+        let extra = roster
+            .iter()
+            .find(|f| f.status == Status::Active)
+            .unwrap()
+            .clone();
+        full.rivals[1].fighters.extend(vec![extra; 6]);
         full.sale_offers.clear();
         next_week(&mut full, &Decisions::default(), &data);
         assert!(full.sale_offers.iter().all(|o| o.rival != 1));
@@ -2936,7 +3008,7 @@ mod tests {
     #[test]
     fn a_released_fighter_becomes_a_free_agent() {
         let data = data();
-        let mut state = GameState::new(7, &data);
+        let mut state = game(7, &data);
         let released = state.fighters[0].clone();
         let summary = next_week(&mut state, &moves(&[Move::Release(0)]), &data);
         assert_eq!(summary.market, [MarketNews::Released(0)]);
@@ -2955,7 +3027,7 @@ mod tests {
     #[test]
     fn observing_a_fighter_reveals_more_of_it() {
         let data = data();
-        let mut state = GameState::new(7, &data);
+        let mut state = game(7, &data);
         let target = RivalId {
             club: 1,
             fighter: 4,
@@ -2970,7 +3042,7 @@ mod tests {
     fn rookies_arrive_and_old_fighters_worth_less_are_released_in_the_off_season() {
         let data = data();
         let market = &data.economy.market;
-        let mut state = GameState::new(3, &data);
+        let mut state = game(3, &data);
         state.fighters[0].status = Status::Retired;
         let calendar = &data.calendar;
         let off_season = u64::from(calendar.competition_weeks + calendar.great_event_weeks + 1);
@@ -3018,7 +3090,7 @@ mod tests {
     fn wealth_follows_money_at_the_off_season_with_no_patron() {
         let data = data();
         let rules = &data.economy.wealth;
-        let mut state = GameState::with_wealth(7, Wealth::Poor, &data);
+        let mut state = game_of(7, Wealth::Poor, &data);
         assert_eq!(state.money, i64::from(rules.poor.starting_money));
         state.fighters[0].status = Status::Retired;
         let summary = next_week(&mut state, &Decisions::default(), &data);
@@ -3041,7 +3113,7 @@ mod tests {
     #[test]
     fn a_poor_club_signs_the_free_agent_of_the_best_potential_its_recruiter_sees() {
         let data = data();
-        let mut state = GameState::new(7, &data);
+        let mut state = game(7, &data);
         let (poor, modest) = (1, 2);
         assert_eq!(state.rivals[poor].wealth, Wealth::Poor);
         assert_eq!(state.rivals[modest].wealth, Wealth::Modest);
@@ -3090,7 +3162,7 @@ mod tests {
     fn a_rich_club_buys_better_fighters_from_poorer_clubs_and_lets_its_weakest_go() {
         let data = data();
         let max = usize::try_from(data.world.roster.max).unwrap();
-        let mut state = GameState::new(7, &data);
+        let mut state = game(7, &data);
         let (rich, poor, modest) = (0, 1, 2);
         assert_eq!(state.rivals[rich].wealth, Wealth::Rich);
         state.rivals[rich].money = 100_000;
@@ -3135,7 +3207,7 @@ mod tests {
     #[test]
     fn at_the_off_season_a_rich_club_lets_go_at_any_age_whoever_no_longer_performs() {
         let data = data();
-        let mut state = GameState::new(3, &data);
+        let mut state = game(3, &data);
         state.fighters[0].status = Status::Retired;
         let (rich, poor) = (0, 1);
         up_to_the_off_season(&mut state, &data);
@@ -3171,7 +3243,7 @@ mod tests {
     fn a_rival_club_buys_from_another_when_no_free_agent_suits_it() {
         let data = data();
         let market = &data.economy.market;
-        let mut state = GameState::new(7, &data);
+        let mut state = game(7, &data);
         // Only weak free agents, and the cautious club rich and one fighter short.
         for agent in &mut state.free_agents {
             agent.stats = agent.stats.map(|_| 1);
@@ -3220,7 +3292,7 @@ mod tests {
             before.rivals[id.club].money + i64::from(price)
         );
         // A club that cannot pay signs the free agent anyway.
-        let mut poor = GameState::new(7, &data);
+        let mut poor = game(7, &data);
         for agent in &mut poor.free_agents {
             agent.stats = agent.stats.map(|_| 1);
         }
@@ -3235,7 +3307,7 @@ mod tests {
     #[test]
     fn money_moves_only_through_the_ledger() {
         let data = data();
-        let mut state = GameState::new(3, &data);
+        let mut state = game(3, &data);
         for _ in 0..60 {
             let before = state.money;
             let decisions = state.suggested_decisions(&data);
@@ -3249,7 +3321,7 @@ mod tests {
     fn same_seed_same_decisions_same_game() {
         let game = || {
             let data = data();
-            let mut state = GameState::new(9, &data);
+            let mut state = game(9, &data);
             for _ in 0..20 {
                 let decisions = state.suggested_decisions(&data);
                 next_week(&mut state, &decisions, &data);
@@ -3262,7 +3334,7 @@ mod tests {
     #[test]
     fn rival_clubs_play_their_weeks_without_the_player() {
         let data = data();
-        let mut state = GameState::new(4, &data);
+        let mut state = game(4, &data);
         state.fighters[0].status = Status::Retired;
         let start = state.clone();
         for _ in 0..60 {
@@ -3293,7 +3365,7 @@ mod tests {
     /// markets change without the player.
     #[test]
     fn three_seasons_live_without_the_player() {
-        let data = data();
+        let data = DesignData::load().unwrap();
         let mut state = GameState::new(1, &data);
         state.fighters[0].status = Status::Retired;
         let start = state.clone();
@@ -3312,7 +3384,7 @@ mod tests {
             // a title defense) recruits the next week.
             for rival in &state.rivals {
                 assert!(rival.money >= 0, "week {week}: {}", rival.money);
-                assert!(rival.active() + 1 >= wanted, "week {week}");
+                assert!(rival.active() + 1 >= wanted, "week {week}: {}", rival.name);
             }
             if week % season == 0 {
                 let rosters = state.rosters();
@@ -3350,23 +3422,27 @@ mod tests {
             .count();
         assert!(young > 0);
         // The clubs hired among the candidates, a poor one its recruiter first (it may
-        // not afford a trainer besides); their salaries, paid for every three fighters,
-        // keep their money within bounds (up to 26 000 without them).
+        // not afford a trainer besides, nor find one when forty clubs share the
+        // market); their salaries, paid for every three fighters, keep their money
+        // within bounds (up to 26 000 without them).
         for rival in &state.rivals {
             let staff = &rival.staff;
             let hired = staff.trainer.is_some() || staff.doctor.is_some();
             assert!(hired || staff.recruiter.is_some(), "{staff:?}");
-            if rival.wealth == Wealth::Poor {
-                assert!(rival.staff.recruiter.is_some());
-            }
             assert!(rival.money < 25_000, "{}", rival.money);
         }
-        // Clubs of different wealth live side by side, each one's following its money
-        // (a rich club that spent too much on fighters is modest now).
+        assert!(
+            state
+                .rivals
+                .iter()
+                .any(|r| r.wealth == Wealth::Poor && r.staff.recruiter.is_some())
+        );
+        // Poor, modest and rich clubs live side by side, each one's wealth following its
+        // money.
         let mut wealths: Vec<Wealth> = state.rivals.iter().map(|r| r.wealth).collect();
         wealths.sort();
         wealths.dedup();
-        assert!(wealths.len() >= 2, "{wealths:?}");
+        assert_eq!(wealths, [Wealth::Poor, Wealth::Modest, Wealth::Rich]);
         // Free agents fought too, ranked in the colosseum free to enter; some were
         // signed with their record, and some died in the arena.
         let fights = |f: &CareerFighter| f.record.wins + f.record.losses + f.record.draws;
@@ -3393,7 +3469,7 @@ mod tests {
     #[test]
     fn rival_clubs_hire_the_candidates_their_money_can_keep_and_pay_them() {
         let data = data();
-        let mut state = GameState::new(7, &data);
+        let mut state = game(7, &data);
         state.fighters[0].status = Status::Retired;
         state.rivals[0].money = 100_000;
         state.rivals[1].money = 0;
@@ -3416,7 +3492,7 @@ mod tests {
     #[test]
     fn free_agents_fight_where_entry_is_free_and_take_their_elo_to_the_club() {
         let data = data();
-        let mut state = GameState::new(7, &data);
+        let mut state = game(7, &data);
         state.fighters[0].status = Status::Retired;
         // Fit free agents register in Capua, free to enter, never in Rome.
         let plans = state.free_agent_plans(&data);
@@ -3491,9 +3567,9 @@ mod tests {
     #[test]
     fn rival_fighters_follow_their_clubs_rules_and_the_club_meets_those_registered() {
         let data = data();
-        let mut state = GameState::new(3, &data);
-        assert_eq!(data.world.rivals[0].profile, Profile::Cautious);
-        assert_eq!(data.world.rivals[1].profile, Profile::Aggressive);
+        let mut state = game(3, &data);
+        assert_eq!(state.rivals[0].profile, Profile::Cautious);
+        assert_eq!(state.rivals[1].profile, Profile::Aggressive);
         state.rivals[0].fighters[0].form = crate::fighter::form::Form::new(50);
         state.rivals[1].fighters[0].form = crate::fighter::form::Form::new(50);
         let plans = state.rival_plans(&data);

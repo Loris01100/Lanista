@@ -79,7 +79,7 @@ pub fn rival_fighter_name(id: RivalId, state: &GameState, data: &DesignData) -> 
     format!(
         "{class} n° {} ({})",
         id.fighter + 1,
-        club_name(id.club, data)
+        club_name(id.club, state)
     )
 }
 
@@ -173,7 +173,7 @@ pub fn move_text(m: Move, state: &GameState, data: &DesignData) -> String {
             format!(
                 "Vendre {} à {} pour {price}",
                 club(fighter),
-                club_name(rival, data)
+                club_name(rival, state)
             )
         }
         Move::Offer(id, price) => format!(
@@ -312,7 +312,7 @@ pub fn market_news_text(news: MarketNews, state: &GameState, data: &DesignData) 
         MarketNews::Sold(offer) => format!(
             "Vend {} à {} pour {}",
             club(offer.fighter),
-            club_name(offer.rival, data),
+            club_name(offer.rival, state),
             offer.price
         ),
         MarketNews::Bought {
@@ -322,16 +322,16 @@ pub fn market_news_text(news: MarketNews, state: &GameState, data: &DesignData) 
         } => format!(
             "Achète {} à {} pour {price}",
             club(fighter),
-            club_name(from.club, data)
+            club_name(from.club, state)
         ),
         MarketNews::Countered(id, price) => format!(
             "{} demande {price} pour {} (offre possible cette semaine)",
-            club_name(id.club, data),
+            club_name(id.club, state),
             rival(id)
         ),
         MarketNews::ClubRefused(id) => format!(
             "{} refuse l'offre pour {}",
-            club_name(id.club, data),
+            club_name(id.club, state),
             rival(id)
         ),
         MarketNews::FighterRefused(id) => {
@@ -417,8 +417,18 @@ pub fn wealth_text(wealth: Wealth) -> String {
 }
 
 /// The name of rival club `club`.
-pub fn club_name(club: usize, data: &DesignData) -> &str {
-    data.world.rivals.get(club).map_or("?", |r| r.name.as_str())
+pub fn club_name(club: usize, state: &GameState) -> &str {
+    state.rivals.get(club).map_or("?", |r| r.name.as_str())
+}
+
+/// The name of culture `key` ("Asie de l'Est").
+pub fn culture_name<'a>(key: &'a str, data: &'a DesignData) -> &'a str {
+    data.culture(key).map_or(key, |c| c.name.as_str())
+}
+
+/// "culture : Asie de l'Est".
+pub fn culture_text(key: &str, data: &DesignData) -> String {
+    format!("culture : {}", culture_name(key, data))
 }
 
 pub fn arena_name(arena: ArenaKind) -> &'static str {

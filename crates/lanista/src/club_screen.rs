@@ -362,7 +362,7 @@ impl ClubScreen {
         if let Some((id, price)) = self.state.counter_offer {
             ui.label(format!(
                 "Marché : {} demande {price} pour {}",
-                club_name(id.club, &self.data),
+                club_name(id.club, &self.state),
                 rival_fighter_name(id, &self.state, &self.data)
             ));
         }
@@ -1289,9 +1289,10 @@ mod tests {
         let state = &screen.state;
         let wanted = state.rival_fighter(target).unwrap();
         let class = class_name(wanted, &data);
+        let owner = state.rivals[2].name.clone();
         assert_eq!(
             move_text(Move::Offer(target, 100), state, &data),
-            format!("Offrir 100 pour {class} n° 2 (Ludus Dacicus)")
+            format!("Offrir 100 pour {class} n° 2 ({owner})")
         );
         // Two stats seen at first, the others hidden.
         let seen = range_texts(wanted, &Scouting::default(), &data);
@@ -1302,12 +1303,12 @@ mod tests {
         let (_, overview) = screen.last_week.as_ref().unwrap();
         assert_eq!(
             overview[1],
-            format!("Ludus Dacicus refuse l'offre pour {class} n° 2 (Ludus Dacicus)")
+            format!("{owner} refuse l'offre pour {class} n° 2 ({owner})")
         );
         assert_eq!(screen.state.transfer_list, [0]);
         // Offers came for the listed fighter.
         let offer = screen.state.sale_offers[0];
-        let club = club_name(offer.rival, &data).to_owned();
+        let club = club_name(offer.rival, &screen.state).to_owned();
         let name = fighter_name(0, &screen.state.fighters[0], &data);
         screen.decisions.moves = vec![Move::AcceptOffer {
             fighter: 0,
@@ -1472,9 +1473,13 @@ mod tests {
             screen.next_week();
         }
         let (_, menu) = screen.last_week.as_ref().unwrap();
+        let clubs = &screen.state.rivals;
         assert!(
             menu.iter()
-                .any(|line| line.starts_with("Titre de Capoue : ") && line.contains(" (Ludus ")),
+                .any(|line| line.starts_with("Titre de Capoue : ")
+                    && clubs
+                        .iter()
+                        .any(|c| line.contains(&format!(" ({})", c.name)))),
             "{menu:?}"
         );
     }
@@ -1482,12 +1487,14 @@ mod tests {
     #[test]
     fn the_rival_clubs_are_listed() {
         let screen = screen(7);
+        let lines = screen.rival_lines();
+        assert_eq!(lines.len(), screen.state.rivals.len());
         assert_eq!(
-            screen.rival_lines(),
+            lines[..3],
             [
-                "Ludus Magnus, prudent et riche : 10 combattants",
-                "Ludus Gallicus, agressif et pauvre : 10 combattants",
-                "Ludus Dacicus, marchand et modeste : 10 combattants",
+                "Clan de Cassivellaunos (Celtes), agressif et riche : 10 combattants",
+                "Maison de l'Aigle de Tecún (Mésoamérique), prudent et pauvre : 10 combattants",
+                "Halle d'Arioviste (Germains), prudent et modeste : 10 combattants",
             ]
         );
     }

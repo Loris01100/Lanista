@@ -47,7 +47,7 @@ impl ClubScreen {
             ui.horizontal(|ui| {
                 ui.label(format!(
                     "{} demande {price} pour {}",
-                    club_name(id.club, data),
+                    club_name(id.club, state),
                     rival_fighter_name(id, state, data)
                 ));
                 if ui.button("Offrir ce prix").clicked() {
@@ -130,7 +130,7 @@ impl ClubScreen {
         let mut goto = None;
         if let Target::Rival(id) = target
             && ui
-                .link(format!("Club : {}", club_name(id.club, data)))
+                .link(format!("Club : {}", club_name(id.club, state)))
                 .clicked()
         {
             goto = Some(View::Rival(id.club));
@@ -386,7 +386,7 @@ fn sale_grid(ui: &mut egui::Ui, state: &GameState, moves: &mut Vec<Move>, data: 
                 };
                 let label = format!(
                     "Accepter {} : {}",
-                    club_name(offer.rival, data),
+                    club_name(offer.rival, state),
                     offer.price
                 );
                 toggle(ui, moves, accept, &label, state.may_move(accept, data));

@@ -65,8 +65,8 @@
     market: (
         // Free agents, signed for nothing: missing ones arrive at the end of the week,
         // the least valuable leave beyond the most.
-        min_free_agents: 6,
-        max_free_agents: 20,
+        min_free_agents: 20,
+        max_free_agents: 60,
         // Arriving at the start of each off-season.
         rookies: 8,
         rookie_age: 20,

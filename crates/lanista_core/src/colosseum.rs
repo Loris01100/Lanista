@@ -11,7 +11,7 @@ use crate::combat::ArenaKind;
 use crate::economy::Purses;
 use crate::fighter::career::{CareerFighter, Status};
 use crate::fighter::fame::FightResult;
-use crate::rivals::{Profile, ProfileRules, Profiles, Rival, RivalData, RivalId, RosterRules};
+use crate::rivals::{ClubRules, Profile, Profiles, Rival, RivalId, RosterRules};
 
 /// The world's rules, from `data/world.ron`.
 #[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
@@ -35,8 +35,8 @@ pub struct WorldRules {
     /// only where entry is free, never trained nor cared for.
     pub free_agents: Profile,
     pub roster: RosterRules,
-    /// The rival clubs; at least one.
-    pub rivals: Vec<RivalData>,
+    /// How the rival clubs are drawn.
+    pub clubs: ClubRules,
     /// `ColosseumId(i)` is the colosseum at index `i`.
     pub colosseums: Vec<ColosseumData>,
 }
@@ -52,12 +52,6 @@ impl WorldRules {
     #[must_use]
     pub fn arena(&self, id: ColosseumId) -> ArenaKind {
         self.colosseum(id).map_or(ArenaKind::Sand, |c| c.arena)
-    }
-
-    /// The thresholds of the rival club at index `club`.
-    #[must_use]
-    pub fn profile(&self, club: usize) -> Option<&ProfileRules> {
-        Some(self.profiles.get(self.rivals.get(club)?.profile))
     }
 }
 
@@ -516,6 +510,9 @@ mod tests {
             .map(|_| with_prestige(CareerFighter::random(&mut rng, data), 3, data))
             .collect();
         let rivals = vec![Rival {
+            name: "Ludus Magnus".into(),
+            culture: "rome".into(),
+            profile: Profile::Cautious,
             money: 0,
             fighters,
             staff: Staff::default(),

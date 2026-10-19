@@ -9,6 +9,7 @@ pub mod fighter;
 pub mod log;
 pub mod market;
 pub mod melee;
+pub mod names;
 pub mod rivals;
 pub mod save;
 pub mod staff;
