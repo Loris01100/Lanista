@@ -12,11 +12,11 @@ use crate::relations::Reason;
 use crate::staff::{StaffMove, StaffNews};
 
 use super::melee::melees;
+use super::transfers::{answer_offer, market_moves, rival_market, trim_market};
 use super::{
-    GameState, News, WorldNews, affordable, answer_offer, club_lives, end_colosseum_weeks,
-    entry_fee, market_moves, met, opponent, outsider_weeks, pay_rival, receive_challenges,
-    refusals, relate, rival_market, rival_staff, staff_week, title_fight, trim_market,
-    wealth_changes, week_plans,
+    GameState, News, WorldNews, affordable, club_lives, end_colosseum_weeks, entry_fee, met,
+    opponent, outsider_weeks, pay_rival, receive_challenges, refusals, relate, rival_staff,
+    staff_week, title_fight, wealth_changes, week_plans,
 };
 
 /// The player's decisions for one week.
