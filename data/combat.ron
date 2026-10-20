@@ -65,6 +65,11 @@
         max_fighters: 20,
         square_meters_per_fighter: 30.0,
         max_ticks: 5400,
+        // Only the first paid_places bring money and fame, the last one standing all of
+        // the colosseum's melee_prize and fame's melee_survival, each place below a
+        // share less, the last paid one a share; the loading checks that its share of
+        // the prize pays every colosseum's entry fee, the journey apart.
+        paid_places: 12,
         // Two standing fighters without an ally, within `distance` meters between their
         // edges, make a pact at each decision (5 per second) with a chance from the
         // caution of the less cautious (from 0 to 100); allies do not aim at each other.

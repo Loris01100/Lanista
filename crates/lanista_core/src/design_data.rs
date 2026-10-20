@@ -264,6 +264,7 @@ impl DesignData {
         }
         self.validate_world()?;
         self.validate_relations()?;
+        self.validate_melee_prizes()?;
         let market = &self.economy.market;
         if market.max_free_agents < market.min_free_agents {
             return Err(LoadError::Invalid {
@@ -304,6 +305,25 @@ impl DesignData {
         }
         if self.world.relations.rivalry.ends_from < standings.tense.from {
             return Err(invalid("a rivalry ending among the rival scores"));
+        }
+        Ok(())
+    }
+
+    /// The last paid place of a melee pays each colosseum's entry fee, the journey apart.
+    fn validate_melee_prizes(&self) -> Result<(), LoadError> {
+        let paid = (usize::MAX, self.combat.melee.paid_places);
+        let last_paid = |c: &crate::colosseum::ColosseumData| c.purses.melee_receipts(paid.1, paid);
+        if self
+            .world
+            .colosseums
+            .iter()
+            .any(|c| last_paid(c) < c.purses.entry_fee)
+        {
+            return Err(LoadError::Invalid {
+                file: WORLD_FILE,
+                field: "melee_prize",
+                problem: "a last paid place of a melee that does not pay the entry fee",
+            });
         }
         Ok(())
     }

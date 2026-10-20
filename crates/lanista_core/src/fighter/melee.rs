@@ -131,23 +131,25 @@ impl MeleeFight {
     }
 }
 
-/// Place `place`'s share of `full` in a melee of `count`: all of it for the first,
-/// shared down by the fighters it outlasted to none for the last.
+/// Place `place`'s share of `full` in a melee of `count` where the first `paid` places
+/// are paid, never the last one: all of it for the first, a `paid`th less for each
+/// place below, nothing past the paid ones.
 #[must_use]
-pub fn place_share(full: u32, place: u32, count: usize) -> u32 {
-    let count = u64::try_from(count).unwrap_or(u64::MAX);
-    let Some(below) = count.checked_sub(1).filter(|&n| n > 0) else {
+pub fn place_share(full: u32, place: u32, (count, paid): (usize, u32)) -> u32 {
+    let below = u64::try_from(count.saturating_sub(1)).unwrap_or(u64::MAX);
+    let paid = u64::from(paid).min(below);
+    let place = u64::from(place.max(1));
+    if place > paid {
         return 0;
-    };
-    let outlasted = count.saturating_sub(u64::from(place.max(1)));
-    u32::try_from(u64::from(full) * outlasted / below).unwrap_or(u32::MAX)
+    }
+    u32::try_from(u64::from(full) * (paid + 1 - place) / paid).unwrap_or(u32::MAX)
 }
 
 /// Fame a place brings in a melee of `count`: `melee_survival`'s share (see
-/// [`place_share`]).
+/// [`place_share`]), the first `paid` places paid.
 #[must_use]
-pub fn place_fame(place: u32, count: usize, rules: &FameRules) -> u32 {
-    place_share(rules.melee_survival, place, count)
+pub fn place_fame(place: u32, (count, paid): (usize, u32), rules: &FameRules) -> u32 {
+    place_share(rules.melee_survival, place, (count, paid))
 }
 
 /// The melee between `fighters` (as `entrants` go in, one each, missing ones fully
@@ -211,7 +213,8 @@ pub fn play_melee<R: Rng + ?Sized>(
             // The others' average above its own, without dividing.
             let against_stronger = total - strengths[i] > strengths[i] * others;
             let place = places.get(i).copied().unwrap_or(1);
-            let fame = place_fame(place, count, &rules.fame)
+            let paid = data.combat.melee.paid_places;
+            let fame = place_fame(place, (count, paid), &rules.fame)
                 .saturating_add(entrant(i).refused.fame_bonus(&rules.fame));
             let fame = i32::try_from(fame).unwrap_or(i32::MAX);
             (
@@ -306,10 +309,16 @@ mod tests {
     fn fame_follows_the_place() {
         let rules = data().fighter.fame;
         let full = rules.melee_survival;
-        assert_eq!(place_fame(1, 20, &rules), full);
-        assert_eq!(place_fame(20, 20, &rules), 0);
-        assert!(place_fame(10, 20, &rules) < full && place_fame(10, 20, &rules) > 0);
-        assert_eq!(place_fame(1, 1, &rules), 0);
+        assert_eq!(place_fame(1, (20, 12), &rules), full);
+        assert_eq!(place_fame(13, (20, 12), &rules), 0);
+        assert_eq!(place_fame(20, (20, 12), &rules), 0);
+        let middle = place_fame(6, (20, 12), &rules);
+        assert!(middle < full && middle > 0);
+        // A small melee pays all but its first one out.
+        assert_eq!(place_fame(2, (3, 12), &rules), full / 2);
+        assert_eq!(place_fame(3, (3, 12), &rules), 0);
+        assert_eq!(place_fame(1, (1, 12), &rules), 0);
+        assert_eq!(place_share(120, 12, (20, 12)), 10);
     }
 
     #[test]
@@ -340,7 +349,8 @@ mod tests {
                 assert!(f.form.value() < old.form.value() || old.form.value() == 0);
             }
             // The place alone, whatever the fight showed.
-            let place = place_fame(melee.places[i], 20, &data.fighter.fame);
+            let paid = (20, data.combat.melee.paid_places);
+            let place = place_fame(melee.places[i], paid, &data.fighter.fame);
             assert_eq!(side.fame_change, i32::try_from(place).unwrap());
             let fame = i64::from(old.fame.value()) + i64::from(side.fame_change);
             assert_eq!(i64::from(f.fame.value()), fame.clamp(0, 100));

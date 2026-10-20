@@ -1125,7 +1125,8 @@ fn settle_melee(
     for (k, &entry) in entries.iter().enumerate() {
         let side = &melee.sides[k];
         let place = melee.places.get(k).copied().unwrap_or(1);
-        let receipts = i64::from(purses.melee_receipts(place, entries.len()));
+        let paid = (entries.len(), data.combat.melee.paid_places);
+        let receipts = i64::from(purses.melee_receipts(place, paid));
         match entry {
             Contender::Club(i) => {
                 let Some(mut report) = club_weeks[k].take() else {
@@ -2573,7 +2574,8 @@ mod tests {
                 .map(|t| (t.flow, t.amount))
                 .collect();
             // Its place's share, whoever it is.
-            let share = i64::from(purses.melee_receipts(fight.place, size));
+            let paid = (size, data.combat.melee.paid_places);
+            let share = i64::from(purses.melee_receipts(fight.place, paid));
             assert_eq!(
                 money.contains(&(Flow::Receipts, share)),
                 share != 0,
@@ -4092,6 +4094,16 @@ mod tests {
         }
     }
 
+    /// The clubs founded in the last `weeks` weeks, by the news.
+    fn founded_within(state: &GameState, weeks: u64) -> Vec<usize> {
+        (state.news.iter())
+            .filter_map(|n| match n.what {
+                WorldNews::Founded(club) if n.week + weeks > state.week => Some(club),
+                _ => None,
+            })
+            .collect()
+    }
+
     /// The milestone of phase 5: seasons follow one another where rankings, champions and
     /// markets change without the player.
     #[test]
@@ -4169,10 +4181,13 @@ mod tests {
         // not afford a trainer besides, nor find one when forty clubs share the
         // market); their salaries, paid for every three fighters, keep their money
         // within bounds (up to 26 000 without them).
-        for rival in state.rivals.iter().filter(|r| r.is_open()) {
+        // A club founded at the last off-season may not have found one yet.
+        let founded = founded_within(&state, season);
+        for (club, rival) in state.rivals.iter().enumerate().filter(|(_, r)| r.is_open()) {
             let staff = &rival.staff;
             let hired = staff.trainer.is_some() || staff.doctor.is_some();
-            assert!(hired || staff.recruiter.is_some(), "{staff:?}");
+            let new = founded.contains(&club);
+            assert!(hired || staff.recruiter.is_some() || new, "{staff:?}");
             assert!(rival.money < 25_000, "{}", rival.money);
         }
         assert!(

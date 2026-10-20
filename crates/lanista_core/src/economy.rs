@@ -115,11 +115,11 @@ pub struct Purses {
 }
 
 impl Purses {
-    /// What place `place` of a melee of `count` pays, the same for every fighter
-    /// whatever its fame or club (see [`place_share`]).
+    /// What place `place` of a melee of `count`, the first `paid` places paid, pays: the
+    /// same for every fighter whatever its fame or club (see [`place_share`]).
     #[must_use]
-    pub fn melee_receipts(&self, place: u32, count: usize) -> u32 {
-        place_share(self.melee_prize, place, count)
+    pub fn melee_receipts(&self, place: u32, (count, paid): (usize, u32)) -> u32 {
+        place_share(self.melee_prize, place, (count, paid))
     }
 
     /// Gate receipts of a fight: famous fighters draw a crowd.
@@ -175,9 +175,9 @@ mod tests {
         assert_eq!(rules.receipts(Fame::default(), Fame::default()), 20);
         let famous = Fame::default().changed_by(30);
         assert_eq!(rules.receipts(famous, Fame::default().changed_by(10)), 60);
-        assert_eq!(rules.melee_receipts(1, 20), 150);
-        assert_eq!(rules.melee_receipts(20, 20), 0);
-        assert_eq!(rules.melee_receipts(11, 20), 150 * 9 / 19);
+        assert_eq!(rules.melee_receipts(1, (20, 12)), 150);
+        assert_eq!(rules.melee_receipts(12, (20, 12)), 150 / 12);
+        assert_eq!(rules.melee_receipts(13, (20, 12)), 0);
     }
 
     #[test]

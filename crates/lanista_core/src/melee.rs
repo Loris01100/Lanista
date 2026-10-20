@@ -23,6 +23,9 @@ pub struct MeleeRules {
     pub square_meters_per_fighter: f64,
     /// Ticks a melee lasts at most (30 per second).
     pub max_ticks: u32,
+    /// Only the first this many places bring money and fame (see
+    /// [`place_share`](crate::fighter::melee::place_share)).
+    pub paid_places: u32,
     pub pacts: PactRules,
     pub elimination: EliminationRules,
 }
