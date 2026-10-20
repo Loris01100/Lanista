@@ -11,9 +11,10 @@ use crate::market::{MarketNews, Move};
 use crate::relations::Reason;
 use crate::staff::{StaffMove, StaffNews};
 
+use super::melee::melees;
 use super::{
     GameState, News, WorldNews, affordable, answer_offer, club_lives, end_colosseum_weeks,
-    entry_fee, market_moves, melees, met, opponent, outsider_weeks, pay_rival, receive_challenges,
+    entry_fee, market_moves, met, opponent, outsider_weeks, pay_rival, receive_challenges,
     refusals, relate, rival_market, rival_staff, staff_week, title_fight, trim_market,
     wealth_changes, week_plans,
 };
