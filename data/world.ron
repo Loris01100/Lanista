@@ -101,13 +101,15 @@
         // reaches. The club asks the player `price_percent` of its price and offers
         // its price divided by it; `deals: false` trades nothing; `challenge_points`
         // add to its chance to challenge the player's fighters and take from what its
-        // fighter needs to accept theirs.
+        // fighter needs to accept theirs; `pact_points` add to the chance, in percent
+        // at each decision of a melee, that its fighters ally with the player's (by
+        // caution alone between fighters of other clubs or without a club).
         standings: (
-            ally: (from: 60, deals: true, price_percent: 85, challenge_points: 0),
-            friend: (from: 20, deals: true, price_percent: 95, challenge_points: 0),
-            neutral: (from: -19, deals: true, price_percent: 100, challenge_points: 0),
-            tense: (from: -59, deals: true, price_percent: 115, challenge_points: 10),
-            rival: (from: -100, deals: false, price_percent: 100, challenge_points: 25),
+            ally: (from: 60, deals: true, price_percent: 85, challenge_points: 0, pact_points: 10),
+            friend: (from: 20, deals: true, price_percent: 95, challenge_points: 0, pact_points: 5),
+            neutral: (from: -19, deals: true, price_percent: 100, challenge_points: 0, pact_points: 0),
+            tense: (from: -59, deals: true, price_percent: 115, challenge_points: 10, pact_points: 0),
+            rival: (from: -100, deals: false, price_percent: 100, challenge_points: 25, pact_points: -100),
         ),
         // A club whose score falls to a rival's declares itself the player's rival,
         // and stays so until its score climbs back to `ends_from`. A fight between

@@ -1209,6 +1209,7 @@ fn melee_entries(
                 medicine: effects.medicine,
                 of_club: true,
                 hunts_club: false,
+                pact_points: 0,
             });
         } else {
             fighters.push(outsider(&state.rivals, &state.free_agents, entry)?.clone());
@@ -1217,6 +1218,10 @@ fn melee_entries(
                 medicine: outsider_effects(&state.rivals, entry).medicine,
                 of_club: false,
                 hunts_club: matches!(entry, Contender::Rival(id) if state.is_rival(id.club)),
+                pact_points: match entry {
+                    Contender::Rival(id) => state.standing_rules(id.club, data).pact_points,
+                    _ => 0,
+                },
             });
             weeks.push(None);
         }

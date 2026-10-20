@@ -19,14 +19,16 @@ use crate::staff::Medicine;
 use crate::stat_model::Ending;
 
 /// How one fighter goes into a melee: the equipment it refuses, its club's doctor,
-/// whether it is one of the player's fighters, and whether its club is the player's
-/// declared rival, so that it goes for them first.
+/// whether it is one of the player's fighters, whether its club is the player's
+/// declared rival, so that it goes for them first, and the points its club's standing
+/// adds to its chance of a pact with them.
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
 pub struct Entrant {
     pub refused: Refused,
     pub medicine: Medicine,
     pub of_club: bool,
     pub hunts_club: bool,
+    pub pact_points: i32,
 }
 
 /// What a melee left one of its fighters.
@@ -172,6 +174,9 @@ pub fn play_melee<R: Rng + ?Sized>(
         for (prey, p) in (0..).map(FighterId).zip(entrants) {
             if h.hunts_club && p.of_club {
                 start.hunts.push((hunter, prey));
+            }
+            if h.pact_points != 0 && p.of_club {
+                start.pact_points.push((hunter, prey, h.pact_points));
             }
         }
     }
@@ -360,13 +365,19 @@ mod tests {
             hunts_club: true,
             ..Entrant::default()
         };
-        let entrants = [club, hunter, Entrant::default(), hunter, club];
+        let friend = Entrant {
+            pact_points: 10,
+            ..Entrant::default()
+        };
+        let entrants = [club, hunter, friend, hunter, club];
         let melee = play_melee(&mut fighters, &entrants, ArenaKind::Narrow, &mut rng, &data);
         let hunt = |a, b| (FighterId(a), FighterId(b));
         assert_eq!(
             melee.start.hunts,
             [hunt(1, 0), hunt(1, 4), hunt(3, 0), hunt(3, 4)]
         );
+        let ally = |a, b| (FighterId(a), FighterId(b), 10);
+        assert_eq!(melee.start.pact_points, [ally(2, 0), ally(2, 4)]);
     }
 
     #[test]

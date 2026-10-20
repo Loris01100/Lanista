@@ -146,6 +146,9 @@ pub struct StandingRules {
     /// Added to the club's chance to challenge the player's fighters, and taken from
     /// the chance its fighter needs to accept the player's challenges, in points.
     pub challenge_points: u32,
+    /// Added to the chance, in percent at each decision of a melee, that its fighters
+    /// make a pact with the player's.
+    pub pact_points: i32,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Deserialize)]

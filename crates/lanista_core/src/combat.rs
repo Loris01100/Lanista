@@ -73,6 +73,9 @@ pub struct Arena {
     /// Who goes for whom first, hunter then prey: in a melee, a rival club's fighters
     /// after the player's.
     pub hunts: Vec<(FighterId, FighterId)>,
+    /// Points added to the chance that two fighters make a pact, whichever way round:
+    /// in a melee, the player's fighters and those of a club by its standing.
+    pub pact_points: Vec<(FighterId, FighterId, i32)>,
     /// Who is put out for dealing too little damage, and when; nobody, unless set with
     /// [`Arena::with_elimination`].
     pub elimination: EliminationRules,
@@ -263,6 +266,7 @@ impl Arena {
             pact_rules: PactRules::NEVER,
             pacts: Vec::new(),
             hunts: Vec::new(),
+            pact_points: Vec::new(),
             elimination: EliminationRules::NEVER,
             max_ticks: crate::duel::MAX_TICKS,
         }

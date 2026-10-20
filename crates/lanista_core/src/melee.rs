@@ -179,7 +179,7 @@ fn happens(arena: &mut Arena, percent: u64) -> bool {
 /// of its more aggressive member, who betrays it (`PactBroken`); all break once `break_fighting` or
 /// fewer fighters are still fighting (`PactBroken`); else, in index order, two
 /// standing fighters without a pact, within `distance`, make one with the chance of
-/// their less cautious member (`Pact`). Draws only for chances strictly between 0 and
+/// their less cautious member, plus their `Arena::pact_points` (`Pact`). Draws only for chances strictly between 0 and
 /// 100, so an arena without pacts draws nothing.
 pub fn update_pacts(arena: &mut Arena) {
     let rules = arena.pact_rules;
@@ -232,6 +232,13 @@ pub fn update_pacts(arena: &mut Arena) {
                 wary,
             );
             let (a, b) = (fa.id, fb.id);
+            let points = arena
+                .pact_points
+                .iter()
+                .find(|&&(x, y, _)| (x, y) == (a, b) || (x, y) == (b, a))
+                .map_or(0, |&(_, _, p)| i64::from(p));
+            let chance =
+                u64::try_from((i64::try_from(chance).unwrap_or(0) + points).max(0)).unwrap_or(0);
             if happens(arena, chance) {
                 arena.pacts.push((a, b));
                 log(arena, EventKind::Pact { a, b });
@@ -423,6 +430,30 @@ mod tests {
                 b: FighterId(1)
             }
         );
+    }
+
+    #[test]
+    fn a_club_s_standing_moves_the_chance_of_a_pact() {
+        // A third fighter far away, so that pacts may be made at all.
+        let pair = || {
+            vec![
+                test_fighter(0, 5.0, 5.0),
+                test_fighter(1, 6.5, 5.0),
+                test_fighter(2, 18.0, 18.0),
+            ]
+        };
+        let never = PactRules {
+            form_percent_most_cautious: 0,
+            ..SURE
+        };
+        let mut friends = Arena::new(20.0, 20.0, pair(), 0).with_pacts(never);
+        friends.pact_points.push((FighterId(1), FighterId(0), 100));
+        update_pacts(&mut friends);
+        assert_eq!(friends.pacts, [(FighterId(0), FighterId(1))]);
+        let mut rivals = Arena::new(20.0, 20.0, pair(), 0).with_pacts(SURE);
+        rivals.pact_points.push((FighterId(0), FighterId(1), -100));
+        update_pacts(&mut rivals);
+        assert_eq!(rivals.pacts, []);
     }
 
     #[test]
