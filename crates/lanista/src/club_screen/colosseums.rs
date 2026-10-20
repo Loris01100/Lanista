@@ -9,8 +9,8 @@ use reesch::egui;
 use super::{ClubScreen, RANKS_SHOWN, View};
 use crate::texts::{
     arena_effect, arena_name, club_name, colosseum_name, condition_text, contender_name,
-    continent_name, culture_name, culture_text, profile_name, record_text, rival_fighter_name,
-    staff_text, wealth_name,
+    continent_name, culture_name, culture_text, date_text, profile_name, record_text,
+    rival_fighter_name, staff_text, wealth_name,
 };
 
 impl ClubScreen {
@@ -123,7 +123,11 @@ impl ClubScreen {
         ui.heading(format!("Clubs rivaux ({})", continent_name(shown)));
         let mut goto = None;
         for (club, line) in self.rival_lines().into_iter().enumerate() {
-            let here = self.state.rivals.get(club).map(|r| r.continent) == Some(shown);
+            let here = self
+                .state
+                .rivals
+                .get(club)
+                .is_some_and(|r| r.is_open() && r.continent == shown);
             if here && ui.link(line).clicked() {
                 goto = Some(View::Rival(club));
             }
@@ -193,9 +197,9 @@ impl ClubScreen {
             .collect()
     }
 
-    /// A rival club: profile, wealth (its money stays hidden), culture, continent, staff,
-    /// the titles it holds, then its fighters in activity with their standing in each
-    /// colosseum of its continent.
+    /// A rival club: when it closed, profile, wealth (its money stays hidden), culture,
+    /// continent, staff, the titles it holds, then its fighters in activity with their
+    /// standing in each colosseum of its continent.
     pub(super) fn rival_club(&mut self, ui: &mut egui::Ui, club: usize) {
         self.back_button(ui);
         let data = &self.data;
@@ -204,6 +208,10 @@ impl ClubScreen {
             return;
         };
         ui.heading(&rival.name);
+        if let Some(week) = rival.closed {
+            let closed = format!("Fermé, ruiné : {}", date_text(week, data));
+            ui.colored_label(egui::Color32::LIGHT_RED, closed);
+        }
         ui.label(format!(
             "Club {} et {}, {}, en {}, {} combattants en activité (au plus {})",
             profile_name(rival.profile),

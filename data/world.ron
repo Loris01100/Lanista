@@ -49,9 +49,17 @@
     // generated fighters up to `roster.wanted`. Wealth changes with money at each
     // off-season: a rich club buys at will and lets go whoever no longer performs, a
     // poor one hires a recruiter first and signs the free agents of the best potential
-    // it sees.
+    // it sees. A poor club with less than `ruined_below` money at an off-season's
+    // start is ruined; ruined `ruined_seasons` off-seasons in a row, it closes and its
+    // fighters go to the market. Then as many clubs are founded as closed, at least
+    // `founded`, never more than `max` open at once (performance: about 25 ms a week
+    // at 160 clubs, 70 ms at 320).
     clubs: (
         count: 40,
+        max: 100,
+        founded: 1,
+        ruined_below: 1500,
+        ruined_seasons: 2,
         profiles: [(1, Cautious), (1, Aggressive), (1, Merchant)],
         // Many poor, few rich.
         wealth: [(5, Poor), (3, Modest), (1, Rich)],
@@ -67,6 +75,9 @@
     // Added to the entry fee of a colosseum on another continent than the club's: the
     // journey. A club fights at home, abroad only when no colosseum at home suits it.
     travel_fee: 40,
+    // The world's news (titles changing hands, champions bought, clubs closed and
+    // founded) are kept this many weeks.
+    news_weeks: 30,
     // Each continent has a major colosseum, of the highest prestige, and one or two
     // minor ones around it, where prestige-2 ones ask a small fee; on each continent
     // where clubs live, at least one must be free to enter: the safety net of a club

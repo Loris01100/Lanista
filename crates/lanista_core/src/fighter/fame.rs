@@ -46,7 +46,7 @@ pub struct FightOutcome {
 }
 
 /// How a fight ended for one fighter.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum FightResult {
     Won,
     /// Killed, or still fighting when someone else won.

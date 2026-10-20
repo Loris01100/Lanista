@@ -39,6 +39,8 @@ pub struct WorldRules {
     pub clubs: ClubRules,
     /// Added to the entry fee of a colosseum on another continent than the club's.
     pub travel_fee: u32,
+    /// How many weeks the world's news are kept (`GameState::news`).
+    pub news_weeks: u32,
     /// `ColosseumId(i)` is the colosseum at index `i`.
     pub colosseums: Vec<ColosseumData>,
 }
@@ -213,7 +215,7 @@ pub struct Colosseum {
 }
 
 /// What happened to a title in a week.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum TitleNews {
     /// A title fight; `result` is the champion's, who keeps the title unless beaten.
     Fight {
@@ -573,6 +575,8 @@ mod tests {
             fighters,
             staff: Staff::default(),
             wealth: Wealth::Modest,
+            ruined_seasons: 0,
+            closed: None,
         }];
         let ranked: Vec<_> = rivals[0]
             .fighters

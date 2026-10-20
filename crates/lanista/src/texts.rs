@@ -1,6 +1,7 @@
 //! What the player reads, in French: fighters, injuries, illnesses, fights,
 //! weeks, money, colosseums, the market and the staff.
 
+use lanista_core::calendar::Date;
 use lanista_core::colosseum::{
     Challenge, ColosseumId, Contender, Continent, TitleNews, title_kept,
 };
@@ -25,7 +26,7 @@ use lanista_core::staff::{
     Candidate, DoctorRules, RecruiterRules, Role, Scouting, Staff, StaffMove, StaffNews,
     TrainerRules,
 };
-use lanista_core::state::GameState;
+use lanista_core::state::{GameState, News, WorldNews};
 
 /// Stat names, in `Stats::to_array` order.
 pub const STAT_NAMES: [&str; STAT_COUNT] = ["PV", "AC", "AL", "PRÉ", "VIT", "DC", "DL"];
@@ -390,6 +391,47 @@ pub fn title_news_text(c: usize, news: TitleNews, state: &GameState, data: &Desi
             format!("Titre de {place} vacant : il revient à {}", to(holder))
         }
     }
+}
+
+/// A world news item in one line, dated: "Saison 2, semaine 7 : Ludus Magnus ferme,
+/// ruiné : ses combattants partent au marché".
+pub fn world_news_text(news: News, state: &GameState, data: &DesignData) -> String {
+    let what = match news.what {
+        WorldNews::Title(c, title) => title_news_text(c, title, state, data),
+        WorldNews::ChampionBought {
+            colosseum,
+            fighter,
+            buyer,
+            price,
+        } => format!(
+            "{} achète {}, champion de {}, pour {price}",
+            club_name(buyer, state),
+            rival_fighter_name(fighter, state, data),
+            data.world
+                .colosseums
+                .get(colosseum)
+                .map_or("?", |c| c.name.as_str())
+        ),
+        WorldNews::Closed(club) => format!(
+            "{} ferme, ruiné : ses combattants partent au marché",
+            club_name(club, state)
+        ),
+        WorldNews::Founded(club) => state.rivals.get(club).map_or_else(String::new, |r| {
+            format!(
+                "Fondation de {} ({}), en {}",
+                r.name,
+                culture_name(&r.culture, data),
+                continent_name(r.continent)
+            )
+        }),
+    };
+    format!("{} : {what}", date_text(news.week, data))
+}
+
+/// "Saison 2, semaine 7".
+pub fn date_text(week: u64, data: &DesignData) -> String {
+    let when = Date::of(week, &data.calendar);
+    format!("Saison {}, semaine {}", when.season, when.week)
 }
 
 pub fn colosseum_name(id: ColosseumId, data: &DesignData) -> &str {

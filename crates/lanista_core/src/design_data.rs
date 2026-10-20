@@ -313,6 +313,18 @@ impl DesignData {
         if clubs.count == 0 {
             return Err(world("clubs.count", "no rival club to own the residents"));
         }
+        if clubs.max < clubs.count {
+            return Err(world(
+                "clubs.max",
+                "fewer than the clubs the world opens with",
+            ));
+        }
+        if clubs.ruined_seasons == 0 {
+            return Err(world(
+                "clubs.ruined_seasons",
+                "clubs closed before being ruined",
+            ));
+        }
         let weighed = |weights: &mut dyn Iterator<Item = u32>| weights.sum::<u32>() > 0;
         if !weighed(&mut clubs.profiles.iter().map(|(w, _)| *w)) {
             return Err(world("clubs.profiles", "no weight"));
@@ -733,6 +745,10 @@ mod tests {
         assert_eq!(world_field(WORLD, &nameless), "cultures");
         let empty = WORLD.replacen("count: 40", "count: 0", 1);
         assert_eq!(world_field(&empty, NAMES), "clubs.count");
+        let crowded = WORLD.replacen("max: 100", "max: 39", 1);
+        assert_eq!(world_field(&crowded, NAMES), "clubs.max");
+        let doomed = WORLD.replacen("ruined_seasons: 2", "ruined_seasons: 0", 1);
+        assert_eq!(world_field(&doomed, NAMES), "clubs.ruined_seasons");
         // Oceania's clubs with no culture of their own, or no free colosseum.
         let uprooted = NAMES.replacen("continent: Oceania", "continent: Europe", 1);
         assert_eq!(world_field(WORLD, &uprooted), "clubs.cultures");

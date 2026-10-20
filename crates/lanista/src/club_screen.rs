@@ -41,7 +41,7 @@ use crate::texts::{
     condition_text, contender_name, continent_name, fight_text, fighter_name, illness_text,
     injury_text, market_news_text, money_line, move_text, personality_text, priced,
     rival_fighter_name, staff_move_text, staff_news_text, title_news_text, wealth_name,
-    wealth_text, week_lines,
+    wealth_text, week_lines, world_news_text,
 };
 
 /// Seed of the standard duel offered from the club.
@@ -413,13 +413,27 @@ impl ClubScreen {
             });
         }
         ui.separator();
-        if let Some((week, lines)) = &self.last_week {
-            ui.strong(format!("Semaine {week}"));
-            for line in lines {
+        egui::ScrollArea::vertical().show(ui, |ui| {
+            if let Some((week, lines)) = &self.last_week {
+                ui.strong(format!("Semaine {week}"));
+                for line in lines {
+                    ui.label(line);
+                }
+                ui.add_space(6.0);
+            }
+            ui.strong("Nouvelles du monde");
+            for line in self.news_lines() {
                 ui.label(line);
             }
-        }
+        });
         play
+    }
+
+    /// The world's news, newest first.
+    fn news_lines(&self) -> Vec<String> {
+        let news = self.state.news.iter().rev();
+        news.map(|&n| world_news_text(n, &self.state, &self.data))
+            .collect()
     }
 
     /// What needs the player's attention before the week.
@@ -1047,6 +1061,7 @@ mod tests {
     use lanista_core::log::Report;
     use lanista_core::market::Move;
     use lanista_core::staff::{Candidate, Person, Role, Scouting, Staff, StaffMove};
+    use lanista_core::state::{News, WorldNews};
     use rand_chacha::ChaCha8Rng;
     use rand_chacha::rand_core::SeedableRng;
 
@@ -1543,6 +1558,28 @@ mod tests {
                 "Familia Crassus (Rome), agressif et riche : 10 combattants",
                 "Dar Khawla (Monde arabe), prudent et pauvre : 10 combattants",
                 "Clan de Tatanka (Tribus amérindiennes), prudent et modeste : 10 combattants",
+            ]
+        );
+    }
+
+    #[test]
+    fn the_world_s_news_are_told_newest_first() {
+        let mut screen = screen(7);
+        screen.state.news = vec![
+            News {
+                week: 30,
+                what: WorldNews::Closed(1),
+            },
+            News {
+                week: 31,
+                what: WorldNews::Founded(0),
+            },
+        ];
+        assert_eq!(
+            screen.news_lines(),
+            [
+                "Saison 2, semaine 1 : Fondation de Familia Crassus (Rome), en Europe",
+                "Saison 1, semaine 30 : Dar Khawla ferme, ruiné : ses combattants partent au marché",
             ]
         );
     }

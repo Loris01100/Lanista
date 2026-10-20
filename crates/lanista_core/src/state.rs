@@ -74,6 +74,8 @@ pub struct GameState {
     /// The staff candidates on the market, for the club and the rival clubs alike;
     /// one hired leaves it.
     pub staff_market: Vec<Candidate>,
+    /// What happened in the world, oldest first, over the last `WorldRules::news_weeks`.
+    pub news: Vec<News>,
     /// The only source of chance after the start: same seed and decisions, same game.
     pub rng: ChaCha8Rng,
 }
@@ -108,6 +110,7 @@ impl GameState {
             counter_offer: None,
             staff: Staff::default(),
             staff_market: Vec::new(),
+            news: Vec::new(),
             rng,
         };
         state.open_world(data);
@@ -136,7 +139,9 @@ impl GameState {
                 continue;
             }
             let mut homes: Vec<usize> = (0..clubs)
-                .filter(|&k| self.rivals[k].continent == rules.continent)
+                .filter(|&k| {
+                    self.rivals[k].is_open() && self.rivals[k].continent == rules.continent
+                })
                 .collect();
             if homes.is_empty() {
                 homes = (0..clubs).collect();
@@ -165,12 +170,8 @@ impl GameState {
             let colosseum = Colosseum::open(&ranked, self.week, &data.world);
             self.colosseums.push(colosseum);
         }
-        let wanted = usize::try_from(data.world.roster.wanted).unwrap_or(0);
         for club in drawn..self.rivals.len() {
-            while self.rivals[club].active() < wanted {
-                let fighter = CareerFighter::random(&mut self.rng, data);
-                self.rivals[club].fighters.push(fighter);
-            }
+            self.fill_roster(club, data);
         }
         let fewest = usize::try_from(data.economy.market.min_free_agents).unwrap_or(0);
         while self.available_free_agents() < fewest {
@@ -178,6 +179,15 @@ impl GameState {
             self.free_agents.push(agent);
         }
         staff::fill_market(&mut self.staff_market, &data.economy.staff, &mut self.rng);
+    }
+
+    /// Rival club `club` gets generated fighters up to `roster.wanted`, ranked nowhere.
+    fn fill_roster(&mut self, club: usize, data: &DesignData) {
+        let wanted = usize::try_from(data.world.roster.wanted).unwrap_or(0);
+        while self.rivals[club].active() < wanted {
+            let fighter = CareerFighter::random(&mut self.rng, data);
+            self.rivals[club].fighters.push(fighter);
+        }
     }
 
     /// Every fighter in the game, for the colosseums.
@@ -479,6 +489,7 @@ impl GameState {
     pub fn rival_has_place(&self, club: usize, data: &DesignData) -> bool {
         self.rivals
             .get(club)
+            .filter(|r| r.is_open())
             .and_then(|r| u32::try_from(r.active()).ok())
             .is_some_and(|n| n < data.world.roster.max)
     }
@@ -611,6 +622,32 @@ pub struct WeekSummary {
     pub staff: Vec<StaffNews>,
     /// The club's new wealth, when it changed at the start of the off-season.
     pub wealth: Option<Wealth>,
+}
+
+/// Something that happened in the world, for the news feed.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub enum WorldNews {
+    /// The title of the colosseum at this index changed hands.
+    Title(usize, TitleNews),
+    /// Rival club `buyer` bought `fighter`, champion of the colosseum at index
+    /// `colosseum`, for `price`; `fighter` is its place in its former club.
+    ChampionBought {
+        colosseum: usize,
+        fighter: RivalId,
+        buyer: usize,
+        price: u32,
+    },
+    /// The rival club at this index closed, ruined.
+    Closed(usize),
+    /// The rival club at this index was founded.
+    Founded(usize),
+}
+
+/// A world news item of week `week`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub struct News {
+    pub week: u64,
+    pub what: WorldNews,
 }
 
 /// Plays one week for the whole club: the market moves and the change of staff before
@@ -1060,8 +1097,20 @@ fn end_week(
     data: &DesignData,
 ) -> Option<Wealth> {
     let wealth = wealth_changes(state, data);
+    club_lives(state, data);
     rival_market(state, data);
     titles.extend(end_colosseum_weeks(state, state.week, data));
+    let changes = titles.iter().filter(|&&(_, news)| match news {
+        TitleNews::Fight { result, .. } => !title_kept(result),
+        TitleNews::Stripped { .. } | TitleNews::Vacated { .. } => true,
+    });
+    let week = state.week;
+    state.news.extend(changes.map(|&(c, news)| News {
+        week,
+        what: WorldNews::Title(c, news),
+    }));
+    let kept = u64::from(data.world.news_weeks);
+    state.news.retain(|n| n.week + kept > week);
     state.open_world(data);
     trim_market(state, data);
     state.week += 1;
@@ -1076,7 +1125,7 @@ fn wealth_changes(state: &mut GameState, data: &DesignData) -> Option<Wealth> {
         return None;
     }
     let rules = &data.economy.wealth;
-    for rival in &mut state.rivals {
+    for rival in state.rivals.iter_mut().filter(|r| r.is_open()) {
         rival.wealth = rival.wealth.next(rival.money, rules);
     }
     let wealth = state.wealth.next(state.money, rules);
@@ -1086,13 +1135,68 @@ fn wealth_changes(state: &mut GameState, data: &DesignData) -> Option<Wealth> {
     })
 }
 
+/// At the start of the off-season, after the wealth changes, each poor club with less
+/// money than `clubs.ruined_below` is ruined for the season, the others are not; one
+/// ruined `clubs.ruined_seasons` in a row closes (`close_club`). Then as many clubs are
+/// founded as closed, at least `clubs.founded`, never more than `clubs.max` open, each
+/// with generated fighters up to `roster.wanted`.
+fn club_lives(state: &mut GameState, data: &DesignData) {
+    if !off_season_starts(state, data) {
+        return;
+    }
+    let rules = &data.world.clubs;
+    let mut closed = 0;
+    for club in 0..state.rivals.len() {
+        let rival = &mut state.rivals[club];
+        if !rival.is_open() {
+            continue;
+        }
+        let ruined = rival.wealth == Wealth::Poor && rival.money < i64::from(rules.ruined_below);
+        rival.ruined_seasons = if ruined { rival.ruined_seasons + 1 } else { 0 };
+        if rival.ruined_seasons >= rules.ruined_seasons {
+            close_club(state, club);
+            closed += 1;
+        }
+    }
+    let open = state.rivals.iter().filter(|r| r.is_open()).count();
+    let room = usize::try_from(rules.max).map_or(0, |max| max.saturating_sub(open));
+    let founded = closed.max(usize::try_from(rules.founded).unwrap_or(0));
+    for _ in 0..founded.min(room) {
+        let club = rivals::random_club(&mut state.rng, &state.rivals, data);
+        state.rivals.push(club);
+        let club = state.rivals.len() - 1;
+        state.fill_roster(club, data);
+        state.news.push(News {
+            week: state.week,
+            what: WorldNews::Founded(club),
+        });
+    }
+}
+
+/// Rival club `club` closes: its fighters go to the market with their Elo and titles,
+/// its staff leaves, and it plays no more.
+fn close_club(state: &mut GameState, club: usize) {
+    for fighter in 0..state.rivals[club].fighters.len() {
+        if state.rivals[club].fighters[fighter].status == Status::Active {
+            release_rival(state, RivalId { club, fighter });
+        }
+    }
+    let rival = &mut state.rivals[club];
+    rival.staff = Staff::default();
+    rival.closed = Some(state.week);
+    state.news.push(News {
+        week: state.week,
+        what: WorldNews::Closed(club),
+    });
+}
+
 /// Each rival club's changes of staff this week, in club order, among the candidates
 /// the club and the clubs before it left (`rivals::staff_moves`, the posts of its
 /// wealth, with its money for each share of the salaries), then its salaries, paid
 /// once for every `fighters_per_salary` fighters in activity, even into debt. The market's week ends with them: no one else hires before the next.
 fn rival_staff(state: &mut GameState, data: &DesignData) {
     let market = &mut state.staff_market;
-    for rival in &mut state.rivals {
+    for rival in state.rivals.iter_mut().filter(|r| r.is_open()) {
         let shares = i64::from(data.economy.staff.salary_shares(rival.active()));
         let money = rival.money / shares;
         let rules = (rival.rules(data), rivals::staff_posts(rival.wealth));
@@ -1367,6 +1471,9 @@ fn rival_market(state: &mut GameState, data: &DesignData) {
         };
         let worth = value(fighter, market);
         for (k, rival) in state.rivals.iter().enumerate() {
+            if !rival.is_open() {
+                continue;
+            }
             let profile = rival.rules(data);
             let price = percent_of(worth, profile.buy_percent);
             let place = u32::try_from(rival.active()).is_ok_and(|n| n < data.world.roster.max);
@@ -1443,6 +1550,9 @@ fn rival_signings(state: &mut GameState, data: &DesignData) {
     let wanted = usize::try_from(data.world.roster.wanted).unwrap_or(0);
     let mut sold = vec![false; state.rivals.len()];
     for buyer in 0..state.rivals.len() {
+        if !state.rivals[buyer].is_open() {
+            continue;
+        }
         let poor = state.rivals[buyer].wealth == Wealth::Poor;
         let mut tried = sold[buyer] || poor;
         while state.rivals[buyer].active() < wanted {
@@ -1477,7 +1587,7 @@ fn rich_purchases(state: &mut GameState, data: &DesignData) {
     let market = &data.economy.market;
     let max = usize::try_from(data.world.roster.max).unwrap_or(usize::MAX);
     for buyer in 0..state.rivals.len() {
-        if state.rivals[buyer].wealth != Wealth::Rich {
+        if state.rivals[buyer].wealth != Wealth::Rich || !state.rivals[buyer].is_open() {
             continue;
         }
         let Some((worth, _)) = weakest(state, buyer, data) else {
@@ -1542,6 +1652,19 @@ fn buy_from_rival(
         return None;
     }
     let bought = fighter.clone();
+    let held: Vec<usize> = (0..state.colosseums.len())
+        .filter(|&c| state.colosseums[c].champion == Some(Contender::Rival(id)))
+        .collect();
+    let week = state.week;
+    state.news.extend(held.into_iter().map(|colosseum| News {
+        week,
+        what: WorldNews::ChampionBought {
+            colosseum,
+            fighter: id,
+            buyer,
+            price,
+        },
+    }));
     state.rivals[id.club].fighters[id.fighter].status = Status::Sold;
     state.rivals[id.club].money += i64::from(price);
     state.rivals[buyer].money -= i64::from(price);
@@ -2125,12 +2248,14 @@ mod tests {
     use crate::staff::{Person, Role};
 
     /// The shipped data cut down to the world most tests were written for: three rival
-    /// clubs, all in Europe, and its first two colosseums, Capoue and Rome, of fifteen
-    /// residents each.
+    /// clubs, all in Europe, that never close nor are joined by new ones, and its first
+    /// two colosseums, Capoue and Rome, of fifteen residents each.
     fn data() -> DesignData {
         let mut data = DesignData::load().unwrap();
         let world = &mut data.world;
         world.clubs.count = 3;
+        world.clubs.founded = 0;
+        world.clubs.ruined_seasons = u32::MAX;
         world.clubs.continents = vec![(1, Continent::Europe)];
         world.colosseums.truncate(2);
         for colosseum in &mut world.colosseums {
@@ -2776,6 +2901,10 @@ mod tests {
             won
         );
         assert_eq!(state.colosseums[1].title_since, 1);
+        // Only a title changing hands is news.
+        let told = state.news.iter().map(|n| (n.week, n.what));
+        let changed = won.then_some((1, WorldNews::Title(1, news)));
+        assert_eq!(told.collect::<Vec<_>>(), Vec::from_iter(changed));
     }
 
     #[test]
@@ -3263,6 +3392,53 @@ mod tests {
     }
 
     #[test]
+    fn a_club_ruined_two_off_seasons_closes_and_a_new_one_is_founded() {
+        let mut data = data();
+        data.world.clubs.founded = 1;
+        data.world.clubs.ruined_seasons = 2;
+        let mut state = game(7, &data);
+        let poor = 1;
+        // Ruined at the last off-season already.
+        state.rivals[poor].ruined_seasons = 1;
+        up_to_the_off_season(&mut state, &data);
+        state.rivals[poor].money = 0;
+        // A rich club without money is not ruined: it becomes modest first.
+        state.rivals[0].money = 0;
+        let leaving = state.rivals[poor].active();
+        let week = state.week;
+        next_week(&mut state, &Decisions::default(), &data);
+        let closed = &state.rivals[poor];
+        assert_eq!(closed.closed, Some(week));
+        assert_eq!(closed.active(), 0);
+        let released = closed.fighters.iter();
+        let released = released.filter(|f| f.status == Status::Released).count();
+        assert!(released >= leaving);
+        assert_eq!(closed.staff, Staff::default());
+        assert!(state.rivals[0].is_open());
+        let founded = &state.rivals[3];
+        assert!(founded.is_open());
+        assert_eq!(
+            founded.active(),
+            usize::try_from(data.world.roster.wanted).unwrap()
+        );
+        let told: Vec<_> = state.news.iter().map(|n| (n.week, n.what)).collect();
+        assert!(told.contains(&(week, WorldNews::Closed(poor))));
+        assert!(told.contains(&(week, WorldNews::Founded(3))));
+        // Closed, it hires no one, signs no one and is offered no fighter.
+        state.rivals[poor].money = 100_000;
+        next_week(&mut state, &Decisions::default(), &data);
+        assert_eq!(state.rivals[poor].active(), 0);
+        assert_eq!(state.rivals[poor].staff, Staff::default());
+        assert!(!state.rival_has_place(poor, &data));
+        // The news fade after `news_weeks`.
+        let kept = u64::from(data.world.news_weeks);
+        while state.week <= week + kept {
+            next_week(&mut state, &Decisions::default(), &data);
+        }
+        assert!(state.news.iter().all(|n| n.week > week));
+    }
+
+    #[test]
     fn a_poor_club_signs_the_free_agent_of_the_best_potential_its_recruiter_sees() {
         let data = data();
         let mut state = game(7, &data);
@@ -3330,8 +3506,18 @@ mod tests {
             club: poor,
             fighter: 0,
         };
-        let price = i64::from(state.asking_price(id, &data).unwrap());
+        state.colosseums[0].champion = Some(Contender::Rival(id));
+        let asked = state.asking_price(id, &data).unwrap();
+        let price = i64::from(asked);
         rich_purchases(&mut state, &data);
+        let bought_champion = WorldNews::ChampionBought {
+            colosseum: 0,
+            fighter: id,
+            buyer: rich,
+            price: asked,
+        };
+        let told: Vec<_> = state.news.iter().map(|n| n.what).collect();
+        assert_eq!(told, [bought_champion]);
         assert_eq!(state.rival_fighter(id).unwrap().status, Status::Sold);
         let bought = state.rivals[rich].fighters.last().unwrap();
         assert_eq!(bought.stats, state.rival_fighter(id).unwrap().stats);
@@ -3535,7 +3721,7 @@ mod tests {
             }
             // A club that loses a fighter after its signings (sold to another, killed in
             // a title defense) recruits the next week.
-            for rival in &state.rivals {
+            for rival in state.rivals.iter().filter(|r| r.is_open()) {
                 assert!(rival.money >= 0, "week {week}: {}", rival.money);
                 assert!(rival.active() + 1 >= wanted, "week {week}: {}", rival.name);
             }
@@ -3552,10 +3738,21 @@ mod tests {
         // Every title changed hands, and the first ranks are not those of the first season.
         assert!(title_changes.iter().all(|&n| n > 0), "{title_changes:?}");
         assert_ne!(leaders[0], leaders[2], "{leaders:?}");
+        // Ruined clubs closed, their fighters gone to the market, and new ones were
+        // founded at the off-seasons, the last ones still in the news.
+        let told = state.news.iter().map(|n| n.what);
+        let closed: Vec<usize> = (0..state.rivals.len())
+            .filter(|&k| !state.rivals[k].is_open())
+            .collect();
+        assert_ne!(closed, Vec::<usize>::new());
+        assert!(closed.iter().all(|&k| state.rivals[k].active() == 0));
+        assert!(state.rivals.len() > start.rivals.len());
+        assert!(told.clone().any(|n| matches!(n, WorldNews::Founded(_))));
         // The clubs replaced those who died, retired or were released in the off-season.
         // Fighters released at `release_age` are worth signing, so the clubs seldom buy
         // from one another (none here).
-        for (rival, before) in state.rivals.iter().zip(&start.rivals) {
+        let open = state.rivals.iter().filter(|r| r.is_open());
+        for (rival, before) in open.zip(&start.rivals) {
             assert!(rival.fighters.len() > before.fighters.len());
         }
         let released = state
@@ -3578,7 +3775,7 @@ mod tests {
         // not afford a trainer besides, nor find one when forty clubs share the
         // market); their salaries, paid for every three fighters, keep their money
         // within bounds (up to 26 000 without them).
-        for rival in &state.rivals {
+        for rival in state.rivals.iter().filter(|r| r.is_open()) {
             let staff = &rival.staff;
             let hired = staff.trainer.is_some() || staff.doctor.is_some();
             assert!(hired || staff.recruiter.is_some(), "{staff:?}");

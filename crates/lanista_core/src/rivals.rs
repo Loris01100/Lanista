@@ -77,8 +77,16 @@ impl Profiles {
 #[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct ClubRules {
-    /// How many; at least one.
+    /// How many when the world opens; at least one.
     pub count: u32,
+    /// Most clubs open at once: no club is founded beyond it.
+    pub max: u32,
+    /// Clubs founded at each off-season's start: as many as closed, at least this many.
+    pub founded: u32,
+    /// A poor club with less money than this at an off-season's start is ruined for
+    /// the season; ruined `ruined_seasons` seasons in a row, it closes.
+    pub ruined_below: u32,
+    pub ruined_seasons: u32,
     pub profiles: Vec<(u32, Profile)>,
     /// At the start of a game.
     pub wealth: Vec<(u32, Wealth)>,
@@ -125,6 +133,10 @@ pub struct Rival {
     pub staff: Staff,
     /// Changes with its money at each off-season (`Wealth::next`).
     pub wealth: Wealth,
+    /// Off-seasons in a row it started ruined (`ClubRules::ruined_below`).
+    pub ruined_seasons: u32,
+    /// The week it closed, ruined: its fighters went to the market, it plays no more.
+    pub closed: Option<u64>,
 }
 
 impl Rival {
@@ -132,6 +144,11 @@ impl Rival {
     #[must_use]
     pub fn rules<'a>(&self, data: &'a DesignData) -> &'a ProfileRules {
         data.world.profiles.get(self.profile)
+    }
+
+    #[must_use]
+    pub fn is_open(&self) -> bool {
+        self.closed.is_none()
     }
 
     /// Fighters neither retired, dead nor gone.
@@ -177,21 +194,24 @@ pub fn random_club<R: Rng + ?Sized>(rng: &mut R, others: &[Rival], data: &Design
         fighters: Vec::new(),
         staff: Staff::default(),
         wealth,
+        ruined_seasons: 0,
+        closed: None,
     }
 }
 
 /// The home of a new club among `others`: the continent furthest below its share of
-/// `clubs.count` by `clubs.continents`' weights, the first of equals, so that each
-/// continent has its share whatever the draws.
+/// the open clubs by `clubs.continents`' weights, the first of equals, so that each
+/// continent has its share whatever the draws and closures.
 fn home(others: &[Rival], data: &DesignData) -> Continent {
     let rules = &data.world.clubs;
     let total: i64 = rules.continents.iter().map(|&(w, _)| i64::from(w)).sum();
-    let count = i64::from(rules.count);
+    let open = others.iter().filter(|r| r.is_open());
+    let count = i64::try_from(open.clone().count() + 1).unwrap_or(i64::MAX);
     (0..)
         .zip(&rules.continents)
         .filter(|(_, (weight, _))| *weight > 0)
         .max_by_key(|&(i, &(weight, continent))| {
-            let have = others.iter().filter(|r| r.continent == continent).count();
+            let have = open.clone().filter(|r| r.continent == continent).count();
             let have = i64::try_from(have).unwrap_or(i64::MAX);
             // Its share less what it has, both times `total`.
             (i64::from(weight) * count - have * total, Reverse(i))
