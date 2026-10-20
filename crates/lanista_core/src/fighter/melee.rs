@@ -131,23 +131,31 @@ impl MeleeFight {
     }
 }
 
-/// Fame a place brings in a melee of `count`: `melee_survival` for the first, shared
-/// down to none for the last.
+/// Place `place`'s share of `full` in a melee of `count`: all of it for the first,
+/// shared down by the fighters it outlasted to none for the last.
 #[must_use]
-pub fn place_fame(place: u32, count: usize, rules: &FameRules) -> u32 {
+pub fn place_share(full: u32, place: u32, count: usize) -> u32 {
     let count = u64::try_from(count).unwrap_or(u64::MAX);
     let Some(below) = count.checked_sub(1).filter(|&n| n > 0) else {
         return 0;
     };
     let outlasted = count.saturating_sub(u64::from(place.max(1)));
-    u32::try_from(u64::from(rules.melee_survival) * outlasted / below).unwrap_or(u32::MAX)
+    u32::try_from(u64::from(full) * outlasted / below).unwrap_or(u32::MAX)
+}
+
+/// Fame a place brings in a melee of `count`: `melee_survival`'s share (see
+/// [`place_share`]).
+#[must_use]
+pub fn place_fame(place: u32, count: usize, rules: &FameRules) -> u32 {
+    place_share(rules.melee_survival, place, count)
 }
 
 /// The melee between `fighters` (as `entrants` go in, one each, missing ones fully
 /// equipped without doctor) on the floor of `kind`, played to its end or its time
 /// limit, then its effects on each, in order: fame, record and death, then morale,
 /// form (a melee's cost), illness worsening, a possible injury and progression.
-/// Fame adds the place's share (see [`place_fame`]) and the refused equipment's bonus;
+/// Fame is the place's share (see [`place_fame`]) and the refused equipment's bonus
+/// alone, whatever the fighter won, gave up or showed;
 /// a fighter is against stronger when the others' strength is above its own on average.
 /// Nobody ends its week.
 pub fn play_melee<R: Rng + ?Sized>(
@@ -203,11 +211,12 @@ pub fn play_melee<R: Rng + ?Sized>(
             // The others' average above its own, without dividing.
             let against_stronger = total - strengths[i] > strengths[i] * others;
             let place = places.get(i).copied().unwrap_or(1);
-            let bonus = place_fame(place, count, &rules.fame)
+            let fame = place_fame(place, count, &rules.fame)
                 .saturating_add(entrant(i).refused.fame_bonus(&rules.fame));
+            let fame = i32::try_from(fame).unwrap_or(i32::MAX);
             (
                 against_stronger,
-                f.take_side(side, against_stronger, bonus, rng, rules),
+                f.take_fame_and_side(side, (against_stronger, fame), rng, rules),
             )
         })
         .collect();
@@ -330,6 +339,9 @@ mod tests {
             if !side.died {
                 assert!(f.form.value() < old.form.value() || old.form.value() == 0);
             }
+            // The place alone, whatever the fight showed.
+            let place = place_fame(melee.places[i], 20, &data.fighter.fame);
+            assert_eq!(side.fame_change, i32::try_from(place).unwrap());
             let fame = i64::from(old.fame.value()) + i64::from(side.fame_change);
             assert_eq!(i64::from(f.fame.value()), fame.clamp(0, 100));
         }

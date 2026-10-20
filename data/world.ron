@@ -141,10 +141,10 @@
                 receipts_per_fame: 1,
                 // Paid for each title defense the club's champion survives.
                 champion_bonus: 30,
-                // The season-opening melee: to the club of the last one standing, and
-                // added to each fighter's receipts for each other fighter in it.
+                // The season-opening melee pays this to the club of the last one
+                // standing and to each other's its place's share, down to nothing for
+                // the first one out: the same for every fighter, whatever its fame.
                 melee_prize: 150,
-                receipts_per_fighter: 3,
             ),
         ),
         (
@@ -153,7 +153,7 @@
             arena: Pillars,
             prestige: 3,
             residents: 10,
-            purses: (entry_fee: 20, win_prize: 150, receipts_base: 40, receipts_per_fame: 1, champion_bonus: 100, melee_prize: 450, receipts_per_fighter: 6),
+            purses: (entry_fee: 20, win_prize: 150, receipts_base: 40, receipts_per_fame: 1, champion_bonus: 100, melee_prize: 450),
         ),
         (
             name: "Pompéi",
@@ -161,7 +161,7 @@
             arena: Narrow,
             prestige: 2,
             residents: 8,
-            purses: (entry_fee: 10, win_prize: 100, receipts_base: 30, receipts_per_fame: 1, champion_bonus: 60, melee_prize: 300, receipts_per_fighter: 4),
+            purses: (entry_fee: 10, win_prize: 100, receipts_base: 30, receipts_per_fame: 1, champion_bonus: 60, melee_prize: 300),
         ),
         (
             name: "Samarcande",
@@ -169,7 +169,7 @@
             arena: Sand,
             prestige: 1,
             residents: 8,
-            purses: (entry_fee: 0, win_prize: 50, receipts_base: 20, receipts_per_fame: 1, champion_bonus: 30, melee_prize: 150, receipts_per_fighter: 3),
+            purses: (entry_fee: 0, win_prize: 50, receipts_base: 20, receipts_per_fame: 1, champion_bonus: 30, melee_prize: 150),
         ),
         (
             name: "Chang'an",
@@ -177,7 +177,7 @@
             arena: Narrow,
             prestige: 2,
             residents: 8,
-            purses: (entry_fee: 10, win_prize: 100, receipts_base: 30, receipts_per_fame: 1, champion_bonus: 60, melee_prize: 300, receipts_per_fighter: 4),
+            purses: (entry_fee: 10, win_prize: 100, receipts_base: 30, receipts_per_fame: 1, champion_bonus: 60, melee_prize: 300),
         ),
         (
             name: "Karakorum",
@@ -185,7 +185,7 @@
             arena: Pillars,
             prestige: 3,
             residents: 10,
-            purses: (entry_fee: 20, win_prize: 150, receipts_base: 40, receipts_per_fame: 1, champion_bonus: 100, melee_prize: 450, receipts_per_fighter: 6),
+            purses: (entry_fee: 20, win_prize: 150, receipts_base: 40, receipts_per_fame: 1, champion_bonus: 100, melee_prize: 450),
         ),
         (
             name: "Cahokia",
@@ -193,7 +193,7 @@
             arena: Sand,
             prestige: 1,
             residents: 8,
-            purses: (entry_fee: 0, win_prize: 50, receipts_base: 20, receipts_per_fame: 1, champion_bonus: 30, melee_prize: 150, receipts_per_fighter: 3),
+            purses: (entry_fee: 0, win_prize: 50, receipts_base: 20, receipts_per_fame: 1, champion_bonus: 30, melee_prize: 150),
         ),
         (
             name: "Cuzco",
@@ -201,7 +201,7 @@
             arena: Narrow,
             prestige: 2,
             residents: 8,
-            purses: (entry_fee: 10, win_prize: 100, receipts_base: 30, receipts_per_fame: 1, champion_bonus: 60, melee_prize: 300, receipts_per_fighter: 4),
+            purses: (entry_fee: 10, win_prize: 100, receipts_base: 30, receipts_per_fame: 1, champion_bonus: 60, melee_prize: 300),
         ),
         (
             name: "Tenochtitlan",
@@ -209,7 +209,7 @@
             arena: Pillars,
             prestige: 3,
             residents: 10,
-            purses: (entry_fee: 20, win_prize: 150, receipts_base: 40, receipts_per_fame: 1, champion_bonus: 100, melee_prize: 450, receipts_per_fighter: 6),
+            purses: (entry_fee: 20, win_prize: 150, receipts_base: 40, receipts_per_fame: 1, champion_bonus: 100, melee_prize: 450),
         ),
         (
             name: "Mbanza Kongo",
@@ -217,7 +217,7 @@
             arena: Sand,
             prestige: 1,
             residents: 8,
-            purses: (entry_fee: 0, win_prize: 50, receipts_base: 20, receipts_per_fame: 1, champion_bonus: 30, melee_prize: 150, receipts_per_fighter: 3),
+            purses: (entry_fee: 0, win_prize: 50, receipts_base: 20, receipts_per_fame: 1, champion_bonus: 30, melee_prize: 150),
         ),
         (
             name: "Musumba",
@@ -225,7 +225,7 @@
             arena: Pillars,
             prestige: 3,
             residents: 10,
-            purses: (entry_fee: 20, win_prize: 150, receipts_base: 40, receipts_per_fame: 1, champion_bonus: 100, melee_prize: 450, receipts_per_fighter: 6),
+            purses: (entry_fee: 20, win_prize: 150, receipts_base: 40, receipts_per_fame: 1, champion_bonus: 100, melee_prize: 450),
         ),
         (
             name: "Nan Madol",
@@ -233,7 +233,7 @@
             arena: Sand,
             prestige: 1,
             residents: 8,
-            purses: (entry_fee: 0, win_prize: 50, receipts_base: 20, receipts_per_fame: 1, champion_bonus: 30, melee_prize: 150, receipts_per_fighter: 3),
+            purses: (entry_fee: 0, win_prize: 50, receipts_base: 20, receipts_per_fame: 1, champion_bonus: 30, melee_prize: 150),
         ),
         (
             name: "Ngāpuhi",
@@ -241,7 +241,7 @@
             arena: Pillars,
             prestige: 3,
             residents: 10,
-            purses: (entry_fee: 20, win_prize: 150, receipts_base: 40, receipts_per_fame: 1, champion_bonus: 100, melee_prize: 450, receipts_per_fighter: 6),
+            purses: (entry_fee: 20, win_prize: 150, receipts_base: 40, receipts_per_fame: 1, champion_bonus: 100, melee_prize: 450),
         ),
     ],
 )

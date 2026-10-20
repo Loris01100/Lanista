@@ -418,6 +418,23 @@ impl CareerFighter {
         };
         let bonus = i32::try_from(bonus).unwrap_or(i32::MAX);
         let fame_change = outcome.fame_change(&rules.fame).saturating_add(bonus);
+        self.take_fame_and_side(side, (against_stronger, fame_change), rng, rules)
+    }
+
+    /// As [`CareerFighter::take_side`], but `fame_change` is all the fame the fight
+    /// brings, whatever its result: a melee's.
+    pub(crate) fn take_fame_and_side<R: Rng + ?Sized>(
+        &mut self,
+        side: Ending,
+        (against_stronger, fame_change): (bool, i32),
+        rng: &mut R,
+        rules: &FighterRules,
+    ) -> Taken {
+        let outcome = FightOutcome {
+            result: side.result,
+            against_stronger,
+            spectacular_hits: side.spectacular_hits,
+        };
         self.fame = self.fame.changed_by(fame_change);
         self.record.add(outcome.result);
         self.season_record.add(outcome.result);
