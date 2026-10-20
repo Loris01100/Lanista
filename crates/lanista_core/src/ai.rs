@@ -229,21 +229,24 @@ fn best(scored: &[(Action, f64)]) -> Action {
     best.0
 }
 
-/// The closest other fighter standing and not an ally, so a fighter down is left alone;
-/// on a tie, the lowest ID.
+/// The closest other fighter standing and not an ally, so a fighter down is left alone,
+/// among its prey first (`Arena::hunts`); on a tie, the lowest ID.
+// ponytail: a prey is chased across the arena past any closer enemy; weigh it by
+// distance if hunters fare too badly.
 fn nearest_enemy<'a>(arena: &'a Arena, me: &Fighter) -> Option<&'a Fighter> {
-    let mut nearest: Option<(&Fighter, f64)> = None;
+    let mut nearest: Option<(&Fighter, bool, f64)> = None;
     for f in arena
         .fighters
         .iter()
         .filter(|f| f.is_standing() && f.id != me.id && !arena.allied(me.id, f.id))
     {
+        let prey = arena.hunts.contains(&(me.id, f.id));
         let distance = edge_distance(me, f);
-        if nearest.is_none_or(|(_, d)| distance < d) {
-            nearest = Some((f, distance));
+        if nearest.is_none_or(|(_, p, d)| (prey, -distance) > (p, -d)) {
+            nearest = Some((f, prey, distance));
         }
     }
-    nearest.map(|(f, _)| f)
+    nearest.map(|(f, _, _)| f)
 }
 
 #[cfg(test)]
@@ -282,6 +285,29 @@ mod tests {
                 target: FighterId(1)
             }
         );
+    }
+
+    #[test]
+    fn goes_for_its_prey_first() {
+        let fighters = vec![
+            test_fighter(0, 5.0, 5.0),
+            test_fighter(1, 6.5, 5.0),
+            test_fighter(2, 15.0, 5.0),
+        ];
+        let mut arena = Arena::new(20.0, 20.0, fighters, 0);
+        arena.hunts.push((FighterId(0), FighterId(2)));
+        assert_eq!(
+            UtilityAi.decide(&arena, FighterId(0)),
+            Action::Move(Vec2::new(10.0, 0.0))
+        );
+        arena.fighters[2].stunned_ticks = 10;
+        assert!(matches!(
+            UtilityAi.decide(&arena, FighterId(0)),
+            Action::Cast {
+                target: FighterId(1),
+                ..
+            }
+        ));
     }
 
     #[test]

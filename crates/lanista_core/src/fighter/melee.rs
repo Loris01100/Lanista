@@ -18,11 +18,15 @@ use crate::melee::melee_arena;
 use crate::staff::Medicine;
 use crate::stat_model::Ending;
 
-/// How one fighter goes into a melee: the equipment it refuses, its club's doctor.
+/// How one fighter goes into a melee: the equipment it refuses, its club's doctor,
+/// whether it is one of the player's fighters, and whether its club is the player's
+/// declared rival, so that it goes for them first.
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
 pub struct Entrant {
     pub refused: Refused,
     pub medicine: Medicine,
+    pub of_club: bool,
+    pub hunts_club: bool,
 }
 
 /// What a melee left one of its fighters.
@@ -163,7 +167,14 @@ pub fn play_melee<R: Rng + ?Sized>(
             f.combat_fighter(id, entrant(i).refused, data, origin)
         })
         .collect();
-    let start = melee_arena(combat, kind, seed, &data.combat);
+    let mut start = melee_arena(combat, kind, seed, &data.combat);
+    for (hunter, h) in (0..).map(FighterId).zip(entrants) {
+        for (prey, p) in (0..).map(FighterId).zip(entrants) {
+            if h.hunts_club && p.of_club {
+                start.hunts.push((hunter, prey));
+            }
+        }
+    }
     let mut arena = start.clone();
     let mut ais: Vec<Box<dyn CombatAi>> = arena
         .fighters
@@ -335,6 +346,27 @@ mod tests {
             (melee, fighters)
         };
         assert_eq!(play(), play());
+    }
+
+    #[test]
+    fn a_rival_club_s_fighters_hunt_the_player_s() {
+        let data = data();
+        let (mut fighters, mut rng) = twenty(&data, 3);
+        let club = Entrant {
+            of_club: true,
+            ..Entrant::default()
+        };
+        let hunter = Entrant {
+            hunts_club: true,
+            ..Entrant::default()
+        };
+        let entrants = [club, hunter, Entrant::default(), hunter, club];
+        let melee = play_melee(&mut fighters, &entrants, ArenaKind::Narrow, &mut rng, &data);
+        let hunt = |a, b| (FighterId(a), FighterId(b));
+        assert_eq!(
+            melee.start.hunts,
+            [hunt(1, 0), hunt(1, 4), hunt(3, 0), hunt(3, 4)]
+        );
     }
 
     #[test]

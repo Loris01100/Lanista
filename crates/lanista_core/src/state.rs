@@ -1207,12 +1207,16 @@ fn melee_entries(
             entrants.push(Entrant {
                 refused: plan.refused,
                 medicine: effects.medicine,
+                of_club: true,
+                hunts_club: false,
             });
         } else {
             fighters.push(outsider(&state.rivals, &state.free_agents, entry)?.clone());
             entrants.push(Entrant {
                 refused: Refused::NONE,
                 medicine: outsider_effects(&state.rivals, entry).medicine,
+                of_club: false,
+                hunts_club: matches!(entry, Contender::Rival(id) if state.is_rival(id.club)),
             });
             weeks.push(None);
         }

@@ -70,6 +70,9 @@ pub struct Arena {
     pub pact_rules: PactRules,
     /// The pairs of allies, who do not aim at each other; each fighter has one at most.
     pub pacts: Vec<(FighterId, FighterId)>,
+    /// Who goes for whom first, hunter then prey: in a melee, a rival club's fighters
+    /// after the player's.
+    pub hunts: Vec<(FighterId, FighterId)>,
     /// Who is put out for dealing too little damage, and when; nobody, unless set with
     /// [`Arena::with_elimination`].
     pub elimination: EliminationRules,
@@ -259,6 +262,7 @@ impl Arena {
             pillars: Vec::new(),
             pact_rules: PactRules::NEVER,
             pacts: Vec::new(),
+            hunts: Vec::new(),
             elimination: EliminationRules::NEVER,
             max_ticks: crate::duel::MAX_TICKS,
         }
