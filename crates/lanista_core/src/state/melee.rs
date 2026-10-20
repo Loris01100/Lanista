@@ -16,10 +16,10 @@ use crate::fighter::melee::{Entrant, MeleeFight, Pact, play_melee};
 use crate::relations::Reason;
 use crate::staff::{Medicine, StaffEffects};
 
-use super::{
-    GameState, OutsiderPlans, affordable, entry_fee, outsider, outsider_effects, outsiders,
-    pay_rival, put_outsider, relate,
+use super::outsiders::{
+    OutsiderPlans, outsider, outsider_effects, outsiders, pay_rival, put_outsider,
 };
+use super::{GameState, affordable, entry_fee, relate};
 
 /// Fewest fighters in a melee, below which it is called off.
 const MELEE_MIN_FIGHTERS: usize = 3;
