@@ -12,7 +12,8 @@ use crate::market::{self, MarketNews, Move, SaleOffer, estimated_potential, valu
 use crate::relations::Reason;
 use crate::rivals::RivalId;
 
-use super::{GameState, News, WorldNews, off_season_starts, relate};
+use super::clubs::off_season_starts;
+use super::{GameState, News, WorldNews, relate};
 
 /// The market moves made before the week, in this order, each if still allowed: the
 /// first observation, accepted offers, releases, the transfer list, then signings. Last
