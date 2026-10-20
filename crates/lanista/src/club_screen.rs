@@ -1068,7 +1068,7 @@ mod tests {
     use super::*;
     use crate::texts::{
         free_agent_name, outside_personality_text, potential_text, range_texts, staff_text,
-        weeks_left_text,
+        unsellable_text, weeks_left_text,
     };
 
     fn screen(seed: u64) -> ClubScreen {
@@ -1538,11 +1538,10 @@ mod tests {
         let (_, menu) = screen.last_week.as_ref().unwrap();
         let clubs = &screen.state.rivals;
         assert!(
-            menu.iter()
-                .any(|line| line.starts_with("Titre de Capoue : ")
-                    && clubs
-                        .iter()
-                        .any(|c| line.contains(&format!(" ({})", c.name)))),
+            menu.iter().any(|line| line.starts_with("Titre de ")
+                && clubs
+                    .iter()
+                    .any(|c| line.contains(&format!(" ({})", c.name)))),
             "{menu:?}"
         );
     }
@@ -1581,6 +1580,18 @@ mod tests {
                 "Saison 2, semaine 1 : Fondation de Familia Crassus (Rome), en Europe",
                 "Saison 1, semaine 30 : Dar Khawla ferme, ruiné : ses combattants partent au marché",
             ]
+        );
+    }
+
+    #[test]
+    fn a_fighter_who_just_joined_tells_when_it_may_be_sold() {
+        let mut screen = screen(7);
+        let (state, data) = (&mut screen.state, &screen.data);
+        assert_eq!(unsellable_text(&state.fighters[0], state, data), None);
+        state.fighters[0].joined = Some(1);
+        assert_eq!(
+            unsellable_text(&state.fighters[0], state, data).unwrap(),
+            "Arrivé récemment : vendable à partir de la saison 1, semaine 16"
         );
     }
 

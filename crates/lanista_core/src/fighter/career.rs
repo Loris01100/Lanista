@@ -93,6 +93,9 @@ pub struct CareerFighter {
     pub observed_weeks: u32,
     /// How it looks, for life.
     pub appearance: Appearance,
+    /// The week it joined its club by a signing or a sale; `None` for one there from
+    /// the start. It may not be sold before `GameState::sellable_from`.
+    pub joined: Option<u64>,
 }
 
 impl CareerFighter {
@@ -140,6 +143,7 @@ impl CareerFighter {
             season_record: Record::default(),
             observed_weeks: 0,
             appearance,
+            joined: None,
         }
     }
 

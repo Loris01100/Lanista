@@ -428,6 +428,22 @@ pub fn world_news_text(news: News, state: &GameState, data: &DesignData) -> Stri
     format!("{} : {what}", date_text(news.week, data))
 }
 
+/// "Arrivé récemment : vendable à partir de la saison 1, semaine 16" for a fighter who
+/// joined its club less than half a season ago, `None` for one that may be sold.
+pub fn unsellable_text(
+    fighter: &CareerFighter,
+    state: &GameState,
+    data: &DesignData,
+) -> Option<String> {
+    (!state.may_be_sold(fighter, data)).then(|| {
+        let from = date_text(GameState::sellable_from(fighter, data), data);
+        format!(
+            "Arrivé récemment : vendable à partir de la {}",
+            from.to_lowercase()
+        )
+    })
+}
+
 /// "Saison 2, semaine 7".
 pub fn date_text(week: u64, data: &DesignData) -> String {
     let when = Date::of(week, &data.calendar);

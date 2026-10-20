@@ -476,12 +476,25 @@ impl GameState {
     pub fn asking_price(&self, id: RivalId, data: &DesignData) -> Option<u32> {
         let fighter = self
             .rival_fighter(id)
-            .filter(|f| f.status == Status::Active)?;
+            .filter(|f| f.status == Status::Active && self.may_be_sold(f, data))?;
         let profile = self.rivals.get(id.club)?.rules(data);
         Some(percent_of(
             value(fighter, &data.economy.market),
             profile.sell_percent,
         ))
+    }
+
+    /// The first week `fighter` may be sold: half a season after it joined its club,
+    /// so that no club sells on at once whom it just took in.
+    #[must_use]
+    pub fn sellable_from(fighter: &CareerFighter, data: &DesignData) -> u64 {
+        let half = u64::from(data.calendar.season_weeks() / 2);
+        fighter.joined.map_or(0, |week| week + half)
+    }
+
+    #[must_use]
+    pub fn may_be_sold(&self, fighter: &CareerFighter, data: &DesignData) -> bool {
+        self.week >= Self::sellable_from(fighter, data)
     }
 
     /// Whether rival club `club` has a place for one more fighter in activity.
@@ -505,7 +518,11 @@ impl GameState {
             Move::Observe(Target::Rival(id)) => active(self.rival_fighter(id)),
             Move::Sign(a) => active(self.free_agents.get(a)) && self.can_hire(data),
             Move::Release(i) => ours(i),
-            Move::List(i) => ours(i) && !self.transfer_list.contains(&i),
+            Move::List(i) => {
+                ours(i)
+                    && self.may_be_sold(&self.fighters[i], data)
+                    && !self.transfer_list.contains(&i)
+            }
             Move::Unlist(i) => self.transfer_list.contains(&i),
             Move::AcceptOffer { fighter, rival } => {
                 ours(fighter)
@@ -517,7 +534,7 @@ impl GameState {
                     })
             }
             Move::Offer(id, price) => {
-                active(self.rival_fighter(id))
+                self.asking_price(id, data).is_some()
                     && price > 0
                     && i64::from(price) <= self.money
                     && self.can_hire(data)
@@ -1298,7 +1315,8 @@ fn market_moves(
                 else {
                     continue;
                 };
-                let sold = state.fighters[fighter].clone();
+                let mut sold = state.fighters[fighter].clone();
+                sold.joined = Some(state.week);
                 state.fighters[fighter].status = Status::Sold;
                 state.rivals[rival].fighters.push(sold);
                 let to = RivalId {
@@ -1328,7 +1346,8 @@ fn market_moves(
             Move::List(i) => state.transfer_list.push(i),
             Move::Unlist(i) => state.transfer_list.retain(|&l| l != i),
             Move::Sign(a) => {
-                let agent = state.free_agents[a].clone();
+                let mut agent = state.free_agents[a].clone();
+                agent.joined = Some(state.week);
                 state.free_agents[a].status = Status::Sold;
                 state.fighters.push(agent);
                 let i = state.fighters.len() - 1;
@@ -1393,7 +1412,8 @@ fn negotiate(
     if !state.can_hire(data) || i64::from(price) > state.money {
         return MarketNews::Failed(id);
     }
-    let bought = fighter.clone();
+    let mut bought = fighter.clone();
+    bought.joined = Some(state.week);
     state.rivals[id.club].fighters[id.fighter].status = Status::Sold;
     state.fighters.push(bought);
     let amount = i64::from(price);
@@ -1567,7 +1587,8 @@ fn rival_signings(state: &mut GameState, data: &DesignData) {
                 }
             }
             let Some(agent) = agent else { break };
-            let signed = state.free_agents[agent].clone();
+            let mut signed = state.free_agents[agent].clone();
+            signed.joined = Some(state.week);
             state.free_agents[agent].status = Status::Sold;
             let roster = &mut state.rivals[buyer].fighters;
             roster.push(signed);
@@ -1651,7 +1672,8 @@ fn buy_from_rival(
     if market::refuses_to_join(&mut state.rng, fighter, fame, market) {
         return None;
     }
-    let bought = fighter.clone();
+    let mut bought = fighter.clone();
+    bought.joined = Some(state.week);
     let held: Vec<usize> = (0..state.colosseums.len())
         .filter(|&c| state.colosseums[c].champion == Some(Contender::Rival(id)))
         .collect();
@@ -3534,12 +3556,34 @@ mod tests {
             buy_from_rival(&mut modest_try, modest, star_value, &data),
             None
         );
-        // Rich too, it may.
+        // Rich too, it may, once the star has played half a season for its new club.
         state.rivals[modest].wealth = Wealth::Rich;
+        let mut too_soon = state.clone();
+        assert_eq!(
+            buy_from_rival(&mut too_soon, modest, star_value, &data),
+            None
+        );
+        let bought = state.rivals[rich].fighters.last().unwrap();
+        state.week = GameState::sellable_from(bought, &data);
+        assert_eq!(state.week, 1 + u64::from(data.calendar.season_weeks() / 2));
         assert_eq!(
             buy_from_rival(&mut state, modest, star_value, &data),
             Some(rich)
         );
+    }
+
+    #[test]
+    fn a_fighter_who_joined_the_club_is_sold_only_after_half_a_season() {
+        let data = data();
+        let mut state = game(7, &data);
+        market_moves(&mut state, &[Move::Sign(0)], &data, &mut Vec::new());
+        let signed = state.fighters.len() - 1;
+        assert_eq!(state.fighters[signed].joined, Some(1));
+        // The fighter there from the start may be listed, not the one just signed.
+        assert!(state.may_move(Move::List(0), &data));
+        assert!(!state.may_move(Move::List(signed), &data));
+        state.week = GameState::sellable_from(&state.fighters[signed], &data);
+        assert!(state.may_move(Move::List(signed), &data));
     }
 
     #[test]

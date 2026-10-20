@@ -14,7 +14,7 @@ use super::{ClubScreen, View};
 use crate::texts::{
     STAT_NAMES, club_name, colosseum_name, condition_text, fighter_name, free_agent_name,
     move_text, outside_personality_text, potential_text, range_texts, record_text,
-    rival_fighter_name, weeks,
+    rival_fighter_name, unsellable_text, weeks,
 };
 
 /// What a click on the market asks for.
@@ -71,6 +71,12 @@ impl ClubScreen {
                     rival_fighter_name(*id, state, data)
                 ));
                 ui.add(egui::DragValue::new(price).speed(5));
+                if let Some(text) = state
+                    .rival_fighter(*id)
+                    .and_then(|f| unsellable_text(f, state, data))
+                {
+                    ui.label(text);
+                }
                 let allowed = state.may_move(Move::Offer(*id, *price), data);
                 if ui
                     .add_enabled(allowed, egui::Button::new("Faire l'offre"))
@@ -396,6 +402,8 @@ fn sale_grid(ui: &mut egui::Ui, state: &GameState, moves: &mut Vec<Move>, data: 
             ui.label(fighter_name(i, f, data));
             if state.transfer_list.contains(&i) {
                 toggle(ui, moves, Move::Unlist(i), "Retirer de la vente", true);
+            } else if let Some(text) = unsellable_text(f, state, data) {
+                ui.label(text);
             } else {
                 let list = Move::List(i);
                 toggle(
