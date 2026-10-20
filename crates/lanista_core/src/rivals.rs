@@ -51,6 +51,10 @@ pub struct ProfileRules {
     /// with those of the posts before it, the club could pay this many weeks from its
     /// money; someone already there stays while it could pay half as many.
     pub staff_weeks: u32,
+    /// Weight of what lowers its relation with the player's club, and of a deal
+    /// concluded with it, in percent (`relations::Relation::change`).
+    pub anger_percent: u32,
+    pub deal_percent: u32,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Deserialize)]

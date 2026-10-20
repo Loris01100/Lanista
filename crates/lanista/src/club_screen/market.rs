@@ -77,6 +77,13 @@ impl ClubScreen {
                 {
                     ui.label(text);
                 }
+                let standing = state.standing(id.club, data);
+                if !data.world.relations.standings.get(standing).deals {
+                    ui.label(format!(
+                        "{} est votre rival : il refuse de traiter avec vous",
+                        club_name(id.club, state)
+                    ));
+                }
                 let allowed = state.may_move(Move::Offer(*id, *price), data);
                 if ui
                     .add_enabled(allowed, egui::Button::new("Faire l'offre"))

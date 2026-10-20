@@ -176,7 +176,7 @@ fn happens(arena: &mut Arena, percent: u64) -> bool {
 
 /// Updates the pacts at a decision, before the fighters decide, in this order: a pact
 /// with a fighter out of the fight ends; each other pact is betrayed with the chance
-/// of its more aggressive member (`PactBroken`); all break once `break_fighting` or
+/// of its more aggressive member, who betrays it (`PactBroken`); all break once `break_fighting` or
 /// fewer fighters are still fighting (`PactBroken`); else, in index order, two
 /// standing fighters without a pact, within `distance`, make one with the chance of
 /// their less cautious member (`Pact`). Draws only for chances strictly between 0 and
@@ -192,10 +192,15 @@ pub fn update_pacts(arena: &mut Arena) {
             continue;
         }
         let aggression = |f: &crate::fighter::Fighter| f.condition.personality.aggression.value();
-        let bolder = aggression(fa).max(aggression(fb));
+        let (bolder, betrayer) = if aggression(fb) > aggression(fa) {
+            (aggression(fb), b)
+        } else {
+            (aggression(fa), a)
+        };
         let betrayal = trait_percent(0, rules.betrayal_percent_most_aggressive, bolder);
         if happens(arena, betrayal) {
-            log(arena, EventKind::PactBroken { a, b });
+            let betrayer = Some(betrayer);
+            log(arena, EventKind::PactBroken { a, b, betrayer });
         } else {
             kept.push((a, b));
         }
@@ -203,7 +208,8 @@ pub fn update_pacts(arena: &mut Arena) {
     let fighting = arena.fighters.iter().filter(|f| f.is_fighting()).count();
     if fighting <= usize::try_from(rules.break_fighting).unwrap_or(usize::MAX) {
         for (a, b) in kept {
-            log(arena, EventKind::PactBroken { a, b });
+            let betrayer = None;
+            log(arena, EventKind::PactBroken { a, b, betrayer });
         }
         return;
     }
@@ -470,7 +476,11 @@ mod tests {
             kinds,
             [
                 EventKind::Pact { a, b },
-                EventKind::PactBroken { a, b },
+                EventKind::PactBroken {
+                    a,
+                    b,
+                    betrayer: Some(b)
+                },
                 EventKind::Pact { a, b },
             ]
         );

@@ -13,7 +13,7 @@ use crate::fighter::equipment::Refused;
 use crate::fighter::fame::{FameRules, FightResult};
 use crate::fighter::form::FormEvent;
 use crate::fighter::injury::Injury;
-use crate::log::{Report, places};
+use crate::log::{Event, EventKind, Report, places};
 use crate::melee::melee_arena;
 use crate::staff::Medicine;
 use crate::stat_model::Ending;
@@ -39,6 +39,46 @@ pub struct MeleeSide {
     pub after_effect_spared: bool,
 }
 
+/// A pact made in a melee between the fighters `a` and `b`, by their index: kept to
+/// its end, or betrayed by `betrayer`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct Pact {
+    pub a: usize,
+    pub b: usize,
+    pub betrayer: Option<usize>,
+}
+
+/// The pacts of a melee's `log`, in the order they were made.
+#[must_use]
+pub fn pacts(log: &[Event]) -> Vec<Pact> {
+    let index = |id: FighterId| usize::try_from(id.0).unwrap_or(usize::MAX);
+    let mut pacts: Vec<Pact> = Vec::new();
+    for event in log {
+        match event.kind {
+            EventKind::Pact { a, b } => pacts.push(Pact {
+                a: index(a),
+                b: index(b),
+                betrayer: None,
+            }),
+            EventKind::PactBroken {
+                a,
+                b,
+                betrayer: Some(betrayer),
+            } => {
+                if let Some(pact) = pacts
+                    .iter_mut()
+                    .rev()
+                    .find(|p| (p.a, p.b) == (index(a), index(b)))
+                {
+                    pact.betrayer = Some(index(betrayer));
+                }
+            }
+            _ => {}
+        }
+    }
+    pacts
+}
+
 /// A melee played: the fight itself, and what it left each fighter, in the arena's
 /// order, which is the order of the fighters given to [`play_melee`].
 #[derive(Debug, Clone, PartialEq)]
@@ -54,6 +94,7 @@ pub struct MeleeFight {
     /// Whether each one fell at 0 HP yet survived the fatal blow.
     pub survived_fatal_blow: Vec<bool>,
     pub sides: Vec<MeleeSide>,
+    pub pacts: Vec<Pact>,
     pub ticks: u32,
 }
 
@@ -187,6 +228,7 @@ pub fn play_melee<R: Rng + ?Sized>(
         places,
         survived_fatal_blow,
         sides,
+        pacts: pacts(&arena.log),
         ticks: arena.tick,
     }
 }
@@ -207,6 +249,32 @@ mod tests {
             .map(|_| CareerFighter::random(&mut rng, data))
             .collect();
         (fighters, rng)
+    }
+
+    #[test]
+    fn a_pact_is_kept_unless_betrayed() {
+        let (a, b, c) = (FighterId(0), FighterId(1), FighterId(2));
+        let event = |kind| Event { tick: 0, kind };
+        let log = [
+            event(EventKind::Pact { a, b }),
+            event(EventKind::PactBroken {
+                a,
+                b,
+                betrayer: Some(b),
+            }),
+            event(EventKind::Pact { a, b }),
+            event(EventKind::Pact { a: c, b: a }),
+            event(EventKind::PactBroken {
+                a: c,
+                b: a,
+                betrayer: None,
+            }),
+        ];
+        let pact = |a, b, betrayer| Pact { a, b, betrayer };
+        assert_eq!(
+            pacts(&log),
+            [pact(0, 1, Some(1)), pact(0, 1, None), pact(2, 0, None)]
+        );
     }
 
     #[test]

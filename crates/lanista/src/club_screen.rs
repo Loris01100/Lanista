@@ -1060,6 +1060,7 @@ mod tests {
     use lanista_core::duel::play;
     use lanista_core::log::Report;
     use lanista_core::market::Move;
+    use lanista_core::relations::{Change, Reason};
     use lanista_core::staff::{Candidate, Person, Role, Scouting, Staff, StaffMove};
     use lanista_core::state::{News, WorldNews};
     use rand_chacha::ChaCha8Rng;
@@ -1554,11 +1555,45 @@ mod tests {
         assert_eq!(
             lines[..3],
             [
-                "Familia Crassus (Rome), agressif et riche : 10 combattants",
-                "Dar Khawla (Monde arabe), prudent et pauvre : 10 combattants",
-                "Clan de Tatanka (Tribus amérindiennes), prudent et modeste : 10 combattants",
+                "Familia Crassus (Rome), agressif et riche : 10 combattants ; relation +0, neutre",
+                "Dar Khawla (Monde arabe), prudent et pauvre : 10 combattants ; relation +0, neutre",
+                "Clan de Tatanka (Tribus amérindiennes), prudent et modeste : 10 combattants ; relation +0, neutre",
             ]
         );
+    }
+
+    #[test]
+    fn a_club_s_page_tells_why_its_relation_moved_newest_first() {
+        let mut screen = screen(7);
+        let victim = RivalId {
+            club: 0,
+            fighter: 2,
+        };
+        let relation = screen.state.relations.entry(0).or_default();
+        relation.score = -25;
+        relation.changes = vec![
+            Change {
+                week: 3,
+                points: 5,
+                why: Reason::Sold { fighter: 0 },
+            },
+            Change {
+                week: 34,
+                points: -30,
+                why: Reason::Killed { fighter: 0, victim },
+            },
+        ];
+        let fighter = fighter_name(0, &screen.state.fighters[0], &screen.data);
+        let victim = rival_fighter_name(victim, &screen.state, &screen.data);
+        assert_eq!(
+            screen.relation_lines(0),
+            [
+                format!("-30 : {fighter} a tué {victim} (saison 2, semaine 4)"),
+                format!("+5 : vous lui avez vendu {fighter} (saison 1, semaine 3)"),
+            ]
+        );
+        assert!(screen.rival_lines()[0].ends_with("; relation -25, tendu"));
+        assert_eq!(screen.relation_lines(1), Vec::<String>::new());
     }
 
     #[test]

@@ -26,12 +26,14 @@
     // for the player's, if it keeps `care_reserve` and has a place. Its trainer, then
     // its doctor (a poor club's recruiter first), are the best whose salaries it could
     // pay `staff_weeks` weeks from its money, kept while it could pay half as many
-    // (data/economy.ron).
+    // (data/economy.ron). What lowers its relation with the player's club weighs
+    // `anger_percent`, a deal concluded with it `deal_percent` (`relations`).
     profiles: (
-        cautious: (rest_form: 70, care_reserve: 0, fight_percent: 45, accept_percent: 50, challenge_percent: 10, sell_percent: 150, buy_percent: 60, staff_weeks: 20),
-        aggressive: (rest_form: 35, care_reserve: 100, fight_percent: 20, accept_percent: 20, challenge_percent: 40, sell_percent: 130, buy_percent: 80, staff_weeks: 10),
-        // Keeps its money, sells cheap and buys dear.
-        merchant: (rest_form: 50, care_reserve: 300, fight_percent: 35, accept_percent: 35, challenge_percent: 20, sell_percent: 100, buy_percent: 90, staff_weeks: 40),
+        cautious: (rest_form: 70, care_reserve: 0, fight_percent: 45, accept_percent: 50, challenge_percent: 10, sell_percent: 150, buy_percent: 60, staff_weeks: 20, anger_percent: 100, deal_percent: 100),
+        // Quick to take offence.
+        aggressive: (rest_form: 35, care_reserve: 100, fight_percent: 20, accept_percent: 20, challenge_percent: 40, sell_percent: 130, buy_percent: 80, staff_weeks: 10, anger_percent: 150, deal_percent: 100),
+        // Keeps its money, sells cheap and buys dear; forgives when the price is right.
+        merchant: (rest_form: 50, care_reserve: 300, fight_percent: 35, accept_percent: 35, challenge_percent: 20, sell_percent: 100, buy_percent: 90, staff_weeks: 40, anger_percent: 100, deal_percent: 300),
     ),
     // Free agents choose their fights by this profile's thresholds, to show their worth,
     // as managers without money: only in colosseums free to enter, never trained nor
@@ -78,6 +80,36 @@
     // The world's news (titles changing hands, champions bought, clubs closed and
     // founded) are kept this many weeks.
     news_weeks: 30,
+    // Each rival club's relation with the player's club, from -100 to +100, starting
+    // at 0: the points of each event, weighed by the club's profile (`anger_percent`,
+    // `deal_percent`), then coming back `decay` points towards 0 each week. A kill or
+    // a win against one of its fighters, its title taken by the player's fighter, its
+    // challenge refused, a sale or a purchase between the two, a pact kept or
+    // betrayed by the player's fighter in a melee. The last `history` changes are
+    // kept for each club, with their reason.
+    relations: (
+        killed: -30,
+        beaten: -5,
+        title_taken: -10,
+        challenge_refused: -5,
+        deal: 5,
+        pact_kept: 5,
+        betrayed: -25,
+        decay: 1,
+        history: 20,
+        // From the ally down, the standing of a score is the first whose `from` it
+        // reaches. The club asks the player `price_percent` of its price and offers
+        // its price divided by it; `deals: false` trades nothing; `challenge_points`
+        // add to its chance to challenge the player's fighters and take from what its
+        // fighter needs to accept theirs.
+        standings: (
+            ally: (from: 60, deals: true, price_percent: 85, challenge_points: 0),
+            friend: (from: 20, deals: true, price_percent: 95, challenge_points: 0),
+            neutral: (from: -19, deals: true, price_percent: 100, challenge_points: 0),
+            tense: (from: -59, deals: true, price_percent: 115, challenge_points: 10),
+            rival: (from: -100, deals: false, price_percent: 100, challenge_points: 25),
+        ),
+    ),
     // Each continent has a major colosseum, of the highest prestige, and one or two
     // minor ones around it, where prestige-2 ones ask a small fee; on each continent
     // where clubs live, at least one must be free to enter: the safety net of a club

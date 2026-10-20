@@ -55,10 +55,12 @@ pub enum EventKind {
         a: FighterId,
         b: FighterId,
     },
-    /// The pact between `a` and `b` ended: betrayed, or too few left in the fight.
+    /// The pact between `a` and `b` ended: betrayed by `betrayer`, or too few left
+    /// in the fight.
     PactBroken {
         a: FighterId,
         b: FighterId,
+        betrayer: Option<FighterId>,
     },
     /// `fighter` dealt too little damage before a melee's check: out, alive.
     Eliminated {
@@ -297,12 +299,12 @@ pub fn log_text(arena: &Arena) -> String {
                     event.tick, a.0, b.0
                 )
             }
-            EventKind::PactBroken { a, b } => {
-                writeln!(
-                    text,
-                    "[{:>5}] the pact between fighters {} and {} ends",
-                    event.tick, a.0, b.0
-                )
+            EventKind::PactBroken { a, b, betrayer } => {
+                let pact = format!("the pact between fighters {} and {}", a.0, b.0);
+                match betrayer {
+                    Some(f) => writeln!(text, "[{:>5}] fighter {} betrays {pact}", event.tick, f.0),
+                    None => writeln!(text, "[{:>5}] {pact} ends", event.tick),
+                }
             }
             EventKind::Eliminated { fighter } => {
                 writeln!(

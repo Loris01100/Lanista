@@ -10,6 +10,7 @@ pub mod log;
 pub mod market;
 pub mod melee;
 pub mod names;
+pub mod relations;
 pub mod rivals;
 pub mod save;
 pub mod staff;

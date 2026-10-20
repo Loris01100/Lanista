@@ -21,6 +21,7 @@ use lanista_core::fighter::retirement::too_maimed;
 use lanista_core::market::{
     MarketNews, Move, Target, personality_seen, potential_range, stat_ranges,
 };
+use lanista_core::relations::{Change, Reason, Standing};
 use lanista_core::rivals::{Profile, RivalId};
 use lanista_core::staff::{
     Candidate, DoctorRules, RecruiterRules, Role, Scouting, Staff, StaffMove, StaffNews,
@@ -442,6 +443,68 @@ pub fn unsellable_text(
             from.to_lowercase()
         )
     })
+}
+
+pub fn standing_name(standing: Standing) -> &'static str {
+    match standing {
+        Standing::Ally => "allié",
+        Standing::Friend => "ami",
+        Standing::Neutral => "neutre",
+        Standing::Tense => "tendu",
+        Standing::Rival => "rival",
+    }
+}
+
+/// "+12, ami": what rival club `club` thinks of the player's club.
+pub fn relation_text(club: usize, state: &GameState, data: &DesignData) -> String {
+    format!(
+        "{:+}, {}",
+        state.relation(club),
+        standing_name(state.standing(club, data))
+    )
+}
+
+/// "-30 : Augure n° 1 a tué Guerrier n° 3 (saison 1, semaine 5)": one change of a
+/// rival club's relation, with its reason.
+pub fn relation_change_text(change: Change, state: &GameState, data: &DesignData) -> String {
+    let club = |i| club_fighter(i, state, data);
+    let rival = |id| rival_fighter_name(id, state, data);
+    let why = match change.why {
+        Reason::Killed { fighter, victim } => format!("{} a tué {}", club(fighter), rival(victim)),
+        Reason::Beaten { fighter, rival: r } => format!("{} a battu {}", club(fighter), rival(r)),
+        Reason::TitleTaken { fighter, colosseum } => format!(
+            "{} lui a pris le titre de {}",
+            club(fighter),
+            data.world
+                .colosseums
+                .get(colosseum)
+                .map_or("?", |c| c.name.as_str())
+        ),
+        Reason::ChallengeRefused { fighter, rival: r } => {
+            format!("{} a refusé le défi de {}", club(fighter), rival(r))
+        }
+        Reason::Sold { fighter } => format!("vous lui avez vendu {}", club(fighter)),
+        Reason::Bought { fighter } => format!("vous lui avez acheté {}", club(fighter)),
+        Reason::PactKept { fighter, rival: r } => {
+            format!(
+                "{} a tenu son pacte avec {} en mêlée",
+                club(fighter),
+                rival(r)
+            )
+        }
+        Reason::Betrayed { fighter, rival: r } => {
+            format!(
+                "{} a trahi son pacte avec {} en mêlée",
+                club(fighter),
+                rival(r)
+            )
+        }
+    };
+    format!(
+        "{:+} : {why} ({})",
+        change.points,
+        date_text(change.week, data).to_lowercase()
+    )
 }
 
 /// "Saison 2, semaine 7".

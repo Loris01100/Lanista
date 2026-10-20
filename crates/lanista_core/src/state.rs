@@ -3,6 +3,7 @@
 //! reads the state.
 
 use std::cmp::Reverse;
+use std::collections::BTreeMap;
 
 use rand::{RngExt, SeedableRng};
 use rand_chacha::ChaCha8Rng;
@@ -23,9 +24,10 @@ use crate::fighter::career::{
 use crate::fighter::equipment::Refused;
 use crate::fighter::fame::{Fame, FightResult};
 use crate::fighter::form::FormEvent;
-use crate::fighter::melee::{Entrant, MeleeFight, play_melee};
+use crate::fighter::melee::{Entrant, MeleeFight, Pact, play_melee};
 use crate::fighter::percent_of;
 use crate::market::{self, MarketNews, Move, SaleOffer, Target, estimated_potential, value};
+use crate::relations::{Reason, Relation, Standing, StandingRules};
 use crate::rivals::{self, Rival, RivalId, Venue};
 use crate::staff::{
     self, Candidate, DoctorRules, Medicine, RecruiterRules, Scouting, Staff, StaffEffects,
@@ -76,6 +78,9 @@ pub struct GameState {
     pub staff_market: Vec<Candidate>,
     /// What happened in the world, oldest first, over the last `WorldRules::news_weeks`.
     pub news: Vec<News>,
+    /// Each rival club's relation with the player's club, by its index; a club
+    /// missing has a relation of 0.
+    pub relations: BTreeMap<usize, Relation>,
     /// The only source of chance after the start: same seed and decisions, same game.
     pub rng: ChaCha8Rng,
 }
@@ -111,6 +116,7 @@ impl GameState {
             staff: Staff::default(),
             staff_market: Vec::new(),
             news: Vec::new(),
+            relations: BTreeMap::new(),
             rng,
         };
         state.open_world(data);
@@ -447,7 +453,9 @@ impl GameState {
             colosseum
                 .zip(self.rivals.get(rival.club).map(|r| r.rules(data)))
                 .is_some_and(|(colosseum, profile)| {
-                    colosseum.accepts_challenge(rival, i, profile.accept_percent, &data.world)
+                    let points = self.standing_rules(rival.club, data).challenge_points;
+                    let needed = profile.accept_percent.saturating_sub(points);
+                    colosseum.accepts_challenge(rival, i, needed, &data.world)
                 })
         };
         active && (self.challenges.contains(&received) || accepts())
@@ -482,6 +490,36 @@ impl GameState {
             value(fighter, &data.economy.market),
             profile.sell_percent,
         ))
+    }
+
+    /// The price the club of rival fighter `id` first asks the player: its asking price
+    /// at its standing's `price_percent`; `None` if it does not trade with the player.
+    #[must_use]
+    pub fn price_to_player(&self, id: RivalId, data: &DesignData) -> Option<u32> {
+        let standing = self.standing_rules(id.club, data);
+        standing
+            .deals
+            .then(|| self.asking_price(id, data))
+            .flatten()
+            .map(|price| percent_of(price, standing.price_percent))
+    }
+
+    /// What rival club `club` thinks of the player's club, from −100 to +100.
+    #[must_use]
+    pub fn relation(&self, club: usize) -> i32 {
+        self.relations.get(&club).map_or(0, |r| r.score)
+    }
+
+    #[must_use]
+    pub fn standing(&self, club: usize, data: &DesignData) -> Standing {
+        data.world.relations.standings.of(self.relation(club))
+    }
+
+    fn standing_rules<'a>(&self, club: usize, data: &'a DesignData) -> &'a StandingRules {
+        data.world
+            .relations
+            .standings
+            .get(self.standing(club, data))
     }
 
     /// The first week `fighter` may be sold: half a season after it joined its club,
@@ -534,7 +572,7 @@ impl GameState {
                     })
             }
             Move::Offer(id, price) => {
-                self.asking_price(id, data).is_some()
+                self.price_to_player(id, data).is_some()
                     && price > 0
                     && i64::from(price) <= self.money
                     && self.can_hire(data)
@@ -808,9 +846,12 @@ fn settle_week(
     let club = Contender::Club(i);
     let colosseum = &mut state.colosseums[c];
     let mut fee = 0;
+    let mut taken = false;
     if let Activity::TitleFight(_) = report.plan.activity {
         let news = title_fight(colosseum, club, rival, fight.result, state.week, data);
         titles.push((c, news));
+        taken = matches!(news, TitleNews::Fight { champion, result, .. }
+            if champion == rival && !title_kept(result));
         if let TitleNews::Fight {
             champion, result, ..
         } = news
@@ -836,7 +877,41 @@ fn settle_week(
     }
     if let Contender::Rival(id) = rival {
         pay_rival(&mut state.rivals, id.club, theirs);
+        if taken {
+            let why = Reason::TitleTaken {
+                fighter: i,
+                colosseum: c,
+            };
+            relate(state, id.club, why, data);
+        }
+        let killed = state
+            .rival_fighter(id)
+            .is_some_and(|f| f.status == Status::Dead);
+        let why = if killed {
+            Some(Reason::Killed {
+                fighter: i,
+                victim: id,
+            })
+        } else {
+            (fight.result == FightResult::Won).then_some(Reason::Beaten {
+                fighter: i,
+                rival: id,
+            })
+        };
+        if let Some(why) = why {
+            relate(state, id.club, why, data);
+        }
     }
+}
+
+/// Rival club `club`'s relation with the player's club moves for `why` this week.
+fn relate(state: &mut GameState, club: usize, why: Reason, data: &DesignData) {
+    let Some(rival) = state.rivals.get(club) else {
+        return;
+    };
+    let profile = rival.rules(data);
+    let relation = state.relations.entry(club).or_default();
+    relation.change((state.week, why), profile, &data.world.relations);
 }
 
 /// The rival fighters the club's fighters meet this week in a title fight or a
@@ -1005,6 +1080,9 @@ fn settle_melee(
     if let Some(colosseum) = state.colosseums.get_mut(c) {
         colosseum.record_places(&places, world);
     }
+    for (club, why) in melee.pacts.iter().filter_map(|&p| pact_reason(entries, p)) {
+        relate(state, club, why, data);
+    }
     let fee = |home| i64::from(entry_fee(c, home, data));
     for (k, &entry) in entries.iter().enumerate() {
         let side = &melee.sides[k];
@@ -1050,6 +1128,23 @@ fn settle_melee(
             Contender::FreeAgent(_) => fought.push(entry),
         }
     }
+}
+
+/// The rival club whose relation `pact` of a melee of `entries` moves, and why: one
+/// between a club's fighter and a rival fighter, kept, or betrayed by the club's
+/// fighter; betrayed by the rival fighter, it changes nothing.
+fn pact_reason(entries: &[Contender], pact: Pact) -> Option<(usize, Reason)> {
+    let (mine, fighter, rival) = match (*entries.get(pact.a)?, *entries.get(pact.b)?) {
+        (Contender::Club(i), Contender::Rival(id)) => (pact.a, i, id),
+        (Contender::Rival(id), Contender::Club(i)) => (pact.b, i, id),
+        _ => return None,
+    };
+    let why = match pact.betrayer {
+        None => Reason::PactKept { fighter, rival },
+        Some(k) if k == mine => Reason::Betrayed { fighter, rival },
+        Some(_) => return None,
+    };
+    Some((rival.club, why))
 }
 
 /// The melee of `entries`, on the floor of `kind`, played: each club's fighter begins
@@ -1113,6 +1208,9 @@ fn end_week(
     titles: &mut Vec<(usize, TitleNews)>,
     data: &DesignData,
 ) -> Option<Wealth> {
+    for relation in state.relations.values_mut() {
+        relation.fade(&data.world.relations);
+    }
     let wealth = wealth_changes(state, data);
     club_lives(state, data);
     rival_market(state, data);
@@ -1333,6 +1431,7 @@ fn market_moves(
                     amount: price,
                 });
                 state.sale_offers.retain(|o| o.fighter != fighter);
+                relate(state, rival, Reason::Sold { fighter }, data);
                 news.push(MarketNews::Sold(offer));
             }
             Move::Release(i) => {
@@ -1392,7 +1491,7 @@ fn negotiate(
     ledger: &mut Vec<Transaction>,
 ) -> MarketNews {
     let market = &data.economy.market;
-    let Some(asking) = state.asking_price(id, data) else {
+    let Some(asking) = state.price_to_player(id, data) else {
         return MarketNews::Failed(id);
     };
     if price < asking {
@@ -1426,6 +1525,7 @@ fn negotiate(
         flow: Flow::Purchase,
         amount: -amount,
     });
+    relate(state, id.club, Reason::Bought { fighter }, data);
     MarketNews::Bought {
         from: id,
         fighter,
@@ -1495,7 +1595,13 @@ fn rival_market(state: &mut GameState, data: &DesignData) {
                 continue;
             }
             let profile = rival.rules(data);
+            let standing = state.standing_rules(k, data);
+            if !standing.deals {
+                continue;
+            }
             let price = percent_of(worth, profile.buy_percent);
+            let price = u32::try_from(u64::from(price) * 100 / u64::from(standing.price_percent))
+                .unwrap_or(u32::MAX);
             let place = u32::try_from(rival.active()).is_ok_and(|n| n < data.world.roster.max);
             if place && rival.money - i64::from(price) >= i64::from(profile.care_reserve) {
                 state.sale_offers.push(SaleOffer {
@@ -1863,6 +1969,11 @@ fn refusals(
         {
             colosseum.lose_elo(Contender::Club(ch.fighter), rules.refusal_elo, &data.world);
         }
+        let why = Reason::ChallengeRefused {
+            fighter: ch.fighter,
+            rival: ch.rival,
+        };
+        relate(state, ch.rival.club, why, data);
     }
     refused
 }
@@ -1884,7 +1995,9 @@ fn receive_challenges(state: &mut GameState, data: &DesignData) {
         for (id, colosseum) in (0..).zip(&state.colosseums) {
             if let Some(rival) = colosseum.challenger(i, rosters)
                 && let Some(profile) = state.rivals.get(rival.club).map(|r| r.rules(data))
-                && state.rng.random_range(0..100) < profile.challenge_percent
+                && state.rng.random_range(0..100)
+                    < profile.challenge_percent
+                        + state.standing_rules(rival.club, data).challenge_points
             {
                 state.challenges.push(Challenge {
                     fighter: i,
@@ -2330,6 +2443,14 @@ mod tests {
 
     fn flows(summary: &WeekSummary) -> Vec<(Flow, i64)> {
         summary.ledger.iter().map(|t| (t.flow, t.amount)).collect()
+    }
+
+    /// Why rival club `club`'s relation moved, oldest first.
+    fn reasons(state: &GameState, club: usize) -> Vec<Reason> {
+        state
+            .relations
+            .get(&club)
+            .map_or_else(Vec::new, |r| r.changes.iter().map(|c| c.why).collect())
     }
 
     #[test]
@@ -2923,6 +3044,15 @@ mod tests {
             won
         );
         assert_eq!(state.colosseums[1].title_since, 1);
+        // Its club holds it against the player.
+        let Contender::Rival(held) = champion else {
+            panic!("a rival champion, not {champion:?}");
+        };
+        let taken = Reason::TitleTaken {
+            fighter: 0,
+            colosseum: 1,
+        };
+        assert_eq!(reasons(&state, held.club).contains(&taken), won);
         // Only a title changing hands is news.
         let told = state.news.iter().map(|n| (n.week, n.what));
         let changed = won.then_some((1, WorldNews::Title(1, news)));
@@ -3029,6 +3159,16 @@ mod tests {
                 rules.elo_start
             );
         }
+        // Beaten or killed, its club holds it against the player.
+        let why = match (fight.result, state.rival_fighter(rival).unwrap().status) {
+            (_, Status::Dead) => vec![Reason::Killed {
+                fighter: 0,
+                victim: rival,
+            }],
+            (FightResult::Won, _) => vec![Reason::Beaten { fighter: 0, rival }],
+            _ => Vec::new(),
+        };
+        assert_eq!(reasons(&state, rival.club), why);
         // Far ahead in Elo, no rival fighter accepts: a week of rest.
         let other = ranked(&state, 3);
         state.colosseums[1].ranking[0].elo = 2000;
@@ -3090,6 +3230,11 @@ mod tests {
             state.fighters[0].fame,
             fame.changed_by(-i32::try_from(refusal.refusal_fame).unwrap())
         );
+        let refused = Reason::ChallengeRefused {
+            fighter: 0,
+            rival: received.rival,
+        };
+        assert_eq!(reasons(&state, received.rival.club), [refused]);
     }
 
     #[test]
@@ -3240,6 +3385,13 @@ mod tests {
                 assert_eq!(state.rival_fighter(target).unwrap().status, Status::Sold);
                 assert!(flows(&summary).contains(&(Flow::Purchase, -i64::from(asked))));
                 assert!(state.money < before);
+                assert_eq!(reasons(&state, 2), [Reason::Bought { fighter: 1 }]);
+                // A merchant forgives when the price is right.
+                let merchant = data.world.profiles.get(Profile::Merchant);
+                let points =
+                    data.world.relations.deal * i32::try_from(merchant.deal_percent).unwrap() / 100;
+                let decay = i32::try_from(data.world.relations.decay).unwrap();
+                assert_eq!(state.relation(2), points - decay);
             }
             [MarketNews::FighterRefused(from)] => assert_eq!(from, target),
             ref news => panic!("bought or refused, not {news:?}"),
@@ -3300,12 +3452,103 @@ mod tests {
         assert_eq!(summary.reports, [None]);
         assert_eq!(state.fighters[0].status, Status::Sold);
         assert_eq!(state.transfer_list, Vec::<usize>::new());
+        assert_eq!(reasons(&state, 1), [Reason::Sold { fighter: 0 }]);
         assert!(
             state.rivals[1]
                 .fighters
                 .iter()
                 .any(|f| f.potential == sold.potential)
         );
+    }
+
+    #[test]
+    fn a_club_s_standing_sets_its_prices_and_challenges() {
+        let data = data();
+        let standings = &data.world.relations.standings;
+        let mut state = game(7, &data);
+        let target = RivalId {
+            club: 2,
+            fighter: 0,
+        };
+        let asking = state.asking_price(target, &data).unwrap();
+        assert_eq!(state.price_to_player(target, &data), Some(asking));
+        let set = |state: &mut GameState, standing: Standing| {
+            // Above its lowest, so that a week fading it keeps it.
+            state.relations.entry(2).or_default().score = standings.get(standing).from + 5;
+        };
+        // A friend asks less of the player, and offers more for its fighters.
+        set(&mut state, Standing::Friend);
+        let friend = standings.get(Standing::Friend).price_percent;
+        assert_eq!(
+            state.price_to_player(target, &data),
+            Some(percent_of(asking, friend))
+        );
+        let mut listed = state.clone();
+        next_week(&mut listed, &moves(&[Move::List(0)]), &data);
+        let offer = listed.sale_offers.iter().find(|o| o.rival == 2).unwrap();
+        let worth = value(&listed.fighters[0], &data.economy.market);
+        let merchant = data.world.profiles.get(Profile::Merchant);
+        let price = percent_of(worth, merchant.buy_percent);
+        assert_eq!(
+            u64::from(offer.price),
+            u64::from(price) * 100 / u64::from(friend)
+        );
+        // A rival trades nothing with the player.
+        set(&mut state, Standing::Rival);
+        assert_eq!(state.price_to_player(target, &data), None);
+        state.money = 10_000;
+        assert!(!state.may_move(Move::Offer(target, asking * 2), &data));
+        next_week(&mut state, &moves(&[Move::List(0)]), &data);
+        assert!(state.sale_offers.iter().all(|o| o.rival != 2));
+        assert!(state.sale_offers.iter().any(|o| o.rival != 2));
+    }
+
+    #[test]
+    fn a_hostile_club_accepts_the_player_s_challenges_more_willingly() {
+        let data = data();
+        let mut state = top_of_rome(&data);
+        let rome = ColosseumId(1);
+        let rival = ranked(&state, 3);
+        let mut hostile = state.clone();
+        let points = data.world.relations.standings.rival.from;
+        hostile.relations.entry(rival.club).or_default().score = points;
+        // Some Elo gap refused by a neutral club is accepted by a rival one, never the
+        // other way round.
+        let mut accepted = false;
+        for elo in (1100..2000).step_by(10) {
+            state.colosseums[1].ranking[0].elo = elo;
+            hostile.colosseums[1].ranking[0].elo = elo;
+            let neutral = state.may_challenge(0, rome, rival, &data);
+            let angry = hostile.may_challenge(0, rome, rival, &data);
+            assert!(angry || !neutral, "at {elo}");
+            accepted |= angry && !neutral;
+        }
+        assert!(accepted);
+    }
+
+    #[test]
+    fn a_pact_between_the_club_s_fighter_and_a_rival_one_moves_its_club() {
+        let rival = RivalId {
+            club: 2,
+            fighter: 4,
+        };
+        let entries = [
+            Contender::Rival(rival),
+            Contender::FreeAgent(0),
+            Contender::Club(1),
+            Contender::Club(0),
+        ];
+        let pact = |a, b, betrayer| Pact { a, b, betrayer };
+        let kept = Reason::PactKept { fighter: 1, rival };
+        let betrayed = Reason::Betrayed { fighter: 1, rival };
+        assert_eq!(pact_reason(&entries, pact(0, 2, None)), Some((2, kept)));
+        assert_eq!(
+            pact_reason(&entries, pact(2, 0, Some(2))),
+            Some((2, betrayed))
+        );
+        assert_eq!(pact_reason(&entries, pact(0, 2, Some(0))), None);
+        assert_eq!(pact_reason(&entries, pact(1, 2, None)), None);
+        assert_eq!(pact_reason(&entries, pact(2, 3, None)), None);
     }
 
     #[test]

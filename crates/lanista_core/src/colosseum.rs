@@ -11,6 +11,7 @@ use crate::combat::ArenaKind;
 use crate::economy::Purses;
 use crate::fighter::career::{CareerFighter, Status};
 use crate::fighter::fame::FightResult;
+use crate::relations::RelationRules;
 use crate::rivals::{ClubRules, Profile, Profiles, Rival, RivalId, RosterRules};
 
 /// The world's rules, from `data/world.ron`.
@@ -41,6 +42,8 @@ pub struct WorldRules {
     pub travel_fee: u32,
     /// How many weeks the world's news are kept (`GameState::news`).
     pub news_weeks: u32,
+    /// What the rival clubs think of the player's club (`GameState::relations`).
+    pub relations: RelationRules,
     /// `ColosseumId(i)` is the colosseum at index `i`.
     pub colosseums: Vec<ColosseumData>,
 }

@@ -22,6 +22,7 @@ use crate::fighter::progression::ProgressionRules;
 use crate::fighter::retirement::RetirementRules;
 use crate::melee::MeleeRules;
 use crate::names::{self, Culture};
+use crate::relations::{MAX_SCORE, Standing};
 use crate::stat_model::StatModels;
 
 /// Everything read from `data/`. `ClassId(i)` is the class at index `i` of `classes`.
@@ -262,6 +263,7 @@ impl DesignData {
             });
         }
         self.validate_world()?;
+        self.validate_relations()?;
         let market = &self.economy.market;
         if market.max_free_agents < market.min_free_agents {
             return Err(LoadError::Invalid {
@@ -282,6 +284,27 @@ impl DesignData {
     }
 
     /// The world's colosseums and clubs, and the cultures that name them.
+    /// The standings run from the highest down to −100, each with a price.
+    fn validate_relations(&self) -> Result<(), LoadError> {
+        let invalid = |problem| LoadError::Invalid {
+            file: WORLD_FILE,
+            field: "relations.standings",
+            problem,
+        };
+        let standings = &self.world.relations.standings;
+        let froms = Standing::ALL.map(|s| standings.get(s).from);
+        if froms.windows(2).any(|w| w[0] <= w[1]) || froms[4] > -MAX_SCORE {
+            return Err(invalid("not from the highest down to -100"));
+        }
+        if Standing::ALL
+            .iter()
+            .any(|&s| standings.get(s).price_percent == 0)
+        {
+            return Err(invalid("a price of nothing"));
+        }
+        Ok(())
+    }
+
     fn validate_world(&self) -> Result<(), LoadError> {
         let world = |field, problem| LoadError::Invalid {
             file: WORLD_FILE,
@@ -749,6 +772,10 @@ mod tests {
         assert_eq!(world_field(&crowded, NAMES), "clubs.max");
         let doomed = WORLD.replacen("ruined_seasons: 2", "ruined_seasons: 0", 1);
         assert_eq!(world_field(&doomed, NAMES), "clubs.ruined_seasons");
+        let muddled = WORLD.replacen("tense: (from: -59", "tense: (from: 30", 1);
+        assert_eq!(world_field(&muddled, NAMES), "relations.standings");
+        let free = WORLD.replacen("price_percent: 85", "price_percent: 0", 1);
+        assert_eq!(world_field(&free, NAMES), "relations.standings");
         // Oceania's clubs with no culture of their own, or no free colosseum.
         let uprooted = NAMES.replacen("continent: Oceania", "continent: Europe", 1);
         assert_eq!(world_field(WORLD, &uprooted), "clubs.cultures");

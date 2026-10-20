@@ -10,7 +10,7 @@ use super::{ClubScreen, RANKS_SHOWN, View};
 use crate::texts::{
     arena_effect, arena_name, club_name, colosseum_name, condition_text, contender_name,
     continent_name, culture_name, culture_text, date_text, profile_name, record_text,
-    rival_fighter_name, staff_text, wealth_name,
+    relation_change_text, relation_text, rival_fighter_name, staff_text, wealth_name,
 };
 
 impl ClubScreen {
@@ -135,22 +135,33 @@ impl ClubScreen {
         goto
     }
 
-    /// "Ludus Magnus (Rome), prudent et riche : 10 combattants" for each rival club, in
-    /// club order; its money stays hidden.
+    /// "Ludus Magnus (Rome), prudent et riche : 10 combattants ; relation +12, ami" for
+    /// each rival club, in club order; its money stays hidden.
     pub(super) fn rival_lines(&self) -> Vec<String> {
-        self.state
-            .rivals
-            .iter()
-            .map(|rival| {
+        (0..)
+            .zip(&self.state.rivals)
+            .map(|(club, rival)| {
                 format!(
-                    "{} ({}), {} et {} : {} combattants",
+                    "{} ({}), {} et {} : {} combattants ; relation {}",
                     rival.name,
                     culture_name(&rival.culture, &self.data),
                     profile_name(rival.profile),
                     wealth_name(rival.wealth),
-                    rival.active()
+                    rival.active(),
+                    relation_text(club, &self.state, &self.data)
                 )
             })
+            .collect()
+    }
+
+    /// Each change of rival club `club`'s relation with the player's club, newest
+    /// first (see `relation_change_text`).
+    pub(super) fn relation_lines(&self, club: usize) -> Vec<String> {
+        let changes = self.state.relations.get(&club);
+        changes
+            .into_iter()
+            .flat_map(|r| r.changes.iter().rev())
+            .map(|&c| relation_change_text(c, &self.state, &self.data))
             .collect()
     }
 
@@ -198,8 +209,9 @@ impl ClubScreen {
     }
 
     /// A rival club: when it closed, profile, wealth (its money stays hidden), culture,
-    /// continent, staff, the titles it holds, then its fighters in activity with their
-    /// standing in each colosseum of its continent.
+    /// continent, staff, the titles it holds, its relation with the player's club and
+    /// why, then its fighters in activity with their standing in each colosseum of its
+    /// continent.
     pub(super) fn rival_club(&mut self, ui: &mut egui::Ui, club: usize) {
         self.back_button(ui);
         let data = &self.data;
@@ -224,6 +236,20 @@ impl ClubScreen {
         ui.label(staff_text(&rival.staff));
         for line in self.titles_of(club) {
             ui.colored_label(egui::Color32::GOLD, line);
+        }
+        ui.strong(format!(
+            "Relation avec votre club : {}",
+            relation_text(club, state, data)
+        ));
+        let lines = self.relation_lines(club);
+        if !lines.is_empty() {
+            egui::CollapsingHeader::new("Ce qui s'est passé entre vous")
+                .id_salt(("relation", club))
+                .show(ui, |ui| {
+                    for line in lines {
+                        ui.label(line);
+                    }
+                });
         }
         let gone = rival.fighters.len() - rival.active();
         if gone > 0 {
