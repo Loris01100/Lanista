@@ -417,6 +417,13 @@ pub fn world_news_text(news: News, state: &GameState, data: &DesignData) -> Stri
             "{} ferme, ruiné : ses combattants partent au marché",
             club_name(club, state)
         ),
+        WorldNews::Rivalry(club, true) => format!(
+            "{} se déclare votre rival : vos combats contre lui attirent les foules",
+            club_name(club, state)
+        ),
+        WorldNews::Rivalry(club, false) => {
+            format!("{} met fin à sa rivalité avec vous", club_name(club, state))
+        }
         WorldNews::Founded(club) => state.rivals.get(club).map_or_else(String::new, |r| {
             format!(
                 "Fondation de {} ({}), en {}",

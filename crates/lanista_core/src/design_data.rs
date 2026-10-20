@@ -302,6 +302,9 @@ impl DesignData {
         {
             return Err(invalid("a price of nothing"));
         }
+        if self.world.relations.rivalry.ends_from < standings.tense.from {
+            return Err(invalid("a rivalry ending among the rival scores"));
+        }
         Ok(())
     }
 

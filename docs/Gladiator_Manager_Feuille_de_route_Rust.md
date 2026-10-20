@@ -355,6 +355,7 @@ Trois clubs écrits à la main et appelés « rivaux » d'office ne suffisent pa
 
 **Étape 5 — Les rivalités déclarées.**
 - En dessous d'un seuil, un club se déclare rival du joueur, avec une alerte. Un combat entre rivaux attire plus de public : plus de recettes et de renommée (règles dans `data/world.ron`).
+- Fait. Un club dont la note tombe dans le statut Rival (sous −59) se déclare rival à la fin de la semaine (`Relation::declare`, `Relation::rival_since`) et le reste jusqu'à ce que sa note remonte à `rivalry.ends_from` (−19), pour qu'une rivalité ne s'éteigne pas au premier point d'oubli ; tant qu'elle dure, son statut est Rival quelle que soit sa note (`GameState::is_rival`, `standing`). La déclaration et la fin sont des nouvelles du monde (`WorldNews::Rivalry`), et le menu général rappelle chaque rivalité en cours dans ses alertes. Un duel du joueur (combat, défi ou titre) contre un combattant d'un club rival rapporte `rivalry.receipts_percent` (150 %) des recettes aux deux clubs et `rivalry.fame` (3) de renommée aux deux combattants, quel que soit le résultat (`settle_week`, ajoutée au `fame_change` du résumé). Le chargement refuse une fin de rivalité parmi les notes de rival. La mêlée ne change pas encore : ses recettes et ses pactes restent ceux d'avant (point suivant).
 - En mêlée, les combattants d'un club rival visent en priorité ceux du joueur, ceux d'un club ami s'allient plus volontiers avec eux (poids dans les pactes de `melee`).
 
 **Étape 6 — Les accords.**

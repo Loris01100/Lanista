@@ -65,6 +65,8 @@ pub struct Relation {
     pub score: i32,
     /// The last changes, oldest first, at most `RelationRules::history`.
     pub changes: Vec<Change>,
+    /// The week the club declared itself the player's rival, while it lasts.
+    pub rival_since: Option<u64>,
 }
 
 impl Relation {
@@ -98,6 +100,36 @@ impl Relation {
         let decay = i32::try_from(rules.decay).unwrap_or(MAX_SCORE);
         self.score -= self.score.signum() * decay.min(self.score.abs());
     }
+
+    /// At the end of week `week`, the club declares itself the player's rival once its
+    /// score is a rival's, and ends the rivalry once it climbs back to
+    /// `RivalryRules::ends_from`. Returns `Some(true)` for a declaration, `Some(false)`
+    /// for an end.
+    pub fn declare(&mut self, week: u64, rules: &RelationRules) -> Option<bool> {
+        match self.rival_since {
+            None if rules.standings.of(self.score) == Standing::Rival => {
+                self.rival_since = Some(week);
+                Some(true)
+            }
+            Some(_) if self.score >= rules.rivalry.ends_from => {
+                self.rival_since = None;
+                Some(false)
+            }
+            _ => None,
+        }
+    }
+}
+
+/// What a declared rivalry does.
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct RivalryRules {
+    /// The score from which a declared rivalry ends.
+    pub ends_from: i32,
+    /// A fight between the rivals' fighters brings this percentage of its receipts.
+    pub receipts_percent: u32,
+    /// And this much fame to each of them, whatever the result.
+    pub fame: u32,
 }
 
 /// What a standing does.
@@ -166,6 +198,7 @@ pub struct RelationRules {
     /// Changes kept for each club.
     pub history: usize,
     pub standings: Standings,
+    pub rivalry: RivalryRules,
 }
 
 impl RelationRules {
@@ -246,6 +279,26 @@ mod tests {
         assert_eq!(relation.score, -MAX_SCORE);
         assert_eq!(relation.changes.len(), rules.history);
         assert_eq!(relation.changes.last().unwrap().week, 99);
+    }
+
+    #[test]
+    fn a_rivalry_is_declared_below_tense_and_ends_well_above() {
+        let data = DesignData::load().unwrap();
+        let rules = &data.world.relations;
+        let mut relation = Relation {
+            score: rules.standings.tense.from,
+            ..Relation::default()
+        };
+        assert_eq!(relation.declare(1, rules), None);
+        relation.score -= 1;
+        assert_eq!(relation.declare(2, rules), Some(true));
+        assert_eq!(relation.declare(3, rules), None);
+        relation.score = rules.rivalry.ends_from - 1;
+        assert_eq!(relation.declare(4, rules), None);
+        assert_eq!(relation.rival_since, Some(2));
+        relation.score += 1;
+        assert_eq!(relation.declare(5, rules), Some(false));
+        assert_eq!(relation.rival_since, None);
     }
 
     #[test]

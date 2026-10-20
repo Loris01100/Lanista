@@ -38,8 +38,8 @@ use crate::fight_view::Cast;
 use crate::saves;
 use crate::texts::{
     STAT_NAMES, activity_name, challenger_text, change, class_name, club_name, colosseum_name,
-    condition_text, contender_name, continent_name, fight_text, fighter_name, illness_text,
-    injury_text, market_news_text, money_line, move_text, personality_text, priced,
+    condition_text, contender_name, continent_name, date_text, fight_text, fighter_name,
+    illness_text, injury_text, market_news_text, money_line, move_text, personality_text, priced,
     rival_fighter_name, staff_move_text, staff_news_text, title_news_text, wealth_name,
     wealth_text, week_lines, world_news_text,
 };
@@ -486,6 +486,18 @@ impl ClubScreen {
                     challenger_text(ch, &self.state, &self.data),
                     refusal.refusal_fame,
                     refusal.refusal_elo
+                ));
+            }
+        }
+        let rivalry = &self.data.world.relations.rivalry;
+        for (&club, relation) in &self.state.relations {
+            if let Some(week) = relation.rival_since {
+                alerts.push(format!(
+                    "{} est votre rival depuis {} : recettes à {} %, renommée +{} par combat",
+                    club_name(club, &self.state),
+                    date_text(week, &self.data).to_lowercase(),
+                    rivalry.receipts_percent,
+                    rivalry.fame
                 ));
             }
         }
@@ -1616,6 +1628,27 @@ mod tests {
                 "Saison 1, semaine 30 : Dar Khawla ferme, ruiné : ses combattants partent au marché",
             ]
         );
+    }
+
+    #[test]
+    fn a_declared_rivalry_is_told_and_alerted() {
+        let mut screen = screen(7);
+        screen.state.relations.entry(1).or_default().rival_since = Some(4);
+        screen.state.news = vec![News {
+            week: 4,
+            what: WorldNews::Rivalry(1, true),
+        }];
+        assert_eq!(
+            screen.news_lines(),
+            [
+                "Saison 1, semaine 4 : Dar Khawla se déclare votre rival : vos combats contre lui attirent les foules"
+            ]
+        );
+        assert!(screen.alerts().contains(
+            &"Dar Khawla est votre rival depuis saison 1, semaine 4 : recettes à 150 %, renommée +3 par combat"
+                .to_owned()
+        ));
+        assert!(screen.rival_lines()[1].ends_with("; relation +0, rival"));
     }
 
     #[test]

@@ -109,6 +109,11 @@
             tense: (from: -59, deals: true, price_percent: 115, challenge_points: 10),
             rival: (from: -100, deals: false, price_percent: 100, challenge_points: 25),
         ),
+        // A club whose score falls to a rival's declares itself the player's rival,
+        // and stays so until its score climbs back to `ends_from`. A fight between
+        // their fighters draws a crowd: `receipts_percent` of the receipts to both
+        // clubs, and `fame` to both fighters, whatever the result.
+        rivalry: (ends_from: -19, receipts_percent: 150, fame: 3),
     ),
     // Each continent has a major colosseum, of the highest prestige, and one or two
     // minor ones around it, where prestige-2 ones ask a small fee; on each continent

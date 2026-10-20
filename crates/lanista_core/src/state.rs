@@ -511,8 +511,22 @@ impl GameState {
     }
 
     #[must_use]
+    /// What rival club `club`'s relation comes to: a rival while the rivalry it
+    /// declared lasts, whatever its score.
     pub fn standing(&self, club: usize, data: &DesignData) -> Standing {
-        data.world.relations.standings.of(self.relation(club))
+        if self.is_rival(club) {
+            Standing::Rival
+        } else {
+            data.world.relations.standings.of(self.relation(club))
+        }
+    }
+
+    /// Whether rival club `club` declared itself the player's rival.
+    #[must_use]
+    pub fn is_rival(&self, club: usize) -> bool {
+        self.relations
+            .get(&club)
+            .is_some_and(|r| r.rival_since.is_some())
     }
 
     fn standing_rules<'a>(&self, club: usize, data: &'a DesignData) -> &'a StandingRules {
@@ -696,6 +710,9 @@ pub enum WorldNews {
     Closed(usize),
     /// The rival club at this index was founded.
     Founded(usize),
+    /// The rival club at this index declared itself the player's rival (`true`), or
+    /// ended its rivalry.
+    Rivalry(usize, bool),
 }
 
 /// A world news item of week `week`.
@@ -770,8 +787,8 @@ pub fn next_week(state: &mut GameState, decisions: &Decisions, data: &DesignData
             fought.extend(meeting.map(|(_, them)| them));
             let opponent =
                 meeting.and_then(|(_, them)| met(&mut state.rivals, &mut state.free_agents, them));
-            let report = fighter.play_week(plan, opponent, effects, &mut state.rng, data);
-            if let Some(report) = &report {
+            let mut report = fighter.play_week(plan, opponent, effects, &mut state.rng, data);
+            if let Some(report) = &mut report {
                 let paid = (i, fame, costs.0);
                 settle_week(
                     state,
@@ -814,11 +831,13 @@ pub fn next_week(state: &mut GameState, decisions: &Decisions, data: &DesignData
 /// the outsider of `meeting` in that colosseum: a title fight (`titles`, the champion
 /// bonus for a defense survived), or else a fight moving both Elo for the entry fee;
 /// receipts, and the prize to the winner. The rival fighter's club pays and earns the
-/// same; a free agent fights for its name alone. The club's money moves into `ledger`.
+/// same; a free agent fights for its name alone. Against a club that declared itself
+/// the player's rival, the receipts grow and both fighters gain fame (added to
+/// `report`). The club's money moves into `ledger`.
 fn settle_week(
     state: &mut GameState,
     (i, fame, training): (usize, Fame, u32),
-    (report, meeting): (&WeekReport, Option<(usize, Contender)>),
+    (report, meeting): (&mut WeekReport, Option<(usize, Contender)>),
     (ledger, titles): (&mut Vec<Transaction>, &mut Vec<(usize, TitleNews)>),
     data: &DesignData,
 ) {
@@ -836,7 +855,7 @@ fn settle_week(
     if report.plan.activity == Activity::Train {
         pay(Flow::Training, -i64::from(training));
     }
-    let (Some(fight), Some((c, rival))) = (&report.fight, meeting) else {
+    let (Some(fight), Some((c, rival))) = (&mut report.fight, meeting) else {
         return;
     };
     let Some(rules) = data.world.colosseums.get(c) else {
@@ -866,7 +885,25 @@ fn settle_week(
         colosseum.record(club, rival, fight.result, &data.world);
     }
     let theirs = fight.opponent().map_or(Fame::default(), |o| o.fame);
-    let receipts = i64::from(purses.receipts(fame, theirs));
+    let mut receipts = purses.receipts(fame, theirs);
+    let rivalry = &data.world.relations.rivalry;
+    // Not `is_rival`: `pay` holds the club's money.
+    if let Contender::Rival(id) = rival
+        && state
+            .relations
+            .get(&id.club)
+            .is_some_and(|r| r.rival_since.is_some())
+    {
+        receipts = percent_of(receipts, rivalry.receipts_percent);
+        let bonus = i32::try_from(rivalry.fame).unwrap_or(i32::MAX);
+        fight.fame_change = fight.fame_change.saturating_add(bonus);
+        let mine = &mut state.fighters[i].fame;
+        *mine = mine.changed_by(bonus);
+        if let Some(f) = state.rivals[id.club].fighters.get_mut(id.fighter) {
+            f.fame = f.fame.changed_by(bonus);
+        }
+    }
+    let receipts = i64::from(receipts);
     pay(Flow::Receipts, receipts);
     let prize = i64::from(purses.win_prize);
     let mut theirs = receipts - fee;
@@ -1208,8 +1245,13 @@ fn end_week(
     titles: &mut Vec<(usize, TitleNews)>,
     data: &DesignData,
 ) -> Option<Wealth> {
-    for relation in state.relations.values_mut() {
+    let week = state.week;
+    for (&club, relation) in &mut state.relations {
         relation.fade(&data.world.relations);
+        if let Some(declared) = relation.declare(week, &data.world.relations) {
+            let what = WorldNews::Rivalry(club, declared);
+            state.news.push(News { week, what });
+        }
     }
     let wealth = wealth_changes(state, data);
     club_lives(state, data);
@@ -3524,6 +3566,64 @@ mod tests {
             accepted |= angry && !neutral;
         }
         assert!(accepted);
+    }
+
+    #[test]
+    fn a_club_declares_a_rivalry_whose_fights_draw_a_crowd() {
+        let data = data();
+        let mut state = top_of_rome(&data);
+        let rome = ColosseumId(1);
+        let rival = ranked(&state, 7);
+        let mut rivals = state.clone();
+        rivals.relations.entry(rival.club).or_default().score = -70;
+        let week = rivals.week;
+        let challenge = plan(Activity::Challenge(rome, rival), false);
+        // Declared at the end of a week: that week's fight is still an ordinary one.
+        let summary = next_week(&mut rivals, &challenge, &data);
+        let first = next_week(&mut state, &challenge, &data);
+        assert_eq!(flows(&summary), flows(&first));
+        assert!(rivals.is_rival(rival.club));
+        assert_eq!(rivals.standing(rival.club, &data), Standing::Rival);
+        let declared = News {
+            week,
+            what: WorldNews::Rivalry(rival.club, true),
+        };
+        assert!(rivals.news.contains(&declared));
+        // The next fight against its fighters brings more receipts and fame.
+        let mut neutral = rivals.clone();
+        neutral.relations.remove(&rival.club);
+        let other = (1..rivals.colosseums[1].ranking.len())
+            .map(|rank| ranked(&rivals, rank))
+            .find(|&id| id.club == rival.club && neutral.may_challenge(0, rome, id, &data))
+            .unwrap();
+        let challenge = plan(Activity::Challenge(rome, other), false);
+        let receipts = |summary: &WeekSummary| {
+            flows(summary)
+                .into_iter()
+                .find(|&(flow, _)| flow == Flow::Receipts)
+                .map(|(_, amount)| u32::try_from(amount).unwrap())
+        };
+        let fame_change = |summary: &WeekSummary| {
+            let report = summary.reports[0].as_ref().unwrap();
+            report.fight.as_ref().unwrap().fame_change
+        };
+        let crowd = next_week(&mut rivals, &challenge, &data);
+        let usual = next_week(&mut neutral, &challenge, &data);
+        let rivalry = &data.world.relations.rivalry;
+        assert_eq!(
+            receipts(&crowd),
+            receipts(&usual).map(|r| percent_of(r, rivalry.receipts_percent))
+        );
+        let bonus = i32::try_from(rivalry.fame).unwrap();
+        assert_eq!(fame_change(&crowd), fame_change(&usual) + bonus);
+        // Forgiven well above a rival's score, it ends the rivalry.
+        rivals.relations.get_mut(&rival.club).unwrap().score = crate::relations::MAX_SCORE;
+        next_week(&mut rivals, &plan(Activity::Rest, false), &data);
+        assert!(!rivals.is_rival(rival.club));
+        assert!(matches!(
+            rivals.news.last().map(|n| n.what),
+            Some(WorldNews::Rivalry(_, false))
+        ));
     }
 
     #[test]
