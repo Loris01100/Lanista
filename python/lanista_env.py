@@ -2,7 +2,7 @@
 
 The agent plays fighter 0 of a standard duel; `opponent` (observation -> action)
 plays fighter 1, a random action by default. `vector_env(n)` runs n duels in
-parallel processes.
+parallel processes. `review` plays one duel and gives its log to read.
 
 Self-check, from the repo root inside python/.venv: python python/lanista_env.py
 """
@@ -44,6 +44,19 @@ def vector_env(n, opponent=None):
     return gym.vector.AsyncVectorEnv([lambda: DuelEnv(opponent)] * n)
 
 
+def review(policy, seed, opponent=None):
+    """Plays the duel of `seed` with `policy` (observation -> action) as fighter 0;
+    gives its log, report and the agent's total reward, to read for absurd behaviour."""
+    env = DuelEnv(opponent)
+    observation, _ = env.reset(seed=seed)
+    total, done = 0.0, False
+    while not done:
+        observation, reward, terminated, truncated, _ = env.step(policy(observation))
+        total += reward
+        done = terminated or truncated
+    return f"{env.env.log()}\nagent's total reward: {total:.3f}"
+
+
 if __name__ == "__main__":
     from gymnasium.utils.env_checker import check_env
 
@@ -55,4 +68,6 @@ if __name__ == "__main__":
         _, _, terminated, truncated, _ = envs.step(envs.action_space.sample())
         episodes += int(np.sum(terminated | truncated))
     envs.close()
-    print("ok: check_env passed, 8 duels played on 4 processes")
+    random_agent = DuelEnv().action_space.sample
+    assert "agent's total reward" in review(lambda _: random_agent(), 7)
+    print("ok: check_env passed, 8 duels played on 4 processes, one reviewed")

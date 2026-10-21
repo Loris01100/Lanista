@@ -4,7 +4,7 @@
 #[pyo3::pymodule]
 mod lanista_py {
     use lanista_core::design_data::DesignData;
-    use lanista_core::learning;
+    use lanista_core::{learning, log};
     use pyo3::exceptions::{PyRuntimeError, PyValueError};
     use pyo3::prelude::*;
 
@@ -63,6 +63,12 @@ mod lanista_py {
         #[getter]
         fn fighters(&self) -> usize {
             self.0.arena().fighters.len()
+        }
+
+        /// The fight so far as `simulate` prints it: its log, then its report.
+        fn log(&self) -> String {
+            let arena = self.0.arena();
+            format!("{}\n{}", log::log_text(arena), log::Report::new(arena))
         }
     }
 }

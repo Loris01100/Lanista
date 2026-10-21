@@ -448,6 +448,20 @@ mod tests {
     }
 
     #[test]
+    fn waiting_out_the_clock_costs_both_fighters() {
+        let mut env = Environment::new(DesignData::load().unwrap());
+        env.reset(3);
+        loop {
+            let step = env.step(&[0, 0]);
+            assert_eq!(step.rewards, [-TIME_PENALTY, -TIME_PENALTY]);
+            if step.done {
+                break;
+            }
+        }
+        assert!(!env.arena().is_over(), "a draw at the time limit");
+    }
+
+    #[test]
     fn same_seed_same_fight() {
         let mut env = Environment::new(DesignData::load().unwrap());
         let first = play(&mut env, 5);
