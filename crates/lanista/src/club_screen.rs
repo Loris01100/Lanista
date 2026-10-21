@@ -1172,9 +1172,12 @@ mod tests {
 
     use super::*;
     use crate::texts::{
-        free_agent_name, named_club, outside_personality_text, potential_text, range_texts,
-        staff_text, unsellable_text, weeks_left_text,
+        club_name as rival_club_name, date_in_sentence, free_agent_name, named_club,
+        outside_personality_text, potential_text, range_texts, staff_text, unsellable_text,
+        weeks_left_text,
     };
+    use colosseums::reign_text;
+    use lanista_core::colosseum::{Reign, ReignEnd, TitleLoss};
 
     fn screen(seed: u64) -> ClubScreen {
         let data = Rc::new(DesignData::load().unwrap());
@@ -1880,6 +1883,36 @@ mod tests {
         let standings = screen.standings(Contender::Rival(gone));
         assert_eq!(standings.len(), screen.state.colosseums.len());
         assert!(standings.iter().all(|s| s == "non classé"));
+    }
+
+    #[test]
+    fn a_colosseum_s_honours_tell_each_reign() {
+        let mut screen = screen(7);
+        let reign = screen.state.colosseums[0].reigns[0];
+        let Contender::Rival(id) = reign.holder else {
+            panic!("no rival champion in Capua");
+        };
+        let club = rival_club_name(id.club, &screen.state);
+        let from = date_in_sentence(reign.from, &screen.data);
+        assert_eq!(
+            reign_text(&reign, &screen.state, &screen.data),
+            format!("pour {club}, de {from} à aujourd'hui, aucune défense")
+        );
+        // The champion died with the title after two defenses.
+        screen.state.rivals[id.club].fighters[id.fighter].status = Status::Dead;
+        let died = Reign {
+            defenses: 2,
+            end: Some(ReignEnd {
+                week: reign.from + 3,
+                how: TitleLoss::Vacated,
+            }),
+            ..reign
+        };
+        let until = date_in_sentence(reign.from + 3, &screen.data);
+        assert_eq!(
+            reign_text(&died, &screen.state, &screen.data),
+            format!("pour {club}, de {from} à {until}, 2 défenses, mort avec le titre")
+        );
     }
 
     #[test]

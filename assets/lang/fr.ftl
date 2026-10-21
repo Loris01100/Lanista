@@ -442,6 +442,26 @@ ranking-rank = Rang
 ranking-club = Club
 ranking-elo = Elo
 ranking-no-club = sans club
+colosseum-honours = Palmarès ({ $reigns } { $reigns ->
+        [one] règne
+       *[other] règnes
+    })
+reign = { $club }, de { $from } à { $until }, { $defenses ->
+        [0] aucune défense
+        [one] { $defenses } défense
+       *[other] { $defenses } défenses
+    }{ $end ->
+        [beaten] , battu
+        [stripped] , déchu faute de défense
+        [died] , mort avec le titre
+        [retired] , retiré avec le titre
+        [vacated] , parti avec le titre
+       *[current] {""}
+    }
+reign-for = pour { $club }
+reign-yours = pour votre club
+reign-no-club = sans club
+reign-now = aujourd'hui
 
 ## Marché (vue)
 

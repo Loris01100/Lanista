@@ -1,6 +1,8 @@
 //! The colosseums view and the page of a rival club.
 
-use lanista_core::colosseum::{Colosseum, ColosseumData, ColosseumId, Contender, Continent};
+use lanista_core::colosseum::{
+    Colosseum, ColosseumData, ColosseumId, Contender, Continent, Reign, ReignEnd, TitleLoss,
+};
 use lanista_core::design_data::DesignData;
 use lanista_core::fighter::career::Status;
 use lanista_core::market::Target;
@@ -13,9 +15,9 @@ use super::{ClubScreen, RANKS_SHOWN, View};
 use crate::lang::tr;
 use crate::texts::{
     arena_effect, arena_name, club_name, colosseum_name, colosseum_rules_name, condition_text,
-    contender_name, continent_name, culture_name, culture_text, date_text, named_club, place_name,
-    profile_name, record_text, relation_change_text, relation_text, rival_fighter_name, staff_text,
-    wealth_name,
+    contender_name, continent_name, culture_name, culture_text, date_in_sentence, date_text,
+    named_club, place_name, profile_name, record_text, relation_change_text, relation_text,
+    rival_fighter_name, staff_text, wealth_name,
 };
 
 impl ClubScreen {
@@ -341,7 +343,50 @@ fn colosseum_column(
         since = colosseum.title_since,
         deadline = colosseum.defense_deadline(&data.world)
     ));
+    egui::CollapsingHeader::new(tr!("colosseum-honours", reigns = colosseum.reigns.len()))
+        .id_salt(("honours", id.0))
+        .show(ui, |ui| {
+            for reign in colosseum.reigns.iter().rev() {
+                ui.horizontal_wrapped(|ui| {
+                    if ui.link(contender_name(reign.holder, state, data)).clicked() {
+                        goto = Some(contender_view(reign.holder));
+                    }
+                    ui.label(reign_text(reign, state, data));
+                });
+            }
+        });
     ranking(ui, id, colosseum, state, data).or(goto)
+}
+
+/// "pour Ludus Magnus, de saison 1, semaine 3 à saison 2, semaine 7, 2 défenses, battu".
+pub(super) fn reign_text(reign: &Reign, state: &GameState, data: &DesignData) -> String {
+    let club = match reign.won_as {
+        Contender::Club(_) => tr!("reign-yours"),
+        Contender::Rival(id) => tr!("reign-for", club = club_name(id.club, state)),
+        Contender::FreeAgent(_) => tr!("reign-no-club"),
+    };
+    let status = state.rosters().fighter(reign.holder).map(|f| f.status);
+    let (until, end) = match reign.end {
+        None => (tr!("reign-now"), "current"),
+        Some(ReignEnd { week, how }) => (
+            date_in_sentence(week, data),
+            match how {
+                TitleLoss::Beaten => "beaten",
+                TitleLoss::Stripped => "stripped",
+                TitleLoss::Vacated if status == Some(Status::Dead) => "died",
+                TitleLoss::Vacated if status == Some(Status::Retired) => "retired",
+                TitleLoss::Vacated => "vacated",
+            },
+        ),
+    };
+    tr!(
+        "reign",
+        club = club,
+        from = date_in_sentence(reign.from, data),
+        until = until,
+        defenses = reign.defenses,
+        end = end
+    )
 }
 
 /// A colosseum's first `RANKS_SHOWN` fighters; returns the page clicked.

@@ -216,6 +216,42 @@ pub struct Colosseum {
     pub champion: Option<Contender>,
     /// Week the title was last won or defended.
     pub title_since: u64,
+    /// Every champion since the opening, oldest first, the current one last.
+    #[serde(default)]
+    pub reigns: Vec<Reign>,
+}
+
+/// A champion's time with the title.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub struct Reign {
+    /// The champion, followed to another club or the market as its Elo is.
+    pub holder: Contender,
+    /// The champion when it took the title, for the club it held it for.
+    pub won_as: Contender,
+    /// Week it took the title.
+    pub from: u64,
+    /// Title fights it survived.
+    pub defenses: u32,
+    /// How and when it lost the title; `None` while it holds it.
+    pub end: Option<ReignEnd>,
+}
+
+/// How a reign ended, in `week`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ReignEnd {
+    pub week: u64,
+    pub how: TitleLoss,
+}
+
+/// How a champion lost the title.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub enum TitleLoss {
+    /// Beaten in a title fight.
+    Beaten,
+    /// Did not defend in time.
+    Stripped,
+    /// Died, retired or left.
+    Vacated,
 }
 
 /// What happened to a title in a week.
@@ -257,11 +293,30 @@ impl Colosseum {
                 elo: rules.elo_start,
             })
             .collect();
-        Self {
+        let mut colosseum = Self {
             ranking,
-            champion,
+            champion: None,
             title_since: week,
+            reigns: Vec::new(),
+        };
+        colosseum.crown(champion, week, TitleLoss::Vacated);
+        colosseum
+    }
+
+    /// Gives the title to `to` in `week`, ending the current reign, if any, `how`.
+    fn crown(&mut self, to: Option<Contender>, week: u64, how: TitleLoss) {
+        if let Some(reign) = self.reigns.last_mut().filter(|r| r.end.is_none()) {
+            reign.end = Some(ReignEnd { week, how });
         }
+        self.champion = to;
+        self.title_since = week;
+        self.reigns.extend(to.map(|holder| Reign {
+            holder,
+            won_as: holder,
+            from: week,
+            defenses: 0,
+            end: None,
+        }));
     }
 
     /// The ranking without those who no longer fight.
@@ -391,6 +446,11 @@ impl Colosseum {
         if self.champion == Some(from) {
             self.champion = Some(to);
         }
+        for reign in &mut self.reigns {
+            if reign.holder == from {
+                reign.holder = to;
+            }
+        }
     }
 
     /// Gives a title whose holder no longer fights to the best ranked still fighting,
@@ -403,8 +463,7 @@ impl Colosseum {
         if to.is_none() && self.champion.is_none() {
             return None;
         }
-        self.champion = to;
-        self.title_since = week;
+        self.crown(to, week, TitleLoss::Vacated);
         Some(TitleNews::Vacated { to })
     }
 
@@ -421,8 +480,7 @@ impl Colosseum {
             .active_ranking(rosters)
             .map(|r| r.contender)
             .find(|&c| c != former);
-        self.champion = to;
-        self.title_since = week;
+        self.crown(to, week, TitleLoss::Stripped);
         Some(TitleNews::Stripped { former, to })
     }
 
@@ -433,7 +491,7 @@ impl Colosseum {
     }
 
     /// Records a title fight in `week`, `result` being the champion's: both Elo move,
-    /// the challenger takes the title by winning, and the title counts as defended.
+    /// the challenger takes the title by winning, else the title counts as defended.
     pub fn record_title_fight(
         &mut self,
         champion: Contender,
@@ -443,10 +501,15 @@ impl Colosseum {
         rules: &WorldRules,
     ) {
         self.record(champion, challenger, result, rules);
-        if !title_kept(result) {
-            self.champion = Some(challenger);
+        if title_kept(result) {
+            let reign = self.reigns.last_mut();
+            if let Some(reign) = reign.filter(|r| r.end.is_none() && r.holder == champion) {
+                reign.defenses += 1;
+            }
+            self.title_since = week;
+        } else {
+            self.crown(Some(challenger), week, TitleLoss::Beaten);
         }
-        self.title_since = week;
     }
 
     /// Elo of `contender`, the starting one for a first fight here.
@@ -955,5 +1018,39 @@ mod tests {
         assert_eq!(rome.ranking[1].contender, rival(5));
         assert_eq!(news, Some(TitleNews::Vacated { to }));
         assert_eq!((rome.champion, rome.title_since), (to, 3));
+    }
+
+    #[test]
+    fn the_honours_keep_every_reign_and_how_it_ended() {
+        let data = data();
+        let rules = &data.world;
+        let world = world(&data);
+        let mut rome = world.rome.clone();
+        let first = rome.champion.unwrap();
+        let club = Contender::Club(0);
+        rome.record_title_fight(first, club, FightResult::Won, 3, rules);
+        rome.record_title_fight(first, club, FightResult::Lost, 5, rules);
+        // The club's champion goes to the market, which does not keep it: the title is
+        // vacated, its reign still won for the club.
+        let gone = Contender::FreeAgent(0);
+        rome.transfer(club, gone);
+        rome.vacate_if_gone(7, world.rosters());
+        let next = rome.champion.unwrap();
+        let reign = |holder, won_as, from, defenses, end| Reign {
+            holder,
+            won_as,
+            from,
+            defenses,
+            end,
+        };
+        let ended = |week, how| Some(ReignEnd { week, how });
+        assert_eq!(
+            rome.reigns,
+            [
+                reign(first, first, 1, 1, ended(5, TitleLoss::Beaten)),
+                reign(gone, club, 5, 0, ended(7, TitleLoss::Vacated)),
+                reign(next, next, 7, 0, None),
+            ]
+        );
     }
 }
