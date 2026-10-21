@@ -111,6 +111,8 @@ pub struct ClubScreen {
     offer_draft: Option<(RivalId, u32)>,
     /// The continent the colosseums view shows, the club's at first.
     shown_continent: Continent,
+    /// The prestige of the colosseums the colosseums view shows; `None` shows them all.
+    shown_prestige: Option<u32>,
     /// Where a new game starts.
     new_continent: Continent,
     bindings: Bindings<Action>,
@@ -151,6 +153,7 @@ impl ClubScreen {
             decisions: state.suggested_decisions(&data),
             histories: vec![Vec::new(); state.fighters.len()],
             shown_continent: state.continent,
+            shown_prestige: None,
             new_continent: state.continent,
             data,
             state,
@@ -486,6 +489,16 @@ impl ClubScreen {
                     challenger_text(ch, &self.state, &self.data),
                     refusal.refusal_fame,
                     refusal.refusal_elo
+                ));
+            }
+        }
+        for offer in &self.state.sale_offers {
+            if let Some(f) = self.state.fighters.get(offer.fighter) {
+                alerts.push(format!(
+                    "{} veut acheter {} pour {} (à accepter au marché cette semaine)",
+                    club_name(offer.rival, &self.state),
+                    fighter_name(offer.fighter, f, &self.data),
+                    offer.price
                 ));
             }
         }
@@ -1386,6 +1399,10 @@ mod tests {
         let offer = screen.state.sale_offers[0];
         let club = club_name(offer.rival, &screen.state).to_owned();
         let name = fighter_name(0, &screen.state.fighters[0], &data);
+        assert!(screen.alerts().contains(&format!(
+            "{club} veut acheter {name} pour {} (à accepter au marché cette semaine)",
+            offer.price
+        )));
         screen.decisions.moves = vec![Move::AcceptOffer {
             fighter: 0,
             rival: offer.rival,

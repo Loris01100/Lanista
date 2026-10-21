@@ -241,7 +241,7 @@ pub(super) fn observed_text(fighter: &CareerFighter) -> String {
 
 /// The value the market shows of a rival fighter.
 // ponytail: the value rounded, until the recruiter estimates it.
-fn estimate(fighter: &CareerFighter, data: &DesignData) -> u32 {
+pub(super) fn estimate(fighter: &CareerFighter, data: &DesignData) -> u32 {
     value(fighter, &data.economy.market) / 10 * 10
 }
 
@@ -397,7 +397,8 @@ fn rival_grid(
 }
 
 /// The club's fighters in activity, each to put on the transfer list or take off it,
-/// with the rival clubs' offers to accept, or to release.
+/// to make not for sale or for sale again, with the rival clubs' offers to accept, or
+/// to release.
 fn sale_grid(ui: &mut egui::Ui, state: &GameState, moves: &mut Vec<Move>, data: &DesignData) {
     ui.add_space(6.0);
     ui.strong("Vos combattants");
@@ -409,9 +410,13 @@ fn sale_grid(ui: &mut egui::Ui, state: &GameState, moves: &mut Vec<Move>, data: 
             ui.label(fighter_name(i, f, data));
             if state.transfer_list.contains(&i) {
                 toggle(ui, moves, Move::Unlist(i), "Retirer de la vente", true);
+            } else if state.kept.contains(&i) {
+                toggle(ui, moves, Move::Unkeep(i), "Rendre vendable", true);
             } else if let Some(text) = unsellable_text(f, state, data) {
                 ui.label(text);
             } else {
+                let keep = Move::Keep(i);
+                toggle(ui, moves, keep, "Invendable", state.may_move(keep, data));
                 let list = Move::List(i);
                 toggle(
                     ui,

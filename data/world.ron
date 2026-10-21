@@ -23,17 +23,18 @@
     // `challenge_percent` chances; the
     // club accepts the player's challenges when Elo gives it `accept_percent` chances.
     // On the market, it asks `sell_percent` of a fighter's value and offers `buy_percent`
-    // for the player's, if it keeps `care_reserve` and has a place. Its trainer, then
-    // its doctor (a poor club's recruiter first), are the best whose salaries it could
+    // for the player's listed fighters, if it keeps `care_reserve` and has a place, and
+    // `unsolicited_percent` of that price for one not for sale, the more it gambles. Its
+    // trainer, then its doctor (a poor club's recruiter first), are the best whose salaries it could
     // pay `staff_weeks` weeks from its money, kept while it could pay half as many
     // (data/economy.ron). What lowers its relation with the player's club weighs
     // `anger_percent`, a deal concluded with it `deal_percent` (`relations`).
     profiles: (
-        cautious: (rest_form: 70, care_reserve: 0, fight_percent: 45, accept_percent: 50, challenge_percent: 10, sell_percent: 150, buy_percent: 60, staff_weeks: 20, anger_percent: 100, deal_percent: 100),
+        cautious: (rest_form: 70, care_reserve: 0, fight_percent: 45, accept_percent: 50, challenge_percent: 10, sell_percent: 150, buy_percent: 60, unsolicited_percent: 130, staff_weeks: 20, anger_percent: 100, deal_percent: 100),
         // Quick to take offence.
-        aggressive: (rest_form: 35, care_reserve: 100, fight_percent: 20, accept_percent: 20, challenge_percent: 40, sell_percent: 130, buy_percent: 80, staff_weeks: 10, anger_percent: 150, deal_percent: 100),
+        aggressive: (rest_form: 35, care_reserve: 100, fight_percent: 20, accept_percent: 20, challenge_percent: 40, sell_percent: 130, buy_percent: 80, unsolicited_percent: 160, staff_weeks: 10, anger_percent: 150, deal_percent: 100),
         // Keeps its money, sells cheap and buys dear; forgives when the price is right.
-        merchant: (rest_form: 50, care_reserve: 300, fight_percent: 35, accept_percent: 35, challenge_percent: 20, sell_percent: 100, buy_percent: 90, staff_weeks: 40, anger_percent: 100, deal_percent: 300),
+        merchant: (rest_form: 50, care_reserve: 300, fight_percent: 35, accept_percent: 35, challenge_percent: 20, sell_percent: 100, buy_percent: 90, unsolicited_percent: 120, staff_weeks: 40, anger_percent: 100, deal_percent: 300),
     ),
     // Free agents choose their fights by this profile's thresholds, to show their worth,
     // as managers without money: only in colosseums free to enter, never trained nor

@@ -72,7 +72,9 @@ pub struct GameState {
     /// The club's fighters on the transfer list, by index: they fight on for the club
     /// until the player accepts an offer.
     pub transfer_list: Vec<usize>,
-    /// The rival clubs' offers for them, open this week.
+    /// The club's fighters not for sale, by index: no rival club offers for them.
+    pub kept: Vec<usize>,
+    /// The rival clubs' offers for the club's fighters, open this week.
     pub sale_offers: Vec<SaleOffer>,
     /// The price a rival club asked instead of the player's last offer, open this week.
     pub counter_offer: Option<(RivalId, u32)>,
@@ -115,6 +117,7 @@ impl GameState {
             challenges: Vec::new(),
             free_agents: Vec::new(),
             transfer_list: Vec::new(),
+            kept: Vec::new(),
             sale_offers: Vec::new(),
             counter_offer: None,
             staff: Staff::default(),
@@ -578,8 +581,11 @@ impl GameState {
                 ours(i)
                     && self.may_be_sold(&self.fighters[i], data)
                     && !self.transfer_list.contains(&i)
+                    && !self.kept.contains(&i)
             }
             Move::Unlist(i) => self.transfer_list.contains(&i),
+            Move::Keep(i) => ours(i) && !self.kept.contains(&i) && !self.transfer_list.contains(&i),
+            Move::Unkeep(i) => self.kept.contains(&i),
             Move::AcceptOffer { fighter, rival } => {
                 ours(fighter)
                     && self.rival_has_place(rival, data)
@@ -1881,6 +1887,35 @@ mod tests {
                 .iter()
                 .any(|f| f.potential == sold.potential)
         );
+    }
+
+    #[test]
+    fn a_club_offers_unasked_for_a_fighter_not_kept() {
+        let mut data = data();
+        let market = &mut data.economy.market;
+        market.unsolicited_percent = 100;
+        market.unsolicited_max_percent = 100;
+        let mut state = game(7, &data);
+        next_week(&mut state, &Decisions::default(), &data);
+        // Not listed: a single club offers, its gamble on top of its price.
+        let [offer] = state.sale_offers[..] else {
+            panic!("{:?}", state.sale_offers);
+        };
+        let profile = state.rivals[offer.rival].rules(&data);
+        let worth = value(&state.fighters[0], &data.economy.market);
+        let price = percent_of(
+            percent_of(worth, profile.buy_percent),
+            profile.unsolicited_percent,
+        );
+        assert_eq!(offer.price, price);
+        // Kept: no offer, and it may not be listed until for sale again.
+        next_week(&mut state, &moves(&[Move::Keep(0)]), &data);
+        assert_eq!(state.kept, [0]);
+        assert_eq!(state.sale_offers, []);
+        assert!(!state.may_move(Move::List(0), &data));
+        next_week(&mut state, &moves(&[Move::Unkeep(0)]), &data);
+        assert_eq!(state.kept, Vec::<usize>::new());
+        assert_eq!(state.sale_offers.len(), 1);
     }
 
     #[test]

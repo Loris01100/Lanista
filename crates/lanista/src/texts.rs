@@ -168,6 +168,8 @@ pub fn move_text(m: Move, state: &GameState, data: &DesignData) -> String {
         Move::Release(i) => format!("Libérer {}", club(i)),
         Move::List(i) => format!("Mettre en vente {}", club(i)),
         Move::Unlist(i) => format!("Retirer {} de la vente", club(i)),
+        Move::Keep(i) => format!("Rendre {} invendable", club(i)),
+        Move::Unkeep(i) => format!("Rendre {} vendable", club(i)),
         Move::AcceptOffer { fighter, rival } => {
             let price = state
                 .sale_offers

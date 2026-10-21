@@ -3,6 +3,8 @@
 
 use std::cmp::Reverse;
 
+use rand::RngExt;
+
 use crate::colosseum::Contender;
 use crate::design_data::DesignData;
 use crate::economy::{Flow, Transaction, Wealth};
@@ -36,7 +38,7 @@ pub(super) fn market_moves(
     let order = |m: &Move| match *m {
         Move::AcceptOffer { .. } => 0,
         Move::Release(_) => 1,
-        Move::List(_) | Move::Unlist(_) => 2,
+        Move::List(_) | Move::Unlist(_) | Move::Keep(_) | Move::Unkeep(_) => 2,
         Move::Sign(_) => 3,
         Move::Observe(_) | Move::Offer(..) => u8::MAX,
     };
@@ -86,6 +88,8 @@ pub(super) fn market_moves(
             }
             Move::List(i) => state.transfer_list.push(i),
             Move::Unlist(i) => state.transfer_list.retain(|&l| l != i),
+            Move::Keep(i) => state.kept.push(i),
+            Move::Unkeep(i) => state.kept.retain(|&k| k != i),
             Move::Sign(a) => {
                 let mut agent = state.free_agents[a].clone();
                 agent.joined = Some(state.week);
@@ -98,9 +102,9 @@ pub(super) fn market_moves(
             Move::Observe(_) | Move::Offer(..) => {}
         }
     }
-    state
-        .transfer_list
-        .retain(|&i| state.fighters[i].status == Status::Active);
+    let active = |i: &usize| state.fighters[*i].status == Status::Active;
+    state.transfer_list.retain(active);
+    state.kept.retain(active);
     news
 }
 
@@ -181,7 +185,7 @@ fn negotiate(
 /// arrive. Each rich club buys a better fighter (`rich_purchases`), then each club
 /// below `roster.wanted` fighters recruits (see `rival_signings`); then each club with a place,
 /// keeping its `care_reserve`, offers its `buy_percent` of their value for the player's
-/// listed fighters.
+/// listed fighters (see `sale_offers`).
 pub(super) fn rival_market(state: &mut GameState, data: &DesignData) {
     let market = &data.economy.market;
     if off_season_starts(state, data) {
@@ -218,31 +222,56 @@ pub(super) fn rival_market(state: &mut GameState, data: &DesignData) {
     // The rich buy first, so that those who sold to them recruit the same week.
     rich_purchases(state, data);
     rival_signings(state, data);
+    sale_offers(state, data);
+}
+
+/// The rival clubs' offers for the player's fighters this week, from each club that
+/// trades with the player, has a place and keeps its `care_reserve` after paying: for
+/// a listed fighter, every such club offers its `buy_percent` of its value; for one
+/// neither listed nor kept, with a chance growing with its value
+/// (`MarketRules::unsolicited_percent`), one such club drawn offers its
+/// `unsolicited_percent` of that. Both at its standing's `price_percent`.
+fn sale_offers(state: &mut GameState, data: &DesignData) {
+    let market = &data.economy.market;
     state.sale_offers.clear();
-    for &i in &state.transfer_list {
-        let Some(fighter) = state.fighters.get(i).filter(|f| f.status == Status::Active) else {
+    for i in 0..state.fighters.len() {
+        let fighter = &state.fighters[i];
+        let listed = state.transfer_list.contains(&i);
+        if fighter.status != Status::Active
+            || state.kept.contains(&i)
+            || !state.may_be_sold(fighter, data)
+        {
             continue;
-        };
+        }
         let worth = value(fighter, market);
-        for (k, rival) in state.rivals.iter().enumerate() {
-            if !rival.is_open() {
-                continue;
-            }
-            let profile = rival.rules(data);
-            let standing = state.standing_rules(k, data);
-            if !standing.deals {
-                continue;
-            }
-            let price = percent_of(worth, profile.buy_percent);
-            let price = u32::try_from(u64::from(price) * 100 / u64::from(standing.price_percent))
-                .unwrap_or(u32::MAX);
-            let place = u32::try_from(rival.active()).is_ok_and(|n| n < data.world.roster.max);
-            if place && rival.money - i64::from(price) >= i64::from(profile.care_reserve) {
-                state.sale_offers.push(SaleOffer {
+        let offers: Vec<SaleOffer> = (0..state.rivals.len())
+            .filter_map(|k| {
+                let rival = &state.rivals[k];
+                let profile = rival.rules(data);
+                let standing = state.standing_rules(k, data);
+                let mut price = percent_of(worth, profile.buy_percent);
+                if !listed {
+                    price = percent_of(price, profile.unsolicited_percent);
+                }
+                let price =
+                    u32::try_from(u64::from(price) * 100 / u64::from(standing.price_percent))
+                        .unwrap_or(u32::MAX);
+                let pays = rival.money - i64::from(price) >= i64::from(profile.care_reserve);
+                (standing.deals && state.rival_has_place(k, data) && pays).then_some(SaleOffer {
                     fighter: i,
                     rival: k,
                     price,
-                });
+                })
+            })
+            .collect();
+        if listed {
+            state.sale_offers.extend(offers);
+        } else if !offers.is_empty() {
+            let chance = (market.unsolicited_percent + worth / market.unsolicited_value.max(1))
+                .min(market.unsolicited_max_percent);
+            if state.rng.random_range(0..100) < chance {
+                let k = state.rng.random_range(0..offers.len());
+                state.sale_offers.push(offers[k]);
             }
         }
     }

@@ -6,6 +6,7 @@ use lanista_core::market::Target;
 use lanista_core::rivals::RivalId;
 use reesch::egui;
 
+use super::market::estimate;
 use super::{ClubScreen, RANKS_SHOWN, View};
 use crate::texts::{
     arena_effect, arena_name, club_name, colosseum_name, condition_text, contender_name,
@@ -20,13 +21,25 @@ impl ClubScreen {
         let mut goto = self.continent_clubs(ui);
         let shown = self.shown_continent;
         ui.heading(format!("Colisées ({})", continent_name(shown)));
+        ui.horizontal(|ui| {
+            ui.selectable_value(&mut self.shown_prestige, None, "Tous");
+            for (prestige, name) in PRESTIGES {
+                ui.selectable_value(&mut self.shown_prestige, Some(prestige), name);
+            }
+        });
+        let prestige = self.shown_prestige;
         let data = &self.data;
         let state = &self.state;
         let colosseums: Vec<_> = (0..)
             .map(ColosseumId)
             .zip(state.colosseums.iter().zip(&data.world.colosseums))
-            .filter(|(_, (_, rules))| rules.continent == shown)
+            .filter(|(_, (_, rules))| {
+                rules.continent == shown && prestige.is_none_or(|p| rules.prestige == p)
+            })
             .collect();
+        if colosseums.is_empty() {
+            ui.label("Aucun colisée de ce niveau sur ce continent pour l'instant");
+        }
         ui.columns(colosseums.len().max(1), |columns| {
             for ((id, (colosseum, rules)), ui) in colosseums.into_iter().zip(columns) {
                 let n = id.0;
@@ -211,7 +224,7 @@ impl ClubScreen {
     /// A rival club: when it closed, profile, wealth (its money stays hidden), culture,
     /// continent, staff, the titles it holds, its relation with the player's club and
     /// why, then its fighters in activity with their standing in each colosseum of its
-    /// continent.
+    /// continent and their estimated value, each to negotiate for on the market.
     pub(super) fn rival_club(&mut self, ui: &mut egui::Ui, club: usize) {
         self.back_button(ui);
         let data = &self.data;
@@ -258,6 +271,7 @@ impl ClubScreen {
             ));
         }
         let mut goto = None;
+        let mut draft = None;
         egui::ScrollArea::vertical().show(ui, |ui| {
             egui::Grid::new(("rival club", club))
                 .striped(true)
@@ -271,6 +285,7 @@ impl ClubScreen {
                     for &c in &home {
                         ui.strong(&data.world.colosseums[c].name);
                     }
+                    ui.strong("Valeur estimée");
                     ui.end_row();
                     for (fighter, f) in rival.fighters.iter().enumerate() {
                         if f.status != Status::Active {
@@ -288,15 +303,26 @@ impl ClubScreen {
                         for &c in &home {
                             ui.label(&standings[c]);
                         }
+                        let estimate = estimate(f, data);
+                        ui.label(format!("≈ {estimate}"));
+                        if ui.button("Négocier").clicked() {
+                            draft = Some((id, estimate));
+                        }
                         ui.end_row();
                     }
                 });
         });
-        if let Some(view) = goto {
+        if let Some(draft) = draft {
+            self.offer_draft = Some(draft);
+            self.view = View::Market;
+        } else if let Some(view) = goto {
             self.go_to(view);
         }
     }
 }
+
+/// The colosseums' levels, by prestige: major, middling, weak.
+const PRESTIGES: [(u32, &str); 3] = [(3, "Majeurs"), (2, "T1"), (1, "T2")];
 
 /// A fighter's standing in a colosseum where it is not among the ranks shown.
 pub(super) const NOT_RANKED: &str = "non classé";

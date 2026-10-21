@@ -47,6 +47,9 @@ pub struct ProfileRules {
     /// percent of its value (`market::value`).
     pub sell_percent: u32,
     pub buy_percent: u32,
+    /// Its offer for one of the player's fighters not for sale, in percent of its
+    /// `buy_percent` price: how much it gambles to tempt the player.
+    pub unsolicited_percent: u32,
     /// Each post of the staff (`staff_posts`) is held at the best level whose salary,
     /// with those of the posts before it, the club could pay this many weeks from its
     /// money; someone already there stays while it could pay half as many.

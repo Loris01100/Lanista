@@ -45,6 +45,12 @@ pub struct MarketRules {
     /// A fighter's chance of refusing to join the player's club, before its fame, the
     /// club's and its caution.
     pub refusal_percent: u32,
+    /// Each week, the chance a rival club offers unasked for one of the player's
+    /// fighters neither listed nor kept: this, plus a point per `unsolicited_value` of
+    /// its value, at most `unsolicited_max_percent`.
+    pub unsolicited_percent: u32,
+    pub unsolicited_value: u32,
+    pub unsolicited_max_percent: u32,
     /// Stats of a fighter out of the club seen without observing it, and how many more
     /// each week of observation reveals; once all are seen, a further week narrows
     /// their ranges from `range_percent` to `narrowed_range_percent` of the stat.
@@ -74,6 +80,10 @@ pub enum Move {
     /// rival clubs make offers for it while it fights on for the club.
     List(usize),
     Unlist(usize),
+    /// Make the club's fighter at this index not for sale, or for sale again: no rival
+    /// club offers for it unasked (see `MarketRules::unsolicited_percent`).
+    Keep(usize),
+    Unkeep(usize),
     /// Accept a rival club's offer (`SaleOffer`) for the club's fighter.
     AcceptOffer {
         fighter: usize,
@@ -84,7 +94,7 @@ pub enum Move {
     Offer(RivalId, u32),
 }
 
-/// A rival club's offer for one of the player's listed fighters, open for a week.
+/// A rival club's offer for one of the player's fighters, listed or not, open for a week.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub struct SaleOffer {
     /// The club's fighter at this index.

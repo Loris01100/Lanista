@@ -93,6 +93,12 @@
         // A fighter's chance of refusing to join, plus half its fame above the club's
         // best, plus a fifth of its caution above 50.
         refusal_percent: 20,
+        // Each week, the chance a rival club offers unasked for one of the player's
+        // fighters neither listed nor kept: so much, plus a point per so much of its
+        // value, at most so much.
+        unsolicited_percent: 2,
+        unsolicited_value: 200,
+        unsolicited_max_percent: 20,
         // Stats of fighters out of the club: so many seen at first, so many more each
         // week of observation, then a further week narrows their ranges (in percent of
         // the stat).
