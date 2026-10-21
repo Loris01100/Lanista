@@ -689,100 +689,119 @@ fn cast_order(arena: &mut Arena) -> Vec<usize> {
 /// down for `StunRules::ticks`.
 fn cast_spells(arena: &mut Arena) {
     for i in cast_order(arena) {
-        let caster = &arena.fighters[i];
-        let Action::Cast { spell, target } = caster.action else {
-            continue;
-        };
-        let Some(t) = usize::try_from(target.0).ok() else {
-            continue;
-        };
-        let Some(defender) = arena.fighters.get(t) else {
-            continue;
-        };
-        if !caster.is_standing() || !defender.is_standing() || caster.id == target {
-            continue;
+        if let Some((spell, target, t)) = ready_cast(arena, i) {
+            cast(arena, i, spell, (target, t));
         }
-        if arena.allied(caster.id, target) {
-            continue;
-        }
-        if !caster.can_cast(spell) || edge_distance(caster, defender) > caster.spells[spell].reach {
-            continue;
-        }
-        let ranged = caster.spells[spell].range == Range::Ranged;
-        if ranged && shot_blocked(&arena.pillars, caster.position, defender.position) {
-            continue;
-        }
-        let chance = hit_percent(&caster.stats, &defender.stats, &arena.accuracy);
-        let missed = chance < 100 && arena.rng.random_range(0..100) >= chance;
-        let amount = if missed {
-            0
-        } else {
-            spell_damage(&caster.stats, &defender.stats, &caster.spells[spell])
-        };
-        let kind = caster.spells[spell].damage_kind;
-        let caster = &mut arena.fighters[i];
-        caster.spend(spell);
-        caster.action = Action::Wait;
-        let caster = caster.id;
-        let defender = &mut arena.fighters[t];
-        let hp_before = defender.hp;
-        defender.take_damage(amount);
-        let event = |kind| Event {
-            tick: arena.tick,
-            kind,
-        };
-        let cast = event(EventKind::Cast {
+    }
+}
+
+/// The spell, target and target index of fighter `i`'s cast, if it may land: both
+/// standing and not allied, the spell ready, affordable and in reach, a shot's line clear.
+fn ready_cast(arena: &Arena, i: usize) -> Option<(usize, FighterId, usize)> {
+    let caster = &arena.fighters[i];
+    let Action::Cast { spell, target } = caster.action else {
+        return None;
+    };
+    let t = usize::try_from(target.0).ok()?;
+    let defender = arena.fighters.get(t)?;
+    let ready = caster.is_standing()
+        && defender.is_standing()
+        && caster.id != target
+        && !arena.allied(caster.id, target)
+        && caster.can_cast(spell)
+        && edge_distance(caster, defender) <= caster.spells[spell].reach
+        && (caster.spells[spell].range != Range::Ranged
+            || !shot_blocked(&arena.pillars, caster.position, defender.position));
+    ready.then_some((spell, target, t))
+}
+
+/// Fighter `i` casts `spell` on the target: the hit is drawn, the damage dealt and logged,
+/// then its effects on the target follow (`strike`).
+fn cast(arena: &mut Arena, i: usize, spell: usize, (target, t): (FighterId, usize)) {
+    let (caster, defender) = (&arena.fighters[i], &arena.fighters[t]);
+    let chance = hit_percent(&caster.stats, &defender.stats, &arena.accuracy);
+    let missed = chance < 100 && arena.rng.random_range(0..100) >= chance;
+    let amount = if missed {
+        0
+    } else {
+        spell_damage(&caster.stats, &defender.stats, &caster.spells[spell])
+    };
+    let kind = caster.spells[spell].damage_kind;
+    let caster = &mut arena.fighters[i];
+    caster.spend(spell);
+    caster.action = Action::Wait;
+    let caster = caster.id;
+    let defender = &mut arena.fighters[t];
+    let hp_before = defender.hp;
+    defender.take_damage(amount);
+    let damage = hp_before - defender.hp;
+    arena.log.push(Event {
+        tick: arena.tick,
+        kind: EventKind::Cast {
             caster,
             target,
             spell,
-            damage: hp_before - defender.hp,
+            damage,
             missed,
+        },
+    });
+    let cuts = !missed && kind == DamageKind::Cutting;
+    strike(arena, (target, t), damage, kind, cuts);
+    let caster = &mut arena.fighters[i];
+    caster.round_damage = caster.round_damage.saturating_add(damage);
+}
+
+/// The effects of a hit on the target: a cut may sever its head, killing it, or a limb,
+/// taking it out of the fight alive (`severed_part`); it dies at 0 HP, gives up at its
+/// surrender threshold, or else may be stunned with `stun_chance`, drawn only above 0.
+fn strike(
+    arena: &mut Arena,
+    (target, t): (FighterId, usize),
+    damage: u32,
+    kind: DamageKind,
+    cuts: bool,
+) {
+    let defender = &mut arena.fighters[t];
+    let severed = if cuts {
+        severed_part(&mut arena.rng, damage, defender, &arena.cut)
+    } else {
+        None
+    };
+    if let Some(part) = severed {
+        defender.severed = Some(part);
+        defender.action = Action::Wait;
+        if part == Location::Head {
+            defender.hp = 0;
+            defender.surrendered = false;
+        }
+    }
+    let died = !defender.is_alive();
+    let surrendered = defender.surrendered;
+    let chance = if died || surrendered || severed.is_some() {
+        0
+    } else {
+        stun_chance(damage, kind, defender, &arena.stun)
+    };
+    let stunned = chance > 0 && arena.rng.random_range(0..10_000) < chance;
+    if stunned {
+        defender.stunned_ticks = arena.stun.ticks.max(1);
+        defender.stuns += 1;
+        defender.action = Action::Wait;
+    }
+    let tick = arena.tick;
+    let mut log = |kind| arena.log.push(Event { tick, kind });
+    if let Some(part) = severed {
+        log(EventKind::Sever {
+            fighter: target,
+            part,
         });
-        let damage = hp_before - defender.hp;
-        let severed = if kind == DamageKind::Cutting && !missed {
-            severed_part(&mut arena.rng, damage, defender, &arena.cut)
-        } else {
-            None
-        };
-        if let Some(part) = severed {
-            defender.severed = Some(part);
-            defender.action = Action::Wait;
-            if part == Location::Head {
-                defender.hp = 0;
-                defender.surrendered = false;
-            }
-        }
-        let died = !defender.is_alive();
-        let surrendered = defender.surrendered;
-        let chance = if died || surrendered || severed.is_some() {
-            0
-        } else {
-            stun_chance(damage, kind, defender, &arena.stun)
-        };
-        let stunned = chance > 0 && arena.rng.random_range(0..10_000) < chance;
-        if stunned {
-            defender.stunned_ticks = arena.stun.ticks.max(1);
-            defender.stuns += 1;
-            defender.action = Action::Wait;
-        }
-        arena.log.push(cast);
-        if let Some(part) = severed {
-            arena.log.push(event(EventKind::Sever {
-                fighter: target,
-                part,
-            }));
-        }
-        if died {
-            arena.log.push(event(EventKind::Death { fighter: target }));
-        } else if surrendered {
-            arena
-                .log
-                .push(event(EventKind::Surrender { fighter: target }));
-        } else if stunned {
-            arena.log.push(event(EventKind::Stun { fighter: target }));
-        }
-        let caster = &mut arena.fighters[i];
-        caster.round_damage = caster.round_damage.saturating_add(damage);
+    }
+    if died {
+        log(EventKind::Death { fighter: target });
+    } else if surrendered {
+        log(EventKind::Surrender { fighter: target });
+    } else if stunned {
+        log(EventKind::Stun { fighter: target });
     }
 }
 
