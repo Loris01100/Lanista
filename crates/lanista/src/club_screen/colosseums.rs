@@ -1,9 +1,11 @@
 //! The colosseums view and the page of a rival club.
 
-use lanista_core::colosseum::{ColosseumId, Contender, Continent};
+use lanista_core::colosseum::{Colosseum, ColosseumData, ColosseumId, Contender, Continent};
+use lanista_core::design_data::DesignData;
 use lanista_core::fighter::career::Status;
 use lanista_core::market::Target;
 use lanista_core::rivals::RivalId;
+use lanista_core::state::GameState;
 use reesch::egui;
 
 use super::market::estimate;
@@ -42,77 +44,7 @@ impl ClubScreen {
         }
         ui.columns(colosseums.len().max(1), |columns| {
             for ((id, (colosseum, rules)), ui) in colosseums.into_iter().zip(columns) {
-                let n = id.0;
-                ui.strong(&rules.name);
-                ui.label(format!(
-                    "Arène : {}, prestige {} / 5",
-                    arena_name(rules.arena),
-                    rules.prestige
-                ))
-                .on_hover_text(arena_effect(rules.arena));
-                let fee = state.entry_fee(id, data).unwrap_or(0);
-                let travel = if fee > rules.purses.entry_fee {
-                    " (voyage compris)"
-                } else {
-                    ""
-                };
-                ui.label(format!(
-                    "Inscription {fee}{travel}, prime de victoire {}, bonus champion {}",
-                    rules.purses.win_prize, rules.purses.champion_bonus
-                ));
-                ui.horizontal(|ui| {
-                    ui.colored_label(egui::Color32::GOLD, "Champion :");
-                    match colosseum.champion {
-                        Some(c) => {
-                            if ui.link(contender_name(c, state, data)).clicked() {
-                                goto = Some(contender_view(c));
-                            }
-                        }
-                        None => {
-                            ui.label("aucun");
-                        }
-                    }
-                });
-                ui.label(format!(
-                    "Titre défendu ou pris en semaine {}, à défendre au plus tard en semaine {}",
-                    colosseum.title_since,
-                    colosseum.defense_deadline(&data.world)
-                ));
-                let ranked = colosseum.active_ranking(state.rosters());
-                egui::ScrollArea::vertical()
-                    .id_salt(("ranking", n))
-                    .show(ui, |ui| {
-                        egui::Grid::new(("ranking", n))
-                            .striped(true)
-                            .show(ui, |ui| {
-                                for title in ["Rang", "Combattant", "Club", "Elo"] {
-                                    ui.strong(title);
-                                }
-                                ui.end_row();
-                                for (rank, rating) in ranked.take(RANKS_SHOWN).enumerate() {
-                                    let c = rating.contender;
-                                    ui.label((rank + 1).to_string());
-                                    if ui.link(contender_name(c, state, data)).clicked() {
-                                        goto = Some(contender_view(c));
-                                    }
-                                    match c {
-                                        Contender::Rival(id) => {
-                                            if ui.link(club_name(id.club, state)).clicked() {
-                                                goto = Some(View::Rival(id.club));
-                                            }
-                                        }
-                                        Contender::FreeAgent(_) => {
-                                            ui.label("sans club");
-                                        }
-                                        Contender::Club(_) => {
-                                            ui.label("");
-                                        }
-                                    }
-                                    ui.label(rating.elo.to_string());
-                                    ui.end_row();
-                                }
-                            });
-                    });
+                goto = colosseum_column(ui, id, colosseum, rules, state, data).or(goto);
             }
         });
         if let Some(view) = goto {
@@ -329,6 +261,102 @@ pub(super) const NOT_RANKED: &str = "non classé";
 
 /// The page of a ranked fighter: the club's sheet, or what the club sees of an
 /// outsider.
+/// One colosseum's column: its arena, purses, champion and ranking; returns the page
+/// clicked.
+fn colosseum_column(
+    ui: &mut egui::Ui,
+    id: ColosseumId,
+    colosseum: &Colosseum,
+    rules: &ColosseumData,
+    state: &GameState,
+    data: &DesignData,
+) -> Option<View> {
+    let mut goto = None;
+    ui.strong(&rules.name);
+    ui.label(format!(
+        "Arène : {}, prestige {} / 5",
+        arena_name(rules.arena),
+        rules.prestige
+    ))
+    .on_hover_text(arena_effect(rules.arena));
+    let fee = state.entry_fee(id, data).unwrap_or(0);
+    let travel = if fee > rules.purses.entry_fee {
+        " (voyage compris)"
+    } else {
+        ""
+    };
+    ui.label(format!(
+        "Inscription {fee}{travel}, prime de victoire {}, bonus champion {}",
+        rules.purses.win_prize, rules.purses.champion_bonus
+    ));
+    ui.horizontal(|ui| {
+        ui.colored_label(egui::Color32::GOLD, "Champion :");
+        match colosseum.champion {
+            Some(c) => {
+                if ui.link(contender_name(c, state, data)).clicked() {
+                    goto = Some(contender_view(c));
+                }
+            }
+            None => {
+                ui.label("aucun");
+            }
+        }
+    });
+    ui.label(format!(
+        "Titre défendu ou pris en semaine {}, à défendre au plus tard en semaine {}",
+        colosseum.title_since,
+        colosseum.defense_deadline(&data.world)
+    ));
+    ranking(ui, id, colosseum, state, data).or(goto)
+}
+
+/// A colosseum's first `RANKS_SHOWN` fighters; returns the page clicked.
+fn ranking(
+    ui: &mut egui::Ui,
+    id: ColosseumId,
+    colosseum: &Colosseum,
+    state: &GameState,
+    data: &DesignData,
+) -> Option<View> {
+    let mut goto = None;
+    let ranked = colosseum.active_ranking(state.rosters());
+    egui::ScrollArea::vertical()
+        .id_salt(("ranking", id.0))
+        .show(ui, |ui| {
+            egui::Grid::new(("ranking", id.0))
+                .striped(true)
+                .show(ui, |ui| {
+                    for title in ["Rang", "Combattant", "Club", "Elo"] {
+                        ui.strong(title);
+                    }
+                    ui.end_row();
+                    for (rank, rating) in ranked.take(RANKS_SHOWN).enumerate() {
+                        let c = rating.contender;
+                        ui.label((rank + 1).to_string());
+                        if ui.link(contender_name(c, state, data)).clicked() {
+                            goto = Some(contender_view(c));
+                        }
+                        match c {
+                            Contender::Rival(id) => {
+                                if ui.link(club_name(id.club, state)).clicked() {
+                                    goto = Some(View::Rival(id.club));
+                                }
+                            }
+                            Contender::FreeAgent(_) => {
+                                ui.label("sans club");
+                            }
+                            Contender::Club(_) => {
+                                ui.label("");
+                            }
+                        }
+                        ui.label(rating.elo.to_string());
+                        ui.end_row();
+                    }
+                });
+        });
+    goto
+}
+
 fn contender_view(contender: Contender) -> View {
     match contender {
         Contender::Club(i) => View::Sheet(i),
