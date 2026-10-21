@@ -1,20 +1,36 @@
 //! The player's language: each text is a Fluent message of `assets/lang/<language>.ftl`,
 //! named by its key and filled with its arguments.
 
+use std::cell::RefCell;
+
 use fluent_bundle::{FluentArgs, FluentBundle, FluentResource, FluentValue};
 
-const FRENCH: &str = include_str!("../../../assets/lang/fr.ftl");
-
-thread_local! {
-    // ponytail: French only, built once; a language setting will rebuild it from another file.
-    static BUNDLE: FluentBundle<FluentResource> = bundle(FRENCH);
+/// A language the game is played in.
+pub struct Language {
+    /// Its file's name, `fr` for `fr.ftl`, and its identifier for Fluent.
+    pub code: &'static str,
+    /// Its name in itself, as the language menu shows it.
+    pub name: &'static str,
+    source: &'static str,
 }
 
-fn bundle(source: &str) -> FluentBundle<FluentResource> {
-    let resource = FluentResource::try_new(source.to_owned())
+/// The game's languages, the first one by default.
+pub const LANGUAGES: &[Language] = &[Language {
+    code: "fr",
+    name: "Français",
+    source: include_str!("../../../assets/lang/fr.ftl"),
+}];
+
+thread_local! {
+    static BUNDLE: RefCell<(&'static str, FluentBundle<FluentResource>)> =
+        RefCell::new((LANGUAGES[0].code, bundle(&LANGUAGES[0])));
+}
+
+fn bundle(language: &Language) -> FluentBundle<FluentResource> {
+    let resource = FluentResource::try_new(language.source.to_owned())
         .unwrap_or_else(|(_, errors)| panic!("unreadable language file: {errors:?}"));
-    let language = "fr".parse().expect("a valid language identifier");
-    let mut bundle = FluentBundle::new(vec![language]);
+    let id = language.code.parse().expect("a valid language identifier");
+    let mut bundle = FluentBundle::new(vec![id]);
     // No Unicode isolation marks around arguments: the font has no glyph for them.
     bundle.set_use_isolating(false);
     bundle
@@ -23,9 +39,23 @@ fn bundle(source: &str) -> FluentBundle<FluentResource> {
     bundle
 }
 
+/// The code of the language the texts are in.
+pub fn language() -> &'static str {
+    BUNDLE.with_borrow(|(code, _)| *code)
+}
+
+/// Shows the texts in the language of `code` from now on; returns whether there is one.
+pub fn set_language(code: &str) -> bool {
+    let Some(language) = LANGUAGES.iter().find(|l| l.code == code) else {
+        return false;
+    };
+    BUNDLE.set((language.code, bundle(language)));
+    true
+}
+
 /// The text of `key`, its `{ $name }` placeables filled from `args`; the key itself when missing.
 pub fn text(key: &str, args: &[(&str, FluentValue)]) -> String {
-    BUNDLE.with(|bundle| {
+    BUNDLE.with_borrow(|(_, bundle)| {
         let Some(pattern) = bundle.get_message(key).and_then(|m| m.value()) else {
             return key.to_owned();
         };
@@ -87,17 +117,36 @@ mod tests {
     }
 
     #[test]
-    fn every_key_in_the_code_is_in_the_french_file() {
-        let source = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("src");
-        let keys = keys_in(&source);
-        assert!(keys.len() > 100, "{} keys found", keys.len());
-        let missing: Vec<&String> =
-            BUNDLE.with(|bundle| keys.iter().filter(|key| !bundle.has_message(key)).collect());
-        assert!(missing.is_empty(), "missing in fr.ftl: {missing:?}");
+    fn a_language_is_chosen_by_its_code() {
+        assert!(!set_language("xx"));
+        assert_eq!(language(), "fr");
+        assert!(set_language("fr"));
+        assert_eq!(language(), "fr");
+    }
+
+    /// Fails on the keys missing from a language's file.
+    fn assert_in_every_language(keys: &[String]) {
+        for language in LANGUAGES {
+            let bundle = bundle(language);
+            let missing: Vec<&String> = keys.iter().filter(|k| !bundle.has_message(k)).collect();
+            assert!(
+                missing.is_empty(),
+                "missing in {}.ftl: {missing:?}",
+                language.code
+            );
+        }
     }
 
     #[test]
-    fn every_name_of_the_design_data_is_in_the_french_file() {
+    fn every_key_in_the_code_is_in_every_language() {
+        let source = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("src");
+        let keys = keys_in(&source);
+        assert!(keys.len() > 100, "{} keys found", keys.len());
+        assert_in_every_language(&keys);
+    }
+
+    #[test]
+    fn every_name_of_the_design_data_is_in_every_language() {
         let data = lanista_core::design_data::DesignData::load().unwrap();
         let mut keys: Vec<String> = data
             .classes
@@ -114,9 +163,7 @@ mod tests {
             keys.push(format!("culture-{}", culture.key));
             keys.extend(culture.clubs.iter().map(|p| format!("club-{p}")));
         }
-        let missing: Vec<&String> =
-            BUNDLE.with(|bundle| keys.iter().filter(|key| !bundle.has_message(key)).collect());
-        assert!(missing.is_empty(), "missing in fr.ftl: {missing:?}");
+        assert_in_every_language(&keys);
     }
 
     /// The key of each `tr!("key"` in the code under `dir`, but for this file's examples.

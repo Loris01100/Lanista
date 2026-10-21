@@ -341,6 +341,7 @@ menu-load = Charger
 menu-new-game = Nouvelle partie :
 menu-new-club = club { $wealth }
 menu-new-game-started = Nouvelle partie, club { $wealth } en { $continent }, graine { $seed }
+menu-language = Langue :
 
 pending-market = Marché : { $what }
 pending-staff = Personnel : { $what }

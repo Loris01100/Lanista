@@ -11,6 +11,8 @@ use lanista_core::state::GameState;
 pub const AUTO: &str = "autosave.json";
 /// Written when the player asks.
 pub const MANUAL: &str = "save.json";
+/// The code of the language the player chose.
+const LANGUAGE: &str = "language.txt";
 
 /// The folder of save files, if the platform has one.
 pub fn folder() -> Option<PathBuf> {
@@ -36,6 +38,17 @@ pub fn read(folder: &Path, file: &str, data: &DesignData) -> Result<Option<GameS
     }
 }
 
+/// The language the player chose in `folder`, if any.
+pub fn read_language(folder: &Path) -> Option<String> {
+    let code = std::fs::read_to_string(folder.join(LANGUAGE)).ok()?;
+    Some(code.trim().to_owned())
+}
+
+pub fn write_language(folder: &Path, code: &str) -> std::io::Result<()> {
+    std::fs::create_dir_all(folder)?;
+    std::fs::write(folder.join(LANGUAGE), code)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -48,6 +61,15 @@ mod tests {
         let state = GameState::new(7, &data);
         write(&folder, MANUAL, &state).unwrap();
         assert_eq!(read(&folder, MANUAL, &data), Ok(Some(state)));
+        std::fs::remove_dir_all(folder).unwrap();
+    }
+
+    #[test]
+    fn a_chosen_language_reads_back() {
+        let folder = std::env::temp_dir().join(format!("lanista-language-{}", std::process::id()));
+        assert_eq!(read_language(&folder), None);
+        write_language(&folder, "fr").unwrap();
+        assert_eq!(read_language(&folder).as_deref(), Some("fr"));
         std::fs::remove_dir_all(folder).unwrap();
     }
 }

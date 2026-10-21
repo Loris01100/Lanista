@@ -35,7 +35,7 @@ use reesch::{Assets, Audio, Bindings, Screen, Transition, egui};
 use crate::Action;
 use crate::combat_screen::{CombatScreen, Watched};
 use crate::fight_view::Cast;
-use crate::lang::tr;
+use crate::lang::{self, tr};
 use crate::saves;
 use crate::texts::{
     activity_name, challenger_text, change, class_name, club_name, colosseum_name,
@@ -127,6 +127,9 @@ impl ClubScreen {
         saves: Option<PathBuf>,
         bindings: Bindings<Action>,
     ) -> Self {
+        if let Some(code) = saves.as_deref().and_then(saves::read_language) {
+            lang::set_language(&code);
+        }
         let autosave = saves
             .as_deref()
             .map_or(Ok(None), |folder| saves::read(folder, saves::AUTO, &data));
@@ -377,6 +380,7 @@ impl ClubScreen {
         if self.saves.is_some() {
             ui.horizontal(|ui| self.files(ui));
         }
+        ui.horizontal(|ui| self.language(ui));
         ui.separator();
         egui::ScrollArea::vertical().show(ui, |ui| {
             if let Some((week, lines)) = &self.last_week {
@@ -392,6 +396,33 @@ impl ClubScreen {
             }
         });
         play
+    }
+
+    /// The language menu; the choice is kept for the next launches.
+    fn language(&mut self, ui: &mut egui::Ui) {
+        ui.label(tr!("menu-language"));
+        let current = lang::language();
+        let mut chosen = current;
+        egui::ComboBox::from_id_salt("language")
+            .selected_text(
+                lang::LANGUAGES
+                    .iter()
+                    .find(|l| l.code == current)
+                    .map_or(current, |l| l.name),
+            )
+            .show_ui(ui, |ui| {
+                for language in lang::LANGUAGES {
+                    ui.selectable_value(&mut chosen, language.code, language.name);
+                }
+            });
+        if chosen != current {
+            lang::set_language(chosen);
+            if let Some(folder) = &self.saves
+                && let Err(e) = saves::write_language(folder, chosen)
+            {
+                self.message = Some(tr!("save-failed", error = e.to_string()));
+            }
+        }
     }
 
     /// Saving, loading and starting a new game.
