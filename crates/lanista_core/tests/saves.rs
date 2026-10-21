@@ -15,6 +15,28 @@ fn played(seed: u64, weeks: u32, data: &DesignData) -> GameState {
     state
 }
 
+#[test]
+fn a_fighter_gone_elsewhere_leaves_only_where_it_went() {
+    let data = DesignData::load().unwrap();
+    let state = played(1, 30, &data);
+    let rosters = state.rosters();
+    let left: Vec<_> = state
+        .free_agents
+        .iter()
+        .chain(state.rivals.iter().flat_map(|r| &r.fighters))
+        .filter(|f| f.moved_to.is_some())
+        .collect();
+    assert_ne!(left.len(), 0, "no fighter went elsewhere");
+    for f in left {
+        let there = rosters.fighter(f.moved_to.unwrap()).unwrap();
+        assert_eq!(there.class, f.class);
+        assert_eq!(f, &f.moved(f.moved_to.unwrap()));
+    }
+    // The player's club keeps its own whole.
+    assert!(state.fighters.iter().all(|f| f.moved_to.is_none()));
+    assert_eq!(from_json(&to_json(&state), &data).unwrap(), state);
+}
+
 proptest! {
     #![proptest_config(ProptestConfig::with_cases(16))]
 

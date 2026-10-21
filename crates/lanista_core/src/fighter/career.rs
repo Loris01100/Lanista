@@ -4,7 +4,7 @@
 use rand::{Rng, RngExt};
 use serde::{Deserialize, Serialize};
 
-use crate::colosseum::ColosseumId;
+use crate::colosseum::{ColosseumId, Contender};
 use crate::combat::{Arena, ArenaKind, Vec2};
 use crate::design_data::{DesignData, FighterRules};
 use crate::duel::{STATS, play};
@@ -96,6 +96,11 @@ pub struct CareerFighter {
     /// The week it joined its club by a signing or a sale; `None` for one there from
     /// the start. It may not be sold before `GameState::sellable_from`.
     pub joined: Option<u64>,
+    /// Where it went, for the entry a rival club's fighter or a free agent left behind:
+    /// the fighter lives on there, and this entry keeps only its class and status
+    /// (`CareerFighter::moved`).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub moved_to: Option<Contender>,
 }
 
 impl CareerFighter {
@@ -144,6 +149,38 @@ impl CareerFighter {
             observed_weeks: 0,
             appearance,
             joined: None,
+            moved_to: None,
+        }
+    }
+
+    /// The entry it leaves behind on going to `to`: its class, for its name, and its
+    /// status; the rest is blank, the fighter living on at `to`.
+    #[must_use]
+    pub fn moved(&self, to: Contender) -> Self {
+        Self::moved_entry(self.class, self.status, to)
+    }
+
+    fn moved_entry(class: ClassId, status: Status, to: Contender) -> Self {
+        Self {
+            class,
+            stats: Stats::default(),
+            potential: Stats::default(),
+            dominant_hand: Side::Right,
+            age: 0,
+            weeks_this_year: 0,
+            personality: Personality::neutral(),
+            morale: Morale::neutral(),
+            fame: Fame::default(),
+            form: Form::full(),
+            injuries: Vec::new(),
+            illness: None,
+            status,
+            record: Record::default(),
+            season_record: Record::default(),
+            observed_weeks: 0,
+            appearance: Appearance::default(),
+            joined: None,
+            moved_to: Some(to),
         }
     }
 
@@ -931,6 +968,63 @@ pub(crate) struct Taken {
     pub(crate) fame_change: i32,
     /// The severe wound of a fatal blow survived.
     wound: Option<Injury>,
+}
+
+/// A roster saved with its moved entries as their class, status and new place alone
+/// (`#[serde(with = "entries")]`), which keeps the saves from swelling with the copies
+/// of fighters living on elsewhere.
+pub mod entries {
+    use serde::{Deserialize, Deserializer, Serialize, Serializer};
+
+    use super::{CareerFighter, Status};
+    use crate::colosseum::Contender;
+    use crate::fighter::ClassId;
+
+    #[derive(Serialize, Deserialize)]
+    #[serde(untagged)]
+    enum Entry<F> {
+        Moved {
+            class: ClassId,
+            status: Status,
+            moved_to: Contender,
+        },
+        Here(F),
+    }
+
+    /// # Errors
+    /// If the serializer fails.
+    pub fn serialize<S: Serializer>(
+        fighters: &[CareerFighter],
+        serializer: S,
+    ) -> Result<S::Ok, S::Error> {
+        serializer.collect_seq(fighters.iter().map(|f| match f.moved_to {
+            Some(moved_to) => Entry::Moved {
+                class: f.class,
+                status: f.status,
+                moved_to,
+            },
+            None => Entry::Here(f),
+        }))
+    }
+
+    /// # Errors
+    /// If an entry is neither a moved one nor a fighter.
+    pub fn deserialize<'de, D: Deserializer<'de>>(
+        deserializer: D,
+    ) -> Result<Vec<CareerFighter>, D::Error> {
+        let entries = Vec::<Entry<CareerFighter>>::deserialize(deserializer)?;
+        Ok(entries
+            .into_iter()
+            .map(|entry| match entry {
+                Entry::Moved {
+                    class,
+                    status,
+                    moved_to,
+                } => CareerFighter::moved_entry(class, status, moved_to),
+                Entry::Here(fighter) => fighter,
+            })
+            .collect())
+    }
 }
 
 #[cfg(test)]

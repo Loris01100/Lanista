@@ -177,7 +177,9 @@ pub struct Rival {
     pub profile: Profile,
     /// Below 0 when upkeep ran it into debt, like the player's.
     pub money: i64,
-    /// Its fighters; like the player's, one who leaves keeps its place here.
+    /// Its fighters; like the player's, one who leaves keeps its place here, as a
+    /// moved entry if it fights on elsewhere (`CareerFighter::moved_to`).
+    #[serde(with = "crate::fighter::career::entries")]
     pub fighters: Vec<CareerFighter>,
     /// Its trainer and doctor, and a poor club's recruiter, paid every week
     /// (`staff_moves`).

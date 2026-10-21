@@ -441,7 +441,7 @@ fn ranking(
     goto
 }
 
-fn contender_view(contender: Contender) -> View {
+pub(super) fn contender_view(contender: Contender) -> View {
     match contender {
         Contender::Club(i) => View::Sheet(i),
         Contender::Rival(id) => View::Outside(Target::Rival(id)),

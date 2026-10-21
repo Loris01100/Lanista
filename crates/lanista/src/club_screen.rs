@@ -10,6 +10,8 @@ mod market;
 mod staff;
 
 use std::path::PathBuf;
+
+use colosseums::contender_view;
 use std::rc::Rc;
 
 use lanista_core::calendar::SeasonPhase;
@@ -293,10 +295,12 @@ impl ClubScreen {
         }));
         self.last_week = Some((week, overview));
         self.to_watch = to_watch(&self.fights, &self.state, data);
-        // Free agents are new each week: the one on screen may be gone or replaced.
+        // Free agents are new each week: the one on screen may be gone or replaced. A
+        // rival club's fighter sold or let go is followed.
         if matches!(self.view, View::Outside(Target::FreeAgent(_))) {
             self.view = View::Market;
         }
+        self.view = self.followed(self.view);
         if !self.fights.is_empty() {
             self.view = View::Fights;
         }
@@ -800,7 +804,20 @@ impl ClubScreen {
         if !matches!(self.view, View::Outside(_) | View::Rival(_)) {
             self.back = self.view;
         }
-        self.view = view;
+        self.view = self.followed(view);
+    }
+
+    /// `view`, or the page of where its fighter went if it is out of the club and gone
+    /// elsewhere.
+    fn followed(&self, view: View) -> View {
+        let View::Outside(target) = view else {
+            return view;
+        };
+        let contender = match target {
+            Target::Rival(id) => Contender::Rival(id),
+            Target::FreeAgent(a) => Contender::FreeAgent(a),
+        };
+        contender_view(self.state.whereabouts(contender))
     }
 
     /// A « Retour » button to the view the current one was opened from.
@@ -1913,6 +1930,20 @@ mod tests {
             reign_text(&died, &screen.state, &screen.data),
             format!("pour {club}, de {from} à {until}, 2 défenses, mort avec le titre")
         );
+    }
+
+    #[test]
+    fn the_page_of_a_fighter_gone_elsewhere_is_where_it_went() {
+        let mut screen = screen(7);
+        let id = RivalId {
+            club: 1,
+            fighter: 0,
+        };
+        let gone = &mut screen.state.rivals[1].fighters[0];
+        gone.status = Status::Released;
+        *gone = gone.moved(Contender::FreeAgent(0));
+        screen.go_to(View::Outside(Target::Rival(id)));
+        assert_eq!(screen.view, View::Outside(Target::FreeAgent(0)));
     }
 
     #[test]

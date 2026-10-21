@@ -67,7 +67,9 @@ pub struct GameState {
     /// Everyone who came to the market, signed for nothing. The free agents are those
     /// still active, never fewer than `MarketRules::min_free_agents` at the start of a
     /// week; like the clubs' fighters, one who leaves keeps its place, with its status:
-    /// `Sold` once signed, `Retired` if it gave up waiting for a club.
+    /// `Sold` once signed, as a moved entry (`CareerFighter::moved_to`), `Retired` if it
+    /// gave up waiting for a club.
+    #[serde(with = "crate::fighter::career::entries")]
     pub free_agents: Vec<CareerFighter>,
     /// The club's fighters on the transfer list, by index: they fight on for the club
     /// until the player accepts an offer.
@@ -222,11 +224,33 @@ impl GameState {
             .count()
     }
 
+    /// Where `contender` fights now: itself, or where it went by its moved entries.
+    #[must_use]
+    pub fn whereabouts(&self, contender: Contender) -> Contender {
+        let mut here = contender;
+        while let Some(to) = self.rosters().fighter(here).and_then(|f| f.moved_to) {
+            here = to;
+        }
+        here
+    }
+
     /// Gives the Elo and titles of `from` to `to` in every colosseum: the same fighter,
-    /// gone to another club or to the market.
+    /// gone to another club or to the market. A rival club's fighter or a free agent
+    /// leaves only a moved entry behind; the player's club keeps its own whole.
     fn transfer(&mut self, from: Contender, to: Contender) {
         for colosseum in &mut self.colosseums {
             colosseum.transfer(from, to);
+        }
+        let left = match from {
+            Contender::Club(_) => None,
+            Contender::Rival(id) => self
+                .rivals
+                .get_mut(id.club)
+                .and_then(|r| r.fighters.get_mut(id.fighter)),
+            Contender::FreeAgent(a) => self.free_agents.get_mut(a),
+        };
+        if let Some(fighter) = left {
+            *fighter = fighter.moved(to);
         }
     }
 
@@ -2332,7 +2356,13 @@ mod tests {
         assert_eq!(told, [bought_champion]);
         assert_eq!(state.rival_fighter(id).unwrap().status, Status::Sold);
         let bought = state.rivals[rich].fighters.last().unwrap();
-        assert_eq!(bought.stats, state.rival_fighter(id).unwrap().stats);
+        assert!(bought.stats.to_array().iter().all(|&s| s == 500));
+        let to = RivalId {
+            club: rich,
+            fighter: state.rivals[rich].fighters.len() - 1,
+        };
+        let left = state.rival_fighter(id).unwrap();
+        assert_eq!(left.moved_to, Some(Contender::Rival(to)));
         assert_eq!(state.rivals[rich].money, 100_000 - price);
         let released = &state.rivals[rich].fighters[weakest_one];
         assert_eq!(released.status, Status::Released);
@@ -2427,7 +2457,10 @@ mod tests {
         for _ in 0..20 {
             let before = state.clone();
             rival_signings(&mut state, &data);
-            let newcomer = state.rivals[0].fighters.last().unwrap().potential;
+            let newcomer = Contender::Rival(RivalId {
+                club: 0,
+                fighter: state.rivals[0].fighters.len() - 1,
+            });
             let from = (1..state.rivals.len())
                 .flat_map(|club| {
                     let fighters = &state.rivals[club].fighters;
@@ -2435,7 +2468,7 @@ mod tests {
                 })
                 .find(|&id| {
                     let f = state.rival_fighter(id).unwrap();
-                    f.status == Status::Sold && f.potential == newcomer
+                    f.status == Status::Sold && f.moved_to == Some(newcomer)
                 });
             if let Some(id) = from {
                 bought = Some((before, id));
@@ -2655,11 +2688,10 @@ mod tests {
                 .iter()
                 .any(|f| f.status == Status::Active && fights(f) > 0)
         );
-        assert!(
-            agents
-                .iter()
-                .any(|f| f.status == Status::Sold && fights(f) > 0)
-        );
+        assert!(agents.iter().any(|f| {
+            let signed = f.moved_to.and_then(|to| state.rosters().fighter(to));
+            f.status == Status::Sold && signed.is_some_and(|s| fights(s) > 0)
+        }));
         assert!(agents.iter().any(|f| f.status == Status::Dead));
         assert!(
             state.colosseums[0]
