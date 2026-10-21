@@ -31,11 +31,25 @@ pub fn text(key: &str, args: &[(&str, FluentValue)]) -> String {
         };
         let args: FluentArgs = args.iter().cloned().collect();
         let mut errors = Vec::new();
-        bundle
+        let text = bundle
             .format_pattern(pattern, Some(&args), &mut errors)
-            .into_owned()
+            .into_owned();
+        // A missing argument shows as `{$name}`: the tests stop on it.
+        debug_assert!(errors.is_empty(), "{key}: {errors:?}");
+        text
     })
 }
+
+/// `tr!("key", name = value, …)`: the text of `key` with its arguments, strings or numbers.
+macro_rules! tr {
+    ($key:expr $(, $name:ident = $value:expr)* $(,)?) => {
+        $crate::lang::text(
+            $key,
+            &[$((stringify!($name), ::fluent_bundle::FluentValue::from($value))),*],
+        )
+    };
+}
+pub(crate) use tr;
 
 #[cfg(test)]
 mod tests {
@@ -43,15 +57,50 @@ mod tests {
 
     #[test]
     fn a_message_is_filled_with_its_arguments() {
-        let name = text(
-            "fighter-name",
-            &[("class", "Mirmillon".into()), ("number", 2.into())],
+        assert_eq!(
+            tr!("fighter-name", class = "Mirmillon", number = 2),
+            "Mirmillon n° 2"
         );
-        assert_eq!(name, "Mirmillon n° 2");
+        assert_eq!(tr!("weeks", n = 1), "1 semaine");
+        assert_eq!(tr!("weeks", n = 3), "3 semaines");
     }
 
     #[test]
     fn a_missing_key_shows_itself() {
         assert_eq!(text("no-such-key", &[]), "no-such-key");
+    }
+
+    #[test]
+    fn every_key_in_the_code_is_in_the_french_file() {
+        let source = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("src");
+        let keys = keys_in(&source);
+        assert!(keys.len() > 100, "{} keys found", keys.len());
+        let missing: Vec<&String> =
+            BUNDLE.with(|bundle| keys.iter().filter(|key| !bundle.has_message(key)).collect());
+        assert!(missing.is_empty(), "missing in fr.ftl: {missing:?}");
+    }
+
+    /// The key of each `tr!("key"` in the code under `dir`, but for this file's examples.
+    // ponytail: literal keys only, which all the code uses.
+    fn keys_in(dir: &std::path::Path) -> Vec<String> {
+        let mut keys = Vec::new();
+        for entry in std::fs::read_dir(dir).unwrap() {
+            let path = entry.unwrap().path();
+            if path.is_dir() {
+                keys.extend(keys_in(&path));
+            } else if path.extension().is_some_and(|e| e == "rs") && !path.ends_with("lang.rs") {
+                let code = std::fs::read_to_string(&path).unwrap();
+                for (at, call) in code.match_indices("tr!(\"") {
+                    // Not the end of another macro's name, as `include_str!`.
+                    let before = code[..at].chars().next_back();
+                    if before.is_some_and(|c| c.is_alphanumeric() || c == '_') {
+                        continue;
+                    }
+                    let rest = &code[at + call.len()..];
+                    keys.extend(rest.split('"').next().map(str::to_owned));
+                }
+            }
+        }
+        keys
     }
 }

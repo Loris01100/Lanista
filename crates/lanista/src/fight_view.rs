@@ -14,6 +14,7 @@ use macroquad::prelude::*;
 use reesch::{Animation, AnimationEvent, AnimationPlayer, Assets, FixedStep};
 
 use crate::fighter_sprite::{Missing, Placement, SHEET, SPRITE_SIZE, draw_fighter};
+use crate::lang::tr;
 
 // ponytail: placeholder sounds; per-spell and per-class sounds in `data/` later.
 pub const HIT_SOUND: &str = "placeholder/hit.wav";
@@ -241,7 +242,7 @@ impl FightView {
         index(id.0)
             .and_then(|i| self.cast.names.get(i))
             .cloned()
-            .unwrap_or_else(|| format!("combattant {}", id.0))
+            .unwrap_or_else(|| tr!("fighter-number", number = id.0))
     }
 
     /// The fight's outcome, in words: its winner and how the others went out, named in
@@ -249,14 +250,14 @@ impl FightView {
     #[must_use]
     pub fn result(&self) -> String {
         if !self.arena.is_over() {
-            return "Temps écoulé, pas de vainqueur".into();
+            return tr!("result-time-up");
         }
         let winner = match self.arena.fighters.iter().find(|f| f.is_fighting()) {
-            Some(winner) => format!("Vainqueur : {}", self.name(winner.id)),
-            None => "Aucun vainqueur".into(),
+            Some(winner) => tr!("result-winner", winner = self.name(winner.id)),
+            None => tr!("result-no-winner"),
         };
         let melee = self.arena.fighters.len() > 2;
-        let out = |how: &str, out: &dyn Fn(&lanista_core::fighter::Fighter) -> bool| {
+        let out = |how: String, out: &dyn Fn(&lanista_core::fighter::Fighter) -> bool| {
             let names: Vec<String> = self
                 .arena
                 .fighters
@@ -269,20 +270,20 @@ impl FightView {
             } else {
                 names.join(", ")
             };
-            (!names.is_empty()).then(|| format!("{how} : {told}"))
+            (!names.is_empty()).then(|| tr!("labelled", label = how, text = told))
         };
         let reasons: Vec<String> = [
-            out("mort", &|f| {
+            out(tr!("out-dead"), &|f| {
                 melee && !f.is_alive() && !self.cast.survivors.contains(&f.id)
             }),
-            out("abandon", &|f| f.surrendered),
-            out("éliminé faute de coups", &|f| f.eliminated),
-            out("K.-O.", &|f| f.knocked_out),
-            out("laissé pour mort, survit", &|f| {
+            out(tr!("out-gave-up"), &|f| f.surrendered),
+            out(tr!("out-eliminated"), &|f| f.eliminated),
+            out(tr!("out-knocked-out"), &|f| f.knocked_out),
+            out(tr!("out-left-for-dead"), &|f| {
                 !f.is_alive() && self.cast.survivors.contains(&f.id)
             }),
-            out("décapité", &|f| f.severed == Some(Location::Head)),
-            out("membre tranché", &|f| {
+            out(tr!("out-beheaded"), &|f| f.severed == Some(Location::Head)),
+            out(tr!("out-severed"), &|f| {
                 f.severed.is_some_and(|part| part != Location::Head)
             }),
         ]
@@ -292,7 +293,11 @@ impl FightView {
         if reasons.is_empty() {
             winner
         } else {
-            format!("{winner} ({})", reasons.join(", "))
+            tr!(
+                "result-with-reasons",
+                winner = winner,
+                reasons = reasons.join(", ")
+            )
         }
     }
 
@@ -307,36 +312,29 @@ impl FightView {
         }
         let Some(cut) = next_cut(&self.arena) else {
             return if in_final(&self.arena) {
-                vec!["Duel final".into()]
+                vec![tr!("final-duel")]
             } else {
                 Vec::new()
             };
         };
         let seconds = cut.ticks_left.div_ceil(combat::TICKS_PER_SECOND);
-        let out = match cut.out {
-            1 => "1 combattant sort".into(),
-            n => format!("{n} combattants sortent"),
-        };
         let mut lines = vec![
-            format!("Élimination dans {seconds} s : {out}"),
-            format!(
-                "Pour rester, plus de {} dégâts depuis la dernière élimination",
-                cut.threshold
-            ),
+            tr!("elimination-next", seconds = seconds, out = cut.out),
+            tr!("elimination-threshold", threshold = cut.threshold),
         ];
         for &id in &self.cast.club {
             let Some(f) = self.arena.fighter(id).filter(|f| f.is_fighting()) else {
                 continue;
             };
-            let standing = if in_danger(&self.arena, f) {
-                "éliminé si rien ne change"
-            } else {
-                "à l'abri"
-            };
-            lines.push(format!(
-                "{} : {} dégâts, {standing}",
-                self.name(id),
-                f.round_damage
+            lines.push(tr!(
+                "elimination-standing",
+                fighter = self.name(id),
+                damage = f.round_damage,
+                danger = if in_danger(&self.arena, f) {
+                    "true"
+                } else {
+                    "false"
+                }
             ));
         }
         lines

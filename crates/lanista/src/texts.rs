@@ -1,4 +1,4 @@
-//! What the player reads, in French: fighters, injuries, illnesses, fights,
+//! What the player reads, from the language files: fighters, injuries, illnesses, fights,
 //! weeks, money, colosseums, the market and the staff.
 
 use lanista_core::calendar::Date;
@@ -29,34 +29,43 @@ use lanista_core::staff::{
 };
 use lanista_core::state::{GameState, News, WorldNews};
 
-use crate::lang::text;
+use crate::lang::tr;
 
 /// Stat names, in `Stats::to_array` order.
-pub const STAT_NAMES: [&str; STAT_COUNT] = ["PV", "AC", "AL", "PRÉ", "VIT", "DC", "DL"];
+pub fn stat_names() -> [String; STAT_COUNT] {
+    [
+        tr!("stat-hp"),
+        tr!("stat-melee-attack"),
+        tr!("stat-ranged-attack"),
+        tr!("stat-accuracy"),
+        tr!("stat-speed"),
+        tr!("stat-melee-defense"),
+        tr!("stat-ranged-defense"),
+    ]
+}
 
 /// How the game names the fighter at `index` in the club, until fighters have names.
 pub fn fighter_name(index: usize, fighter: &CareerFighter, data: &DesignData) -> String {
-    text(
+    tr!(
         "fighter-name",
-        &[
-            ("class", class_name(fighter, data).into()),
-            ("number", (index + 1).into()),
-        ],
+        class = class_name(fighter, data),
+        number = index + 1
     )
 }
 
 /// One word for a fighter's state, worst first.
 pub fn condition_text(fighter: &CareerFighter) -> String {
-    let key = match fighter.status {
-        Status::Dead => "condition-dead",
-        Status::Retired => "condition-retired",
-        Status::Sold => "condition-sold",
-        Status::Released => "condition-released",
-        Status::Active if !fighter.injuries.iter().all(Injury::is_permanent) => "condition-injured",
-        Status::Active if fighter.illness.is_some() => "condition-ill",
-        Status::Active => "condition-fit",
-    };
-    text(key, &[])
+    match fighter.status {
+        Status::Dead => tr!("condition-dead"),
+        Status::Retired => tr!("condition-retired"),
+        Status::Sold => tr!("condition-sold"),
+        Status::Released => tr!("condition-released"),
+        Status::Active if !fighter.injuries.iter().all(Injury::is_permanent) => {
+            tr!("condition-injured")
+        }
+        Status::Active if fighter.illness.is_some() => tr!("condition-ill"),
+        Status::Active => tr!("condition-fit"),
+    }
 }
 
 pub fn class_name(fighter: &CareerFighter, data: &DesignData) -> String {
@@ -66,21 +75,21 @@ pub fn class_name(fighter: &CareerFighter, data: &DesignData) -> String {
 
 pub fn activity_name(activity: Activity, data: &DesignData) -> String {
     match activity {
-        Activity::Rest => "Repos".into(),
-        Activity::Train => "Entraînement".into(),
-        Activity::Fight(id) => format!("Combat à {}", colosseum_name(id, data)),
-        Activity::TitleFight(id) => format!("Combat pour le titre à {}", colosseum_name(id, data)),
-        Activity::Challenge(id, _) => format!("Défi à {}", colosseum_name(id, data)),
-        Activity::Melee(id) => format!("Mêlée à {}", colosseum_name(id, data)),
+        Activity::Rest => tr!("activity-rest"),
+        Activity::Train => tr!("activity-train"),
+        Activity::Fight(id) => tr!("activity-fight", place = colosseum_name(id, data)),
+        Activity::TitleFight(id) => tr!("activity-title-fight", place = colosseum_name(id, data)),
+        Activity::Challenge(id, _) => tr!("activity-challenge", place = colosseum_name(id, data)),
+        Activity::Melee(id) => tr!("activity-melee", place = colosseum_name(id, data)),
     }
 }
 
 /// How the market names the free agent at `index`.
 pub fn free_agent_name(index: usize, fighter: &CareerFighter, data: &DesignData) -> String {
-    format!(
-        "Free agent n° {} ({})",
-        index + 1,
-        class_name(fighter, data)
+    tr!(
+        "free-agent-name",
+        number = index + 1,
+        class = class_name(fighter, data)
     )
 }
 
@@ -89,10 +98,11 @@ pub fn rival_fighter_name(id: RivalId, state: &GameState, data: &DesignData) -> 
     let class = state
         .rival_fighter(id)
         .map_or_else(|| "?".into(), |f| class_name(f, data));
-    format!(
-        "{class} n° {} ({})",
-        id.fighter + 1,
-        club_name(id.club, state)
+    tr!(
+        "rival-fighter-name",
+        class = class,
+        number = id.fighter + 1,
+        club = club_name(id.club, state)
     )
 }
 
@@ -117,12 +127,12 @@ pub fn potential_text(fighter: &CareerFighter, scouting: &Scouting) -> String {
 
 /// "Agressivité 60, prudence 40, goût du spectacle 50, détermination 70".
 pub fn personality_text(p: &Personality) -> String {
-    format!(
-        "Agressivité {}, prudence {}, goût du spectacle {}, détermination {}",
-        p.aggression.value(),
-        p.caution.value(),
-        p.showmanship.value(),
-        p.determination.value()
+    tr!(
+        "personality",
+        aggression = p.aggression.value(),
+        caution = p.caution.value(),
+        showmanship = p.showmanship.value(),
+        determination = p.determination.value()
     )
 }
 
@@ -133,18 +143,23 @@ pub fn outside_personality_text(fighter: &CareerFighter, scouting: &Scouting) ->
         return "?".into();
     }
     let p = &fighter.personality;
-    format!(
-        "Agr {}, Pru {}, Spe {}, Dét {}",
-        p.aggression.value(),
-        p.caution.value(),
-        p.showmanship.value(),
-        p.determination.value()
+    tr!(
+        "personality-short",
+        aggression = p.aggression.value(),
+        caution = p.caution.value(),
+        showmanship = p.showmanship.value(),
+        determination = p.determination.value()
     )
 }
 
 /// "3 V, 1 D, 2 N".
 pub fn record_text(record: Record) -> String {
-    format!("{} V, {} D, {} N", record.wins, record.losses, record.draws)
+    tr!(
+        "record",
+        wins = record.wins,
+        losses = record.losses,
+        draws = record.draws
+    )
 }
 
 /// The fighter out of the club `target` names.
@@ -169,51 +184,49 @@ fn club_fighter(i: usize, state: &GameState, data: &DesignData) -> String {
 pub fn move_text(m: Move, state: &GameState, data: &DesignData) -> String {
     let club = |i| club_fighter(i, state, data);
     match m {
-        Move::Observe(target) => format!("Observer {}", target_name(target, state, data)),
-        Move::Sign(a) => format!(
-            "Recruter {}",
-            target_name(Target::FreeAgent(a), state, data)
+        Move::Observe(target) => tr!("move-observe", fighter = target_name(target, state, data)),
+        Move::Sign(a) => tr!(
+            "move-sign",
+            fighter = target_name(Target::FreeAgent(a), state, data)
         ),
-        Move::Release(i) => format!("Libérer {}", club(i)),
-        Move::List(i) => format!("Mettre en vente {}", club(i)),
-        Move::Unlist(i) => format!("Retirer {} de la vente", club(i)),
-        Move::Keep(i) => format!("Rendre {} invendable", club(i)),
-        Move::Unkeep(i) => format!("Rendre {} vendable", club(i)),
+        Move::Release(i) => tr!("move-release", fighter = club(i)),
+        Move::List(i) => tr!("move-list", fighter = club(i)),
+        Move::Unlist(i) => tr!("move-unlist", fighter = club(i)),
+        Move::Keep(i) => tr!("move-keep", fighter = club(i)),
+        Move::Unkeep(i) => tr!("move-unkeep", fighter = club(i)),
         Move::AcceptOffer { fighter, rival } => {
             let price = state
                 .sale_offers
                 .iter()
                 .find(|o| o.fighter == fighter && o.rival == rival)
                 .map_or(0, |o| o.price);
-            format!(
-                "Vendre {} à {} pour {price}",
-                club(fighter),
-                club_name(rival, state)
+            tr!(
+                "move-accept-offer",
+                fighter = club(fighter),
+                club = club_name(rival, state),
+                price = price
             )
         }
-        Move::Offer(id, price) => format!(
-            "Offrir {price} pour {}",
-            rival_fighter_name(id, state, data)
+        Move::Offer(id, price) => tr!(
+            "move-offer",
+            price = price,
+            fighter = rival_fighter_name(id, state, data)
         ),
     }
 }
 
-/// The name of a post, as in "un médecin".
-pub fn role_name(role: Role) -> &'static str {
+/// The key a post is selected by in the language files.
+fn role_key(role: Role) -> &'static str {
     match role {
-        Role::Trainer => "entraîneur",
-        Role::Doctor => "médecin",
-        Role::Recruiter => "recruteur",
+        Role::Trainer => "trainer",
+        Role::Doctor => "doctor",
+        Role::Recruiter => "recruiter",
     }
 }
 
 /// The name of a post, as a title.
-pub fn role_title(role: Role) -> &'static str {
-    match role {
-        Role::Trainer => "Entraîneur",
-        Role::Doctor => "Médecin",
-        Role::Recruiter => "Recruteur",
-    }
+pub fn role_title(role: Role) -> String {
+    tr!("role-title", role = role_key(role))
 }
 
 /// A club's staff: "Personnel : entraîneur de niveau 5, médecin de niveau 2", or
@@ -223,13 +236,13 @@ pub fn staff_text(staff: &Staff) -> String {
         .into_iter()
         .filter_map(|role| {
             let level = staff.level(role)?;
-            Some(format!("{} de niveau {level}", role_name(role)))
+            Some(tr!("staff-post", role = role_key(role), level = level))
         })
         .collect();
     if posts.is_empty() {
-        "Personnel : aucun".into()
+        tr!("staff-none")
     } else {
-        format!("Personnel : {}", posts.join(", "))
+        tr!("staff", posts = posts.join(", "))
     }
 }
 
@@ -239,45 +252,42 @@ pub fn staff_move_text(m: StaffMove, market: &[Candidate]) -> String {
         StaffMove::Hire(c) => match market.get(c) {
             Some(candidate) => {
                 let person = &candidate.person;
-                format!(
-                    "Engager un {} de niveau {}",
-                    role_name(person.role()),
-                    person.level()
+                tr!(
+                    "staff-move-hire",
+                    role = role_key(person.role()),
+                    level = person.level()
                 )
             }
-            None => "Engager un candidat parti".into(),
+            None => tr!("staff-move-hire-gone"),
         },
-        StaffMove::Dismiss(Role::Trainer) => "Renvoyer l'entraîneur".into(),
-        StaffMove::Dismiss(role) => format!("Renvoyer le {}", role_name(role)),
+        StaffMove::Dismiss(role) => tr!("staff-move-dismiss", role = role_key(role)),
     }
 }
 
 /// A change of staff, once made.
 pub fn staff_news_text(news: StaffNews) -> String {
     match news {
-        StaffNews::Hired(role, level) => format!("{} de niveau {level} engagé", role_title(role)),
-        StaffNews::Dismissed(role) => format!("{} renvoyé", role_title(role)),
+        StaffNews::Hired(role, level) => {
+            tr!("staff-news-hired", role = role_key(role), level = level)
+        }
+        StaffNews::Dismissed(role) => tr!("staff-news-dismissed", role = role_key(role)),
     }
 }
 
 /// How long a candidate stays on the market: "encore 3 semaines", or "dernière semaine".
 pub fn weeks_left_text(weeks: u32) -> String {
-    if weeks <= 1 {
-        "dernière semaine".into()
-    } else {
-        format!("encore {weeks} semaines")
-    }
+    tr!("weeks-left", n = weeks)
 }
 
 /// What a trainer costs and brings: "salaire 20 par semaine, séance 6, progression
 /// +20 %, 1 de forme épargnée par séance".
 pub fn trainer_text(trainer: &TrainerRules) -> String {
-    format!(
-        "salaire {} par semaine, séance {}, progression +{} %, {} de forme épargnée par séance",
-        trainer.salary,
-        trainer.training_cost,
-        trainer.coaching.progress_percent,
-        trainer.coaching.form_spared
+    tr!(
+        "trainer",
+        salary = trainer.salary,
+        session = trainer.training_cost,
+        progress = trainer.coaching.progress_percent,
+        form = trainer.coaching.form_spared
     )
 }
 
@@ -285,14 +295,13 @@ pub fn trainer_text(trainer: &TrainerRules) -> String {
 /// des semaines (50 sans médecin), prix des soins 110 %, séquelle évitée 30 fois sur 100".
 pub fn doctor_text(doctor: &DoctorRules, care: &CareRules) -> String {
     let medicine = &doctor.medicine;
-    let kept = medicine.care_rules(care).weeks_kept_percent;
-    format!(
-        "salaire {} par semaine, les soins laissent {kept} % des semaines ({} sans médecin), \
-         prix des soins {} %, séquelle évitée {} fois sur 100",
-        doctor.salary,
-        care.weeks_kept_percent,
-        medicine.care_cost_percent,
-        medicine.after_effect_spared_percent
+    tr!(
+        "doctor",
+        salary = doctor.salary,
+        kept = medicine.care_rules(care).weeks_kept_percent,
+        kept_alone = care.weeks_kept_percent,
+        cost = medicine.care_cost_percent,
+        spared = medicine.after_effect_spared_percent
     )
 }
 
@@ -301,19 +310,17 @@ pub fn doctor_text(doctor: &DoctorRules, care: &CareRules) -> String {
 /// cachée".
 pub fn recruiter_text(recruiter: &RecruiterRules) -> String {
     let scouting = &recruiter.scouting;
-    let potential = match scouting.potential_range_percent {
-        0 => "potentiel non estimé".to_owned(),
-        percent => format!("potentiel estimé à {percent} % près"),
-    };
-    let personality = if scouting.personality {
-        "personnalité vue"
-    } else {
-        "personnalité cachée"
-    };
-    format!(
-        "salaire {} par semaine, {} stat de plus révélée par semaine, fourchettes à {} %, \
-         {potential}, {personality}",
-        recruiter.salary, scouting.revealed_per_week, scouting.range_width_percent
+    tr!(
+        "recruiter",
+        salary = recruiter.salary,
+        revealed = scouting.revealed_per_week,
+        width = scouting.range_width_percent,
+        potential = scouting.potential_range_percent,
+        personality = if scouting.personality {
+            "seen"
+        } else {
+            "hidden"
+        }
     )
 }
 
@@ -322,50 +329,47 @@ pub fn market_news_text(news: MarketNews, state: &GameState, data: &DesignData) 
     let club = |i| club_fighter(i, state, data);
     let rival = |id| rival_fighter_name(id, state, data);
     match news {
-        MarketNews::Signed(i) => format!("Recrute {}", club(i)),
-        MarketNews::Released(i) => format!("Libère {}", club(i)),
-        MarketNews::Sold(offer) => format!(
-            "Vend {} à {} pour {}",
-            club(offer.fighter),
-            club_name(offer.rival, state),
-            offer.price
+        MarketNews::Signed(i) => tr!("market-signed", fighter = club(i)),
+        MarketNews::Released(i) => tr!("market-released", fighter = club(i)),
+        MarketNews::Sold(offer) => tr!(
+            "market-sold",
+            fighter = club(offer.fighter),
+            club = club_name(offer.rival, state),
+            price = offer.price
         ),
         MarketNews::Bought {
             from,
             fighter,
             price,
-        } => format!(
-            "Achète {} à {} pour {price}",
-            club(fighter),
-            club_name(from.club, state)
+        } => tr!(
+            "market-bought",
+            fighter = club(fighter),
+            club = club_name(from.club, state),
+            price = price
         ),
-        MarketNews::Countered(id, price) => format!(
-            "{} demande {price} pour {} (offre possible cette semaine)",
-            club_name(id.club, state),
-            rival(id)
+        MarketNews::Countered(id, price) => tr!(
+            "market-countered",
+            club = club_name(id.club, state),
+            price = price,
+            fighter = rival(id)
         ),
-        MarketNews::ClubRefused(id) => format!(
-            "{} refuse l'offre pour {}",
-            club_name(id.club, state),
-            rival(id)
+        MarketNews::ClubRefused(id) => tr!(
+            "market-club-refused",
+            club = club_name(id.club, state),
+            fighter = rival(id)
         ),
-        MarketNews::FighterRefused(id) => {
-            format!("{} refuse de rejoindre le club", rival(id))
-        }
-        MarketNews::Failed(id) => format!(
-            "Transfert de {} impossible : pas de place, pas assez d'argent ou combattant parti",
-            rival(id)
-        ),
+        MarketNews::FighterRefused(id) => tr!("market-fighter-refused", fighter = rival(id)),
+        MarketNews::Failed(id) => tr!("market-failed", fighter = rival(id)),
     }
 }
 
 /// "Augure n° 3 (Ludus Magnus) à Capoue": who sent or would receive the challenge, and
 /// where.
 pub fn challenger_text(challenge: Challenge, state: &GameState, data: &DesignData) -> String {
-    format!(
-        "{} à {}",
-        rival_fighter_name(challenge.rival, state, data),
-        colosseum_name(challenge.colosseum, data)
+    tr!(
+        "challenger",
+        fighter = rival_fighter_name(challenge.rival, state, data),
+        place = colosseum_name(challenge.colosseum, data)
     )
 }
 
@@ -375,32 +379,28 @@ pub fn title_news_text(c: usize, news: TitleNews, state: &GameState, data: &Desi
         return String::new();
     };
     let name = |contender| contender_name(contender, state, data);
-    let to = |to: Option<Contender>| to.map_or_else(|| "personne".into(), name);
-    let place = &rules.name;
+    let to = |to: Option<Contender>| to.map_or_else(|| tr!("title-nobody"), name);
+    let place = rules.name.as_str();
     match news {
         TitleNews::Fight {
             champion,
             challenger,
             result,
-        } => {
-            let outcome = if title_kept(result) {
-                "le garde"
-            } else {
-                "le perd"
-            };
-            format!(
-                "Titre de {place} : {} {outcome} face à {}",
-                name(champion),
-                name(challenger)
-            )
-        }
-        TitleNews::Stripped { former, to: holder } => format!(
-            "Titre de {place} : {} le perd faute de défense, il revient à {}",
-            name(former),
-            to(holder)
+        } => tr!(
+            "title-fight",
+            place = place,
+            champion = name(champion),
+            kept = if title_kept(result) { "true" } else { "false" },
+            challenger = name(challenger)
+        ),
+        TitleNews::Stripped { former, to: holder } => tr!(
+            "title-stripped",
+            place = place,
+            former = name(former),
+            holder = to(holder)
         ),
         TitleNews::Vacated { to: holder } => {
-            format!("Titre de {place} vacant : il revient à {}", to(holder))
+            tr!("title-vacated", place = place, holder = to(holder))
         }
     }
 }
@@ -415,36 +415,32 @@ pub fn world_news_text(news: News, state: &GameState, data: &DesignData) -> Stri
             fighter,
             buyer,
             price,
-        } => format!(
-            "{} achète {}, champion de {}, pour {price}",
-            club_name(buyer, state),
-            rival_fighter_name(fighter, state, data),
-            data.world
+        } => tr!(
+            "news-champion-bought",
+            club = club_name(buyer, state),
+            fighter = rival_fighter_name(fighter, state, data),
+            place = data
+                .world
                 .colosseums
                 .get(colosseum)
-                .map_or("?", |c| c.name.as_str())
+                .map_or("?", |c| c.name.as_str()),
+            price = price
         ),
-        WorldNews::Closed(club) => format!(
-            "{} ferme, ruiné : ses combattants partent au marché",
-            club_name(club, state)
-        ),
-        WorldNews::Rivalry(club, true) => format!(
-            "{} se déclare votre rival : vos combats contre lui attirent les foules",
-            club_name(club, state)
-        ),
+        WorldNews::Closed(club) => tr!("news-closed", club = club_name(club, state)),
+        WorldNews::Rivalry(club, true) => tr!("news-rivalry", club = club_name(club, state)),
         WorldNews::Rivalry(club, false) => {
-            format!("{} met fin à sa rivalité avec vous", club_name(club, state))
+            tr!("news-rivalry-ended", club = club_name(club, state))
         }
         WorldNews::Founded(club) => state.rivals.get(club).map_or_else(String::new, |r| {
-            format!(
-                "Fondation de {} ({}), en {}",
-                r.name,
-                culture_name(&r.culture, data),
-                continent_name(r.continent)
+            tr!(
+                "news-founded",
+                club = r.name.as_str(),
+                culture = culture_name(&r.culture, data),
+                continent = continent_name(r.continent)
             )
         }),
     };
-    format!("{} : {what}", date_text(news.week, data))
+    tr!("dated", date = date_text(news.week, data), what = what)
 }
 
 /// "Arrivé récemment : vendable à partir de la saison 1, semaine 16" for a fighter who
@@ -455,21 +451,18 @@ pub fn unsellable_text(
     data: &DesignData,
 ) -> Option<String> {
     (!state.may_be_sold(fighter, data)).then(|| {
-        let from = date_text(GameState::sellable_from(fighter, data), data);
-        format!(
-            "Arrivé récemment : vendable à partir de la {}",
-            from.to_lowercase()
-        )
+        let from = date_in_sentence(GameState::sellable_from(fighter, data), data);
+        tr!("unsellable", date = from)
     })
 }
 
-pub fn standing_name(standing: Standing) -> &'static str {
+pub fn standing_name(standing: Standing) -> String {
     match standing {
-        Standing::Ally => "allié",
-        Standing::Friend => "ami",
-        Standing::Neutral => "neutre",
-        Standing::Tense => "tendu",
-        Standing::Rival => "rival",
+        Standing::Ally => tr!("standing-ally"),
+        Standing::Friend => tr!("standing-friend"),
+        Standing::Neutral => tr!("standing-neutral"),
+        Standing::Tense => tr!("standing-tense"),
+        Standing::Rival => tr!("standing-rival"),
     }
 }
 
@@ -488,81 +481,97 @@ pub fn relation_change_text(change: Change, state: &GameState, data: &DesignData
     let club = |i| club_fighter(i, state, data);
     let rival = |id| rival_fighter_name(id, state, data);
     let why = match change.why {
-        Reason::Killed { fighter, victim } => format!("{} a tué {}", club(fighter), rival(victim)),
-        Reason::Beaten { fighter, rival: r } => format!("{} a battu {}", club(fighter), rival(r)),
-        Reason::TitleTaken { fighter, colosseum } => format!(
-            "{} lui a pris le titre de {}",
-            club(fighter),
-            data.world
+        Reason::Killed { fighter, victim } => {
+            tr!(
+                "reason-killed",
+                fighter = club(fighter),
+                rival = rival(victim)
+            )
+        }
+        Reason::Beaten { fighter, rival: r } => {
+            tr!("reason-beaten", fighter = club(fighter), rival = rival(r))
+        }
+        Reason::TitleTaken { fighter, colosseum } => tr!(
+            "reason-title-taken",
+            fighter = club(fighter),
+            place = data
+                .world
                 .colosseums
                 .get(colosseum)
                 .map_or("?", |c| c.name.as_str())
         ),
         Reason::ChallengeRefused { fighter, rival: r } => {
-            format!("{} a refusé le défi de {}", club(fighter), rival(r))
+            tr!(
+                "reason-challenge-refused",
+                fighter = club(fighter),
+                rival = rival(r)
+            )
         }
-        Reason::Sold { fighter } => format!("vous lui avez vendu {}", club(fighter)),
-        Reason::Bought { fighter } => format!("vous lui avez acheté {}", club(fighter)),
+        Reason::Sold { fighter } => tr!("reason-sold", fighter = club(fighter)),
+        Reason::Bought { fighter } => tr!("reason-bought", fighter = club(fighter)),
         Reason::PactKept { fighter, rival: r } => {
-            format!(
-                "{} a tenu son pacte avec {} en mêlée",
-                club(fighter),
-                rival(r)
+            tr!(
+                "reason-pact-kept",
+                fighter = club(fighter),
+                rival = rival(r)
             )
         }
         Reason::Betrayed { fighter, rival: r } => {
-            format!(
-                "{} a trahi son pacte avec {} en mêlée",
-                club(fighter),
-                rival(r)
-            )
+            tr!("reason-betrayed", fighter = club(fighter), rival = rival(r))
         }
     };
-    format!(
-        "{:+} : {why} ({})",
-        change.points,
-        date_text(change.week, data).to_lowercase()
+    tr!(
+        "relation-change",
+        points = format!("{:+}", change.points),
+        why = why,
+        date = date_in_sentence(change.week, data)
     )
 }
 
 /// "Saison 2, semaine 7".
 pub fn date_text(week: u64, data: &DesignData) -> String {
     let when = Date::of(week, &data.calendar);
-    format!("Saison {}, semaine {}", when.season, when.week)
+    tr!("date", season = when.season, week = when.week)
+}
+
+/// "saison 2, semaine 7", within a sentence.
+pub fn date_in_sentence(week: u64, data: &DesignData) -> String {
+    let when = Date::of(week, &data.calendar);
+    tr!("date-in-sentence", season = when.season, week = when.week)
 }
 
 pub fn colosseum_name(id: ColosseumId, data: &DesignData) -> &str {
     data.world.colosseum(id).map_or("?", |c| c.name.as_str())
 }
 
-pub fn profile_name(profile: Profile) -> &'static str {
+pub fn profile_name(profile: Profile) -> String {
     match profile {
-        Profile::Cautious => "prudent",
-        Profile::Aggressive => "agressif",
-        Profile::Merchant => "marchand",
-        Profile::Mentor => "formateur",
-        Profile::Veteran => "vétéran",
-        Profile::Showman => "spectacle",
+        Profile::Cautious => tr!("profile-cautious"),
+        Profile::Aggressive => tr!("profile-aggressive"),
+        Profile::Merchant => tr!("profile-merchant"),
+        Profile::Mentor => tr!("profile-mentor"),
+        Profile::Veteran => tr!("profile-veteran"),
+        Profile::Showman => tr!("profile-showman"),
     }
 }
 
 /// "pauvre", "modeste" or "riche".
-pub fn wealth_name(wealth: Wealth) -> &'static str {
+pub fn wealth_name(wealth: Wealth) -> String {
     match wealth {
-        Wealth::Poor => "pauvre",
-        Wealth::Modest => "modeste",
-        Wealth::Rich => "riche",
+        Wealth::Poor => tr!("wealth-poor"),
+        Wealth::Modest => tr!("wealth-modest"),
+        Wealth::Rich => tr!("wealth-rich"),
     }
 }
 
 /// "Europe", "Asie", "Amériques", "Afrique" or "Océanie".
-pub fn continent_name(continent: Continent) -> &'static str {
+pub fn continent_name(continent: Continent) -> String {
     match continent {
-        Continent::Europe => "Europe",
-        Continent::Asia => "Asie",
-        Continent::Americas => "Amériques",
-        Continent::Africa => "Afrique",
-        Continent::Oceania => "Océanie",
+        Continent::Europe => tr!("continent-europe"),
+        Continent::Asia => tr!("continent-asia"),
+        Continent::Americas => tr!("continent-americas"),
+        Continent::Africa => tr!("continent-africa"),
+        Continent::Oceania => tr!("continent-oceania"),
     }
 }
 
@@ -578,7 +587,7 @@ pub fn priced(activity: Activity, fee: u32, data: &DesignData) -> String {
 
 /// "Club modeste": the club's wealth.
 pub fn wealth_text(wealth: Wealth) -> String {
-    format!("Club {}", wealth_name(wealth))
+    tr!("wealth", wealth = wealth_name(wealth))
 }
 
 /// The name of rival club `club`.
@@ -593,94 +602,97 @@ pub fn culture_name<'a>(key: &'a str, data: &'a DesignData) -> &'a str {
 
 /// "culture : Asie de l'Est".
 pub fn culture_text(key: &str, data: &DesignData) -> String {
-    format!("culture : {}", culture_name(key, data))
+    tr!("culture", culture = culture_name(key, data))
 }
 
-pub fn arena_name(arena: ArenaKind) -> &'static str {
+pub fn arena_name(arena: ArenaKind) -> String {
     match arena {
-        ArenaKind::Sand => "sable",
-        ArenaKind::Pillars => "piliers",
-        ArenaKind::Narrow => "étroite",
+        ArenaKind::Sand => tr!("arena-sand"),
+        ArenaKind::Pillars => tr!("arena-pillars"),
+        ArenaKind::Narrow => tr!("arena-narrow"),
     }
 }
 
 /// What an arena kind does to the fight, for the player.
-pub fn arena_effect(arena: ArenaKind) -> &'static str {
+pub fn arena_effect(arena: ArenaKind) -> String {
     match arena {
-        ArenaKind::Sand => "le sable ralentit tout le monde, les tireurs en profitent",
-        ArenaKind::Pillars => "les piliers arrêtent les tirs et barrent le passage",
-        ArenaKind::Narrow => "le corps à corps s'engage vite",
+        ArenaKind::Sand => tr!("arena-sand-effect"),
+        ArenaKind::Pillars => tr!("arena-pillars-effect"),
+        ArenaKind::Narrow => tr!("arena-narrow-effect"),
     }
 }
 
 /// How a colosseum's ranking names `contender`; the club's fighters are marked.
 pub fn contender_name(contender: Contender, state: &GameState, data: &DesignData) -> String {
     match contender {
-        Contender::Club(i) => format!("{} (votre club)", club_fighter(i, state, data)),
+        Contender::Club(i) => tr!("contender-yours", fighter = club_fighter(i, state, data)),
         Contender::Rival(id) => rival_fighter_name(id, state, data),
         Contender::FreeAgent(a) => target_name(Target::FreeAgent(a), state, data),
     }
 }
 
+/// The key a side is selected by in the language files.
+fn side_key(side: Side) -> &'static str {
+    match side {
+        Side::Left => "left",
+        Side::Right => "right",
+    }
+}
+
 pub fn location_name(location: Location, dominant: Side) -> String {
-    let side = |side: Side, feminine: bool| match (side, feminine) {
-        (Side::Left, _) => "gauche",
-        (Side::Right, false) => "droit",
-        (Side::Right, true) => "droite",
-    };
     match location {
-        Location::Head => "Tête".into(),
-        Location::Body => "Corps".into(),
-        Location::Arm(s) if s == dominant => format!("Bras {} (dominant)", side(s, false)),
-        Location::Arm(s) => format!("Bras {}", side(s, false)),
-        Location::Leg(s) => format!("Jambe {}", side(s, true)),
+        Location::Head => tr!("location-head"),
+        Location::Body => tr!("location-body"),
+        Location::Arm(s) if s == dominant => tr!("location-arm-dominant", side = side_key(s)),
+        Location::Arm(s) => tr!("location-arm", side = side_key(s)),
+        Location::Leg(s) => tr!("location-leg", side = side_key(s)),
     }
 }
 
 pub fn weeks(n: u32) -> String {
-    if n == 1 {
-        "1 semaine".into()
-    } else {
-        format!("{n} semaines")
-    }
+    tr!("weeks", n = n)
 }
 
 pub fn injury_text(injury: Injury, dominant: Side) -> String {
     let location = location_name(injury.location, dominant);
     let severity = match injury.severity {
-        Severity::Light => "légère",
-        Severity::Medium => "moyenne",
-        Severity::Severe => "grave",
-        Severity::Permanent => return format!("{location} : séquelle définitive"),
-        Severity::Lost if matches!(injury.location, Location::Leg(_)) => {
-            return format!("{location} : perdue");
+        Severity::Light => "light",
+        Severity::Medium => "medium",
+        Severity::Severe => "severe",
+        Severity::Permanent => return tr!("injury-permanent", location = location),
+        Severity::Lost => {
+            let leg = matches!(injury.location, Location::Leg(_));
+            return tr!(
+                "injury-lost",
+                location = location,
+                leg = if leg { "true" } else { "false" }
+            );
         }
-        Severity::Lost => return format!("{location} : perdu"),
     };
-    format!("{location} : {severity}, {}", weeks(injury.weeks_left))
+    tr!(
+        "injury",
+        location = location,
+        severity = severity,
+        weeks = weeks(injury.weeks_left)
+    )
 }
 
 pub fn illness_text(illness: Illness) -> String {
     let level = match illness.level {
-        IllnessLevel::Mild => "faible",
-        IllnessLevel::Moderate => "moyenne",
-        IllnessLevel::Severe => "sévère",
+        IllnessLevel::Mild => "mild",
+        IllnessLevel::Moderate => "moderate",
+        IllnessLevel::Severe => "severe",
     };
-    format!("Maladie {level}, {}", weeks(illness.weeks_left))
+    tr!("illness", level = level, weeks = weeks(illness.weeks_left))
 }
 
 /// A severed limb in a sentence: "bras gauche tranché", "jambe droite tranchée".
 fn limb_cut(location: Location) -> String {
-    let side = |s, feminine| match (s, feminine) {
-        (Side::Left, _) => "gauche",
-        (Side::Right, false) => "droit",
-        (Side::Right, true) => "droite",
-    };
     match location {
-        Location::Head => "tête tranchée".into(),
-        Location::Body => "corps tranché".into(),
-        Location::Arm(s) => format!("bras {} tranché", side(s, false)),
-        Location::Leg(s) => format!("jambe {} tranchée", side(s, true)),
+        Location::Head => tr!("cut-head"),
+        Location::Body => tr!("cut-body"),
+        Location::Arm(s) => tr!("cut-arm", side = side_key(s)),
+        Location::Leg(s) => tr!("cut-leg", side = side_key(s)),
     }
 }
 
@@ -691,65 +703,55 @@ pub fn fight_text(fight: &FightSummary, data: &DesignData) -> String {
     let knocked_out = mine.is_some_and(|f| f.knocked_out);
     let severed = mine.and_then(|f| f.severed);
     let result = match (fight.result, fight.died, severed) {
-        (_, true, Some(Location::Head)) => "décapité".into(),
-        (_, true, _) => "mort au combat".into(),
-        (FightResult::Lost, false, Some(limb)) => format!("défaite, {}", limb_cut(limb)),
-        (FightResult::Lost, false, _) if fell => {
-            "laissé pour mort, survit grièvement blessé".into()
-        }
-        (FightResult::Lost, false, _) if knocked_out => "défaite, étourdi sans se relever".into(),
-        (FightResult::Won, ..) => "victoire".into(),
-        (FightResult::Lost, ..) => "défaite".into(),
-        (FightResult::GaveUp, ..) => "abandon".into(),
-        (FightResult::Unfinished, ..) => {
-            let minutes = fight.start.max_ticks / (lanista_core::combat::TICKS_PER_SECOND * 60);
-            match minutes {
-                1 => "pas de vainqueur après une minute".into(),
-                n => format!("pas de vainqueur après {n} minutes"),
-            }
-        }
+        (_, true, Some(Location::Head)) => tr!("result-beheaded"),
+        (_, true, _) => tr!("result-dead"),
+        (FightResult::Lost, false, Some(limb)) => tr!("result-severed", limb = limb_cut(limb)),
+        (FightResult::Lost, false, _) if fell => tr!("result-left-for-dead"),
+        (FightResult::Lost, false, _) if knocked_out => tr!("result-knocked-out"),
+        (FightResult::Won, ..) => tr!("result-won"),
+        (FightResult::Lost, ..) => tr!("result-lost"),
+        (FightResult::GaveUp, ..) => tr!("result-gave-up"),
+        (FightResult::Unfinished, ..) => tr!(
+            "result-unfinished",
+            minutes = fight.start.max_ticks / (lanista_core::combat::TICKS_PER_SECOND * 60)
+        ),
     };
     let stronger = if fight.against_stronger {
-        ", plus fort"
+        "true"
     } else {
-        ""
+        "false"
     };
-    let bare = match (fight.refused.armour, fight.refused.weapon) {
-        (true, true) => ", sans armure ni arme",
-        (true, false) => ", sans armure",
-        (false, true) => ", sans arme",
-        (false, false) => "",
+    let refused = match (fight.refused.armour, fight.refused.weapon) {
+        (true, true) => "both",
+        (true, false) => "armour",
+        (false, true) => "weapon",
+        (false, false) => "none",
     };
     let against = if fight.is_melee() {
-        format!(
-            "Mêlée à {}, {}{}",
-            fight.opponents.len() + 1,
-            place_name(fight.place),
-            if fight.against_stronger {
-                ", plus forts"
-            } else {
-                ""
-            }
+        tr!(
+            "against-melee",
+            size = fight.opponents.len() + 1,
+            place = place_name(fight.place),
+            stronger = stronger
         )
     } else {
         let class = fight
             .opponent()
             .map_or_else(|| "?".into(), |o| class_name(o, data));
-        format!("Contre un {class}{stronger}")
+        tr!("against-duel", class = class, stronger = stronger)
     };
-    format!(
-        "{against}{bare} : {result}, renommée {:+}",
-        fight.fame_change
+    tr!(
+        "fight",
+        against = against,
+        refused = refused,
+        result = result,
+        fame = format!("{:+}", fight.fame_change)
     )
 }
 
 /// A place in a melee: « 1er », « 2e »…
 pub fn place_name(place: u32) -> String {
-    if place == 1 {
-        "1er".into()
-    } else {
-        format!("{place}e")
-    }
+    tr!("place", place = place)
 }
 
 /// `name after (±difference)`, or `name value` when it did not change. Plain ASCII
@@ -767,33 +769,35 @@ pub fn change(name: &str, before: u32, after: u32) -> String {
 
 /// The club's money after the week and why it moved: `Argent 530 (+30) : recettes +20, …`.
 pub fn money_line(before: i64, after: i64, ledger: &[Transaction]) -> String {
-    let mut line = if before == after {
-        format!("Argent {after}")
+    let money = tr!("money");
+    let line = if before == after {
+        format!("{money} {after}")
     } else {
-        format!("Argent {after} ({:+})", after - before)
+        format!("{money} {after} ({:+})", after - before)
     };
     let moves: Vec<String> = ledger
         .iter()
         .map(|t| {
             let name = match t.flow {
-                Flow::Upkeep => "entretien",
-                Flow::Care => "soins",
-                Flow::Training => "entraînement",
-                Flow::EntryFee => "inscription",
-                Flow::WinPrize => "prime de victoire",
-                Flow::Receipts => "recettes",
-                Flow::ChampionBonus => "bonus champion",
-                Flow::Purchase => "achat",
-                Flow::Sale => "vente",
-                Flow::Salary => "salaires",
+                Flow::Upkeep => tr!("flow-upkeep"),
+                Flow::Care => tr!("flow-care"),
+                Flow::Training => tr!("flow-training"),
+                Flow::EntryFee => tr!("flow-entry-fee"),
+                Flow::WinPrize => tr!("flow-win-prize"),
+                Flow::Receipts => tr!("flow-receipts"),
+                Flow::ChampionBonus => tr!("flow-champion-bonus"),
+                Flow::Purchase => tr!("flow-purchase"),
+                Flow::Sale => tr!("flow-sale"),
+                Flow::Salary => tr!("flow-salary"),
             };
             format!("{name} {:+}", t.amount)
         })
         .collect();
-    if !moves.is_empty() {
-        line = format!("{line} : {}", moves.join(", "));
+    if moves.is_empty() {
+        line
+    } else {
+        tr!("detailed", what = line, details = moves.join(", "))
     }
-    line
 }
 
 /// What a week changed, in the player's language.
@@ -809,39 +813,36 @@ pub fn week_lines(
         lines.push(fight_text(fight, data));
     }
     if let Some(injury) = &report.new_injury {
-        lines.push(format!("Blessure : {}", injury_text(*injury, dominant)));
+        lines.push(tr!("week-injury", injury = injury_text(*injury, dominant)));
     }
     if report.after_effect_spared {
-        lines.push("Séquelle évitée par le médecin".into());
+        lines.push(tr!("week-after-effect-spared"));
     }
     for injury in &report.healed_injuries {
-        lines.push(format!(
-            "Guéri : {}",
-            location_name(injury.location, dominant)
+        lines.push(tr!(
+            "week-healed",
+            location = location_name(injury.location, dominant)
         ));
     }
     if let Some(illness) = &report.new_illness {
-        lines.push(format!("Tombe malade : {}", illness_text(*illness)));
+        lines.push(tr!("week-ill", illness = illness_text(*illness)));
     }
     if report.illness_healed {
-        lines.push("Maladie guérie".into());
+        lines.push(tr!("week-illness-healed"));
     }
     if report.birthday {
-        lines.push(format!("Un an de plus : {} ans", after.age));
+        lines.push(tr!("week-birthday", age = after.age));
         if report.season_gains > 0 {
-            lines.push(format!(
-                "Bilan de la saison : {} progrès",
-                report.season_gains
-            ));
+            lines.push(tr!("week-season-gains", gains = report.season_gains));
         }
     }
     lines.push(format!(
         "{}, {}, {}",
-        change("Forme", before.form.value(), after.form.value()),
-        change("moral", before.morale.value(), after.morale.value()),
-        change("renommée", before.fame.value(), after.fame.value())
+        change(&tr!("form"), before.form.value(), after.form.value()),
+        change(&tr!("morale"), before.morale.value(), after.morale.value()),
+        change(&tr!("fame"), before.fame.value(), after.fame.value())
     ));
-    let stats: Vec<String> = STAT_NAMES
+    let stats: Vec<String> = stat_names()
         .iter()
         .zip(
             before
@@ -854,14 +855,14 @@ pub fn week_lines(
         .map(|(name, (b, a))| format!("{name} {:+}", i64::from(a) - i64::from(b)))
         .collect();
     if !stats.is_empty() {
-        lines.push(format!("Stats : {}", stats.join(", ")));
+        lines.push(tr!("week-stats", stats = stats.join(", ")));
     }
     match after.status {
         Status::Active | Status::Dead | Status::Sold | Status::Released => {}
         Status::Retired if too_maimed(&after.injuries, &data.fighter.retirement) => {
-            lines.push("Prend sa retraite : trop mutilé pour combattre".into());
+            lines.push(tr!("week-retires-maimed"));
         }
-        Status::Retired => lines.push(format!("Prend sa retraite à {} ans", after.age)),
+        Status::Retired => lines.push(tr!("week-retires", age = after.age)),
     }
     lines
 }

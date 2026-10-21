@@ -10,9 +10,10 @@ use reesch::egui;
 
 use super::market::estimate;
 use super::{ClubScreen, RANKS_SHOWN, View};
+use crate::lang::tr;
 use crate::texts::{
     arena_effect, arena_name, club_name, colosseum_name, condition_text, contender_name,
-    continent_name, culture_name, culture_text, date_text, profile_name, record_text,
+    continent_name, culture_name, culture_text, date_text, place_name, profile_name, record_text,
     relation_change_text, relation_text, rival_fighter_name, staff_text, wealth_name,
 };
 
@@ -22,10 +23,11 @@ impl ClubScreen {
     pub(super) fn colosseums(&mut self, ui: &mut egui::Ui) {
         let mut goto = self.continent_clubs(ui);
         let shown = self.shown_continent;
-        ui.heading(format!("Colisées ({})", continent_name(shown)));
+        ui.heading(tr!("colosseums-title", continent = continent_name(shown)));
         ui.horizontal(|ui| {
-            ui.selectable_value(&mut self.shown_prestige, None, "Tous");
-            for (prestige, name) in PRESTIGES {
+            ui.selectable_value(&mut self.shown_prestige, None, tr!("prestige-all"));
+            for prestige in PRESTIGES {
+                let name = prestige_name(prestige);
                 ui.selectable_value(&mut self.shown_prestige, Some(prestige), name);
             }
         });
@@ -40,7 +42,7 @@ impl ClubScreen {
             })
             .collect();
         if colosseums.is_empty() {
-            ui.label("Aucun colisée de ce niveau sur ce continent pour l'instant");
+            ui.label(tr!("colosseums-none"));
         }
         ui.columns(colosseums.len().max(1), |columns| {
             for ((id, (colosseum, rules)), ui) in colosseums.into_iter().zip(columns) {
@@ -57,15 +59,15 @@ impl ClubScreen {
     fn continent_clubs(&mut self, ui: &mut egui::Ui) -> Option<View> {
         ui.horizontal(|ui| {
             for continent in Continent::ALL {
-                let mut name = continent_name(continent).to_owned();
+                let mut name = continent_name(continent);
                 if continent == self.state.continent {
-                    name = format!("{name} (chez vous)");
+                    name = tr!("continent-home", continent = name);
                 }
                 ui.selectable_value(&mut self.shown_continent, continent, name);
             }
         });
         let shown = self.shown_continent;
-        ui.heading(format!("Clubs rivaux ({})", continent_name(shown)));
+        ui.heading(tr!("rival-clubs-title", continent = continent_name(shown)));
         let mut goto = None;
         for (club, line) in self.rival_lines().into_iter().enumerate() {
             let here = self
@@ -86,14 +88,14 @@ impl ClubScreen {
         (0..)
             .zip(&self.state.rivals)
             .map(|(club, rival)| {
-                format!(
-                    "{} ({}), {} et {} : {} combattants ; relation {}",
-                    rival.name,
-                    culture_name(&rival.culture, &self.data),
-                    profile_name(rival.profile),
-                    wealth_name(rival.wealth),
-                    rival.active(),
-                    relation_text(club, &self.state, &self.data)
+                tr!(
+                    "rival-club-line",
+                    club = rival.name.as_str(),
+                    culture = culture_name(&rival.culture, &self.data),
+                    profile = profile_name(rival.profile),
+                    wealth = wealth_name(rival.wealth),
+                    fighters = rival.active(),
+                    relation = relation_text(club, &self.state, &self.data)
                 )
             })
             .collect()
@@ -116,10 +118,10 @@ impl ClubScreen {
         (0..)
             .zip(&self.state.colosseums)
             .filter_map(|(c, colosseum)| match colosseum.champion {
-                Some(Contender::Rival(id)) if id.club == club => Some(format!(
-                    "Champion de {} : {}",
-                    colosseum_name(ColosseumId(c), &self.data),
-                    rival_fighter_name(id, &self.state, &self.data)
+                Some(Contender::Rival(id)) if id.club == club => Some(tr!(
+                    "champion-of",
+                    place = colosseum_name(ColosseumId(c), &self.data),
+                    fighter = rival_fighter_name(id, &self.state, &self.data)
                 )),
                 _ => None,
             })
@@ -138,15 +140,13 @@ impl ClubScreen {
                     .active_ranking(rosters)
                     .position(|r| r.contender == contender)
                     .filter(|&rank| rank < RANKS_SHOWN);
-                let mut text = rank.map_or_else(
-                    || NOT_RANKED.to_owned(),
-                    |rank| {
-                        let elo = colosseum.elo(contender, &self.data.world);
-                        format!("{}, Elo {elo}", ordinal(rank + 1))
-                    },
-                );
+                let mut text = rank.map_or_else(not_ranked, |rank| {
+                    let elo = colosseum.elo(contender, &self.data.world);
+                    let place = u32::try_from(rank + 1).unwrap_or(u32::MAX);
+                    tr!("standing-ranked", place = place_name(place), elo = elo)
+                });
                 if colosseum.champion == Some(contender) {
-                    text = format!("champion, {text}");
+                    text = tr!("standing-champion", standing = text);
                 }
                 text
             })
@@ -179,29 +179,29 @@ impl ClubScreen {
         let rival = &state.rivals[club];
         ui.heading(&rival.name);
         if let Some(week) = rival.closed {
-            let closed = format!("Fermé, ruiné : {}", date_text(week, data));
+            let closed = tr!("rival-closed", date = date_text(week, data));
             ui.colored_label(egui::Color32::LIGHT_RED, closed);
         }
-        ui.label(format!(
-            "Club {} et {}, {}, en {}, {} combattants en activité (au plus {})",
-            profile_name(rival.profile),
-            wealth_name(rival.wealth),
-            culture_text(&rival.culture, data),
-            continent_name(rival.continent),
-            rival.active(),
-            data.world.roster.max
+        ui.label(tr!(
+            "rival-description",
+            profile = profile_name(rival.profile),
+            wealth = wealth_name(rival.wealth),
+            culture = culture_text(&rival.culture, data),
+            continent = continent_name(rival.continent),
+            fighters = rival.active(),
+            max = data.world.roster.max
         ));
         ui.label(staff_text(&rival.staff));
         for line in self.titles_of(club) {
             ui.colored_label(egui::Color32::GOLD, line);
         }
-        ui.strong(format!(
-            "Relation avec votre club : {}",
-            relation_text(club, state, data)
+        ui.strong(tr!(
+            "rival-relation",
+            relation = relation_text(club, state, data)
         ));
         let lines = self.relation_lines(club);
         if !lines.is_empty() {
-            egui::CollapsingHeader::new("Ce qui s'est passé entre vous")
+            egui::CollapsingHeader::new(tr!("rival-history"))
                 .id_salt(("relation", club))
                 .show(ui, |ui| {
                     for line in lines {
@@ -211,9 +211,7 @@ impl ClubScreen {
         }
         let gone = rival.fighters.len() - rival.active();
         if gone > 0 {
-            ui.label(format!(
-                "{gone} anciens combattants : retraités, morts, vendus ou libérés"
-            ));
+            ui.label(tr!("rival-gone", gone = gone));
         }
     }
 
@@ -233,7 +231,13 @@ impl ClubScreen {
             egui::Grid::new(("rival club", club))
                 .striped(true)
                 .show(ui, |ui| {
-                    for title in ["Combattant", "Âge", "Renommée", "Bilan", "État"] {
+                    for title in [
+                        tr!("roster-fighter"),
+                        tr!("roster-age"),
+                        tr!("roster-fame"),
+                        tr!("record-title"),
+                        tr!("roster-condition"),
+                    ] {
                         ui.strong(title);
                     }
                     let home: Vec<usize> = (0..data.world.colosseums.len())
@@ -242,7 +246,7 @@ impl ClubScreen {
                     for &c in &home {
                         ui.strong(&data.world.colosseums[c].name);
                     }
-                    ui.strong("Valeur estimée");
+                    ui.strong(tr!("estimated-value"));
                     ui.end_row();
                     for (fighter, f) in rival.fighters.iter().enumerate() {
                         if f.status != Status::Active {
@@ -261,8 +265,8 @@ impl ClubScreen {
                             ui.label(&standings[c]);
                         }
                         let estimate = estimate(f, data);
-                        ui.label(format!("≈ {estimate}"));
-                        if ui.button("Négocier").clicked() {
+                        ui.label(tr!("estimate", value = estimate));
+                        if ui.button(tr!("negotiate")).clicked() {
                             draft = Some((id, estimate));
                         }
                         ui.end_row();
@@ -274,10 +278,20 @@ impl ClubScreen {
 }
 
 /// The colosseums' levels, by prestige: major, middling, weak.
-const PRESTIGES: [(u32, &str); 3] = [(3, "Majeurs"), (2, "T1"), (1, "T2")];
+const PRESTIGES: [u32; 3] = [3, 2, 1];
+
+fn prestige_name(prestige: u32) -> String {
+    match prestige {
+        3 => tr!("prestige-major"),
+        2 => tr!("prestige-t1"),
+        _ => tr!("prestige-t2"),
+    }
+}
 
 /// A fighter's standing in a colosseum where it is not among the ranks shown.
-pub(super) const NOT_RANKED: &str = "non classé";
+pub(super) fn not_ranked() -> String {
+    tr!("not-ranked")
+}
 
 /// The page of a ranked fighter: the club's sheet, or what the club sees of an
 /// outsider.
@@ -293,24 +307,23 @@ fn colosseum_column(
 ) -> Option<View> {
     let mut goto = None;
     ui.strong(&rules.name);
-    ui.label(format!(
-        "Arène : {}, prestige {} / 5",
-        arena_name(rules.arena),
-        rules.prestige
+    ui.label(tr!(
+        "colosseum-arena",
+        arena = arena_name(rules.arena),
+        prestige = rules.prestige
     ))
     .on_hover_text(arena_effect(rules.arena));
     let fee = state.entry_fee(id, data).unwrap_or(0);
-    let travel = if fee > rules.purses.entry_fee {
-        " (voyage compris)"
-    } else {
-        ""
-    };
-    ui.label(format!(
-        "Inscription {fee}{travel}, prime de victoire {}, bonus champion {}",
-        rules.purses.win_prize, rules.purses.champion_bonus
+    let travel = fee > rules.purses.entry_fee;
+    ui.label(tr!(
+        "colosseum-purses",
+        fee = fee,
+        travel = if travel { "true" } else { "false" },
+        prize = rules.purses.win_prize,
+        bonus = rules.purses.champion_bonus
     ));
     ui.horizontal(|ui| {
-        ui.colored_label(egui::Color32::GOLD, "Champion :");
+        ui.colored_label(egui::Color32::GOLD, tr!("colosseum-champion"));
         match colosseum.champion {
             Some(c) => {
                 if ui.link(contender_name(c, state, data)).clicked() {
@@ -318,14 +331,14 @@ fn colosseum_column(
                 }
             }
             None => {
-                ui.label("aucun");
+                ui.label(tr!("colosseum-no-champion"));
             }
         }
     });
-    ui.label(format!(
-        "Titre défendu ou pris en semaine {}, à défendre au plus tard en semaine {}",
-        colosseum.title_since,
-        colosseum.defense_deadline(&data.world)
+    ui.label(tr!(
+        "colosseum-title-weeks",
+        since = colosseum.title_since,
+        deadline = colosseum.defense_deadline(&data.world)
     ));
     ranking(ui, id, colosseum, state, data).or(goto)
 }
@@ -346,7 +359,12 @@ fn ranking(
             egui::Grid::new(("ranking", id.0))
                 .striped(true)
                 .show(ui, |ui| {
-                    for title in ["Rang", "Combattant", "Club", "Elo"] {
+                    for title in [
+                        tr!("ranking-rank"),
+                        tr!("roster-fighter"),
+                        tr!("ranking-club"),
+                        tr!("ranking-elo"),
+                    ] {
                         ui.strong(title);
                     }
                     ui.end_row();
@@ -363,7 +381,7 @@ fn ranking(
                                 }
                             }
                             Contender::FreeAgent(_) => {
-                                ui.label("sans club");
+                                ui.label(tr!("ranking-no-club"));
                             }
                             Contender::Club(_) => {
                                 ui.label("");
@@ -382,14 +400,5 @@ fn contender_view(contender: Contender) -> View {
         Contender::Club(i) => View::Sheet(i),
         Contender::Rival(id) => View::Outside(Target::Rival(id)),
         Contender::FreeAgent(a) => View::Outside(Target::FreeAgent(a)),
-    }
-}
-
-/// "1er", "2e", "3e"…
-fn ordinal(n: usize) -> String {
-    if n == 1 {
-        "1er".into()
-    } else {
-        format!("{n}e")
     }
 }

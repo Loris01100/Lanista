@@ -12,12 +12,13 @@ use reesch::{Assets, Audio, Bindings, SceneTarget, Screen, Transition, egui, pix
 use crate::Action;
 use crate::fight_view::{Cast, FightView, STANDS};
 use crate::fighter_sprite::PIXELS_PER_METRE;
+use crate::lang::tr;
 
 pub use crate::fight_view::{DEATH_SOUND, HIT_SOUND};
 // ponytail: placeholder music.
 pub const MUSIC: &str = "placeholder/music.wav";
-/// Fight speeds offered, with their labels.
-const SPEEDS: [(f32, &str); 3] = [(0.5, "x0,5"), (1.0, "x1"), (1.5, "x1,5")];
+/// Fight speeds offered.
+const SPEEDS: [f32; 3] = [0.5, 1.0, 1.5];
 /// A thumbnail's width, a share of the screen's; 16:10, like its render target.
 const THUMBNAIL_SHARE: f32 = 0.24;
 /// Pixels of a thumbnail's render target.
@@ -162,17 +163,18 @@ impl CombatScreen {
     fn controls(&mut self, ui: &egui::Context) -> bool {
         let mut start = None;
         let mut done = false;
-        egui::Window::new("Contrôles")
+        egui::Window::new(tr!("controls"))
             .title_bar(false)
             .resizable(false)
             .anchor(egui::Align2::CENTER_BOTTOM, [0.0, -12.0])
             .show(ui, |ui| {
                 ui.horizontal(|ui| {
                     if self.running() {
-                        for (speed, label) in SPEEDS {
+                        let labels = [tr!("speed-slow"), tr!("speed-normal"), tr!("speed-fast")];
+                        for (speed, label) in SPEEDS.into_iter().zip(labels) {
                             ui.selectable_value(&mut self.speed, speed, label);
                         }
-                        if ui.button("Passer au résultat").clicked() {
+                        if ui.button(tr!("skip-to-result")).clicked() {
                             self.skip();
                         }
                     }
@@ -182,17 +184,17 @@ impl CombatScreen {
                     match &mut self.mode {
                         Mode::Free { next_seed } => {
                             ui.separator();
-                            ui.label(format!("Graine {}", self.views[0].arena.seed));
+                            ui.label(tr!("seed", seed = self.views[0].arena.seed.to_string()));
                             ui.add(egui::DragValue::new(next_seed));
-                            if ui.button("Lancer").clicked() {
+                            if ui.button(tr!("start-fight")).clicked() {
                                 start = Some(*next_seed);
                             }
                             ui.separator();
-                            done = ui.button("Retour (Échap)").clicked();
+                            done = ui.button(tr!("back-escape")).clicked();
                         }
                         Mode::Watch => {
                             let finished = !self.running();
-                            done = finished && ui.button("Continuer").clicked();
+                            done = finished && ui.button(tr!("continue")).clicked();
                         }
                     }
                 });
@@ -235,7 +237,7 @@ impl CombatScreen {
         if lines.is_empty() {
             return;
         }
-        egui::Window::new("Élimination")
+        egui::Window::new(tr!("elimination"))
             .title_bar(false)
             .resizable(false)
             .anchor(egui::Align2::CENTER_TOP, [0.0, 12.0])
@@ -268,9 +270,9 @@ impl Screen for CombatScreen {
             return Transition::Pop;
         }
         for (action, speed) in [
-            (Action::SlowSpeed, SPEEDS[0].0),
-            (Action::NormalSpeed, SPEEDS[1].0),
-            (Action::FastSpeed, SPEEDS[2].0),
+            (Action::SlowSpeed, SPEEDS[0]),
+            (Action::NormalSpeed, SPEEDS[1]),
+            (Action::FastSpeed, SPEEDS[2]),
         ] {
             if self.bindings.pressed(ui, &action) {
                 self.speed = speed;
@@ -329,21 +331,21 @@ impl Screen for CombatScreen {
 
 /// Music and effects volume sliders, top right.
 fn volumes(ui: &egui::Context, audio: &mut Audio) {
-    egui::Window::new("Son")
+    egui::Window::new(tr!("sound"))
         .resizable(false)
         .default_open(false)
         .anchor(egui::Align2::RIGHT_TOP, [-12.0, 12.0])
         .show(ui, |ui| {
             let mut music = audio.music_volume();
             if ui
-                .add(egui::Slider::new(&mut music, 0.0..=1.0).text("Musique"))
+                .add(egui::Slider::new(&mut music, 0.0..=1.0).text(tr!("music")))
                 .changed()
             {
                 audio.set_music_volume(music);
             }
             let mut effects = audio.effects_volume();
             if ui
-                .add(egui::Slider::new(&mut effects, 0.0..=1.0).text("Effets"))
+                .add(egui::Slider::new(&mut effects, 0.0..=1.0).text(tr!("effects")))
                 .changed()
             {
                 audio.set_effects_volume(effects);
@@ -602,7 +604,7 @@ mod tests {
             let mut screen = screen(seed);
             let mut frame = 0;
             while screen.running() {
-                let speed = SPEEDS[frame % SPEEDS.len()].0;
+                let speed = SPEEDS[frame % SPEEDS.len()];
                 screen.advance(frame_times[frame % frame_times.len()] * speed);
                 frame += 1;
             }

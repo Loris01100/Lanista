@@ -35,12 +35,13 @@ use reesch::{Assets, Audio, Bindings, Screen, Transition, egui};
 use crate::Action;
 use crate::combat_screen::{CombatScreen, Watched};
 use crate::fight_view::Cast;
+use crate::lang::tr;
 use crate::saves;
 use crate::texts::{
-    STAT_NAMES, activity_name, challenger_text, change, class_name, club_name, colosseum_name,
-    condition_text, contender_name, continent_name, date_text, fight_text, fighter_name,
-    illness_text, injury_text, market_news_text, money_line, move_text, personality_text, priced,
-    rival_fighter_name, staff_move_text, staff_news_text, title_news_text, wealth_name,
+    activity_name, challenger_text, change, class_name, club_name, colosseum_name, condition_text,
+    contender_name, continent_name, date_in_sentence, fight_text, fighter_name, illness_text,
+    injury_text, market_news_text, money_line, move_text, personality_text, priced,
+    rival_fighter_name, staff_move_text, staff_news_text, stat_names, title_news_text, wealth_name,
     wealth_text, week_lines, world_news_text,
 };
 
@@ -130,11 +131,11 @@ impl ClubScreen {
             .as_deref()
             .map_or(Ok(None), |folder| saves::read(folder, saves::AUTO, &data));
         let (state, message) = match autosave {
-            Ok(Some(state)) => (state, Some("Partie reprise".to_owned())),
+            Ok(Some(state)) => (state, Some(tr!("save-resumed"))),
             Ok(None) => (GameState::new(seed, &data), None),
             Err(e) => (
                 GameState::new(seed, &data),
-                Some(format!("Sauvegarde automatique illisible : {e}")),
+                Some(tr!("save-autosave-unreadable", error = e)),
             ),
         };
         let mut screen = Self::new(data, state, saves, bindings);
@@ -183,9 +184,9 @@ impl ClubScreen {
     fn save(&mut self, file: &str, asked: bool) {
         let Some(folder) = &self.saves else { return };
         match saves::write(folder, file, &self.state) {
-            Ok(()) if asked => self.message = Some("Partie sauvegardée".into()),
+            Ok(()) if asked => self.message = Some(tr!("save-saved")),
             Ok(()) => {}
-            Err(e) => self.message = Some(format!("Sauvegarde impossible : {e}")),
+            Err(e) => self.message = Some(tr!("save-failed", error = e.to_string())),
         }
     }
 
@@ -194,10 +195,10 @@ impl ClubScreen {
         match saves::read(folder, saves::MANUAL, &self.data) {
             Ok(Some(state)) => {
                 self.replace(state);
-                self.message = Some("Partie chargée".into());
+                self.message = Some(tr!("save-loaded"));
             }
-            Ok(None) => self.message = Some("Aucune sauvegarde".into()),
-            Err(e) => self.message = Some(format!("Sauvegarde illisible : {e}")),
+            Ok(None) => self.message = Some(tr!("save-none")),
+            Err(e) => self.message = Some(tr!("save-unreadable", error = e)),
         }
     }
 
@@ -212,7 +213,7 @@ impl ClubScreen {
             .resize_with(self.state.fighters.len(), Vec::new);
         let mut overview = vec![money_line(money, self.state.money, &summary.ledger)];
         if let Some(wealth) = summary.wealth {
-            overview.push(format!("Le club devient {}", wealth_name(wealth)));
+            overview.push(tr!("club-becomes", wealth = wealth_name(wealth)));
         }
         overview.extend(summary.staff.iter().map(|&m| staff_news_text(m)));
         overview.extend(
@@ -228,7 +229,11 @@ impl ClubScreen {
             // A free agent signed this week was not there before it.
             let before = before.get(i).unwrap_or(after);
             let lines = week_lines(before, after, &report, data);
-            let mut line = format!("{} : {}", fighter_name(i, after, data), lines[0]);
+            let mut line = tr!(
+                "labelled",
+                label = fighter_name(i, after, data),
+                text = lines[0].as_str()
+            );
             if let Some(fight) = &report.fight {
                 line = format!("{line}, {}", fight_text(fight, data));
             }
@@ -273,13 +278,14 @@ impl ClubScreen {
         let refusal = &data.world.challenges;
         overview.extend(summary.refusals.iter().map(|&ch| {
             let club = &self.state.fighters;
-            format!(
-                "{} refuse le défi de {} sans combattre : renommée -{}, Elo -{}",
-                club.get(ch.fighter)
+            tr!(
+                "challenge-refused",
+                fighter = club
+                    .get(ch.fighter)
                     .map_or_else(|| "?".into(), |f| fighter_name(ch.fighter, f, data)),
-                challenger_text(ch, &self.state, data),
-                refusal.refusal_fame,
-                refusal.refusal_elo
+                challenger = challenger_text(ch, &self.state, data),
+                fame = refusal.refusal_fame,
+                elo = refusal.refusal_elo
             )
         }));
         self.last_week = Some((week, overview));
@@ -304,33 +310,35 @@ impl ClubScreen {
     fn top_bar(&mut self, ui: &mut egui::Ui) -> Option<Transition> {
         let date = self.state.date(&self.data);
         let phase = match date.phase(&self.data.calendar) {
-            SeasonPhase::Competition => "compétition",
-            SeasonPhase::GreatEvent => "grand événement",
-            SeasonPhase::OffSeason => "intersaison",
+            SeasonPhase::Competition => "competition",
+            SeasonPhase::GreatEvent => "great-event",
+            SeasonPhase::OffSeason => "off-season",
         };
         let mut transition = None;
         ui.horizontal(|ui| {
-            ui.strong(format!(
-                "Saison {}, semaine {} : {phase}",
-                date.season, date.week
+            ui.strong(tr!(
+                "top-date",
+                season = date.season,
+                week = date.week,
+                phase = phase
             ));
             ui.separator();
-            ui.strong(format!("Argent : {}", self.state.money));
+            ui.strong(tr!("top-money", money = self.state.money));
             ui.separator();
             if let Some(message) = &self.message {
                 ui.label(message);
                 ui.separator();
             }
-            ui.selectable_value(&mut self.view, View::Menu, "Menu");
-            ui.selectable_value(&mut self.view, View::Roster, "Combattants");
+            ui.selectable_value(&mut self.view, View::Menu, tr!("view-menu"));
+            ui.selectable_value(&mut self.view, View::Roster, tr!("view-roster"));
             ui.add_enabled_ui(!self.fights.is_empty(), |ui| {
-                ui.selectable_value(&mut self.view, View::Fights, "Résumé des combats");
+                ui.selectable_value(&mut self.view, View::Fights, tr!("view-fights"));
             });
-            ui.selectable_value(&mut self.view, View::Colosseums, "Colisées");
-            ui.selectable_value(&mut self.view, View::Market, "Marché");
-            ui.selectable_value(&mut self.view, View::Staff, "Personnel");
+            ui.selectable_value(&mut self.view, View::Colosseums, tr!("view-colosseums"));
+            ui.selectable_value(&mut self.view, View::Market, tr!("view-market"));
+            ui.selectable_value(&mut self.view, View::Staff, tr!("view-staff"));
             ui.separator();
-            if ui.button("Duel standard").clicked() {
+            if ui.button(tr!("standard-duel")).clicked() {
                 let duel =
                     CombatScreen::new(Rc::clone(&self.data), FREE_DUEL_SEED, self.bindings.clone());
                 transition = Some(Transition::Push(Box::new(duel)));
@@ -341,43 +349,44 @@ impl ClubScreen {
 
     /// The general menu; returns whether to play the week.
     fn menu(&mut self, ui: &mut egui::Ui) -> bool {
-        ui.heading("Menu général");
-        ui.label(format!(
-            "{}, en {}",
-            wealth_text(self.state.wealth),
-            continent_name(self.state.continent)
+        ui.heading(tr!("menu-title"));
+        ui.label(tr!(
+            "menu-club",
+            wealth = wealth_text(self.state.wealth),
+            continent = continent_name(self.state.continent)
         ));
         let alerts = self.alerts();
         if !alerts.is_empty() {
             ui.add_space(6.0);
-            ui.strong("Alertes");
+            ui.strong(tr!("menu-alerts"));
             for alert in alerts {
                 ui.colored_label(egui::Color32::LIGHT_RED, alert);
             }
         }
         ui.add_space(6.0);
         let max = self.data.economy.max_fighters;
-        ui.label(format!(
-            "{} / {max} combattants en activité",
-            self.state.active_fighters()
+        ui.label(tr!(
+            "menu-active",
+            active = self.state.active_fighters(),
+            max = max
         ));
         for line in self.pending_lines() {
             ui.label(line);
         }
-        let play = ui.button("Semaine suivante (Espace)").clicked();
+        let play = ui.button(tr!("menu-next-week")).clicked();
         if self.saves.is_some() {
             ui.horizontal(|ui| self.files(ui));
         }
         ui.separator();
         egui::ScrollArea::vertical().show(ui, |ui| {
             if let Some((week, lines)) = &self.last_week {
-                ui.strong(format!("Semaine {week}"));
+                ui.strong(tr!("week-title", week = *week));
                 for line in lines {
                     ui.label(line);
                 }
                 ui.add_space(6.0);
             }
-            ui.strong("Nouvelles du monde");
+            ui.strong(tr!("menu-news"));
             for line in self.news_lines() {
                 ui.label(line);
             }
@@ -387,13 +396,13 @@ impl ClubScreen {
 
     /// Saving, loading and starting a new game.
     fn files(&mut self, ui: &mut egui::Ui) {
-        if ui.button("Sauvegarder").clicked() {
+        if ui.button(tr!("menu-save")).clicked() {
             self.save(saves::MANUAL, true);
         }
-        if ui.button("Charger").clicked() {
+        if ui.button(tr!("menu-load")).clicked() {
             self.load();
         }
-        ui.label("Nouvelle partie :");
+        ui.label(tr!("menu-new-game"));
         egui::ComboBox::from_id_salt("new continent")
             .selected_text(continent_name(self.new_continent))
             .show_ui(ui, |ui| {
@@ -406,14 +415,18 @@ impl ClubScreen {
                 }
             });
         for wealth in Wealth::ALL {
-            if ui.button(format!("club {}", wealth_name(wealth))).clicked() {
+            if ui
+                .button(tr!("menu-new-club", wealth = wealth_name(wealth)))
+                .clicked()
+            {
                 let seed = new_seed();
                 let start = (wealth, self.new_continent);
                 self.replace(GameState::start(seed, start, &self.data));
-                self.message = Some(format!(
-                    "Nouvelle partie, club {} en {}, graine {seed}",
-                    wealth_name(wealth),
-                    continent_name(start.1)
+                self.message = Some(tr!(
+                    "menu-new-game-started",
+                    wealth = wealth_name(wealth),
+                    continent = continent_name(start.1),
+                    seed = seed.to_string()
                 ));
             }
         }
@@ -421,22 +434,24 @@ impl ClubScreen {
 
     /// The moves decided for the week and the pending counter-offer.
     fn pending_lines(&self) -> Vec<String> {
-        let moves = self
-            .decisions
-            .moves
-            .iter()
-            .map(|&m| format!("Marché : {}", move_text(m, &self.state, &self.data)));
+        let moves = self.decisions.moves.iter().map(|&m| {
+            tr!(
+                "pending-market",
+                what = move_text(m, &self.state, &self.data)
+            )
+        });
         let staff = self.decisions.staff.iter().map(|&m| {
-            format!(
-                "Personnel : {}",
-                staff_move_text(m, &self.state.staff_market)
+            tr!(
+                "pending-staff",
+                what = staff_move_text(m, &self.state.staff_market)
             )
         });
         let counter = self.state.counter_offer.map(|(id, price)| {
-            format!(
-                "Marché : {} demande {price} pour {}",
-                club_name(id.club, &self.state),
-                rival_fighter_name(id, &self.state, &self.data)
+            tr!(
+                "pending-counter-offer",
+                club = club_name(id.club, &self.state),
+                price = price,
+                fighter = rival_fighter_name(id, &self.state, &self.data)
             )
         });
         moves.chain(staff).chain(counter).collect()
@@ -453,7 +468,7 @@ impl ClubScreen {
     fn alerts(&self) -> Vec<String> {
         let mut alerts = Vec::new();
         if self.state.money < 0 {
-            alerts.push(format!("Dettes : {}", self.state.money));
+            alerts.push(tr!("alert-debts", money = self.state.money));
         }
         for (i, f) in self.state.fighters.iter().enumerate() {
             if f.status != Status::Active {
@@ -463,14 +478,26 @@ impl ClubScreen {
             for injury in &f.injuries {
                 if matches!(injury.severity, Severity::Medium | Severity::Severe) {
                     let injury = injury_text(*injury, f.dominant_hand);
-                    alerts.push(format!("{name} : blessure, {injury}"));
+                    alerts.push(tr!(
+                        "alert-injury",
+                        fighter = name.as_str(),
+                        injury = injury
+                    ));
                 }
             }
             if let Some(illness) = f.illness.filter(|i| i.level != IllnessLevel::Mild) {
-                alerts.push(format!("{name} : {}", illness_text(illness)));
+                alerts.push(tr!(
+                    "labelled",
+                    label = name.as_str(),
+                    text = illness_text(illness)
+                ));
             }
             if f.form.value() < lanista_core::fighter::career::REST_BELOW_FORM {
-                alerts.push(format!("{name} : fatigué (forme {})", f.form.value()));
+                alerts.push(tr!(
+                    "alert-tired",
+                    fighter = name.as_str(),
+                    form = f.form.value()
+                ));
             }
         }
         for (colosseum, rules) in self
@@ -482,50 +509,50 @@ impl ClubScreen {
             if let Some(Contender::Club(i)) = colosseum.champion
                 && let Some(f) = self.state.fighters.get(i)
             {
-                alerts.push(format!(
-                    "{} : titre de {} à défendre au plus tard en semaine {}",
-                    fighter_name(i, f, &self.data),
-                    rules.name,
-                    colosseum.defense_deadline(&self.data.world)
+                alerts.push(tr!(
+                    "alert-title-defense",
+                    fighter = fighter_name(i, f, &self.data),
+                    place = rules.name.as_str(),
+                    week = colosseum.defense_deadline(&self.data.world)
                 ));
             }
         }
         let refusal = &self.data.world.challenges;
         for &ch in &self.state.challenges {
             if let Some(f) = self.state.fighters.get(ch.fighter) {
-                alerts.push(format!(
-                    "{} : défi de {} (refus sans combattre : renommée -{}, Elo -{})",
-                    fighter_name(ch.fighter, f, &self.data),
-                    challenger_text(ch, &self.state, &self.data),
-                    refusal.refusal_fame,
-                    refusal.refusal_elo
+                alerts.push(tr!(
+                    "alert-challenge",
+                    fighter = fighter_name(ch.fighter, f, &self.data),
+                    challenger = challenger_text(ch, &self.state, &self.data),
+                    fame = refusal.refusal_fame,
+                    elo = refusal.refusal_elo
                 ));
             }
         }
         for offer in &self.state.sale_offers {
             if let Some(f) = self.state.fighters.get(offer.fighter) {
-                alerts.push(format!(
-                    "{} veut acheter {} pour {} (à accepter au marché cette semaine)",
-                    club_name(offer.rival, &self.state),
-                    fighter_name(offer.fighter, f, &self.data),
-                    offer.price
+                alerts.push(tr!(
+                    "alert-sale-offer",
+                    club = club_name(offer.rival, &self.state),
+                    fighter = fighter_name(offer.fighter, f, &self.data),
+                    price = offer.price
                 ));
             }
         }
         let rivalry = &self.data.world.relations.rivalry;
         for (&club, relation) in &self.state.relations {
             if let Some(week) = relation.rival_since {
-                alerts.push(format!(
-                    "{} est votre rival depuis {} : recettes à {} %, renommée +{} par combat",
-                    club_name(club, &self.state),
-                    date_text(week, &self.data).to_lowercase(),
-                    rivalry.receipts_percent,
-                    rivalry.fame
+                alerts.push(tr!(
+                    "alert-rival",
+                    club = club_name(club, &self.state),
+                    since = date_in_sentence(week, &self.data),
+                    receipts = rivalry.receipts_percent,
+                    fame = rivalry.fame
                 ));
             }
         }
         if self.state.active_fighters() == 0 {
-            alerts.push("Plus aucun combattant : recrutez un free agent au marché".into());
+            alerts.push(tr!("alert-no-fighter"));
         }
         alerts
     }
@@ -560,14 +587,14 @@ impl ClubScreen {
                 let name = challenger_text(ch, &self.state, data);
                 (
                     Activity::Challenge(ch.colosseum, ch.rival),
-                    format!("Défi de {name}"),
+                    tr!("challenge-from", challenger = name),
                 )
             });
         melees.chain(titles).chain(challenges).collect()
     }
 
     fn roster(&mut self, ui: &mut egui::Ui) {
-        ui.heading("Combattants");
+        ui.heading(tr!("view-roster"));
         let data = &self.data;
         let care = self.state.care_rules(data);
         let special: Vec<_> = (0..self.state.fighters.len())
@@ -576,13 +603,13 @@ impl ClubScreen {
         egui::ScrollArea::vertical().show(ui, |ui| {
             egui::Grid::new("roster").striped(true).show(ui, |ui| {
                 for title in [
-                    "Combattant",
-                    "Âge",
-                    "Forme",
-                    "Moral",
-                    "Renommée",
-                    "État",
-                    "Semaine",
+                    tr!("roster-fighter"),
+                    tr!("roster-age"),
+                    tr!("roster-form"),
+                    tr!("roster-morale"),
+                    tr!("roster-fame"),
+                    tr!("roster-condition"),
+                    tr!("roster-week"),
                 ] {
                     ui.strong(title);
                 }
@@ -623,13 +650,13 @@ impl ClubScreen {
             return;
         };
         let special = self.special_fights(index);
-        if ui.button("Retour à la liste").clicked() {
+        if ui.button(tr!("back-to-list")).clicked() {
             self.view = View::Roster;
         }
         ui.columns(2, |columns| {
             sheet(&mut columns[0], index, f, data);
             let ui = &mut columns[1];
-            ui.heading("Cette semaine");
+            ui.heading(tr!("sheet-this-week"));
             if f.status == Status::Active
                 && let Some(plan) = self.decisions.plans.get_mut(index)
             {
@@ -637,15 +664,15 @@ impl ClubScreen {
                 plan_editor(ui, plan, f, &special, (&self.state, &care), data);
                 challenge_picker(ui, plan, index, &self.state, data);
             } else {
-                ui.label("Carrière terminée");
+                ui.label(tr!("sheet-career-over"));
             }
             ui.separator();
-            ui.heading("Historique");
+            ui.heading(tr!("sheet-history"));
             egui::ScrollArea::vertical()
                 .id_salt("history")
                 .show(ui, |ui| {
                     for (week, lines) in self.histories.get(index).into_iter().flatten() {
-                        ui.strong(format!("Semaine {week}"));
+                        ui.strong(tr!("week-title", week = *week));
                         for line in lines {
                             ui.label(line);
                         }
@@ -659,30 +686,30 @@ impl ClubScreen {
     fn fight_summary(&self, ui: &mut egui::Ui) -> Option<u64> {
         let data = &self.data;
         let mut again = None;
-        ui.heading("Résumé des combats");
+        ui.heading(tr!("view-fights"));
         egui::ScrollArea::vertical().show(ui, |ui| {
             for (n, report) in self.fights.iter().enumerate() {
                 let fight = &report.fight;
                 let fighter = &self.state.fighters[report.fighter];
                 ui.add_space(8.0);
-                ui.strong(format!(
-                    "{}, à {}",
-                    fighter_name(report.fighter, fighter, data),
-                    colosseum_name(report.colosseum, data)
+                ui.strong(tr!(
+                    "summary-fighter-at",
+                    fighter = fighter_name(report.fighter, fighter, data),
+                    place = colosseum_name(report.colosseum, data)
                 ));
                 ui.label(fight_text(fight, data));
-                ui.label(format!(
-                    "Durée {} s, graine {}",
-                    fight.ticks / lanista_core::combat::TICKS_PER_SECOND,
-                    fight.seed
+                ui.label(tr!(
+                    "summary-duration",
+                    seconds = fight.ticks / lanista_core::combat::TICKS_PER_SECOND,
+                    seed = fight.seed.to_string()
                 ));
                 egui::Grid::new(("fight", n)).striped(true).show(ui, |ui| {
                     ui.label("");
-                    ui.strong("Votre combattant");
+                    ui.strong(tr!("summary-yours"));
                     // A melee shows the fighter's line only, a duel both sides.
                     let sides: Vec<_> =
                         if let (false, Some(opponent)) = (fight.is_melee(), fight.opponent()) {
-                            ui.strong(format!("L'adversaire ({})", class_name(opponent, data)));
+                            ui.strong(tr!("summary-opponent", class = class_name(opponent, data)));
                             fight.report.fighters.iter().collect()
                         } else {
                             fight.mine().into_iter().collect()
@@ -699,12 +726,12 @@ impl ClubScreen {
                         ]
                     });
                     let names = [
-                        "Dégâts infligés",
-                        "Dégâts reçus",
-                        "Sorts lancés",
-                        "Coups ratés",
-                        "Étourdi",
-                        "PV restants",
+                        tr!("summary-damage-dealt"),
+                        tr!("summary-damage-taken"),
+                        tr!("summary-spells-cast"),
+                        tr!("summary-misses"),
+                        tr!("summary-stuns"),
+                        tr!("summary-hp-left"),
                     ];
                     let values: Vec<[u32; 6]> = rows.collect();
                     for (row, name) in names.into_iter().enumerate() {
@@ -715,19 +742,19 @@ impl ClubScreen {
                         ui.end_row();
                     }
                 });
-                ui.label(format!(
-                    "Argent {:+}, renommée {:+}, {}",
-                    report.money,
-                    fight.fame_change,
-                    change("forme", report.form.0, report.form.1)
+                ui.label(tr!(
+                    "summary-money",
+                    money = format!("{:+}", report.money),
+                    fame = format!("{:+}", fight.fame_change),
+                    form = change(&tr!("summary-form"), report.form.0, report.form.1)
                 ));
                 if let Some(injury) = report.injury {
-                    ui.label(format!(
-                        "Blessure : {}",
-                        injury_text(injury, fighter.dominant_hand)
+                    ui.label(tr!(
+                        "week-injury",
+                        injury = injury_text(injury, fighter.dominant_hand)
                     ));
                 }
-                if ui.button("Revoir le combat").clicked() {
+                if ui.button(tr!("summary-watch-again")).clicked() {
                     again = Some(fight.seed);
                 }
                 ui.separator();
@@ -747,7 +774,7 @@ impl ClubScreen {
 
     /// A « Retour » button to the view the current one was opened from.
     fn back_button(&mut self, ui: &mut egui::Ui) {
-        if ui.button("Retour").clicked() {
+        if ui.button(tr!("back")).clicked() {
             self.view = self.back;
         }
     }
@@ -901,7 +928,7 @@ fn plan_editor(
     }
     let chosen = abroad.iter().find(|(a, ..)| *a == plan.activity);
     let text = chosen.map_or_else(
-        || format!("À l'étranger (voyage {})", data.world.travel_fee),
+        || tr!("plan-abroad", travel = data.world.travel_fee),
         |(_, name, _)| name.clone(),
     );
     egui::ComboBox::from_id_salt("abroad")
@@ -927,31 +954,33 @@ fn plan_editor(
         plan.care = false;
     } else if i64::from(cost) > money {
         plan.care = false;
-        let text = format!("Soigner ({cost}) : pas assez d'argent");
+        let text = tr!("plan-care-unaffordable", cost = cost);
         ui.add_enabled(false, egui::Checkbox::new(&mut plan.care, text));
     } else {
-        ui.checkbox(&mut plan.care, format!("Soigner ({cost})"));
+        ui.checkbox(&mut plan.care, tr!("plan-care", cost = cost));
     }
     let fights = plan.activity.fights();
     // The colosseum's equipment, refused for fame; nothing to refuse without a fight.
     if fights {
         let fame = &data.fighter.fame;
-        ui.checkbox(&mut plan.refused.armour, "Sans armure")
-            .on_hover_text(format!(
-                "Défenses très réduites, renommée +{} (+{} sans rien)",
-                fame.refused_armour, fame.refused_all
+        ui.checkbox(&mut plan.refused.armour, tr!("plan-no-armour"))
+            .on_hover_text(tr!(
+                "plan-no-armour-effect",
+                fame = fame.refused_armour,
+                all = fame.refused_all
             ));
-        ui.checkbox(&mut plan.refused.weapon, "Sans arme")
-            .on_hover_text(format!(
-                "Attaques très réduites, coups à mains nues, renommée +{} (+{} sans rien)",
-                fame.refused_weapon, fame.refused_all
+        ui.checkbox(&mut plan.refused.weapon, tr!("plan-no-weapon"))
+            .on_hover_text(tr!(
+                "plan-no-weapon-effect",
+                fame = fame.refused_weapon,
+                all = fame.refused_all
             ));
     } else {
         plan.refused = Refused::NONE;
     }
     let ill = fighter.illness.is_some_and(|i| !i.fight_advised());
     if ill && fights {
-        ui.colored_label(egui::Color32::LIGHT_RED, "Combat déconseillé");
+        ui.colored_label(egui::Color32::LIGHT_RED, tr!("plan-fight-ill-advised"));
     }
 }
 
@@ -966,7 +995,7 @@ fn challenge_picker(
     data: &DesignData,
 ) {
     ui.horizontal(|ui| {
-        ui.label("Défier :");
+        ui.label(tr!("plan-challenge"));
         for (c, colosseum) in (0..).zip(&state.colosseums) {
             let id = ColosseumId(c);
             let home = data
@@ -1003,11 +1032,12 @@ fn challenge_picker(
                             };
                             let name = contender_name(rating.contender, state, data);
                             let accepts = state.may_challenge(i, id, r, data);
-                            let text = if accepts {
-                                format!("{name}, Elo {}", rating.elo)
-                            } else {
-                                format!("{name}, Elo {} : refuse", rating.elo)
-                            };
+                            let text = tr!(
+                                "plan-challenge-rival",
+                                name = name,
+                                elo = rating.elo,
+                                accepts = if accepts { "true" } else { "false" }
+                            );
                             ui.add_enabled_ui(accepts, |ui| {
                                 ui.selectable_value(
                                     &mut plan.activity,
@@ -1025,44 +1055,52 @@ fn challenge_picker(
 /// A fighter's sheet: identity, gauges, stats, personality and health.
 fn sheet(ui: &mut egui::Ui, index: usize, f: &CareerFighter, data: &DesignData) {
     let rules = &data.fighter;
-    ui.heading(format!("{}, {} ans", fighter_name(index, f, data), f.age));
+    ui.heading(tr!(
+        "sheet-title",
+        fighter = fighter_name(index, f, data),
+        age = f.age
+    ));
     let hand = match f.dominant_hand {
-        Side::Right => "droitier",
-        Side::Left => "gaucher",
+        Side::Right => tr!("sheet-right-handed"),
+        Side::Left => tr!("sheet-left-handed"),
     };
     ui.label(hand);
     match f.status {
         Status::Active => {}
         Status::Retired if too_maimed(&f.injuries, &rules.retirement) => {
-            ui.colored_label(egui::Color32::GOLD, "A pris sa retraite, trop mutilé");
+            ui.colored_label(egui::Color32::GOLD, tr!("sheet-retired-maimed"));
         }
         Status::Retired => {
-            ui.colored_label(egui::Color32::GOLD, "A pris sa retraite");
+            ui.colored_label(egui::Color32::GOLD, tr!("sheet-retired"));
         }
         Status::Dead => {
-            ui.colored_label(egui::Color32::LIGHT_RED, "Mort au combat");
+            ui.colored_label(egui::Color32::LIGHT_RED, tr!("sheet-dead"));
         }
         Status::Sold => {
-            ui.label("Vendu");
+            ui.label(tr!("sheet-sold"));
         }
         Status::Released => {
-            ui.label("Libéré");
+            ui.label(tr!("sheet-released"));
         }
     }
     ui.add_space(8.0);
-    gauge(ui, "Forme", f.form.value(), Form::MAX);
-    gauge(ui, "Moral", f.morale.value(), Morale::MAX);
-    gauge(ui, "Renommée", f.fame.value(), Fame::MAX);
+    gauge(ui, &tr!("roster-form"), f.form.value(), Form::MAX);
+    gauge(ui, &tr!("roster-morale"), f.morale.value(), Morale::MAX);
+    gauge(ui, &tr!("roster-fame"), f.fame.value(), Fame::MAX);
 
     ui.add_space(8.0);
     egui::Grid::new("stats").striped(true).show(ui, |ui| {
         ui.label("");
-        ui.label("Entraîné");
-        ui.label("En combat");
+        ui.label(tr!("sheet-trained"));
+        ui.label(tr!("sheet-fighting"));
         ui.end_row();
         let fighting = f.fighting_stats(rules).to_array();
-        for ((name, trained), now) in STAT_NAMES.iter().zip(f.stats.to_array()).zip(fighting) {
-            ui.label(*name);
+        for ((name, trained), now) in stat_names()
+            .into_iter()
+            .zip(f.stats.to_array())
+            .zip(fighting)
+        {
+            ui.label(name);
             ui.label(trained.to_string());
             ui.label(now.to_string());
             ui.end_row();
@@ -1072,15 +1110,15 @@ fn sheet(ui: &mut egui::Ui, index: usize, f: &CareerFighter, data: &DesignData) 
     ui.add_space(8.0);
     ui.label(personality_text(&f.personality));
     ui.add_space(8.0);
-    ui.strong("Blessures");
+    ui.strong(tr!("sheet-injuries"));
     if f.injuries.is_empty() {
-        ui.label("Aucune");
+        ui.label(tr!("sheet-none"));
     }
     for injury in &f.injuries {
         ui.label(injury_text(*injury, f.dominant_hand));
     }
-    ui.strong("Maladie");
-    ui.label(f.illness.map_or_else(|| "Aucune".into(), illness_text));
+    ui.strong(tr!("sheet-illness"));
+    ui.label(f.illness.map_or_else(|| tr!("sheet-none"), illness_text));
 }
 
 fn gauge(ui: &mut egui::Ui, name: &str, value: u32, max: u32) {

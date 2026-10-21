@@ -1,6 +1,21 @@
 # Textes du jeu en français (Fluent : https://projectfluent.org).
+# Une variante choisie par une clé anglaise ($role, $side, $stronger…) suit le code ;
+# {""} est une variante vide.
+
+## Combattants
+
+stat-hp = PV
+stat-melee-attack = AC
+stat-ranged-attack = AL
+stat-accuracy = PRÉ
+stat-speed = VIT
+stat-melee-defense = DC
+stat-ranged-defense = DL
 
 fighter-name = { $class } n° { $number }
+free-agent-name = Free agent n° { $number } ({ $class })
+rival-fighter-name = { $class } n° { $number } ({ $club })
+contender-yours = { $fighter } (votre club)
 
 condition-dead = mort
 condition-retired = retraité
@@ -9,3 +24,495 @@ condition-released = libéré
 condition-injured = blessé
 condition-ill = malade
 condition-fit = en forme
+
+personality = Agressivité { $aggression }, prudence { $caution }, goût du spectacle { $showmanship }, détermination { $determination }
+personality-short = Agr { $aggression }, Pru { $caution }, Spe { $showmanship }, Dét { $determination }
+record = { $wins } V, { $losses } D, { $draws } N
+
+form = Forme
+morale = moral
+fame = renommée
+
+## Blessures et maladies
+
+location-head = Tête
+location-body = Corps
+location-arm = Bras { $side ->
+        [left] gauche
+       *[right] droit
+    }
+location-arm-dominant = Bras { $side ->
+        [left] gauche
+       *[right] droit
+    } (dominant)
+location-leg = Jambe { $side ->
+        [left] gauche
+       *[right] droite
+    }
+
+weeks = { $n ->
+        [1] 1 semaine
+       *[other] { $n } semaines
+    }
+
+injury = { $location } : { $severity ->
+        [light] légère
+        [medium] moyenne
+       *[severe] grave
+    }, { $weeks }
+injury-permanent = { $location } : séquelle définitive
+injury-lost = { $location } : { $leg ->
+        [true] perdue
+       *[false] perdu
+    }
+
+illness = Maladie { $level ->
+        [mild] faible
+        [moderate] moyenne
+       *[severe] sévère
+    }, { $weeks }
+
+cut-head = tête tranchée
+cut-body = corps tranché
+cut-arm = bras { $side ->
+        [left] gauche
+       *[right] droit
+    } tranché
+cut-leg = jambe { $side ->
+        [left] gauche
+       *[right] droite
+    } tranchée
+
+## Semaine
+
+activity-rest = Repos
+activity-train = Entraînement
+activity-fight = Combat à { $place }
+activity-title-fight = Combat pour le titre à { $place }
+activity-challenge = Défi à { $place }
+activity-melee = Mêlée à { $place }
+
+week-injury = Blessure : { $injury }
+week-after-effect-spared = Séquelle évitée par le médecin
+week-healed = Guéri : { $location }
+week-ill = Tombe malade : { $illness }
+week-illness-healed = Maladie guérie
+week-birthday = Un an de plus : { $age } ans
+week-season-gains = Bilan de la saison : { $gains } progrès
+week-stats = Stats : { $stats }
+week-retires-maimed = Prend sa retraite : trop mutilé pour combattre
+week-retires = Prend sa retraite à { $age } ans
+
+date = Saison { $season }, semaine { $week }
+date-in-sentence = saison { $season }, semaine { $week }
+dated = { $date } : { $what }
+detailed = { $what } : { $details }
+
+## Combats
+
+result-beheaded = décapité
+result-dead = mort au combat
+result-severed = défaite, { $limb }
+result-left-for-dead = laissé pour mort, survit grièvement blessé
+result-knocked-out = défaite, étourdi sans se relever
+result-won = victoire
+result-lost = défaite
+result-gave-up = abandon
+result-unfinished = pas de vainqueur après { $minutes ->
+        [1] une minute
+       *[other] { $minutes } minutes
+    }
+
+against-duel = Contre un { $class }{ $stronger ->
+        [true] , plus fort
+       *[false] {""}
+    }
+against-melee = Mêlée à { $size }, { $place }{ $stronger ->
+        [true] , plus forts
+       *[false] {""}
+    }
+fight = { $against }{ $refused ->
+        [both] , sans armure ni arme
+        [armour] , sans armure
+        [weapon] , sans arme
+       *[none] {""}
+    } : { $result }, renommée { $fame }
+
+place = { $place ->
+        [1] 1er
+       *[other] { $place }e
+    }
+
+## Argent
+
+money = Argent
+flow-upkeep = entretien
+flow-care = soins
+flow-training = entraînement
+flow-entry-fee = inscription
+flow-win-prize = prime de victoire
+flow-receipts = recettes
+flow-champion-bonus = bonus champion
+flow-purchase = achat
+flow-sale = vente
+flow-salary = salaires
+
+wealth = Club { $wealth }
+wealth-poor = pauvre
+wealth-modest = modeste
+wealth-rich = riche
+
+## Marché
+
+move-observe = Observer { $fighter }
+move-sign = Recruter { $fighter }
+move-release = Libérer { $fighter }
+move-list = Mettre en vente { $fighter }
+move-unlist = Retirer { $fighter } de la vente
+move-keep = Rendre { $fighter } invendable
+move-unkeep = Rendre { $fighter } vendable
+move-accept-offer = Vendre { $fighter } à { $club } pour { $price }
+move-offer = Offrir { $price } pour { $fighter }
+
+market-signed = Recrute { $fighter }
+market-released = Libère { $fighter }
+market-sold = Vend { $fighter } à { $club } pour { $price }
+market-bought = Achète { $fighter } à { $club } pour { $price }
+market-countered = { $club } demande { $price } pour { $fighter } (offre possible cette semaine)
+market-club-refused = { $club } refuse l'offre pour { $fighter }
+market-fighter-refused = { $fighter } refuse de rejoindre le club
+market-failed = Transfert de { $fighter } impossible : pas de place, pas assez d'argent ou combattant parti
+
+unsellable = Arrivé récemment : vendable à partir de la { $date }
+
+## Personnel
+
+role = { $role ->
+        [trainer] entraîneur
+        [doctor] médecin
+       *[recruiter] recruteur
+    }
+role-title = { $role ->
+        [trainer] Entraîneur
+        [doctor] Médecin
+       *[recruiter] Recruteur
+    }
+
+staff = Personnel : { $posts }
+staff-none = Personnel : aucun
+staff-post = { role } de niveau { $level }
+staff-move-hire = Engager un { role } de niveau { $level }
+staff-move-hire-gone = Engager un candidat parti
+staff-move-dismiss = Renvoyer { $role ->
+        [trainer] l'entraîneur
+        [doctor] le médecin
+       *[recruiter] le recruteur
+    }
+staff-news-hired = { role-title } de niveau { $level } engagé
+staff-news-dismissed = { role-title } renvoyé
+
+weeks-left = { $n ->
+        [0] dernière semaine
+        [1] dernière semaine
+       *[other] encore { $n } semaines
+    }
+
+trainer = salaire { $salary } par semaine, séance { $session }, progression +{ $progress } %, { $form } de forme épargnée par séance
+doctor = salaire { $salary } par semaine, les soins laissent { $kept } % des semaines ({ $kept_alone } sans médecin), prix des soins { $cost } %, séquelle évitée { $spared } fois sur 100
+recruiter = salaire { $salary } par semaine, { $revealed } stat de plus révélée par semaine, fourchettes à { $width } %, { $potential ->
+        [0] potentiel non estimé
+       *[other] potentiel estimé à { $potential } % près
+    }, { $personality ->
+        [seen] personnalité vue
+       *[hidden] personnalité cachée
+    }
+
+## Monde
+
+continent-europe = Europe
+continent-asia = Asie
+continent-americas = Amériques
+continent-africa = Afrique
+continent-oceania = Océanie
+
+culture = culture : { $culture }
+
+profile-cautious = prudent
+profile-aggressive = agressif
+profile-merchant = marchand
+profile-mentor = formateur
+profile-veteran = vétéran
+profile-showman = spectacle
+
+arena-sand = sable
+arena-pillars = piliers
+arena-narrow = étroite
+arena-sand-effect = le sable ralentit tout le monde, les tireurs en profitent
+arena-pillars-effect = les piliers arrêtent les tirs et barrent le passage
+arena-narrow-effect = le corps à corps s'engage vite
+
+challenger = { $fighter } à { $place }
+
+title-nobody = personne
+title-fight = Titre de { $place } : { $champion } { $kept ->
+        [true] le garde
+       *[false] le perd
+    } face à { $challenger }
+title-stripped = Titre de { $place } : { $former } le perd faute de défense, il revient à { $holder }
+title-vacated = Titre de { $place } vacant : il revient à { $holder }
+
+news-champion-bought = { $club } achète { $fighter }, champion de { $place }, pour { $price }
+news-closed = { $club } ferme, ruiné : ses combattants partent au marché
+news-rivalry = { $club } se déclare votre rival : vos combats contre lui attirent les foules
+news-rivalry-ended = { $club } met fin à sa rivalité avec vous
+news-founded = Fondation de { $club } ({ $culture }), en { $continent }
+
+## Relations
+
+standing-ally = allié
+standing-friend = ami
+standing-neutral = neutre
+standing-tense = tendu
+standing-rival = rival
+
+relation-change = { $points } : { $why } ({ $date })
+reason-killed = { $fighter } a tué { $rival }
+reason-beaten = { $fighter } a battu { $rival }
+reason-title-taken = { $fighter } lui a pris le titre de { $place }
+reason-challenge-refused = { $fighter } a refusé le défi de { $rival }
+reason-sold = vous lui avez vendu { $fighter }
+reason-bought = vous lui avez acheté { $fighter }
+reason-pact-kept = { $fighter } a tenu son pacte avec { $rival } en mêlée
+reason-betrayed = { $fighter } a trahi son pacte avec { $rival } en mêlée
+
+## Commun
+
+labelled = { $label } : { $text }
+this-week = Cette semaine : { $what }
+cancel = Annuler
+back = Retour
+back-to-list = Retour à la liste
+potential = Potentiel
+personality-title = Personnalité
+record-title = Bilan
+estimated-value = Valeur estimée
+estimated-value-of = Valeur estimée ≈ { $value }
+estimate = ≈ { $value }
+negotiate = Négocier
+not-ranked = non classé
+
+## Écran du club
+
+save-resumed = Partie reprise
+save-autosave-unreadable = Sauvegarde automatique illisible : { $error }
+save-saved = Partie sauvegardée
+save-failed = Sauvegarde impossible : { $error }
+save-loaded = Partie chargée
+save-none = Aucune sauvegarde
+save-unreadable = Sauvegarde illisible : { $error }
+
+club-becomes = Le club devient { $wealth }
+challenge-refused = { $fighter } refuse le défi de { $challenger } sans combattre : renommée -{ $fame }, Elo -{ $elo }
+challenge-from = Défi de { $challenger }
+
+top-date = Saison { $season }, semaine { $week } : { $phase ->
+        [competition] compétition
+        [great-event] grand événement
+       *[off-season] intersaison
+    }
+top-money = Argent : { $money }
+view-menu = Menu
+view-roster = Combattants
+view-fights = Résumé des combats
+view-colosseums = Colisées
+view-market = Marché
+view-staff = Personnel
+standard-duel = Duel standard
+
+menu-title = Menu général
+menu-club = { $wealth }, en { $continent }
+menu-alerts = Alertes
+menu-active = { $active } / { $max } combattants en activité
+menu-next-week = Semaine suivante (Espace)
+week-title = Semaine { $week }
+menu-news = Nouvelles du monde
+menu-save = Sauvegarder
+menu-load = Charger
+menu-new-game = Nouvelle partie :
+menu-new-club = club { $wealth }
+menu-new-game-started = Nouvelle partie, club { $wealth } en { $continent }, graine { $seed }
+
+pending-market = Marché : { $what }
+pending-staff = Personnel : { $what }
+pending-counter-offer = Marché : { $club } demande { $price } pour { $fighter }
+
+alert-debts = Dettes : { $money }
+alert-injury = { $fighter } : blessure, { $injury }
+alert-tired = { $fighter } : fatigué (forme { $form })
+alert-title-defense = { $fighter } : titre de { $place } à défendre au plus tard en semaine { $week }
+alert-challenge = { $fighter } : défi de { $challenger } (refus sans combattre : renommée -{ $fame }, Elo -{ $elo })
+alert-sale-offer = { $club } veut acheter { $fighter } pour { $price } (à accepter au marché cette semaine)
+alert-rival = { $club } est votre rival depuis { $since } : recettes à { $receipts } %, renommée +{ $fame } par combat
+alert-no-fighter = Plus aucun combattant : recrutez un free agent au marché
+
+roster-fighter = Combattant
+roster-age = Âge
+roster-form = Forme
+roster-morale = Moral
+roster-fame = Renommée
+roster-condition = État
+roster-week = Semaine
+
+sheet-this-week = Cette semaine
+sheet-career-over = Carrière terminée
+sheet-history = Historique
+sheet-title = { $fighter }, { $age } ans
+sheet-right-handed = droitier
+sheet-left-handed = gaucher
+sheet-retired-maimed = A pris sa retraite, trop mutilé
+sheet-retired = A pris sa retraite
+sheet-dead = Mort au combat
+sheet-sold = Vendu
+sheet-released = Libéré
+sheet-trained = Entraîné
+sheet-fighting = En combat
+sheet-injuries = Blessures
+sheet-illness = Maladie
+sheet-none = Aucune
+
+summary-fighter-at = { $fighter }, à { $place }
+summary-duration = Durée { $seconds } s, graine { $seed }
+summary-yours = Votre combattant
+summary-opponent = L'adversaire ({ $class })
+summary-damage-dealt = Dégâts infligés
+summary-damage-taken = Dégâts reçus
+summary-spells-cast = Sorts lancés
+summary-misses = Coups ratés
+summary-stuns = Étourdi
+summary-hp-left = PV restants
+summary-money = Argent { $money }, renommée { $fame }, { $form }
+summary-form = forme
+summary-watch-again = Revoir le combat
+
+plan-abroad = À l'étranger (voyage { $travel })
+plan-care = Soigner ({ $cost })
+plan-care-unaffordable = Soigner ({ $cost }) : pas assez d'argent
+plan-no-armour = Sans armure
+plan-no-armour-effect = Défenses très réduites, renommée +{ $fame } (+{ $all } sans rien)
+plan-no-weapon = Sans arme
+plan-no-weapon-effect = Attaques très réduites, coups à mains nues, renommée +{ $fame } (+{ $all } sans rien)
+plan-fight-ill-advised = Combat déconseillé
+plan-challenge = Défier :
+plan-challenge-rival = { $name }, Elo { $elo }{ $accepts ->
+        [false] {" "}: refuse
+       *[true] {""}
+    }
+
+## Colisées et clubs rivaux
+
+colosseums-title = Colisées ({ $continent })
+colosseums-none = Aucun colisée de ce niveau sur ce continent pour l'instant
+continent-home = { $continent } (chez vous)
+rival-clubs-title = Clubs rivaux ({ $continent })
+rival-club-line = { $club } ({ $culture }), { $profile } et { $wealth } : { $fighters } combattants ; relation { $relation }
+champion-of = Champion de { $place } : { $fighter }
+standing-ranked = { $place }, Elo { $elo }
+standing-champion = champion, { $standing }
+prestige-all = Tous
+prestige-major = Majeurs
+prestige-t1 = T1
+prestige-t2 = T2
+
+rival-closed = Fermé, ruiné : { $date }
+rival-description = Club { $profile } et { $wealth }, { $culture }, en { $continent }, { $fighters } combattants en activité (au plus { $max })
+rival-relation = Relation avec votre club : { $relation }
+rival-history = Ce qui s'est passé entre vous
+rival-gone = { $gone } anciens combattants : retraités, morts, vendus ou libérés
+
+colosseum-arena = Arène : { $arena }, prestige { $prestige } / 5
+colosseum-purses = Inscription { $fee }{ $travel ->
+        [true] {" "}(voyage compris)
+       *[false] {""}
+    }, prime de victoire { $prize }, bonus champion { $bonus }
+colosseum-champion = Champion :
+colosseum-no-champion = aucun
+colosseum-title-weeks = Titre défendu ou pris en semaine { $since }, à défendre au plus tard en semaine { $deadline }
+ranking-rank = Rang
+ranking-club = Club
+ranking-elo = Elo
+ranking-no-club = sans club
+
+## Marché (vue)
+
+market-intro = { $active } / { $max } combattants en activité. Une observation et une offre par semaine ; le club rival répond à une offre en fin de semaine, puis le combattant.
+market-counter-offer = { $club } demande { $price } pour { $fighter }
+market-offer-this-price = Offrir ce prix
+market-offer-for = Offre pour { $fighter } :
+market-rival-refuses = { $club } est votre rival : il refuse de traiter avec vous
+market-make-offer = Faire l'offre
+market-free-agents = Free agents (gratuits ; ils combattent dans les colisées sans droit d'entrée)
+market-rival-fighters = Combattants des clubs rivaux
+market-your-fighters = Vos combattants
+outside-club = Club : { $club }
+outside-summary = { $condition }, renommée { $fame }, bilan { $record }
+never-observed = Jamais observé
+observed = Observé { $weeks }
+observe = Observer
+observe-again = Observer (déjà { $weeks } sem.)
+sign = Recruter
+unlist = Retirer de la vente
+unkeep = Rendre vendable
+keep = Invendable
+list = Mettre en vente
+accept-offer = Accepter { $club } : { $price }
+release = Libérer
+
+## Personnel (vue)
+
+staff-intro = L'entraîneur rend l'entraînement plus profitable et moins fatigant, le médecin rend les soins plus efficaces et évite des séquelles, le recruteur montre mieux les combattants observés. Les candidats arrivent et partent du marché, chacun avec ses stats et son salaire, et les clubs rivaux y engagent aussi. Chaque salaire est payé chaque semaine, même à crédit ; un changement compte dès la semaine qui se joue.
+staff-held = Niveau { $level } : { $text }
+staff-no-trainer = Aucun : séance { $session }, sans bonus
+staff-nobody = Aucun
+staff-no-candidate = Aucun candidat sur le marché
+staff-level = Niveau { $level }
+dismiss = Renvoyer
+hire = Engager
+
+## Écran de combat
+
+controls = Contrôles
+speed-slow = x0,5
+speed-normal = x1
+speed-fast = x1,5
+skip-to-result = Passer au résultat
+seed = Graine { $seed }
+start-fight = Lancer
+back-escape = Retour (Échap)
+continue = Continuer
+elimination = Élimination
+sound = Son
+music = Musique
+effects = Effets
+
+fighter-number = combattant { $number }
+result-time-up = Temps écoulé, pas de vainqueur
+result-winner = Vainqueur : { $winner }
+result-no-winner = Aucun vainqueur
+result-with-reasons = { $winner } ({ $reasons })
+out-dead = mort
+out-gave-up = abandon
+out-eliminated = éliminé faute de coups
+out-knocked-out = K.-O.
+out-left-for-dead = laissé pour mort, survit
+out-beheaded = décapité
+out-severed = membre tranché
+final-duel = Duel final
+elimination-next = Élimination dans { $seconds } s : { $out ->
+        [1] 1 combattant sort
+       *[other] { $out } combattants sortent
+    }
+elimination-threshold = Pour rester, plus de { $threshold } dégâts depuis la dernière élimination
+elimination-standing = { $fighter } : { $damage } dégâts, { $danger ->
+        [true] éliminé si rien ne change
+       *[false] à l'abri
+    }
