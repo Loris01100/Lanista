@@ -361,59 +361,12 @@ impl ClubScreen {
             "{} / {max} combattants en activité",
             self.state.active_fighters()
         ));
-        for &m in &self.decisions.moves {
-            ui.label(format!(
-                "Marché : {}",
-                move_text(m, &self.state, &self.data)
-            ));
-        }
-        for &m in &self.decisions.staff {
-            ui.label(format!(
-                "Personnel : {}",
-                staff_move_text(m, &self.state.staff_market)
-            ));
-        }
-        if let Some((id, price)) = self.state.counter_offer {
-            ui.label(format!(
-                "Marché : {} demande {price} pour {}",
-                club_name(id.club, &self.state),
-                rival_fighter_name(id, &self.state, &self.data)
-            ));
+        for line in self.pending_lines() {
+            ui.label(line);
         }
         let play = ui.button("Semaine suivante (Espace)").clicked();
         if self.saves.is_some() {
-            ui.horizontal(|ui| {
-                if ui.button("Sauvegarder").clicked() {
-                    self.save(saves::MANUAL, true);
-                }
-                if ui.button("Charger").clicked() {
-                    self.load();
-                }
-                ui.label("Nouvelle partie :");
-                egui::ComboBox::from_id_salt("new continent")
-                    .selected_text(continent_name(self.new_continent))
-                    .show_ui(ui, |ui| {
-                        for continent in Continent::ALL {
-                            ui.selectable_value(
-                                &mut self.new_continent,
-                                continent,
-                                continent_name(continent),
-                            );
-                        }
-                    });
-                for wealth in Wealth::ALL {
-                    if ui.button(format!("club {}", wealth_name(wealth))).clicked() {
-                        let seed = new_seed();
-                        let start = (wealth, self.new_continent);
-                        self.replace(GameState::start(seed, start, &self.data));
-                        self.message = Some(format!(
-                            "Nouvelle partie, club {} en {}, graine {seed}",
-                            wealth_name(wealth),
-                            continent_name(start.1)
-                        ));
-                    }
-                }
-            });
+            ui.horizontal(|ui| self.files(ui));
         }
         ui.separator();
         egui::ScrollArea::vertical().show(ui, |ui| {
@@ -430,6 +383,63 @@ impl ClubScreen {
             }
         });
         play
+    }
+
+    /// Saving, loading and starting a new game.
+    fn files(&mut self, ui: &mut egui::Ui) {
+        if ui.button("Sauvegarder").clicked() {
+            self.save(saves::MANUAL, true);
+        }
+        if ui.button("Charger").clicked() {
+            self.load();
+        }
+        ui.label("Nouvelle partie :");
+        egui::ComboBox::from_id_salt("new continent")
+            .selected_text(continent_name(self.new_continent))
+            .show_ui(ui, |ui| {
+                for continent in Continent::ALL {
+                    ui.selectable_value(
+                        &mut self.new_continent,
+                        continent,
+                        continent_name(continent),
+                    );
+                }
+            });
+        for wealth in Wealth::ALL {
+            if ui.button(format!("club {}", wealth_name(wealth))).clicked() {
+                let seed = new_seed();
+                let start = (wealth, self.new_continent);
+                self.replace(GameState::start(seed, start, &self.data));
+                self.message = Some(format!(
+                    "Nouvelle partie, club {} en {}, graine {seed}",
+                    wealth_name(wealth),
+                    continent_name(start.1)
+                ));
+            }
+        }
+    }
+
+    /// The moves decided for the week and the pending counter-offer.
+    fn pending_lines(&self) -> Vec<String> {
+        let moves = self
+            .decisions
+            .moves
+            .iter()
+            .map(|&m| format!("Marché : {}", move_text(m, &self.state, &self.data)));
+        let staff = self.decisions.staff.iter().map(|&m| {
+            format!(
+                "Personnel : {}",
+                staff_move_text(m, &self.state.staff_market)
+            )
+        });
+        let counter = self.state.counter_offer.map(|(id, price)| {
+            format!(
+                "Marché : {} demande {price} pour {}",
+                club_name(id.club, &self.state),
+                rival_fighter_name(id, &self.state, &self.data)
+            )
+        });
+        moves.chain(staff).chain(counter).collect()
     }
 
     /// The world's news, newest first.
