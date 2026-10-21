@@ -19,6 +19,7 @@ use crate::ai::Action;
 use crate::combat::Vec2;
 use crate::design_data::{ClassData, Cost, SpellData};
 use crate::fighter::appearance::Appearance;
+use crate::fighter::equipment::Refused;
 use crate::fighter::form::Form;
 use crate::fighter::illness::Illness;
 use crate::fighter::injury::{Injury, Location};
@@ -203,6 +204,8 @@ pub struct Fighter {
     /// The fighter's state outside the fight, read by the AI so that an injured or
     /// fearful fighter fights differently. `stats` already include its effects.
     pub condition: Condition,
+    /// Equipment it fights without; `stats` and its spells already include the effects.
+    pub refused: Refused,
     /// How it is drawn; no effect on the fight.
     pub appearance: Appearance,
 }
@@ -261,6 +264,7 @@ impl Fighter {
             eliminated: false,
             round_damage: 0,
             condition: Condition::default(),
+            refused: Refused::NONE,
             appearance: Appearance::default(),
         }
     }

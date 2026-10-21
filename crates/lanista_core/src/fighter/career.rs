@@ -192,6 +192,7 @@ impl CareerFighter {
         }
         fighter.surrender_hp = self.personality.surrender_hp(stats.hp, &rules.personality);
         fighter.appearance = self.appearance.clone();
+        fighter.refused = refused;
         fighter.condition = Condition {
             personality: self.personality,
             morale: self.morale,

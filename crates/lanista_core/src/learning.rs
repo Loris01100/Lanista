@@ -4,10 +4,15 @@
 //! the same observations.
 
 use crate::ai::{Action, CombatAi};
-use crate::combat::{Arena, TICKS_PER_DECISION, Vec2, edge_distance, tick};
+use crate::combat::{Arena, Pillar, TICKS_PER_DECISION, Vec2, edge_distance, tick};
 use crate::design_data::DesignData;
-use crate::duel::random_duel;
-use crate::fighter::{Fighter, FighterId, Gauge};
+use crate::duel::{STATS, random_duel};
+use crate::fighter::form::Form;
+use crate::fighter::illness::IllnessLevel;
+use crate::fighter::injury::{Location, Severity, Side};
+use crate::fighter::morale::Morale;
+use crate::fighter::personality::Personality;
+use crate::fighter::{Fighter, FighterId, Gauge, STAT_COUNT};
 use crate::log::EventKind;
 
 // ponytail: reward weights in code; move them to `data/` once training tunes them.
@@ -27,11 +32,24 @@ const MOVES: [Vec2; 8] = [
     Vec2::new(0.0, -1.0),
     Vec2::new(1.0, -1.0),
 ];
-/// Values of a fighter's own state, then of its opponent's, in an observation.
-const OWN_VALUES: usize = 6;
-const OPPONENT_VALUES: usize = 5;
-/// Values of each spell slot in an observation: castable, in reach.
-const SPELL_VALUES: usize = 2;
+/// Values of a fighter's own state in an observation, its class aside: hit points,
+/// mana, endurance, position, standing, surrender share, stats, form, morale,
+/// personality, injury by location, illness, refused equipment.
+const OWN_VALUES: usize = 6 + 1 + STAT_COUNT + 2 + 4 + INJURY_LOCATIONS + 1 + 2;
+/// Head, body, then left and right arm and leg.
+const INJURY_LOCATIONS: usize = 6;
+/// Values of the arena: size, speed, time left, nearest pillar's offset and radius.
+const ARENA_VALUES: usize = 7;
+/// Values of each spell slot: castable, nearest opponent in reach, cooldown left.
+const SPELL_VALUES: usize = 3;
+/// Opponents seen, then allies seen, nearest first.
+const OTHERS_SEEN: usize = 4;
+/// Values of each other fighter seen, its class aside: there, hit points, offset,
+/// distance, standing.
+const OTHER_VALUES: usize = 6;
+// ponytail: fixed scales, larger arenas reading as 1; move to `data/` if melees outgrow it.
+/// Meters an arena's side is measured against.
+const ARENA_SCALE: f64 = 50.0;
 
 /// A standard duel ([`random_duel`]) whose two fighters are played from outside.
 #[derive(Debug, Clone)]
@@ -40,6 +58,7 @@ pub struct Environment {
     arena: Arena,
     /// Spells of the class with the most: the spell slots of actions and observations.
     max_spells: usize,
+    class_count: usize,
 }
 
 /// What a [`Environment::step`] gives back, one entry per fighter.
@@ -71,10 +90,12 @@ impl Environment {
             .max()
             .unwrap_or(0);
         let arena = random_duel(&data, 0);
+        let class_count = data.classes.len();
         Self {
             data,
             arena,
             max_spells,
+            class_count,
         }
     }
 
@@ -86,7 +107,8 @@ impl Environment {
 
     /// Plays `actions[i]` (below [`Environment::action_count`]) for fighter `i` until the
     /// next decision: 0 waits, 1 to 8 move (see `MOVES`), then each spell slot casts on
-    /// the opponent. A fighter down or out ignores its action.
+    /// the nearest opponent, waiting without one. A fighter down or out ignores its
+    /// action.
     ///
     /// # Panics
     /// If there is not one action per fighter.
@@ -129,7 +151,14 @@ impl Environment {
     /// Number of values of each fighter's observation.
     #[must_use]
     pub fn observation_size(&self) -> usize {
-        OWN_VALUES + SPELL_VALUES * self.max_spells + OPPONENT_VALUES
+        self.spells_start()
+            + SPELL_VALUES * self.max_spells
+            + 2 * OTHERS_SEEN * (OTHER_VALUES + self.class_count)
+    }
+
+    /// Where the spell slots start in an observation.
+    fn spells_start(&self) -> usize {
+        OWN_VALUES + self.class_count + ARENA_VALUES
     }
 
     #[must_use]
@@ -141,19 +170,33 @@ impl Environment {
         self.arena.is_over() || self.arena.tick >= self.arena.max_ticks
     }
 
-    /// The duel's other fighter.
-    fn opponent(&self, i: usize) -> &Fighter {
-        &self.arena.fighters[1 - i]
+    /// The other fighters still in the fight, nearest first: opponents, then allies.
+    fn others(&self, i: usize) -> (Vec<&Fighter>, Vec<&Fighter>) {
+        let me = &self.arena.fighters[i];
+        let mut others: Vec<&Fighter> = self
+            .arena
+            .fighters
+            .iter()
+            .filter(|f| f.id != me.id && f.is_fighting())
+            .collect();
+        others.sort_by(|a, b| edge_distance(me, a).total_cmp(&edge_distance(me, b)));
+        others
+            .into_iter()
+            .partition(|f| !self.arena.allied(me.id, f.id))
     }
 
     fn action(&self, i: usize, index: usize) -> Action {
         match index {
             0 => Action::Wait,
             m if m <= MOVES.len() => Action::Move(MOVES[m - 1]),
-            s => Action::Cast {
-                spell: s - 1 - MOVES.len(),
-                target: self.opponent(i).id,
-            },
+            s => self
+                .others(i)
+                .0
+                .first()
+                .map_or(Action::Wait, |target| Action::Cast {
+                    spell: s - 1 - MOVES.len(),
+                    target: target.id,
+                }),
         }
     }
 
@@ -177,41 +220,155 @@ impl Environment {
             .sum()
     }
 
-    /// Each fighter's view of the fight, every value between -1 and 1: its hit points,
-    /// mana, endurance, position and whether it stands; for each spell slot, whether it
-    /// can cast and whether the opponent is in reach; the opponent's hit points, offset,
-    /// distance and whether it stands.
+    /// Each fighter's view of the fight, every value between -1 and 1 (see
+    /// [`Environment::observation_size`]): its own state and class, the arena, for each
+    /// spell slot whether it can cast, whether the nearest opponent is in reach and the
+    /// cooldown left, then its [`OTHERS_SEEN`] nearest opponents and allies, an empty
+    /// slot all 0.
     fn observations(&self) -> Vec<Vec<f64>> {
-        let (width, height) = (self.arena.width, self.arena.height);
-        let diagonal = Vec2::new(width, height).length();
         (0..self.arena.fighters.len())
             .map(|i| {
                 let me = &self.arena.fighters[i];
-                let other = self.opponent(i);
-                let distance = edge_distance(me, other);
-                let mut values = vec![
-                    ratio(me.hp, me.stats.hp),
-                    gauge(me.mana),
-                    gauge(me.endurance),
-                    me.position.x / width,
-                    me.position.y / height,
-                    flag(me.is_standing()),
-                ];
-                for spell in 0..self.max_spells {
-                    let reach = me.spells.get(spell).map(|s| s.reach);
-                    values.push(flag(me.can_cast(spell)));
-                    values.push(flag(reach.is_some_and(|r| distance <= r)));
+                let mut values = self.own_values(me);
+                let (opponents, allies) = self.others(i);
+                let distance = opponents.first().map(|o| edge_distance(me, o));
+                for slot in 0..self.max_spells {
+                    let spell = me.spells.get(slot);
+                    values.extend([
+                        flag(me.can_cast(slot)),
+                        flag(spell.zip(distance).is_some_and(|(s, d)| d <= s.reach)),
+                        spell.map_or(0.0, |s| ratio(me.cooldowns[slot], s.cooldown).min(1.0)),
+                    ]);
                 }
-                values.extend([
-                    ratio(other.hp, other.stats.hp),
-                    (other.position.x - me.position.x) / width,
-                    (other.position.y - me.position.y) / height,
-                    distance / diagonal,
-                    flag(other.is_standing()),
-                ]);
+                for seen in [opponents, allies] {
+                    for slot in 0..OTHERS_SEEN {
+                        match seen.get(slot) {
+                            Some(other) => values.extend(self.other_values(me, other)),
+                            None => values.extend(vec![0.0; OTHER_VALUES + self.class_count]),
+                        }
+                    }
+                }
                 values
             })
             .collect()
+    }
+
+    /// The fighter's own state and class, then the arena.
+    fn own_values(&self, me: &Fighter) -> Vec<f64> {
+        let arena = &self.arena;
+        let condition = &me.condition;
+        let traits = condition.personality;
+        let mut values = vec![
+            ratio(me.hp, me.stats.hp),
+            gauge(me.mana),
+            gauge(me.endurance),
+            me.position.x / arena.width,
+            me.position.y / arena.height,
+            flag(me.is_standing()),
+            ratio(me.surrender_hp, me.stats.hp),
+        ];
+        // A standard duel's stats read as 0.5.
+        values.extend(
+            me.stats
+                .to_array()
+                .into_iter()
+                .zip(STATS.to_array())
+                .map(|(stat, standard)| ratio(stat, 2 * standard).min(1.0)),
+        );
+        values.extend([
+            ratio(condition.form.value(), Form::MAX),
+            ratio(condition.morale.value(), Morale::MAX),
+        ]);
+        values.extend(
+            [
+                traits.aggression,
+                traits.caution,
+                traits.showmanship,
+                traits.determination,
+            ]
+            .map(|t| ratio(t.value(), Personality::MAX)),
+        );
+        let mut injuries = [0.0; INJURY_LOCATIONS];
+        for injury in &condition.injuries {
+            let slot = &mut injuries[location_index(injury.location)];
+            *slot = f64::max(*slot, severity_value(injury.severity));
+        }
+        values.extend(injuries);
+        values.push(
+            condition
+                .illness
+                .map_or(0.0, |illness| match illness.level {
+                    IllnessLevel::Mild => 1.0 / 3.0,
+                    IllnessLevel::Moderate => 2.0 / 3.0,
+                    IllnessLevel::Severe => 1.0,
+                }),
+        );
+        values.extend([flag(me.refused.armour), flag(me.refused.weapon)]);
+        values.extend(self.class_values(me));
+        values.extend([
+            (arena.width / ARENA_SCALE).min(1.0),
+            (arena.height / ARENA_SCALE).min(1.0),
+            ratio(arena.speed_percent, 100).min(1.0),
+            1.0 - ratio(arena.tick, arena.max_ticks).min(1.0),
+        ]);
+        let offset = |p: &Pillar| Vec2::new(p.x - me.position.x, p.y - me.position.y);
+        let pillar = arena
+            .pillars
+            .iter()
+            .min_by(|a, b| offset(a).length().total_cmp(&offset(b).length()));
+        values.extend(pillar.map_or([0.0; 3], |p| {
+            [
+                offset(p).x / arena.width,
+                offset(p).y / arena.height,
+                (p.radius / arena.width).min(1.0),
+            ]
+        }));
+        values
+    }
+
+    /// What `me` sees of `other`: there, hit points, offset, distance, standing, class.
+    fn other_values(&self, me: &Fighter, other: &Fighter) -> Vec<f64> {
+        let (width, height) = (self.arena.width, self.arena.height);
+        let diagonal = Vec2::new(width, height).length();
+        let mut values = vec![
+            1.0,
+            ratio(other.hp, other.stats.hp),
+            (other.position.x - me.position.x) / width,
+            (other.position.y - me.position.y) / height,
+            (edge_distance(me, other) / diagonal).min(1.0),
+            flag(other.is_standing()),
+        ];
+        values.extend(self.class_values(other));
+        values
+    }
+
+    /// One flag per class, set for the fighter's.
+    fn class_values(&self, fighter: &Fighter) -> Vec<f64> {
+        (0..self.class_count)
+            .map(|c| flag(usize::try_from(fighter.class.0) == Ok(c)))
+            .collect()
+    }
+}
+
+fn location_index(location: Location) -> usize {
+    match location {
+        Location::Head => 0,
+        Location::Body => 1,
+        Location::Arm(Side::Left) => 2,
+        Location::Arm(Side::Right) => 3,
+        Location::Leg(Side::Left) => 4,
+        Location::Leg(Side::Right) => 5,
+    }
+}
+
+/// From a light wound up to 1 for a lost limb; 0 is unhurt.
+fn severity_value(severity: Severity) -> f64 {
+    match severity {
+        Severity::Light => 0.2,
+        Severity::Medium => 0.4,
+        Severity::Severe => 0.6,
+        Severity::Permanent => 0.8,
+        Severity::Lost => 1.0,
     }
 }
 
@@ -243,9 +400,13 @@ mod tests {
             let actions: Vec<usize> = observations
                 .iter()
                 .map(|o| {
-                    let spells = &o[OWN_VALUES..OWN_VALUES + SPELL_VALUES * env.max_spells];
-                    let cast = spells.chunks(SPELL_VALUES).position(|s| s == [1.0, 1.0]);
-                    let offset = &o[OWN_VALUES + spells.len() + 1..];
+                    let start = env.spells_start();
+                    let spells = &o[start..start + SPELL_VALUES * env.max_spells];
+                    let cast = spells
+                        .chunks(SPELL_VALUES)
+                        .position(|s| s[..2] == [1.0, 1.0]);
+                    // The nearest opponent's offset, after "there" and its hit points.
+                    let offset = &o[start + spells.len() + 2..];
                     let towards = |k: &usize| {
                         let m = MOVES[*k];
                         (m.x * offset[0] + m.y * offset[1]) / m.length()
@@ -291,5 +452,36 @@ mod tests {
         let mut env = Environment::new(DesignData::load().unwrap());
         let first = play(&mut env, 5);
         assert_eq!(first, play(&mut env, 5));
+    }
+
+    #[test]
+    fn a_fighter_sees_its_wounds_its_equipment_and_its_ally() {
+        let mut env = Environment::new(DesignData::load().unwrap());
+        env.reset(1);
+        let mut ally = env.arena.fighters[1].clone();
+        ally.id = FighterId(2);
+        env.arena.fighters.push(ally);
+        env.arena.pacts.push((FighterId(0), FighterId(2)));
+        let me = &mut env.arena.fighters[0];
+        me.refused.weapon = true;
+        me.condition.injuries.push(crate::fighter::injury::Injury {
+            location: Location::Arm(Side::Left),
+            severity: Severity::Lost,
+            weeks_left: 0,
+        });
+        let o = &env.observations()[0];
+        assert_eq!(o.len(), env.observation_size());
+        let injuries = 6 + 1 + STAT_COUNT + 2 + 4;
+        assert_eq!(
+            o[injuries..injuries + INJURY_LOCATIONS],
+            [0.0, 0.0, 1.0, 0.0, 0.0, 0.0]
+        );
+        assert_eq!(o[OWN_VALUES - 2..OWN_VALUES], [0.0, 1.0]);
+        let seen = OTHER_VALUES + env.class_count;
+        let opponents = env.spells_start() + SPELL_VALUES * env.max_spells;
+        let allies = opponents + OTHERS_SEEN * seen;
+        let there = |slot: usize| o[slot] > 0.5;
+        assert!(there(opponents) && !there(opponents + seen), "one opponent");
+        assert!(there(allies) && !there(allies + seen), "one ally");
     }
 }
