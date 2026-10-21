@@ -1,6 +1,6 @@
 """Phase 7: Gymnasium environments around lanista_py's Environment.
 
-The agent plays fighter 0 of a standard duel, or of a melee of 3 to 20 generated
+The agent plays fighter 0 of a duel or of a melee of 3 to 20 generated
 fighters with `melee=True`; `opponent` (observations -> actions) plays all the others,
 a random action each by default; `utility_ai` leaves them to the utility AI. With
 `fighter_class` (a class key), the agent is always of that class. The episode ends for the agent once it is out of the fight. `vector_env(n)` runs n fights

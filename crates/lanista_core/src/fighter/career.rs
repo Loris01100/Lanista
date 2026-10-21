@@ -352,6 +352,23 @@ impl CareerFighter {
         data: &DesignData,
     ) -> (u64, Arena, Arena) {
         let seed = rng.random::<u64>();
+        let start = self.duel_arena(opponent, (kind, refused), seed, data);
+        let mut arena = start.clone();
+        play(&mut arena);
+        (seed, start, arena)
+    }
+
+    /// The arena of this fighter's duel against `opponent` on `kind`'s floor, before the
+    /// first tick: this fighter is `FighterId(0)`, without the `refused` pieces of
+    /// equipment.
+    #[must_use]
+    pub fn duel_arena(
+        &self,
+        opponent: &Self,
+        (kind, refused): (ArenaKind, Refused),
+        seed: u64,
+        data: &DesignData,
+    ) -> Arena {
         let layout = data.combat.arenas.get(kind);
         let (width, middle) = (layout.width, layout.height / 2.0);
         let fighters = vec![
@@ -363,12 +380,9 @@ impl CareerFighter {
                 Vec2::new(width * 0.85, middle),
             ),
         ];
-        let start = Arena::new(width, layout.height, fighters, seed)
+        Arena::new(width, layout.height, fighters, seed)
             .with_rules(&data.combat)
-            .with_layout(layout);
-        let mut arena = start.clone();
-        play(&mut arena);
-        (seed, start, arena)
+            .with_layout(layout)
     }
 
     /// Whether this fighter's fighting stats add up to more than `other`'s.

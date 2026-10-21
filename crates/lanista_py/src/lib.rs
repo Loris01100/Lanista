@@ -9,7 +9,7 @@ mod lanista_py {
     use pyo3::exceptions::{PyRuntimeError, PyValueError};
     use pyo3::prelude::*;
 
-    /// A standard duel or a melee whose fighters are played from Python, with the
+    /// A duel or a melee whose fighters are played from Python, with the
     /// classes' keys.
     #[pyclass]
     struct Environment(learning::Environment, Vec<String>);

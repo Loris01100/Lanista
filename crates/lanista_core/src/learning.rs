@@ -1,4 +1,4 @@
-//! The learning AI's environment (phase 7): a standard duel or a melee played one
+//! The learning AI's environment (phase 7): a duel or a melee of generated fighters played one
 //! decision at a time by actions chosen from outside or by the utility AI, each fighter
 //! seeing an observation and getting a reward. `lanista_py` exposes it to Python for training; the learned AI will read
 //! the same observations.
@@ -57,7 +57,7 @@ const OTHER_VALUES: usize = 6;
 /// Meters an arena's side is measured against.
 const ARENA_SCALE: f64 = 50.0;
 
-/// A standard duel ([`random_duel`]) or a melee ([`Environment::reset_melee`]) whose
+/// A duel ([`Environment::reset`]) or a melee ([`Environment::reset_melee`]) whose
 /// fighters are played from outside.
 #[derive(Debug, Clone)]
 pub struct Environment {
@@ -106,26 +106,38 @@ impl Environment {
         }
     }
 
-    /// Starts the duel of `seed` and gives each fighter's observation.
+    /// Starts the duel of `seed`: two generated fighters on a drawn arena kind's floor,
+    /// as a career duel; gives each fighter's observation.
     pub fn reset(&mut self, seed: u64) -> Vec<Vec<f64>> {
-        self.arena = random_duel(&self.data, seed);
+        let (kind, fighters) = self.draw(seed, 2);
+        let arena = fighters[0].duel_arena(&fighters[1], (kind, Refused::NONE), seed, &self.data);
+        self.arena = arena;
         self.observations()
     }
 
     /// Starts the melee of `seed`: `count` generated fighters on a drawn arena kind's
     /// floor, as the season-opening melee; gives each fighter's observation.
     pub fn reset_melee(&mut self, seed: u64, count: u32) -> Vec<Vec<f64>> {
-        let mut rng = ChaCha8Rng::seed_from_u64(seed);
-        let kind = ArenaKind::ALL[rng.random_range(0..ArenaKind::ALL.len())];
+        let (kind, fighters) = self.draw(seed, count);
         let fighters = (0..count)
-            .map(|id| {
-                let fighter = CareerFighter::random(&mut rng, &self.data);
+            .zip(fighters)
+            .map(|(id, fighter)| {
                 let at = Vec2::new(0.0, 0.0);
                 fighter.combat_fighter(FighterId(id), Refused::NONE, &self.data, at)
             })
             .collect();
         self.arena = melee_arena(fighters, kind, seed, &self.data.combat);
         self.observations()
+    }
+
+    /// The arena kind and the `count` generated fighters of the fight of `seed`.
+    fn draw(&self, seed: u64, count: u32) -> (ArenaKind, Vec<CareerFighter>) {
+        let mut rng = ChaCha8Rng::seed_from_u64(seed);
+        let kind = ArenaKind::ALL[rng.random_range(0..ArenaKind::ALL.len())];
+        let fighters = (0..count)
+            .map(|_| CareerFighter::random(&mut rng, &self.data))
+            .collect();
+        (kind, fighters)
     }
 
     /// Plays `actions[i]` (below [`Environment::action_count`]) for fighter `i` until the
