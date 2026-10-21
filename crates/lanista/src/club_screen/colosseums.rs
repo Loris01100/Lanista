@@ -159,11 +159,24 @@ impl ClubScreen {
     /// continent and their estimated value, each to negotiate for on the market.
     pub(super) fn rival_club(&mut self, ui: &mut egui::Ui, club: usize) {
         self.back_button(ui);
+        if club >= self.state.rivals.len() {
+            return;
+        }
+        self.rival_header(ui, club);
+        let (goto, draft) = self.rival_fighters(ui, club);
+        if let Some(draft) = draft {
+            self.offer_draft = Some(draft);
+            self.view = View::Market;
+        } else if let Some(view) = goto {
+            self.go_to(view);
+        }
+    }
+
+    /// A rival club's description, titles and relation with the player's club.
+    fn rival_header(&self, ui: &mut egui::Ui, club: usize) {
         let data = &self.data;
         let state = &self.state;
-        let Some(rival) = state.rivals.get(club) else {
-            return;
-        };
+        let rival = &state.rivals[club];
         ui.heading(&rival.name);
         if let Some(week) = rival.closed {
             let closed = format!("Fermé, ruiné : {}", date_text(week, data));
@@ -202,6 +215,18 @@ impl ClubScreen {
                 "{gone} anciens combattants : retraités, morts, vendus ou libérés"
             ));
         }
+    }
+
+    /// A rival club's fighters in activity; returns the page clicked and the offer to
+    /// negotiate.
+    fn rival_fighters(
+        &self,
+        ui: &mut egui::Ui,
+        club: usize,
+    ) -> (Option<View>, Option<(RivalId, u32)>) {
+        let data = &self.data;
+        let state = &self.state;
+        let rival = &state.rivals[club];
         let mut goto = None;
         let mut draft = None;
         egui::ScrollArea::vertical().show(ui, |ui| {
@@ -244,12 +269,7 @@ impl ClubScreen {
                     }
                 });
         });
-        if let Some(draft) = draft {
-            self.offer_draft = Some(draft);
-            self.view = View::Market;
-        } else if let Some(view) = goto {
-            self.go_to(view);
-        }
+        (goto, draft)
     }
 }
 
