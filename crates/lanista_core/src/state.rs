@@ -806,11 +806,12 @@ fn affordable(
 
 #[cfg(test)]
 mod tests {
-    use super::melee::pact_reason;
+    use super::melee::{melee_entries, pact_reason};
     use super::outsiders::opponent;
     use super::transfers::{buy_from_rival, market_moves, rich_purchases, rival_signings, weakest};
     use super::*;
     use crate::colosseum::title_kept;
+    use crate::combat::ArenaKind;
     use crate::economy::Flow;
     use crate::fighter::injury::{Injury, Location, Severity};
     use crate::fighter::melee::Pact;
@@ -2072,6 +2073,29 @@ mod tests {
         assert_eq!(pact_reason(&entries, pact(0, 2, Some(0))), None);
         assert_eq!(pact_reason(&entries, pact(1, 2, None)), None);
         assert_eq!(pact_reason(&entries, pact(2, 3, None)), None);
+    }
+
+    #[test]
+    fn a_melee_with_an_unknown_entry_begins_nobody_s_week() {
+        let data = data();
+        let mut state = game(7, &data);
+        state.fighters[0].injuries.push(Injury {
+            location: Location::Body,
+            severity: Severity::Medium,
+            weeks_left: 4,
+        });
+        let before = state.clone();
+        let wanted = plan(Activity::Melee(ColosseumId(0)), true).plans;
+        let entries = [Contender::Club(0), Contender::FreeAgent(usize::MAX)];
+        let played = melee_entries(
+            &mut state,
+            &entries,
+            (&wanted, ArenaKind::Sand),
+            StaffEffects::default(),
+            &data,
+        );
+        assert!(played.is_none());
+        assert_eq!(state, before);
     }
 
     #[test]

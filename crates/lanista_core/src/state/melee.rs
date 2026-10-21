@@ -240,14 +240,23 @@ pub(super) fn pact_reason(entries: &[Contender], pact: Pact) -> Option<(usize, R
 /// The melee of `entries`, on the floor of `kind`, played: each club's fighter begins
 /// its week following its `wanted` plan (care, paid by the caller), then everyone
 /// fights, and each one goes back where it came from. Returns the melee and, for each
-/// entry, the club's fighter's week begun; `None` if an entry is nobody.
-fn melee_entries(
+/// entry, the club's fighter's week begun; `None` if an entry is nobody, before anyone's
+/// week begins.
+pub(super) fn melee_entries(
     state: &mut GameState,
     entries: &[Contender],
     (wanted, kind): (&[WeekPlan], ArenaKind),
     effects: StaffEffects,
     data: &DesignData,
 ) -> Option<(MeleeFight, Vec<Option<WeekReport>>)> {
+    let rosters = state.rosters();
+    let known = |entry: Contender| {
+        rosters.fighter(entry).is_some()
+            && !matches!(entry, Contender::Club(i) if i >= wanted.len())
+    };
+    if !entries.iter().all(|&entry| known(entry)) {
+        return None;
+    }
     let mut fighters = Vec::with_capacity(entries.len());
     let mut entrants = Vec::with_capacity(entries.len());
     let mut weeks = Vec::with_capacity(entries.len());
