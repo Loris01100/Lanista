@@ -1584,8 +1584,8 @@ mod tests {
         assert_eq!(
             lines[..3],
             [
-                "Familia Crassus (Rome), agressif et riche : 10 combattants ; relation +0, neutre",
-                "Dar Khawla (Monde arabe), prudent et pauvre : 10 combattants ; relation +0, neutre",
+                "Familia Crassus (Rome), formateur et riche : 10 combattants ; relation +0, neutre",
+                "Dar Khawla (Monde arabe), agressif et pauvre : 10 combattants ; relation +0, neutre",
                 "Clan de Tatanka (Tribus amérindiennes), prudent et modeste : 10 combattants ; relation +0, neutre",
             ]
         );

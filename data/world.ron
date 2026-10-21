@@ -28,13 +28,22 @@
     // trainer, then its doctor (a poor club's recruiter first), are the best whose salaries it could
     // pay `staff_weeks` weeks from its money, kept while it could pay half as many
     // (data/economy.ron). What lowers its relation with the player's club weighs
-    // `anger_percent`, a deal concluded with it `deal_percent` (`relations`).
+    // `anger_percent`, a deal concluded with it `deal_percent` (`relations`). It rates
+    // the fighters it signs, buys and lets go by `recruits`: by value if left out,
+    // `Youth` its value times `percent` up to `until` years old, `Grown` from `from`
+    // years old, `Crowd` its fame alone, whatever its stats.
     profiles: (
         cautious: (rest_form: 70, care_reserve: 0, fight_percent: 45, accept_percent: 50, challenge_percent: 10, sell_percent: 150, buy_percent: 60, unsolicited_percent: 130, staff_weeks: 20, anger_percent: 100, deal_percent: 100),
         // Quick to take offence.
         aggressive: (rest_form: 35, care_reserve: 100, fight_percent: 20, accept_percent: 20, challenge_percent: 40, sell_percent: 130, buy_percent: 80, unsolicited_percent: 160, staff_weeks: 10, anger_percent: 150, deal_percent: 100),
         // Keeps its money, sells cheap and buys dear; forgives when the price is right.
         merchant: (rest_form: 50, care_reserve: 300, fight_percent: 35, accept_percent: 35, challenge_percent: 20, sell_percent: 100, buy_percent: 90, unsolicited_percent: 120, staff_weeks: 40, anger_percent: 100, deal_percent: 300),
+        // Raises young fighters, while they still progress fast (data/fighter.ron).
+        mentor: (rest_form: 60, care_reserve: 50, fight_percent: 40, accept_percent: 45, challenge_percent: 15, sell_percent: 140, buy_percent: 70, unsolicited_percent: 140, staff_weeks: 30, anger_percent: 100, deal_percent: 100, recruits: Youth(until: 25, percent: 150)),
+        // Wants fighters already grown, past their fast progression.
+        veteran: (rest_form: 50, care_reserve: 100, fight_percent: 30, accept_percent: 30, challenge_percent: 25, sell_percent: 120, buy_percent: 85, unsolicited_percent: 140, staff_weeks: 20, anger_percent: 100, deal_percent: 100, recruits: Grown(from: 28, percent: 150)),
+        // Wants who draws the crowd, whatever their stats.
+        showman: (rest_form: 40, care_reserve: 50, fight_percent: 25, accept_percent: 25, challenge_percent: 30, sell_percent: 130, buy_percent: 75, unsolicited_percent: 150, staff_weeks: 15, anger_percent: 120, deal_percent: 100, recruits: Crowd),
     ),
     // Free agents choose their fights by this profile's thresholds, to show their worth,
     // as managers without money: only in colosseums free to enter, never trained nor
@@ -63,7 +72,7 @@
         founded: 1,
         ruined_below: 1500,
         ruined_seasons: 2,
-        profiles: [(1, Cautious), (1, Aggressive), (1, Merchant)],
+        profiles: [(1, Cautious), (1, Aggressive), (1, Merchant), (1, Mentor), (1, Veteran), (1, Showman)],
         // Many poor, few rich.
         wealth: [(5, Poor), (3, Modest), (1, Rich)],
         continents: [(1, Europe), (1, Asia), (1, Americas), (1, Africa), (1, Oceania)],

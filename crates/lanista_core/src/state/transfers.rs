@@ -12,7 +12,7 @@ use crate::fighter::career::{CareerFighter, Status};
 use crate::fighter::percent_of;
 use crate::market::{self, MarketNews, Move, SaleOffer, estimated_potential, value};
 use crate::relations::Reason;
-use crate::rivals::RivalId;
+use crate::rivals::{Eye, RivalId};
 
 use super::clubs::off_season_starts;
 use super::{GameState, News, WorldNews, relate};
@@ -181,7 +181,8 @@ fn negotiate(
 
 /// The rival clubs' market. At the start of the off-season, each releases its
 /// fighters of `release_age` and more worth less than its average fighter, a rich club
-/// at any age those worth less than `rich_release_percent` of it, and the rookies
+/// at any age those worth less than `rich_release_percent` of it, worth as its
+/// profile's eye sees it (`ProfileRules::recruits`), and the rookies
 /// arrive. Each rich club buys a better fighter (`rich_purchases`), then each club
 /// below `roster.wanted` fighters recruits (see `rival_signings`); then each club with a place,
 /// keeping its `care_reserve`, offers its `buy_percent` of their value for the player's
@@ -191,11 +192,12 @@ pub(super) fn rival_market(state: &mut GameState, data: &DesignData) {
     if off_season_starts(state, data) {
         for club in 0..state.rivals.len() {
             let rival = &state.rivals[club];
+            let eye = rival.rules(data).recruits;
             let values: Vec<u64> = rival
                 .fighters
                 .iter()
                 .filter(|f| f.status == Status::Active)
-                .map(|f| u64::from(value(f, market)))
+                .map(|f| u64::from(eye.appeal(f, market)))
                 .collect();
             let count = u64::try_from(values.len()).unwrap_or(u64::MAX);
             let average = values.iter().sum::<u64>().checked_div(count).unwrap_or(0);
@@ -203,7 +205,7 @@ pub(super) fn rival_market(state: &mut GameState, data: &DesignData) {
             let gone: Vec<usize> = (0..rival.fighters.len())
                 .filter(|&i| {
                     let fighter = &rival.fighters[i];
-                    let worth = u64::from(value(fighter, market));
+                    let worth = u64::from(eye.appeal(fighter, market));
                     fighter.status == Status::Active
                         && ((fighter.age >= market.release_age && worth < average)
                             || (rich
@@ -288,21 +290,23 @@ pub(super) fn release_rival(state: &mut GameState, id: RivalId) {
     state.transfer(Contender::Rival(id), to);
 }
 
-/// The value of rival club `club`'s weakest fighter in activity, and its index; `None`
-/// for a club without any.
+/// The worth to rival club `club` (its profile's eye) of its weakest fighter in
+/// activity, and its index; `None` for a club without any.
 pub(super) fn weakest(state: &GameState, club: usize, data: &DesignData) -> Option<(u32, usize)> {
     let market = &data.economy.market;
-    let fighters = &state.rivals[club].fighters;
+    let rival = &state.rivals[club];
+    let eye = rival.rules(data).recruits;
+    let fighters = &rival.fighters;
     (0..fighters.len())
         .filter(|&i| fighters[i].status == Status::Active)
-        .map(|i| (value(&fighters[i], market), i))
+        .map(|i| (eye.appeal(&fighters[i], market), i))
         .min()
 }
 
 /// The free agent rival club `club` would sign first: for a poor club, the one of the
 /// best potential its recruiter sees (`market::estimated_potential`), the youngest of
-/// equals; for the others, or a poor club whose recruiter cannot tell, the most
-/// valuable.
+/// equals; for the others, or a poor club whose recruiter cannot tell, the one worth
+/// most to its profile's eye.
 fn wanted_agent(state: &GameState, club: usize, data: &DesignData) -> Option<usize> {
     let rival = &state.rivals[club];
     let scouting = rival
@@ -321,12 +325,12 @@ fn wanted_agent(state: &GameState, club: usize, data: &DesignData) -> Option<usi
         .map(|(.., Reverse(a))| a);
     match promising {
         Some(a) if rival.wealth == Wealth::Poor => Some(a),
-        _ => most_valuable(agents, data),
+        _ => most_valuable(agents, rival.rules(data).recruits, data),
     }
 }
 
 /// Each rival club below `roster.wanted` fighters in activity recruits until it has
-/// them: the free agent it wants first (`wanted_agent`) if worth at least its weakest
+/// them: the free agent it wants first (`wanted_agent`) if worth, to its eye, at least its weakest
 /// fighter; if not, a club that is not poor first tries, once a week, to buy the most
 /// valuable fighter of another club worth that much that it can pay at the seller's
 /// `sell_percent` keeping its own `care_reserve`, if the fighter agrees
@@ -347,7 +351,8 @@ pub(super) fn rival_signings(state: &mut GameState, data: &DesignData) {
         while state.rivals[buyer].active() < wanted {
             let weakest = weakest(state, buyer, data).map_or(0, |(worth, _)| worth);
             let agent = wanted_agent(state, buyer, data);
-            let suits = agent.is_some_and(|a| value(&state.free_agents[a], market) >= weakest);
+            let eye = state.rivals[buyer].rules(data).recruits;
+            let suits = agent.is_some_and(|a| eye.appeal(&state.free_agents[a], market) >= weakest);
             if !suits && !tried {
                 tried = true;
                 if let Some(seller) = buy_from_rival(state, buyer, weakest, data) {
@@ -399,8 +404,8 @@ pub(super) fn rich_purchases(state: &mut GameState, data: &DesignData) {
     }
 }
 
-/// Rival club `buyer` buys the most valuable fighter of another club no richer than it
-/// worth at least `floor` that it can pay, if the fighter agrees; returns the seller if
+/// Rival club `buyer` buys the fighter of another club no richer than it worth most to
+/// its eye, at least `floor`, that it can pay, if the fighter agrees; returns the seller if
 /// it did. A club sells to a richer one, never to a poorer, and buys only keeping its
 /// `care_reserve` and half the money of its wealth (`WealthLevel::from`), so as not to
 /// fall from its level by buying.
@@ -414,7 +419,9 @@ pub(super) fn buy_from_rival(
     let money = state.rivals[buyer].money;
     let wealth = state.rivals[buyer].wealth;
     let level = i64::from(data.economy.wealth.get(wealth).from) / 2;
-    let reserve = i64::from(state.rivals[buyer].rules(data).care_reserve).max(level);
+    let rules = state.rivals[buyer].rules(data);
+    let reserve = i64::from(rules.care_reserve).max(level);
+    let eye = rules.recruits;
     let best = state
         .rivals
         .iter()
@@ -424,7 +431,7 @@ pub(super) fn buy_from_rival(
             (0..rival.fighters.len()).map(move |fighter| RivalId { club, fighter })
         })
         .filter_map(|id| {
-            let worth = value(state.rival_fighter(id)?, market);
+            let worth = eye.appeal(state.rival_fighter(id)?, market);
             let price = state.asking_price(id, data)?;
             (worth >= floor && money - i64::from(price) >= reserve).then_some((worth, id, price))
         })
@@ -469,11 +476,11 @@ pub(super) fn buy_from_rival(
     Some(id.club)
 }
 
-/// Index of the most valuable of `fighters` still active, the first of equals.
-fn most_valuable(fighters: &[CareerFighter], data: &DesignData) -> Option<usize> {
+/// Index of the one of `fighters` still active worth most to `eye`, the first of equals.
+fn most_valuable(fighters: &[CareerFighter], eye: Eye, data: &DesignData) -> Option<usize> {
     (0..fighters.len())
         .filter(|&a| fighters[a].status == Status::Active)
-        .max_by_key(|&a| (value(&fighters[a], &data.economy.market), Reverse(a)))
+        .max_by_key(|&a| (eye.appeal(&fighters[a], &data.economy.market), Reverse(a)))
 }
 
 /// Beyond `MarketRules::max_free_agents`, the least valuable free agents give up

@@ -12,7 +12,8 @@ use crate::design_data::DesignData;
 use crate::economy::Wealth;
 use crate::fighter::career::{Activity, CareerFighter, Status, WeekPlan, badly_hurt_or_ill};
 use crate::fighter::equipment::Refused;
-use crate::fighter::pick;
+use crate::fighter::{percent_of, pick};
+use crate::market::{MarketRules, value};
 use crate::names;
 use crate::staff::{Candidate, Role, Staff, StaffMove};
 
@@ -23,6 +24,40 @@ pub enum Profile {
     Aggressive,
     /// Keeps its money, sells cheap and buys dear.
     Merchant,
+    /// Recruits young fighters to raise them.
+    Mentor,
+    /// Recruits fighters whose stats are grown.
+    Veteran,
+    /// Recruits the fighters who draw the crowd, whatever their stats.
+    Showman,
+}
+
+/// How a club rates a fighter it might recruit or keep (`Eye::appeal`).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Deserialize)]
+pub enum Eye {
+    /// By its value (`market::value`).
+    #[default]
+    Worth,
+    /// Its value, times `percent` up to `until` years old.
+    Youth { until: u32, percent: u32 },
+    /// Its value, times `percent` from `from` years old.
+    Grown { from: u32, percent: u32 },
+    /// By its fame alone, at the market's `price_per_fame`.
+    Crowd,
+}
+
+impl Eye {
+    /// What `fighter` is worth to a club of this eye, on the scale of `market::value`.
+    #[must_use]
+    pub fn appeal(self, fighter: &CareerFighter, market: &MarketRules) -> u32 {
+        let worth = || value(fighter, market);
+        match self {
+            Eye::Youth { until, percent } if fighter.age <= until => percent_of(worth(), percent),
+            Eye::Grown { from, percent } if fighter.age >= from => percent_of(worth(), percent),
+            Eye::Worth | Eye::Youth { .. } | Eye::Grown { .. } => worth(),
+            Eye::Crowd => fighter.fame.value().saturating_mul(market.price_per_fame),
+        }
+    }
 }
 
 /// A profile's thresholds.
@@ -58,6 +93,9 @@ pub struct ProfileRules {
     /// concluded with it, in percent (`relations::Relation::change`).
     pub anger_percent: u32,
     pub deal_percent: u32,
+    /// How it rates the fighters it recruits, buys and lets go; by value if left out.
+    #[serde(default)]
+    pub recruits: Eye,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
@@ -66,6 +104,9 @@ pub struct Profiles {
     pub cautious: ProfileRules,
     pub aggressive: ProfileRules,
     pub merchant: ProfileRules,
+    pub mentor: ProfileRules,
+    pub veteran: ProfileRules,
+    pub showman: ProfileRules,
 }
 
 impl Profiles {
@@ -75,6 +116,9 @@ impl Profiles {
             Profile::Cautious => &self.cautious,
             Profile::Aggressive => &self.aggressive,
             Profile::Merchant => &self.merchant,
+            Profile::Mentor => &self.mentor,
+            Profile::Veteran => &self.veteran,
+            Profile::Showman => &self.showman,
         }
     }
 }
@@ -384,6 +428,30 @@ mod tests {
                 home: true,
             })
             .collect()
+    }
+
+    #[test]
+    fn each_eye_rates_a_fighter_its_way() {
+        let data = DesignData::load().unwrap();
+        let market = &data.economy.market;
+        let profiles = &data.world.profiles;
+        let mut fighter = CareerFighter::random(&mut ChaCha8Rng::seed_from_u64(1), &data);
+        fighter.fame = crate::fighter::fame::Fame::new(10);
+        let worth = value(&fighter, market);
+        let [mentor, veteran, showman] =
+            [&profiles.mentor, &profiles.veteran, &profiles.showman].map(|p| p.recruits);
+        assert_eq!(profiles.cautious.recruits.appeal(&fighter, market), worth);
+        fighter.age = 20;
+        assert!(mentor.appeal(&fighter, market) > worth);
+        assert_eq!(veteran.appeal(&fighter, market), worth);
+        fighter.age = 32;
+        assert_eq!(mentor.appeal(&fighter, market), worth);
+        assert!(veteran.appeal(&fighter, market) > worth);
+        // Stats do not count for the crowd, fame alone.
+        let crowd = showman.appeal(&fighter, market);
+        assert_eq!(crowd, 10 * market.price_per_fame);
+        fighter.stats.hp += 50;
+        assert_eq!(showman.appeal(&fighter, market), crowd);
     }
 
     #[test]

@@ -531,6 +531,9 @@ pub fn profile_name(profile: Profile) -> &'static str {
         Profile::Cautious => "prudent",
         Profile::Aggressive => "agressif",
         Profile::Merchant => "marchand",
+        Profile::Mentor => "formateur",
+        Profile::Veteran => "vétéran",
+        Profile::Showman => "spectacle",
     }
 }
 
