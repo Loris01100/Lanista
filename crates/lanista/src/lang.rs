@@ -166,6 +166,42 @@ mod tests {
         assert_in_every_language(&keys);
     }
 
+    #[test]
+    fn the_font_has_every_character_of_every_language() {
+        use reesch::egui::{Context, FontId, RawInput};
+        let ui = Context::default();
+        crate::theme::apply(&ui);
+        // The fonts are built at the first pass.
+        let _ = ui.run(RawInput::default(), |_| {});
+        let font = FontId::proportional(18.0);
+        let missing = |text: &str| -> Vec<char> {
+            ui.fonts(|fonts| {
+                let mut missing: Vec<char> = text
+                    .chars()
+                    .filter(|&c| !c.is_whitespace() && !fonts.has_glyph(&font, c))
+                    .collect();
+                missing.sort_unstable();
+                missing.dedup();
+                missing
+            })
+        };
+        for language in LANGUAGES {
+            let shown: String = language
+                .source
+                .lines()
+                .filter(|line| !line.starts_with('#'))
+                .collect();
+            let missing = missing(&shown);
+            assert!(missing.is_empty(), "{}.ftl: {missing:?}", language.code);
+        }
+        // The clubs' names drawn from the data are shown too.
+        let data = lanista_core::design_data::DesignData::load().unwrap();
+        for culture in &data.cultures {
+            let missing = missing(&culture.names.concat());
+            assert!(missing.is_empty(), "{}: {missing:?}", culture.key);
+        }
+    }
+
     /// The key of each `tr!("key"` in the code under `dir`, but for this file's examples.
     // ponytail: literal keys only, which all the code uses.
     fn keys_in(dir: &std::path::Path) -> Vec<String> {
