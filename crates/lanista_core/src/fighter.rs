@@ -12,6 +12,8 @@ pub mod personality;
 pub mod progression;
 pub mod retirement;
 
+use std::sync::Arc;
+
 use rand::{Rng, RngExt};
 use serde::{Deserialize, Serialize};
 
@@ -25,6 +27,7 @@ use crate::fighter::illness::Illness;
 use crate::fighter::injury::{Injury, Location};
 use crate::fighter::morale::Morale;
 use crate::fighter::personality::Personality;
+use crate::learned::Model;
 
 /// Index of a fighter in its arena; fighters refer to each other by ID, never by reference.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
@@ -208,6 +211,8 @@ pub struct Fighter {
     pub refused: Refused,
     /// How it is drawn; no effect on the fight.
     pub appearance: Appearance,
+    /// The learned AI that plays it; the utility AI without one (see `duel::ais`).
+    pub model: Option<Arc<Model>>,
 }
 
 /// Everything about a fighter's state that its combat AI reads, beyond HP and resources.
@@ -266,6 +271,7 @@ impl Fighter {
             condition: Condition::default(),
             refused: Refused::NONE,
             appearance: Appearance::default(),
+            model: None,
         }
     }
 

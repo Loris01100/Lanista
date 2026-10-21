@@ -8,7 +8,7 @@ use std::hint::black_box;
 use criterion::{BatchSize, Criterion, criterion_group, criterion_main};
 use lanista_core::combat::{Arena, ArenaKind, Vec2, tick};
 use lanista_core::design_data::DesignData;
-use lanista_core::duel::{random_duel, utility_ais};
+use lanista_core::duel::{ais, random_duel};
 use lanista_core::fighter::FighterId;
 use lanista_core::fighter::career::CareerFighter;
 use lanista_core::fighter::equipment::Refused;
@@ -30,7 +30,7 @@ fn melee(data: &DesignData, kind: ArenaKind, seed: u64) -> Arena {
 
 /// Plays `arenas` one tick each in turn until all are over or out of time.
 fn play_together(arenas: &mut [Arena]) {
-    let mut ais: Vec<_> = arenas.iter().map(utility_ais).collect();
+    let mut ais: Vec<_> = arenas.iter().map(ais).collect();
     loop {
         let mut running = false;
         for (arena, ais) in arenas.iter_mut().zip(&mut ais) {
@@ -59,13 +59,13 @@ fn benches(c: &mut Criterion) {
     }
     // One tick in the thick of it: the first 10 s played, 20 fighters still around.
     let mut busy = melee(&data, ArenaKind::Pillars, 1);
-    let mut ais = utility_ais(&busy);
+    let mut busy_ais = ais(&busy);
     for _ in 0..300 {
-        tick(&mut busy, &mut ais);
+        tick(&mut busy, &mut busy_ais);
     }
     c.bench_function("one tick of a melee of 20", |b| {
         b.iter_batched(
-            || (busy.clone(), utility_ais(&busy)),
+            || (busy.clone(), ais(&busy)),
             |(mut arena, mut ais)| tick(black_box(&mut arena), &mut ais),
             BatchSize::SmallInput,
         );

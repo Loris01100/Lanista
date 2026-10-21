@@ -1,6 +1,8 @@
 //! The standard duel, set up from a seed: the same in the game, the tools
 //! (`simulate`, `batch`) and the tests.
 
+use std::sync::Arc;
+
 use rand::{RngExt, SeedableRng};
 use rand_chacha::ChaCha8Rng;
 
@@ -9,6 +11,7 @@ use crate::combat::{Arena, Vec2, run};
 use crate::design_data::DesignData;
 use crate::fighter::appearance::Appearance;
 use crate::fighter::{ClassId, Fighter, FighterId, Stats};
+use crate::learned::LearnedAi;
 
 /// A fight lasts at most one minute.
 pub const MAX_TICKS: u32 = 1800;
@@ -51,20 +54,24 @@ pub fn random_duel(data: &DesignData, seed: u64) -> Arena {
     Arena::new(ARENA_SIZE, ARENA_SIZE, fighters, seed).with_rules(&data.combat)
 }
 
-/// A utility AI for every fighter of `arena`.
+/// The AI of every fighter of `arena`: its learned model's ([`LearnedAi`]), the utility
+/// AI without one.
 #[must_use]
-pub fn utility_ais(arena: &Arena) -> Vec<Box<dyn CombatAi>> {
+pub fn ais(arena: &Arena) -> Vec<Box<dyn CombatAi>> {
     arena
         .fighters
         .iter()
-        .map(|_| Box::new(UtilityAi) as Box<dyn CombatAi>)
+        .map(|f| match &f.model {
+            Some(model) => Box::new(LearnedAi(Arc::clone(model))) as Box<dyn CombatAi>,
+            None => Box::new(UtilityAi),
+        })
         .collect()
 }
 
-/// Plays the fight to its end, or its time limit (`Arena::max_ticks`), with a utility
-/// AI for every fighter.
+/// Plays the fight to its end, or its time limit (`Arena::max_ticks`), each fighter
+/// with its AI (see [`ais`]).
 pub fn play(arena: &mut Arena) {
-    let mut ais = utility_ais(arena);
+    let mut ais = ais(arena);
     let ticks = arena.max_ticks;
     run(arena, &mut ais, ticks);
 }

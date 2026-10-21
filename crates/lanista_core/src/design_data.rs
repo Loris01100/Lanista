@@ -20,6 +20,7 @@ use crate::fighter::morale::MoraleRules;
 use crate::fighter::personality::PersonalityRules;
 use crate::fighter::progression::ProgressionRules;
 use crate::fighter::retirement::RetirementRules;
+use crate::learned::{ClassModels, MODELS_DIR};
 use crate::melee::MeleeRules;
 use crate::names::Culture;
 use crate::relations::{MAX_SCORE, Standing};
@@ -37,6 +38,9 @@ pub struct DesignData {
     /// The world's cultures, from `data/names.ron`.
     pub cultures: Vec<Culture>,
     pub stat_model: StatModels,
+    /// Each class's learned models, in the order of `classes`, read by
+    /// [`DesignData::load`] from `assets/ai/`; none from [`DesignData::from_ron`].
+    pub models: Vec<ClassModels>,
 }
 
 /// Rules of the fighter's physical state, from `data/fighter.ron`.
@@ -205,6 +209,7 @@ impl DesignData {
                 file: STAT_MODEL_FILE,
                 source,
             })?,
+            models: Vec::new(),
         };
         data.validate()?;
         if let Some(field) = data.stat_model.invalid_field() {
@@ -228,7 +233,7 @@ impl DesignData {
             std::fs::read_to_string(Self::path(file))
                 .map_err(|source| LoadError::Io { file, source })
         };
-        Self::from_ron(
+        let mut data = Self::from_ron(
             &read(CLASSES_FILE)?,
             &read(COMBAT_FILE)?,
             &read(FIGHTER_FILE)?,
@@ -237,7 +242,9 @@ impl DesignData {
             &read(WORLD_FILE)?,
             &read(NAMES_FILE)?,
             &read(STAT_MODEL_FILE)?,
-        )
+        )?;
+        data.models = ClassModels::load(MODELS_DIR, &data);
+        Ok(data)
     }
 
     /// Where [`DesignData::load`] reads `file`, one of the `data/` files.

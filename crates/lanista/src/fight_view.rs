@@ -5,7 +5,7 @@
 use lanista_core::ai::{self, CombatAi};
 use lanista_core::combat::{self, Arena, RADIUS};
 use lanista_core::design_data::DesignData;
-use lanista_core::duel::utility_ais;
+use lanista_core::duel::ais;
 use lanista_core::fighter::FighterId;
 use lanista_core::fighter::injury::Location;
 use lanista_core::log::EventKind;
@@ -136,7 +136,7 @@ impl FightView {
             })
             .collect();
         Self {
-            ais: utility_ais(&arena),
+            ais: ais(&arena),
             previous: positions(&arena),
             arena,
             cast,

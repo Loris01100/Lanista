@@ -4,9 +4,9 @@
 
 use rand::{Rng, RngExt};
 
-use crate::ai::{CombatAi, UtilityAi};
 use crate::combat::{Arena, ArenaKind, Vec2, run};
 use crate::design_data::DesignData;
+use crate::duel::ais;
 use crate::fighter::FighterId;
 use crate::fighter::career::{CareerFighter, FightSummary, Status};
 use crate::fighter::equipment::Refused;
@@ -191,11 +191,7 @@ pub fn play_melee<R: Rng + ?Sized>(
         }
     }
     let mut arena = start.clone();
-    let mut ais: Vec<Box<dyn CombatAi>> = arena
-        .fighters
-        .iter()
-        .map(|_| Box::new(UtilityAi) as Box<dyn CombatAi>)
-        .collect();
+    let mut ais = ais(&arena);
     let ticks = arena.max_ticks;
     run(&mut arena, &mut ais, ticks);
     let places = places(&arena);
@@ -355,11 +351,9 @@ mod tests {
             let fame = i64::from(old.fame.value()) + i64::from(side.fame_change);
             assert_eq!(i64::from(f.fame.value()), fame.clamp(0, 100));
         }
-        // Replaying the start with utility AIs gives the same melee.
+        // Replaying the start with its fighters' AIs gives the same melee.
         let mut replay = melee.start.clone();
-        let mut ais: Vec<Box<dyn CombatAi>> = (0..20)
-            .map(|_| Box::new(UtilityAi) as Box<dyn CombatAi>)
-            .collect();
+        let mut ais = ais(&replay);
         run(&mut replay, &mut ais, data.combat.melee.max_ticks);
         assert_eq!(Report::new(&replay), melee.report);
     }

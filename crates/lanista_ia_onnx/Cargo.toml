@@ -16,3 +16,4 @@ workspace = true
 
 [dev-dependencies]
 lanista_core = { path = "../lanista_core" }
+serde_json = "1.0.154"

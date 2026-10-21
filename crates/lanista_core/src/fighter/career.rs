@@ -193,6 +193,17 @@ impl CareerFighter {
         fighter.surrender_hp = self.personality.surrender_hp(stats.hp, &rules.personality);
         fighter.appearance = self.appearance.clone();
         fighter.refused = refused;
+        let models = usize::try_from(self.class.0)
+            .ok()
+            .and_then(|c| data.models.get(c));
+        let record = self.record;
+        fighter.model = models.and_then(|m| {
+            if record.wins + record.losses + record.draws >= rules.career.veteran_fights {
+                m.veteran.clone()
+            } else {
+                m.recruit.clone()
+            }
+        });
         fighter.condition = Condition {
             personality: self.personality,
             morale: self.morale,
@@ -908,6 +919,9 @@ pub struct CareerRules {
     pub stats_spread_percent: u32,
     /// Chance, in percent, that a generated fighter is right-handed.
     pub right_handed_percent: u32,
+    /// Fights from which a fighter is a veteran, played by its class's most advanced
+    /// learned model rather than the recruits' one.
+    pub veteran_fights: u32,
 }
 
 /// What a fight brings a fighter before its after-effects (see `CareerFighter::take_side`).

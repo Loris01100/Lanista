@@ -188,5 +188,8 @@
         start_age: (20, 30),
         stats_spread_percent: 20,
         right_handed_percent: 85,
+        // Fights from which a fighter is a veteran, played by its class's most advanced
+        // learned model (assets/ai/<class>-veteran.json), a recruit's before.
+        veteran_fights: 10,
     ),
 )

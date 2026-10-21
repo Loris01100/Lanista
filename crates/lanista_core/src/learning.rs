@@ -1,6 +1,6 @@
 //! The learning AI's environment (phase 7): a duel or a melee of generated fighters played one
 //! decision at a time by actions chosen from outside or by the utility AI, each fighter
-//! seeing an observation and getting a reward. `lanista_py` exposes it to Python for training; the learned AI will read
+//! seeing an observation and getting a reward. `lanista_py` exposes it to Python for training; the learned AI (`learned`) reads
 //! the same observations.
 
 use rand::{RngExt, SeedableRng};
@@ -63,7 +63,14 @@ const ARENA_SCALE: f64 = 50.0;
 pub struct Environment {
     data: DesignData,
     arena: Arena,
-    /// Spells of the class with the most: the spell slots of actions and observations.
+    senses: Senses,
+}
+
+/// What a fighter sees of a fight and can do in it, shaped by the design data: the
+/// spell slots of actions and observations, and the classes.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct Senses {
+    /// Spells of the class with the most.
     max_spells: usize,
     class_count: usize,
 }
@@ -90,19 +97,12 @@ impl Environment {
     /// Ready to play the duel of seed 0.
     #[must_use]
     pub fn new(data: DesignData) -> Self {
-        let max_spells = data
-            .classes
-            .iter()
-            .map(|c| c.spells.len())
-            .max()
-            .unwrap_or(0);
+        let senses = Senses::of(&data);
         let arena = random_duel(&data, 0);
-        let class_count = data.classes.len();
         Self {
             data,
             arena,
-            max_spells,
-            class_count,
+            senses,
         }
     }
 
@@ -150,7 +150,9 @@ impl Environment {
     pub fn step(&mut self, actions: &[Option<usize>]) -> Step {
         let mut ais: Vec<Box<dyn CombatAi>> = (0..self.arena.fighters.len())
             .map(|i| match actions[i] {
-                Some(a) => Box::new(Chosen(self.action(i, a))) as Box<dyn CombatAi>,
+                Some(a) => {
+                    Box::new(Chosen(self.senses.action(&self.arena, i, a))) as Box<dyn CombatAi>
+                }
                 None => Box::new(UtilityAi),
             })
             .collect();
@@ -189,20 +191,13 @@ impl Environment {
     /// Number of actions of each fighter: wait, the moves, then a cast per spell slot.
     #[must_use]
     pub fn action_count(&self) -> usize {
-        1 + MOVES.len() + self.max_spells
+        self.senses.action_count()
     }
 
     /// Number of values of each fighter's observation.
     #[must_use]
     pub fn observation_size(&self) -> usize {
-        self.spells_start()
-            + SPELL_VALUES * self.max_spells
-            + 2 * OTHERS_SEEN * (OTHER_VALUES + self.class_count)
-    }
-
-    /// Where the spell slots start in an observation.
-    fn spells_start(&self) -> usize {
-        OWN_VALUES + self.class_count + ARENA_VALUES
+        self.senses.observation_size()
     }
 
     #[must_use]
@@ -212,36 +207,6 @@ impl Environment {
 
     fn is_done(&self) -> bool {
         self.arena.is_over() || self.arena.tick >= self.arena.max_ticks
-    }
-
-    /// The other fighters still in the fight, nearest first: opponents, then allies.
-    fn others(&self, i: usize) -> (Vec<&Fighter>, Vec<&Fighter>) {
-        let me = &self.arena.fighters[i];
-        let mut others: Vec<&Fighter> = self
-            .arena
-            .fighters
-            .iter()
-            .filter(|f| f.id != me.id && f.is_fighting())
-            .collect();
-        others.sort_by(|a, b| edge_distance(me, a).total_cmp(&edge_distance(me, b)));
-        others
-            .into_iter()
-            .partition(|f| !self.arena.allied(me.id, f.id))
-    }
-
-    fn action(&self, i: usize, index: usize) -> Action {
-        match index {
-            0 => Action::Wait,
-            m if m <= MOVES.len() => Action::Move(MOVES[m - 1]),
-            s => self
-                .others(i)
-                .0
-                .first()
-                .map_or(Action::Wait, |target| Action::Cast {
-                    spell: s - 1 - MOVES.len(),
-                    target: target.id,
-                }),
-        }
     }
 
     /// Hit points `caster` took off since log entry `log_start`, each hit as a share of
@@ -264,42 +229,108 @@ impl Environment {
             .sum()
     }
 
-    /// Each fighter's view of the fight, every value between -1 and 1 (see
-    /// [`Environment::observation_size`]): its own state and class, the arena, for each
+    /// Each fighter's view of the fight (see [`Senses::observation`]).
+    fn observations(&self) -> Vec<Vec<f64>> {
+        (0..self.arena.fighters.len())
+            .map(|i| self.senses.observation(&self.arena, i))
+            .collect()
+    }
+}
+
+impl Senses {
+    /// The senses of a fighter of any class of `data`.
+    #[must_use]
+    pub fn of(data: &DesignData) -> Self {
+        Self {
+            max_spells: data
+                .classes
+                .iter()
+                .map(|c| c.spells.len())
+                .max()
+                .unwrap_or(0),
+            class_count: data.classes.len(),
+        }
+    }
+
+    /// Number of actions of each fighter: wait, the moves, then a cast per spell slot.
+    #[must_use]
+    pub fn action_count(self) -> usize {
+        1 + MOVES.len() + self.max_spells
+    }
+
+    /// Number of values of each fighter's observation.
+    #[must_use]
+    pub fn observation_size(self) -> usize {
+        self.spells_start()
+            + SPELL_VALUES * self.max_spells
+            + 2 * OTHERS_SEEN * (OTHER_VALUES + self.class_count)
+    }
+
+    /// Where the spell slots start in an observation.
+    fn spells_start(self) -> usize {
+        OWN_VALUES + self.class_count + ARENA_VALUES
+    }
+
+    /// The other fighters still in the fight, nearest first: opponents, then allies.
+    fn others(arena: &Arena, i: usize) -> (Vec<&Fighter>, Vec<&Fighter>) {
+        let me = &arena.fighters[i];
+        let mut others: Vec<&Fighter> = arena
+            .fighters
+            .iter()
+            .filter(|f| f.id != me.id && f.is_fighting())
+            .collect();
+        others.sort_by(|a, b| edge_distance(me, a).total_cmp(&edge_distance(me, b)));
+        others.into_iter().partition(|f| !arena.allied(me.id, f.id))
+    }
+
+    /// The action of `index` (see [`Environment::step`]) for fighter `i` of `arena`.
+    #[must_use]
+    pub fn action(self, arena: &Arena, i: usize, index: usize) -> Action {
+        match index {
+            0 => Action::Wait,
+            m if m <= MOVES.len() => Action::Move(MOVES[m - 1]),
+            s => Self::others(arena, i)
+                .0
+                .first()
+                .map_or(Action::Wait, |target| Action::Cast {
+                    spell: s - 1 - MOVES.len(),
+                    target: target.id,
+                }),
+        }
+    }
+
+    /// Fighter `i`'s view of the fight, every value between -1 and 1 (see
+    /// [`Senses::observation_size`]): its own state and class, the arena, for each
     /// spell slot whether it can cast, whether the nearest opponent is in reach and the
     /// cooldown left, then its [`OTHERS_SEEN`] nearest opponents and allies, an empty
     /// slot all 0.
-    fn observations(&self) -> Vec<Vec<f64>> {
-        (0..self.arena.fighters.len())
-            .map(|i| {
-                let me = &self.arena.fighters[i];
-                let mut values = self.own_values(me);
-                let (opponents, allies) = self.others(i);
-                let distance = opponents.first().map(|o| edge_distance(me, o));
-                for slot in 0..self.max_spells {
-                    let spell = me.spells.get(slot);
-                    values.extend([
-                        flag(me.can_cast(slot)),
-                        flag(spell.zip(distance).is_some_and(|(s, d)| d <= s.reach)),
-                        spell.map_or(0.0, |s| ratio(me.cooldowns[slot], s.cooldown).min(1.0)),
-                    ]);
+    #[must_use]
+    pub fn observation(self, arena: &Arena, i: usize) -> Vec<f64> {
+        let me = &arena.fighters[i];
+        let mut values = self.own_values(arena, me);
+        let (opponents, allies) = Self::others(arena, i);
+        let distance = opponents.first().map(|o| edge_distance(me, o));
+        for slot in 0..self.max_spells {
+            let spell = me.spells.get(slot);
+            values.extend([
+                flag(me.can_cast(slot)),
+                flag(spell.zip(distance).is_some_and(|(s, d)| d <= s.reach)),
+                spell.map_or(0.0, |s| ratio(me.cooldowns[slot], s.cooldown).min(1.0)),
+            ]);
+        }
+        for seen in [opponents, allies] {
+            for slot in 0..OTHERS_SEEN {
+                match seen.get(slot) {
+                    Some(other) => values.extend(self.other_values(arena, me, other)),
+                    None => values.extend(vec![0.0; OTHER_VALUES + self.class_count]),
                 }
-                for seen in [opponents, allies] {
-                    for slot in 0..OTHERS_SEEN {
-                        match seen.get(slot) {
-                            Some(other) => values.extend(self.other_values(me, other)),
-                            None => values.extend(vec![0.0; OTHER_VALUES + self.class_count]),
-                        }
-                    }
-                }
-                values
-            })
-            .collect()
+            }
+        }
+        values
     }
 
     /// The fighter's own state and class, then the arena.
-    fn own_values(&self, me: &Fighter) -> Vec<f64> {
-        let arena = &self.arena;
+    fn own_values(self, arena: &Arena, me: &Fighter) -> Vec<f64> {
         let condition = &me.condition;
         let traits = condition.personality;
         let mut values = vec![
@@ -371,8 +402,8 @@ impl Environment {
     }
 
     /// What `me` sees of `other`: there, hit points, offset, distance, standing, class.
-    fn other_values(&self, me: &Fighter, other: &Fighter) -> Vec<f64> {
-        let (width, height) = (self.arena.width, self.arena.height);
+    fn other_values(self, arena: &Arena, me: &Fighter, other: &Fighter) -> Vec<f64> {
+        let (width, height) = (arena.width, arena.height);
         let diagonal = Vec2::new(width, height).length();
         let mut values = vec![
             1.0,
@@ -387,7 +418,7 @@ impl Environment {
     }
 
     /// One flag per class, set for the fighter's.
-    fn class_values(&self, fighter: &Fighter) -> Vec<f64> {
+    fn class_values(self, fighter: &Fighter) -> Vec<f64> {
         (0..self.class_count)
             .map(|c| flag(usize::try_from(fighter.class.0) == Ok(c)))
             .collect()
@@ -444,8 +475,8 @@ mod tests {
             let actions: Vec<Option<usize>> = observations
                 .iter()
                 .map(|o| {
-                    let start = env.spells_start();
-                    let spells = &o[start..start + SPELL_VALUES * env.max_spells];
+                    let start = env.senses.spells_start();
+                    let spells = &o[start..start + SPELL_VALUES * env.senses.max_spells];
                     let cast = spells
                         .chunks(SPELL_VALUES)
                         .position(|s| s[..2] == [1.0, 1.0]);
@@ -559,8 +590,8 @@ mod tests {
             [0.0, 0.0, 1.0, 0.0, 0.0, 0.0]
         );
         assert_eq!(o[OWN_VALUES - 2..OWN_VALUES], [0.0, 1.0]);
-        let seen = OTHER_VALUES + env.class_count;
-        let opponents = env.spells_start() + SPELL_VALUES * env.max_spells;
+        let seen = OTHER_VALUES + env.senses.class_count;
+        let opponents = env.senses.spells_start() + SPELL_VALUES * env.senses.max_spells;
         let allies = opponents + OTHERS_SEEN * seen;
         let there = |slot: usize| o[slot] > 0.5;
         assert!(there(opponents) && !there(opponents + seen), "one opponent");

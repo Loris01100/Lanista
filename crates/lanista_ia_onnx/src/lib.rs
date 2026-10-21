@@ -1,6 +1,6 @@
-//! ONNX inference for the learned combat AI (phase 7).
-//!
-//! Phase 0 prototype: loads and runs a model with `tract` (chosen over `ort`: pure Rust, nothing to ship).
+//! ONNX inference with `tract`, used by the tests only: the game plays the learned AI
+//! from the networks `python/export.py` writes next to the ONNX models
+//! (`lanista_core::learned`), the same on every processor.
 
 use std::error::Error;
 use std::path::Path;
