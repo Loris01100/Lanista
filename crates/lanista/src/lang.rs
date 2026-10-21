@@ -146,6 +146,19 @@ mod tests {
     }
 
     #[test]
+    fn every_french_key_is_in_every_language() {
+        // A message starts at the line's start; its other lines are indented.
+        let keys: Vec<String> = LANGUAGES[0]
+            .source
+            .lines()
+            .filter(|line| !line.starts_with(['#', ' ', '}']))
+            .filter_map(|line| line.split_once(" =").map(|(key, _)| key.to_owned()))
+            .collect();
+        assert!(keys.len() > 100, "{} keys found", keys.len());
+        assert_in_every_language(&keys);
+    }
+
+    #[test]
     fn every_name_of_the_design_data_is_in_every_language() {
         let data = lanista_core::design_data::DesignData::load().unwrap();
         let mut keys: Vec<String> = data
