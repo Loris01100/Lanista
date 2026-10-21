@@ -183,7 +183,7 @@ Le développement se fait en onze phases (0 à 10), plus les phases 5 bis et 6 b
 | 5. Le monde | Colisées, Elo, rivaux, marché, personnel, modèle statistique | Plusieurs saisons où les classements vivent sans le joueur |
 | 5 bis. Précision et personnel | Précision en combat, blessures à la tête sur la précision, étourdissement selon l'arme, personnel sur le marché et chez les rivaux, mortalité revue, free agents qui combattent, niveaux de richesse des clubs | Une blessure à la tête fait rater des coups ; les rivaux engagent du personnel sur le marché ; les libérations de l'intersaison arrivent |
 | 6. Formats et spectacle | Mêlée (King of the hill) d'ouverture de saison, équipement refusable, types d'arène, apparence, vue multi-combats | Regarder 3 combats du joueur en même temps, dont une mêlée à 20 |
-| 6 bis. Un monde vivant | Des dizaines de clubs générés aux influences du monde entier, colisées sur cinq continents, relations entre clubs, rivalités déclarées, accords | Trois saisons où un club devient rival du joueur par ce qui s'est passé entre eux, et où un club ferme et un autre se crée |
+| 6 bis. Un monde vivant | Des dizaines de clubs générés aux influences du monde entier, colisées sur cinq continents, relations entre clubs, rivalités déclarées | Trois saisons où un club devient rival du joueur par ce qui s'est passé entre eux, et où un club ferme et un autre se crée |
 | 7. IA apprenante | PyO3, Gymnasium, PPO en self-play, export et inférence ONNX | Le modèle appris bat nettement l'IA scriptée |
 | 8. Grands événements | Championnat du monde, Inter-Coliseum, succès, tutoriel | Un cycle complet de 4 saisons avec les deux événements |
 | 9. Contenu et équilibrage | Classes, sorts, arènes, simulations de masse, finitions | Taux de victoire par classe entre 45 et 55 % |
@@ -361,10 +361,10 @@ Trois clubs écrits à la main et appelés « rivaux » d'office ne suffisent pa
 - En mêlée, les combattants d'un club rival visent en priorité ceux du joueur, ceux d'un club ami s'allient plus volontiers avec eux (poids dans les pactes de `melee`).
 
 **Étape 6 — Les accords.**
-- Au-dessus d'un seuil de relation, des accords se débloquent : prêt d'un combattant pour quelques semaines, échange d'un combattant contre un autre, combat d'exhibition sans mort. Un club peut aussi les proposer au joueur.
+- Abandonné. Il était prévu qu'au-dessus d'un seuil de relation, des accords se débloquent (prêt d'un combattant pour quelques semaines, échange d'un combattant contre un autre, combat d'exhibition sans mort), proposés aussi par les clubs. Décidé : ni prêt ni échange, et pas d'exhibition, qui laisserait le joueur tester ses adversaires à l'avance. Les relations jouent sur le marché, les défis, les rivalités et les pactes de mêlée.
 - Plus tard, peut-être : relations entre clubs de l'ordinateur, alliances de clubs, coups bas (débauchage du personnel).
 
-**Écran.** La vue des rivaux devient une vue « Clubs », filtrable par continent et par colisée, avec la richesse et la relation de chaque club ; la page d'un club montre l'historique entre lui et le joueur et les accords possibles ; les alertes du menu général annoncent rivalités et propositions.
+**Écran.** La vue des rivaux devient une vue « Clubs », filtrable par continent et par colisée, avec la richesse et la relation de chaque club ; la page d'un club montre l'historique entre lui et le joueur ; les alertes du menu général annoncent les rivalités.
 
 **Jalon :** trois saisons jouées où un club devient rival du joueur par ce qui s'est passé entre eux, où un club ferme et un autre se crée, et dont la vue « Clubs » montre la raison de chaque relation.
 
