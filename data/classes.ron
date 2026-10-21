@@ -1,5 +1,6 @@
 // Prototype classes: placeholder values, to balance with mass simulations.
-// ClassId(i) is the i-th class of this list.
+// ClassId(i) is the i-th class of this list. A class's key names it in the language
+// files (assets/lang, class-<key>); a spell's name is the fight logs' alone.
 // reach: meters between the fighters' edges. power: % of the damage formula.
 // cooldown: ticks, 30 per second. mana_per_second, endurance_per_second: recovered
 // each second of a fight, up to the max.
@@ -7,7 +8,7 @@
 // the head instead (data/combat.ron); Neutral (spells without an element yet) does neither.
 [
     (
-        name: "Mirmillon",
+        key: "mirmillon",
         max_mana: 0,
         max_endurance: 100,
         mana_per_second: 0,
@@ -43,7 +44,7 @@
         ],
     ),
     (
-        name: "Augure",
+        key: "augure",
         max_mana: 100,
         max_endurance: 50,
         mana_per_second: 4,

@@ -1,150 +1,137 @@
 // The world's cultures, from data/world.ron's `clubs.cultures`: the continent its
-// clubs are at home on, the names a club of that culture may take, and how it is
-// named, each `{name}` in a pattern replaced by a drawn name ("de" before a vowel
-// becoming "d'"). Player-facing, in French.
+// clubs are at home on, the names a club of that culture may take, and the patterns
+// it is named by. A culture's shown name is `culture-<key>` in the language files
+// (assets/lang), a pattern's `club-<pattern>`, which puts the drawn name in place
+// of `$name`.
 [
     (
         key: "rome",
-        name: "Rome",
         continent: Europe,
         names: [
             "Magnus", "Gallicus", "Dacicus", "Matutinus", "Maximus", "Flavius", "Aurelius",
             "Varro", "Crassus", "Scaurus", "Tullius", "Cornelius", "Septimius", "Valerius",
             "Claudius", "Fabius", "Marcellus", "Lucullus", "Capito", "Gracchus",
         ],
-        clubs: ["Ludus {name}", "Familia {name}", "Domus {name}"],
+        clubs: ["ludus", "familia", "domus"],
     ),
     (
         key: "grece",
-        name: "Grèce",
         continent: Europe,
         names: [
             "Achille", "Ajax", "Léonidas", "Milon", "Théagène", "Diagoras", "Polydamas",
             "Arrhichion", "Créugas", "Damoxène", "Mélankomas", "Kléomédès", "Phayllos",
             "Hipposthénès",
         ],
-        clubs: ["Palestre de {name}", "Gymnase de {name}"],
+        clubs: ["palestre", "gymnase"],
     ),
     (
         key: "celtes",
-        name: "Celtes",
         continent: Europe,
         names: [
             "Vercingétorix", "Ambiorix", "Brennus", "Dumnorix", "Orgétorix",
             "Cassivellaunos", "Boudicca", "Commios", "Indutiomare", "Lugotorix",
             "Teutomatos", "Caratacos",
         ],
-        clubs: ["Clan de {name}", "Tribu de {name}"],
+        clubs: ["clan", "tribu"],
     ),
     (
         key: "germains",
-        name: "Germains",
         continent: Europe,
         names: [
             "Arminius", "Marbod", "Arioviste", "Ségeste", "Civilis", "Thusnelda",
             "Fritigern", "Alaric", "Genséric", "Odoacre", "Thorgrim", "Hrolf",
         ],
-        clubs: ["Halle de {name}", "Bande de {name}"],
+        clubs: ["halle", "bande"],
     ),
     (
         key: "steppe",
-        name: "Steppe",
         continent: Asia,
         names: [
             "Temüjin", "Subötaï", "Djebé", "Batu", "Kubilaï", "Tolui", "Ögödei", "Bayan",
             "Toghril", "Mukhali", "Börte", "Khutulun",
         ],
-        clubs: ["Ordu de {name}", "Horde de {name}"],
+        clubs: ["ordu", "horde"],
     ),
     (
         key: "asie_est",
-        name: "Asie de l'Est",
         continent: Asia,
         names: [
             "Guan Yu", "Zhao Yun", "Lü Bu", "Xiang Yu", "Miyamoto", "Tomoe", "Minamoto",
             "Taira", "Kusunoki", "Gyebaek", "Eulji", "Gwanggaeto",
         ],
-        clubs: ["Dōjō {name}", "Maison {name}", "École {name}"],
+        clubs: ["dojo", "maison_asie", "ecole"],
     ),
     (
         key: "inde",
-        name: "Inde",
         continent: Asia,
         names: [
             "Arjuna", "Bhima", "Karna", "Drona", "Chandragupta", "Ashoka", "Poros",
             "Vikrama", "Rudra", "Abhimanyu", "Ghatotkacha", "Prithviraj",
         ],
-        clubs: ["Akhara de {name}", "Ashram de {name}"],
+        clubs: ["akhara", "ashram"],
     ),
     (
         key: "asie_ouest",
-        name: "Asie de l'Ouest",
         continent: Asia,
         names: [
             "Rostam", "Sohrab", "Esfandiyar", "Kaveh", "Arash", "Babak", "Gilgamesh",
             "Enkidu", "Tigrane", "Mithridate", "Cyrus", "Darius",
         ],
-        clubs: ["Zourkhaneh de {name}", "Maison de {name}"],
+        clubs: ["zourkhaneh", "maison"],
     ),
     (
         key: "arabe",
-        name: "Monde arabe",
         continent: Asia,
         names: [
             "Antar", "Khalid", "Hamza", "Zubayr", "Saladin", "Baybars", "Tariq", "Amr",
             "Zénobie", "Qutuz", "Sayf", "Khawla",
         ],
-        clubs: ["Dar {name}", "Bayt {name}"],
+        clubs: ["dar", "bayt"],
     ),
     (
         key: "afrique",
-        name: "Tribus d'Afrique",
         continent: Africa,
         names: [
             "Soundiata", "Chaka", "Mwata", "Lueji", "Chibinda", "Ilunga", "Nzinga", "Kimpa",
             "Askia", "Sonni", "Moshoeshoe", "Makeda", "Ezana", "Dingane",
         ],
-        clubs: ["Kraal de {name}", "Lignée de {name}", "Maison de {name}"],
+        clubs: ["kraal", "lignee", "maison"],
     ),
     (
         key: "amerindiens",
-        name: "Tribus amérindiennes",
         continent: Americas,
         names: [
             "Tecumseh", "Pontiac", "Tatanka", "Tashunka", "Goyathlay", "Cochise", "Osceola",
             "Metacom", "Hiawatha", "Mangas", "Ouray", "Sequoyah",
         ],
-        clubs: ["Clan de {name}", "Loge de {name}", "Cercle de {name}"],
+        clubs: ["clan", "loge", "cercle"],
     ),
     (
         key: "mesoamerique",
-        name: "Mésoamérique",
         continent: Americas,
         names: [
             "Cuauhtémoc", "Moctezuma", "Ahuitzotl", "Itzcóatl", "Tlacaélel",
             "Nezahualcóyotl", "Pakal", "Xicoténcatl", "Cuitláhuac", "Axayácatl", "Tízoc",
             "Tecún",
         ],
-        clubs: ["Maison de l'Aigle de {name}", "Maison du Jaguar de {name}", "Calmecac de {name}"],
+        clubs: ["maison_aigle", "maison_jaguar", "calmecac"],
     ),
     (
         key: "amerique_sud",
-        name: "Tribus d'Amérique du Sud",
         continent: Americas,
         names: [
             "Pachacutec", "Túpac", "Atahualpa", "Manco", "Rumiñahui", "Lautaro",
             "Caupolicán", "Galvarino", "Pelantaro", "Sepé", "Cunhambebe", "Arariboia",
         ],
-        clubs: ["Ayllu de {name}", "Clan de {name}"],
+        clubs: ["ayllu", "clan"],
     ),
     (
         key: "oceanie",
-        name: "Tribus d'Océanie",
         continent: Oceania,
         names: [
             "Hongi Hika", "Te Rauparaha", "Kamehameha", "Hōne Heke", "Kiwa", "Tāwhaki",
             "Māui", "Rata", "Tangaroa", "Malietoa", "Kahekili", "Hinemoa",
         ],
-        clubs: ["Whare {name}", "Pā de {name}"],
+        clubs: ["whare", "pa"],
     ),
 ]

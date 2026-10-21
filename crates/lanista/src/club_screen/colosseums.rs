@@ -12,9 +12,10 @@ use super::market::estimate;
 use super::{ClubScreen, RANKS_SHOWN, View};
 use crate::lang::tr;
 use crate::texts::{
-    arena_effect, arena_name, club_name, colosseum_name, condition_text, contender_name,
-    continent_name, culture_name, culture_text, date_text, place_name, profile_name, record_text,
-    relation_change_text, relation_text, rival_fighter_name, staff_text, wealth_name,
+    arena_effect, arena_name, club_name, colosseum_name, colosseum_rules_name, condition_text,
+    contender_name, continent_name, culture_name, culture_text, date_text, named_club, place_name,
+    profile_name, record_text, relation_change_text, relation_text, rival_fighter_name, staff_text,
+    wealth_name,
 };
 
 impl ClubScreen {
@@ -90,8 +91,8 @@ impl ClubScreen {
             .map(|(club, rival)| {
                 tr!(
                     "rival-club-line",
-                    club = rival.name.as_str(),
-                    culture = culture_name(&rival.culture, &self.data),
+                    club = named_club(&rival.name),
+                    culture = culture_name(&rival.culture),
                     profile = profile_name(rival.profile),
                     wealth = wealth_name(rival.wealth),
                     fighters = rival.active(),
@@ -177,7 +178,7 @@ impl ClubScreen {
         let data = &self.data;
         let state = &self.state;
         let rival = &state.rivals[club];
-        ui.heading(&rival.name);
+        ui.heading(named_club(&rival.name));
         if let Some(week) = rival.closed {
             let closed = tr!("rival-closed", date = date_text(week, data));
             ui.colored_label(egui::Color32::LIGHT_RED, closed);
@@ -186,7 +187,7 @@ impl ClubScreen {
             "rival-description",
             profile = profile_name(rival.profile),
             wealth = wealth_name(rival.wealth),
-            culture = culture_text(&rival.culture, data),
+            culture = culture_text(&rival.culture),
             continent = continent_name(rival.continent),
             fighters = rival.active(),
             max = data.world.roster.max
@@ -244,7 +245,7 @@ impl ClubScreen {
                         .filter(|&c| data.world.colosseums[c].continent == rival.continent)
                         .collect();
                     for &c in &home {
-                        ui.strong(&data.world.colosseums[c].name);
+                        ui.strong(colosseum_rules_name(&data.world.colosseums[c]));
                     }
                     ui.strong(tr!("estimated-value"));
                     ui.end_row();
@@ -306,7 +307,7 @@ fn colosseum_column(
     data: &DesignData,
 ) -> Option<View> {
     let mut goto = None;
-    ui.strong(&rules.name);
+    ui.strong(colosseum_rules_name(rules));
     ui.label(tr!(
         "colosseum-arena",
         arena = arena_name(rules.arena),

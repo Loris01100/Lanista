@@ -1030,12 +1030,10 @@ mod tests {
         for rival in &state.rivals {
             // Named by its culture, unlike any other, with a full roster.
             let culture = data.culture(&rival.culture).unwrap();
+            assert!(culture.names.contains(&rival.name.name), "{:?}", rival.name);
             assert!(
-                culture
-                    .names
-                    .iter()
-                    .any(|n| rival.name.contains(n.as_str())),
-                "{}",
+                culture.clubs.contains(&rival.name.pattern),
+                "{:?}",
                 rival.name
             );
             assert!(rival.active() >= wanted);
@@ -1043,7 +1041,7 @@ mod tests {
                 rival.money,
                 i64::from(data.economy.wealth.get(rival.wealth).starting_money)
             );
-            names.push(rival.name.as_str());
+            names.push(&rival.name);
             cultures.push(rival.culture.as_str());
         }
         names.sort_unstable();
@@ -2535,7 +2533,11 @@ mod tests {
             // a title defense) recruits the next week.
             for rival in state.rivals.iter().filter(|r| r.is_open()) {
                 assert!(rival.money >= 0, "week {week}: {}", rival.money);
-                assert!(rival.active() + 1 >= wanted, "week {week}: {}", rival.name);
+                assert!(
+                    rival.active() + 1 >= wanted,
+                    "week {week}: {:?}",
+                    rival.name
+                );
             }
             if week % season == 0 {
                 let rosters = state.rosters();

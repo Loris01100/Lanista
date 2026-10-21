@@ -346,7 +346,7 @@ pub(crate) fn test_fighter(id: u32, x: f64, y: f64) -> Fighter {
     use crate::combat::{DamageKind, Range};
 
     let class = ClassData {
-        name: "Test".into(),
+        key: "test".into(),
         max_mana: 50,
         max_endurance: 50,
         mana_per_second: 0,

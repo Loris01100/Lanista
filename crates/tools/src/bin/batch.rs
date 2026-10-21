@@ -85,7 +85,7 @@ fn main() -> ExitCode {
     for (i, class) in data.classes.iter().enumerate() {
         println!(
             "  {:<12} {:>5} % of {} fights",
-            class.name,
+            class.key,
             one_decimal(wins[i] * 100, appearances[i]),
             appearances[i],
         );

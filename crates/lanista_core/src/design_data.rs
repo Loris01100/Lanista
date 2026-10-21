@@ -21,7 +21,7 @@ use crate::fighter::personality::PersonalityRules;
 use crate::fighter::progression::ProgressionRules;
 use crate::fighter::retirement::RetirementRules;
 use crate::melee::MeleeRules;
-use crate::names::{self, Culture};
+use crate::names::Culture;
 use crate::relations::{MAX_SCORE, Standing};
 use crate::stat_model::StatModels;
 
@@ -60,8 +60,8 @@ pub struct FighterRules {
 #[derive(Debug, Clone, PartialEq, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct ClassData {
-    /// Shown to the player.
-    pub name: String,
+    /// Names it in the language files (`class-<key>`) and the tools.
+    pub key: String,
     pub max_mana: u32,
     pub max_endurance: u32,
     /// Mana, then endurance, recovered each second of a fight.
@@ -73,7 +73,7 @@ pub struct ClassData {
 #[derive(Debug, Clone, PartialEq, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct SpellData {
-    /// Shown to the player.
+    /// Names it in the fight logs; not shown to the player.
     pub name: String,
     /// Melee uses melee attack against melee defense, ranged the ranged ones.
     pub range: Range,
@@ -403,16 +403,12 @@ impl DesignData {
                 "a continent of clubs without a culture",
             ));
         }
-        let unnamed = |c: &Culture| {
-            c.names.is_empty()
-                || c.clubs.is_empty()
-                || c.clubs.iter().any(|p| !p.contains(names::NAME))
-        };
+        let unnamed = |c: &Culture| c.names.is_empty() || c.clubs.is_empty();
         if self.cultures.iter().any(unnamed) {
             return Err(LoadError::Invalid {
                 file: NAMES_FILE,
                 field: "cultures",
-                problem: "no name, no pattern or a pattern without {name}",
+                problem: "no name or no pattern",
             });
         }
         if self.world.roster.max < self.world.roster.wanted {
@@ -656,7 +652,7 @@ mod tests {
         .unwrap();
         assert_eq!(data.classes.len(), 2);
         for class in &data.classes {
-            assert_eq!(class.spells.len(), 3, "{}", class.name);
+            assert_eq!(class.spells.len(), 3, "{}", class.key);
         }
         assert_eq!(data.calendar.season_weeks(), 30);
         // Five continents, each with its major colosseum and one or two minor ones, one
@@ -668,7 +664,7 @@ mod tests {
             let first = world.colosseum(world.first_colosseum(continent)).unwrap();
             assert_eq!((first.continent, first.purses.entry_fee), (continent, 0));
         }
-        assert_eq!(world.colosseums[0].name, "Capoue");
+        assert_eq!(world.colosseums[0].key, "capoue");
         assert_eq!(world.first_colosseum(Continent::Europe).0, 0);
     }
 
@@ -787,7 +783,7 @@ mod tests {
         };
         let unknown = WORLD.replacen(r#"(2, "oceanie")"#, r#"(2, "atlantide")"#, 1);
         assert_eq!(world_field(&unknown, NAMES), "clubs.cultures");
-        let nameless = NAMES.replacen(r#""Whare {name}", "#, r#""Whare", "#, 1);
+        let nameless = NAMES.replacen(r#"clubs: ["whare", "pa"]"#, "clubs: []", 1);
         assert_eq!(world_field(WORLD, &nameless), "cultures");
         let empty = WORLD.replacen("count: 40", "count: 0", 1);
         assert_eq!(world_field(&empty, NAMES), "clubs.count");
@@ -803,13 +799,13 @@ mod tests {
         let uprooted = NAMES.replacen("continent: Oceania", "continent: Europe", 1);
         assert_eq!(world_field(WORLD, &uprooted), "clubs.cultures");
         let dear = WORLD.replacen(
-            r#"name: "Nan Madol",
+            r#"key: "nan_madol",
             continent: Oceania,
             arena: Sand,
             prestige: 1,
             residents: 8,
             purses: (entry_fee: 0"#,
-            r#"name: "Nan Madol",
+            r#"key: "nan_madol",
             continent: Oceania,
             arena: Sand,
             prestige: 1,

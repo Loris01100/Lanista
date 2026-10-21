@@ -66,6 +66,22 @@ mod tests {
     }
 
     #[test]
+    fn a_club_name_elides_de_before_a_vowel() {
+        use lanista_core::names::ClubName;
+        let named = |pattern: &str, name: &str, number| {
+            crate::texts::named_club(&ClubName {
+                pattern: pattern.into(),
+                name: name.into(),
+                number,
+            })
+        };
+        assert_eq!(named("palestre", "Achille", 0), "Palestre d'Achille");
+        assert_eq!(named("ordu", "Batu", 0), "Ordu de Batu");
+        assert_eq!(named("ludus", "Magnus", 2), "Ludus Magnus II");
+        assert_eq!(named("ludus", "Magnus", 14), "Ludus Magnus XIV");
+    }
+
+    #[test]
     fn a_missing_key_shows_itself() {
         assert_eq!(text("no-such-key", &[]), "no-such-key");
     }
@@ -75,6 +91,29 @@ mod tests {
         let source = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("src");
         let keys = keys_in(&source);
         assert!(keys.len() > 100, "{} keys found", keys.len());
+        let missing: Vec<&String> =
+            BUNDLE.with(|bundle| keys.iter().filter(|key| !bundle.has_message(key)).collect());
+        assert!(missing.is_empty(), "missing in fr.ftl: {missing:?}");
+    }
+
+    #[test]
+    fn every_name_of_the_design_data_is_in_the_french_file() {
+        let data = lanista_core::design_data::DesignData::load().unwrap();
+        let mut keys: Vec<String> = data
+            .classes
+            .iter()
+            .map(|c| format!("class-{}", c.key))
+            .collect();
+        keys.extend(
+            data.world
+                .colosseums
+                .iter()
+                .map(|c| format!("colosseum-{}", c.key)),
+        );
+        for culture in &data.cultures {
+            keys.push(format!("culture-{}", culture.key));
+            keys.extend(culture.clubs.iter().map(|p| format!("club-{p}")));
+        }
         let missing: Vec<&String> =
             BUNDLE.with(|bundle| keys.iter().filter(|key| !bundle.has_message(key)).collect());
         assert!(missing.is_empty(), "missing in fr.ftl: {missing:?}");

@@ -38,11 +38,11 @@ use crate::fight_view::Cast;
 use crate::lang::tr;
 use crate::saves;
 use crate::texts::{
-    activity_name, challenger_text, change, class_name, club_name, colosseum_name, condition_text,
-    contender_name, continent_name, date_in_sentence, fight_text, fighter_name, illness_text,
-    injury_text, market_news_text, money_line, move_text, personality_text, priced,
-    rival_fighter_name, staff_move_text, staff_news_text, stat_names, title_news_text, wealth_name,
-    wealth_text, week_lines, world_news_text,
+    activity_name, challenger_text, change, class_name, club_name, colosseum_name,
+    colosseum_rules_name, condition_text, contender_name, continent_name, date_in_sentence,
+    fight_text, fighter_name, illness_text, injury_text, market_news_text, money_line, move_text,
+    personality_text, priced, rival_fighter_name, staff_move_text, staff_news_text, stat_names,
+    title_news_text, wealth_name, wealth_text, week_lines, world_news_text,
 };
 
 /// Seed of the standard duel offered from the club.
@@ -512,7 +512,7 @@ impl ClubScreen {
                 alerts.push(tr!(
                     "alert-title-defense",
                     fighter = fighter_name(i, f, &self.data),
-                    place = rules.name.as_str(),
+                    place = colosseum_rules_name(rules),
                     week = colosseum.defense_deadline(&self.data.world)
                 ));
             }
@@ -1020,7 +1020,7 @@ fn challenge_picker(
                     state,
                     data,
                 ),
-                _ => colosseum_name(id, data).to_string(),
+                _ => colosseum_name(id, data),
             };
             ui.add_enabled_ui(i64::from(fee) <= state.money, |ui| {
                 egui::ComboBox::from_id_salt(("challenge", c))
@@ -1141,8 +1141,8 @@ mod tests {
 
     use super::*;
     use crate::texts::{
-        free_agent_name, outside_personality_text, potential_text, range_texts, staff_text,
-        unsellable_text, weeks_left_text,
+        free_agent_name, named_club, outside_personality_text, potential_text, range_texts,
+        staff_text, unsellable_text, weeks_left_text,
     };
 
     fn screen(seed: u64) -> ClubScreen {
@@ -1426,7 +1426,7 @@ mod tests {
         let state = &screen.state;
         let wanted = state.rival_fighter(target).unwrap();
         let class = class_name(wanted, &data);
-        let owner = state.rivals[2].name.clone();
+        let owner = club_name(2, state);
         assert_eq!(
             move_text(Move::Offer(target, 100), state, &data),
             format!("Offrir 100 pour {class} n° 2 ({owner})")
@@ -1445,7 +1445,7 @@ mod tests {
         assert_eq!(screen.state.transfer_list, [0]);
         // Offers came for the listed fighter.
         let offer = screen.state.sale_offers[0];
-        let club = club_name(offer.rival, &screen.state).to_owned();
+        let club = club_name(offer.rival, &screen.state);
         let name = fighter_name(0, &screen.state.fighters[0], &data);
         assert!(screen.alerts().contains(&format!(
             "{club} veut acheter {name} pour {} (à accepter au marché cette semaine)",
@@ -1619,7 +1619,7 @@ mod tests {
             menu.iter().any(|line| line.starts_with("Titre de ")
                 && clubs
                     .iter()
-                    .any(|c| line.contains(&format!(" ({})", c.name)))),
+                    .any(|c| line.contains(&format!(" ({})", named_club(&c.name))))),
             "{menu:?}"
         );
     }

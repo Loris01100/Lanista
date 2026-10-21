@@ -25,7 +25,7 @@ fn main() -> ExitCode {
     let mut arena = random_duel(&data, seed);
     println!("seed {seed}");
     for f in &arena.fighters {
-        let class = data.class(f.class).map_or("?", |c| c.name.as_str());
+        let class = data.class(f.class).map_or("?", |c| c.key.as_str());
         println!(
             "fighter {}: {class}, starts at ({:.1}, {:.1})",
             f.id.0, f.position.x, f.position.y

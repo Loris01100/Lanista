@@ -207,7 +207,7 @@ mod tests {
     #[test]
     fn the_model_stays_close_to_the_real_duels() {
         let data = DesignData::load().unwrap();
-        let names: Vec<String> = data.classes.iter().map(|c| c.name.clone()).collect();
+        let names: Vec<String> = data.classes.iter().map(|c| c.key.clone()).collect();
         for kind in ArenaKind::ALL {
             let pairs: Vec<Pair> = (1_000_000..1_001_000)
                 .map(|seed| play(seed, kind, &data))

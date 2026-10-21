@@ -128,8 +128,8 @@ pub struct ChallengeRules {
 #[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct ColosseumData {
-    /// Shown to the player.
-    pub name: String,
+    /// Names it in the language files (`colosseum-<key>`) and the tools.
+    pub key: String,
     pub continent: Continent,
     pub arena: ArenaKind,
     /// From 1 to 5: the higher, the stronger the fighters generated for it.
@@ -570,7 +570,7 @@ mod tests {
             .map(|_| with_prestige(CareerFighter::random(&mut rng, data), 3, data))
             .collect();
         let rivals = vec![Rival {
-            name: "Ludus Magnus".into(),
+            name: crate::names::ClubName::default(),
             culture: "rome".into(),
             continent: Continent::Europe,
             profile: Profile::Cautious,

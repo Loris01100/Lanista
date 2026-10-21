@@ -13,9 +13,9 @@ use super::colosseums::not_ranked;
 use super::{ClubScreen, View};
 use crate::lang::tr;
 use crate::texts::{
-    club_name, colosseum_name, condition_text, fighter_name, free_agent_name, move_text,
-    outside_personality_text, potential_text, range_texts, record_text, rival_fighter_name,
-    stat_names, unsellable_text, weeks,
+    club_name, colosseum_name, colosseum_rules_name, condition_text, fighter_name, free_agent_name,
+    move_text, outside_personality_text, potential_text, range_texts, record_text,
+    rival_fighter_name, stat_names, unsellable_text, weeks,
 };
 
 /// What a click on the market asks for.
@@ -353,7 +353,7 @@ fn free_agent_grid(
                 .colosseums
                 .iter()
                 .filter(|c| c.continent == state.continent)
-                .map(|c| c.name.clone()),
+                .map(colosseum_rules_name),
         );
         last.extend([String::new(), String::new()]);
         market_header(ui, &outside_titles(), &last);

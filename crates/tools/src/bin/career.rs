@@ -63,7 +63,7 @@ fn main() -> ExitCode {
 
 fn class_name(fighter: &CareerFighter, data: &DesignData) -> String {
     data.class(fighter.class)
-        .map_or_else(|| "?".into(), |c| c.name.clone())
+        .map_or_else(|| "?".into(), |c| c.key.clone())
 }
 
 fn describe(fighter: &CareerFighter, data: &DesignData) -> String {
@@ -133,21 +133,21 @@ fn week_text(
         Activity::Train => "training".to_owned(),
         Activity::Fight(id) => format!(
             "fight in {}",
-            data.world.colosseum(id).map_or("?", |c| c.name.as_str())
+            data.world.colosseum(id).map_or("?", |c| c.key.as_str())
         ),
         Activity::Melee(id) => format!(
             "melee in {}",
-            data.world.colosseum(id).map_or("?", |c| c.name.as_str())
+            data.world.colosseum(id).map_or("?", |c| c.key.as_str())
         ),
         Activity::TitleFight(id) => format!(
             "title fight in {}",
-            data.world.colosseum(id).map_or("?", |c| c.name.as_str())
+            data.world.colosseum(id).map_or("?", |c| c.key.as_str())
         ),
         Activity::Challenge(id, rival) => format!(
             "challenge to rival {} of club {} in {}",
             rival.fighter + 1,
             rival.club + 1,
-            data.world.colosseum(id).map_or("?", |c| c.name.as_str())
+            data.world.colosseum(id).map_or("?", |c| c.key.as_str())
         ),
     };
     let _ = writeln!(text, "week {week} (age {}): {activity}", before.age);

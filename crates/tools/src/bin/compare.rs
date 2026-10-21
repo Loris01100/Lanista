@@ -39,7 +39,7 @@ fn main() -> ExitCode {
 
     #[expect(clippy::cast_precision_loss, reason = "a tolerance of a few points")]
     let tolerance = tolerance as f64;
-    let names: Vec<String> = data.classes.iter().map(|c| c.name.clone()).collect();
+    let names: Vec<String> = data.classes.iter().map(|c| c.key.clone()).collect();
     let mut too_far = 0;
     for kind in ArenaKind::ALL {
         // Each fight is independent: parallel across fights, never inside one.

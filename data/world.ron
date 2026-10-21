@@ -133,7 +133,7 @@
     // without money. Capoue, in Europe, is where one starts by default.
     colosseums: [
         (
-            name: "Capoue",
+            key: "capoue",
             continent: Europe,
             // Its floor is in data/combat.ron (arenas): sand slows, pillars block shots
             // and the way, narrow is small, so melee closes in fast.
@@ -158,7 +158,7 @@
             ),
         ),
         (
-            name: "Rome",
+            key: "rome",
             continent: Europe,
             arena: Pillars,
             prestige: 3,
@@ -166,7 +166,7 @@
             purses: (entry_fee: 20, win_prize: 150, receipts_base: 40, receipts_per_fame: 1, champion_bonus: 100, melee_prize: 450),
         ),
         (
-            name: "Pompéi",
+            key: "pompei",
             continent: Europe,
             arena: Narrow,
             prestige: 2,
@@ -174,7 +174,7 @@
             purses: (entry_fee: 10, win_prize: 100, receipts_base: 30, receipts_per_fame: 1, champion_bonus: 60, melee_prize: 300),
         ),
         (
-            name: "Samarcande",
+            key: "samarcande",
             continent: Asia,
             arena: Sand,
             prestige: 1,
@@ -182,7 +182,7 @@
             purses: (entry_fee: 0, win_prize: 50, receipts_base: 20, receipts_per_fame: 1, champion_bonus: 30, melee_prize: 150),
         ),
         (
-            name: "Chang'an",
+            key: "chang_an",
             continent: Asia,
             arena: Narrow,
             prestige: 2,
@@ -190,7 +190,7 @@
             purses: (entry_fee: 10, win_prize: 100, receipts_base: 30, receipts_per_fame: 1, champion_bonus: 60, melee_prize: 300),
         ),
         (
-            name: "Karakorum",
+            key: "karakorum",
             continent: Asia,
             arena: Pillars,
             prestige: 3,
@@ -198,7 +198,7 @@
             purses: (entry_fee: 20, win_prize: 150, receipts_base: 40, receipts_per_fame: 1, champion_bonus: 100, melee_prize: 450),
         ),
         (
-            name: "Cahokia",
+            key: "cahokia",
             continent: Americas,
             arena: Sand,
             prestige: 1,
@@ -206,7 +206,7 @@
             purses: (entry_fee: 0, win_prize: 50, receipts_base: 20, receipts_per_fame: 1, champion_bonus: 30, melee_prize: 150),
         ),
         (
-            name: "Cuzco",
+            key: "cuzco",
             continent: Americas,
             arena: Narrow,
             prestige: 2,
@@ -214,7 +214,7 @@
             purses: (entry_fee: 10, win_prize: 100, receipts_base: 30, receipts_per_fame: 1, champion_bonus: 60, melee_prize: 300),
         ),
         (
-            name: "Tenochtitlan",
+            key: "tenochtitlan",
             continent: Americas,
             arena: Pillars,
             prestige: 3,
@@ -222,7 +222,7 @@
             purses: (entry_fee: 20, win_prize: 150, receipts_base: 40, receipts_per_fame: 1, champion_bonus: 100, melee_prize: 450),
         ),
         (
-            name: "Mbanza Kongo",
+            key: "mbanza_kongo",
             continent: Africa,
             arena: Sand,
             prestige: 1,
@@ -230,7 +230,7 @@
             purses: (entry_fee: 0, win_prize: 50, receipts_base: 20, receipts_per_fame: 1, champion_bonus: 30, melee_prize: 150),
         ),
         (
-            name: "Musumba",
+            key: "musumba",
             continent: Africa,
             arena: Pillars,
             prestige: 3,
@@ -238,7 +238,7 @@
             purses: (entry_fee: 20, win_prize: 150, receipts_base: 40, receipts_per_fame: 1, champion_bonus: 100, melee_prize: 450),
         ),
         (
-            name: "Nan Madol",
+            key: "nan_madol",
             continent: Oceania,
             arena: Sand,
             prestige: 1,
@@ -246,7 +246,7 @@
             purses: (entry_fee: 0, win_prize: 50, receipts_base: 20, receipts_per_fame: 1, champion_bonus: 30, melee_prize: 150),
         ),
         (
-            name: "Ngāpuhi",
+            key: "ngapuhi",
             continent: Oceania,
             arena: Pillars,
             prestige: 3,

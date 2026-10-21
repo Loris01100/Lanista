@@ -168,8 +168,8 @@ pub struct RivalId {
 /// A rival club in the game, drawn when the world opens (`random_club`).
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct Rival {
-    /// Shown to the player; no two clubs share it.
-    pub name: String,
+    /// No two clubs share it.
+    pub name: names::ClubName,
     /// The key of its culture in `data/names.ron`, which named it.
     pub culture: String,
     /// Its home, its culture's: it fights mostly in the colosseums there.
@@ -232,10 +232,11 @@ pub fn random_club<R: Rng + ?Sized>(rng: &mut R, others: &[Rival], data: &Design
     } else {
         String::new()
     };
-    let taken: Vec<&str> = others.iter().map(|r| r.name.as_str()).collect();
+    let taken: Vec<&names::ClubName> = others.iter().map(|r| &r.name).collect();
     let name = data
         .culture(&key)
-        .map_or_else(|| key.clone(), |c| names::club_name(rng, c, &taken));
+        .map(|c| names::club_name(rng, c, &taken))
+        .unwrap_or_default();
     Rival {
         name,
         culture: key,

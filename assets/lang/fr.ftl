@@ -516,3 +516,74 @@ elimination-standing = { $fighter } : { $damage } dégâts, { $danger ->
         [true] éliminé si rien ne change
        *[false] à l'abri
     }
+
+## Données de conception
+
+class-mirmillon = Mirmillon
+class-augure = Augure
+
+colosseum-capoue = Capoue
+colosseum-rome = Rome
+colosseum-pompei = Pompéi
+colosseum-samarcande = Samarcande
+colosseum-chang_an = Chang'an
+colosseum-karakorum = Karakorum
+colosseum-cahokia = Cahokia
+colosseum-cuzco = Cuzco
+colosseum-tenochtitlan = Tenochtitlan
+colosseum-mbanza_kongo = Mbanza Kongo
+colosseum-musumba = Musumba
+colosseum-nan_madol = Nan Madol
+colosseum-ngapuhi = Ngāpuhi
+
+culture-rome = Rome
+culture-grece = Grèce
+culture-celtes = Celtes
+culture-germains = Germains
+culture-steppe = Steppe
+culture-asie_est = Asie de l'Est
+culture-inde = Inde
+culture-asie_ouest = Asie de l'Ouest
+culture-arabe = Monde arabe
+culture-afrique = Tribus d'Afrique
+culture-amerindiens = Tribus amérindiennes
+culture-mesoamerique = Mésoamérique
+culture-amerique_sud = Tribus d'Amérique du Sud
+culture-oceanie = Tribus d'Océanie
+
+# « de » devant le nom d'un club, élidé devant une voyelle ($vowel).
+club-de = { $vowel ->
+        [true] d'
+       *[false] {"de "}
+    }
+club-ludus = Ludus { $name }
+club-familia = Familia { $name }
+club-domus = Domus { $name }
+club-palestre = Palestre { club-de }{ $name }
+club-gymnase = Gymnase { club-de }{ $name }
+club-clan = Clan { club-de }{ $name }
+club-tribu = Tribu { club-de }{ $name }
+club-halle = Halle { club-de }{ $name }
+club-bande = Bande { club-de }{ $name }
+club-ordu = Ordu { club-de }{ $name }
+club-horde = Horde { club-de }{ $name }
+club-dojo = Dōjō { $name }
+club-maison_asie = Maison { $name }
+club-ecole = École { $name }
+club-akhara = Akhara { club-de }{ $name }
+club-ashram = Ashram { club-de }{ $name }
+club-zourkhaneh = Zourkhaneh { club-de }{ $name }
+club-maison = Maison { club-de }{ $name }
+club-dar = Dar { $name }
+club-bayt = Bayt { $name }
+club-kraal = Kraal { club-de }{ $name }
+club-lignee = Lignée { club-de }{ $name }
+club-loge = Loge { club-de }{ $name }
+club-cercle = Cercle { club-de }{ $name }
+club-maison_aigle = Maison de l'Aigle { club-de }{ $name }
+club-maison_jaguar = Maison du Jaguar { club-de }{ $name }
+club-calmecac = Calmecac { club-de }{ $name }
+club-ayllu = Ayllu { club-de }{ $name }
+club-whare = Whare { $name }
+club-pa = Pā { club-de }{ $name }
+club-numbered = { $club } { $number }

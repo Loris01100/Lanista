@@ -3,7 +3,7 @@
 
 use lanista_core::calendar::Date;
 use lanista_core::colosseum::{
-    Challenge, ColosseumId, Contender, Continent, TitleNews, title_kept,
+    Challenge, ColosseumData, ColosseumId, Contender, Continent, TitleNews, title_kept,
 };
 use lanista_core::combat::ArenaKind;
 use lanista_core::design_data::DesignData;
@@ -21,6 +21,7 @@ use lanista_core::fighter::retirement::too_maimed;
 use lanista_core::market::{
     MarketNews, Move, Target, personality_seen, potential_range, stat_ranges,
 };
+use lanista_core::names::ClubName;
 use lanista_core::relations::{Change, Reason, Standing};
 use lanista_core::rivals::{Profile, RivalId};
 use lanista_core::staff::{
@@ -70,7 +71,7 @@ pub fn condition_text(fighter: &CareerFighter) -> String {
 
 pub fn class_name(fighter: &CareerFighter, data: &DesignData) -> String {
     data.class(fighter.class)
-        .map_or_else(|| "?".into(), |c| c.name.clone())
+        .map_or_else(|| "?".into(), |c| data_name("class", &c.key))
 }
 
 pub fn activity_name(activity: Activity, data: &DesignData) -> String {
@@ -380,7 +381,7 @@ pub fn title_news_text(c: usize, news: TitleNews, state: &GameState, data: &Desi
     };
     let name = |contender| contender_name(contender, state, data);
     let to = |to: Option<Contender>| to.map_or_else(|| tr!("title-nobody"), name);
-    let place = rules.name.as_str();
+    let place = colosseum_rules_name(rules);
     match news {
         TitleNews::Fight {
             champion,
@@ -388,19 +389,19 @@ pub fn title_news_text(c: usize, news: TitleNews, state: &GameState, data: &Desi
             result,
         } => tr!(
             "title-fight",
-            place = place,
+            place = place.as_str(),
             champion = name(champion),
             kept = if title_kept(result) { "true" } else { "false" },
             challenger = name(challenger)
         ),
         TitleNews::Stripped { former, to: holder } => tr!(
             "title-stripped",
-            place = place,
+            place = place.as_str(),
             former = name(former),
             holder = to(holder)
         ),
         TitleNews::Vacated { to: holder } => {
-            tr!("title-vacated", place = place, holder = to(holder))
+            tr!("title-vacated", place = place.as_str(), holder = to(holder))
         }
     }
 }
@@ -423,7 +424,7 @@ pub fn world_news_text(news: News, state: &GameState, data: &DesignData) -> Stri
                 .world
                 .colosseums
                 .get(colosseum)
-                .map_or("?", |c| c.name.as_str()),
+                .map_or_else(|| "?".into(), colosseum_rules_name),
             price = price
         ),
         WorldNews::Closed(club) => tr!("news-closed", club = club_name(club, state)),
@@ -434,8 +435,8 @@ pub fn world_news_text(news: News, state: &GameState, data: &DesignData) -> Stri
         WorldNews::Founded(club) => state.rivals.get(club).map_or_else(String::new, |r| {
             tr!(
                 "news-founded",
-                club = r.name.as_str(),
-                culture = culture_name(&r.culture, data),
+                club = named_club(&r.name),
+                culture = culture_name(&r.culture),
                 continent = continent_name(r.continent)
             )
         }),
@@ -498,7 +499,7 @@ pub fn relation_change_text(change: Change, state: &GameState, data: &DesignData
                 .world
                 .colosseums
                 .get(colosseum)
-                .map_or("?", |c| c.name.as_str())
+                .map_or_else(|| "?".into(), colosseum_rules_name)
         ),
         Reason::ChallengeRefused { fighter, rival: r } => {
             tr!(
@@ -540,8 +541,19 @@ pub fn date_in_sentence(week: u64, data: &DesignData) -> String {
     tr!("date-in-sentence", season = when.season, week = when.week)
 }
 
-pub fn colosseum_name(id: ColosseumId, data: &DesignData) -> &str {
-    data.world.colosseum(id).map_or("?", |c| c.name.as_str())
+pub fn colosseum_name(id: ColosseumId, data: &DesignData) -> String {
+    data.world
+        .colosseum(id)
+        .map_or_else(|| "?".into(), colosseum_rules_name)
+}
+
+pub fn colosseum_rules_name(rules: &ColosseumData) -> String {
+    data_name("colosseum", &rules.key)
+}
+
+/// The shown name of a design data entry: `<kind>-<key>` in the language files.
+fn data_name(kind: &str, key: &str) -> String {
+    tr!(&format!("{kind}-{key}"))
 }
 
 pub fn profile_name(profile: Profile) -> String {
@@ -591,18 +603,51 @@ pub fn wealth_text(wealth: Wealth) -> String {
 }
 
 /// The name of rival club `club`.
-pub fn club_name(club: usize, state: &GameState) -> &str {
-    state.rivals.get(club).map_or("?", |r| r.name.as_str())
+pub fn club_name(club: usize, state: &GameState) -> String {
+    state
+        .rivals
+        .get(club)
+        .map_or_else(|| "?".into(), |r| named_club(&r.name))
+}
+
+/// "Palestre d'Achille", "Ludus Magnus II": its pattern filled with its name, told
+/// whether that name starts with a vowel for the languages that elide before one.
+pub fn named_club(name: &ClubName) -> String {
+    let vowel = name.name.starts_with(is_vowel);
+    let club = tr!(
+        &format!("club-{}", name.pattern),
+        name = name.name.as_str(),
+        vowel = if vowel { "true" } else { "false" }
+    );
+    if name.number < 2 {
+        club
+    } else {
+        tr!("club-numbered", club = club, number = roman(name.number))
+    }
+}
+
+fn is_vowel(c: char) -> bool {
+    "AEIOUYÂÄÀÉÈÊËÎÏÔÖÛÜŪĀĒĪŌ".contains(c)
+}
+
+/// `n` in Roman numerals, from 1 to 39 (beyond, a figure).
+fn roman(n: u32) -> String {
+    if n >= 40 {
+        return n.to_string();
+    }
+    let units = ["", "I", "II", "III", "IV", "V", "VI", "VII", "VIII", "IX"];
+    let tens = "X".repeat(usize::try_from(n / 10).unwrap_or(0));
+    format!("{tens}{}", units[usize::try_from(n % 10).unwrap_or(0)])
 }
 
 /// The name of culture `key` ("Asie de l'Est").
-pub fn culture_name<'a>(key: &'a str, data: &'a DesignData) -> &'a str {
-    data.culture(key).map_or(key, |c| c.name.as_str())
+pub fn culture_name(key: &str) -> String {
+    data_name("culture", key)
 }
 
 /// "culture : Asie de l'Est".
-pub fn culture_text(key: &str, data: &DesignData) -> String {
-    tr!("culture", culture = culture_name(key, data))
+pub fn culture_text(key: &str) -> String {
+    tr!("culture", culture = culture_name(key))
 }
 
 pub fn arena_name(arena: ArenaKind) -> String {
