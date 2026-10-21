@@ -36,8 +36,13 @@ impl ClubScreen {
         let home: Vec<usize> = (0..self.data.world.colosseums.len())
             .filter(|&c| self.data.world.colosseums[c].continent == self.state.continent)
             .collect();
-        let free_standings: Vec<Vec<String>> = (0..self.state.free_agents.len())
-            .map(|a| {
+        // Only those on the market: the others stay listed, and are many.
+        let free_standings: Vec<Vec<String>> = (0..)
+            .zip(&self.state.free_agents)
+            .map(|(a, f)| {
+                if f.status != Status::Active {
+                    return Vec::new();
+                }
                 let all = self.standings(Contender::FreeAgent(a));
                 home.iter().map(|&c| all[c].clone()).collect()
             })

@@ -295,9 +295,13 @@ fn ranked(arena: &Arena) -> Vec<usize> {
 /// final of a melee.
 #[must_use]
 pub fn next_cut(arena: &Arena) -> Option<Cut> {
+    cut_of(arena, &ranked(arena))
+}
+
+/// [`next_cut`], the fighters still in the fight in `order` ([`ranked`]).
+fn cut_of(arena: &Arena, order: &[usize]) -> Option<Cut> {
     let every = arena.elimination.every_ticks.max(1);
     let number = arena.tick / every + 1;
-    let order = ranked(arena);
     let out = out_at(arena, number, order.len());
     if out == 0 {
         return None;
@@ -317,13 +321,15 @@ pub fn next_cut(arena: &Arena) -> Option<Cut> {
 /// one out included.
 #[must_use]
 pub fn in_danger(arena: &Arena, fighter: &Fighter) -> bool {
-    let Some(cut) = next_cut(arena) else {
+    if !fighter.is_fighting() {
+        return false;
+    }
+    let order = ranked(arena);
+    let Some(cut) = cut_of(arena, &order) else {
         return false;
     };
-    let order = ranked(arena);
     let last = usize::try_from(cut.out - 1).ok().and_then(|k| order.get(k));
-    fighter.is_fighting()
-        && last.is_some_and(|&i| rank(fighter, &arena.fighters[i]) != Ordering::Greater)
+    last.is_some_and(|&i| rank(fighter, &arena.fighters[i]) != Ordering::Greater)
 }
 
 /// At each check of the arena's `EliminationRules`, at the end of every `every_ticks`

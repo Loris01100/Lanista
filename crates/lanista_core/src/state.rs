@@ -10,7 +10,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::calendar::Date;
 use crate::colosseum::{
-    Challenge, Colosseum, ColosseumId, Contender, Continent, Rosters, TitleNews,
+    Challenge, Colosseum, ColosseumId, Contender, Continent, Odds, Rosters, TitleNews,
 };
 use crate::design_data::DesignData;
 use crate::economy::Wealth;
@@ -259,23 +259,31 @@ impl GameState {
         self.date(data).opens_season()
     }
 
+    /// Each colosseum's [`Odds`], in their order, as the week starts.
+    fn odds(&self, data: &DesignData) -> Vec<Odds> {
+        let rosters = self.rosters();
+        self.colosseums
+            .iter()
+            .map(|c| c.odds(rosters, &data.world))
+            .collect()
+    }
+
     /// Each colosseum as `contender` sees it, in their order: the chance Elo gives it
-    /// there (`Colosseum::chance`), and the fee from `home`, its club's continent, the
+    /// there (`odds`, see `Colosseum::chance`), and the fee from `home`, its club's continent, the
     /// journey included; a free agent, `None`, travels for nothing and is at home
     /// everywhere.
     fn venues(
-        &self,
+        odds: &[Odds],
         contender: Contender,
         home: Option<Continent>,
         data: &DesignData,
     ) -> Vec<Venue> {
         let world = &data.world;
-        self.colosseums
-            .iter()
+        odds.iter()
             .zip(&world.colosseums)
             .zip(0..)
-            .map(|((c, rules), id)| Venue {
-                chance: c.chance(contender, self.rosters(), world),
+            .map(|((odds, rules), id)| Venue {
+                chance: odds.chance(contender),
                 fee: home
                     .and_then(|home| world.entry_fee(ColosseumId(id), home))
                     .unwrap_or(rules.purses.entry_fee),
@@ -302,6 +310,7 @@ impl GameState {
     /// in roster order.
     #[must_use]
     pub fn rival_plans(&self, data: &DesignData) -> Vec<Vec<WeekPlan>> {
+        let odds = self.odds(data);
         self.rivals
             .iter()
             .enumerate()
@@ -314,7 +323,7 @@ impl GameState {
                     .map(|(fighter, f)| match profile {
                         Some(profile) if f.status == Status::Active => {
                             let me = Contender::Rival(RivalId { club, fighter });
-                            let venues = self.venues(me, Some(rival.continent), data);
+                            let venues = Self::venues(&odds, me, Some(rival.continent), data);
                             let rules = (profile, &rival.staff, true);
                             rivals::plan(f, &venues, &mut left, rules, data)
                         }
@@ -332,13 +341,14 @@ impl GameState {
     #[must_use]
     pub fn free_agent_plans(&self, data: &DesignData) -> Vec<WeekPlan> {
         let profile = data.world.profiles.get(data.world.free_agents);
+        let odds = self.odds(data);
         (0..)
             .zip(&self.free_agents)
             .map(|(a, f)| {
                 if f.status != Status::Active {
                     return REST;
                 }
-                let venues = self.venues(Contender::FreeAgent(a), None, data);
+                let venues = Self::venues(&odds, Contender::FreeAgent(a), None, data);
                 rivals::plan(
                     f,
                     &venues,

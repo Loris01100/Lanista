@@ -3,6 +3,7 @@
 //! come from the clubs and the market.
 
 use std::cmp::{Ordering, Reverse};
+use std::collections::BTreeMap;
 
 use rand::{Rng, RngExt};
 use serde::{Deserialize, Serialize};
@@ -325,20 +326,33 @@ impl Colosseum {
     /// outsiders still fighting here; even when there is none.
     #[must_use]
     pub fn chance(&self, contender: Contender, rosters: Rosters, rules: &WorldRules) -> f64 {
-        let others: Vec<i64> = self
-            .active_ranking(rosters)
-            .filter(|r| !r.contender.is_club() && r.contender != contender)
-            .map(|r| i64::from(r.elo))
-            .collect();
-        let Ok(n) = i64::try_from(others.len()) else {
-            return 0.5;
+        self.odds(rosters, rules).chance(contender)
+    }
+
+    /// What [`Colosseum::chance`] reads of this colosseum, gathered once to give the
+    /// chance of many contenders.
+    #[must_use]
+    pub fn odds(&self, rosters: Rosters, rules: &WorldRules) -> Odds {
+        let mut odds = Odds {
+            ratings: BTreeMap::new(),
+            sum: 0,
+            count: 0,
+            elo_start: rules.elo_start,
         };
-        let average = others
-            .iter()
-            .sum::<i64>()
-            .checked_div(n)
-            .and_then(|a| i32::try_from(a).ok());
-        average.map_or(0.5, |a| expected(self.elo(contender, rules), a))
+        for r in &self.ranking {
+            let counted = !r.contender.is_club() && rosters.active(r.contender);
+            let entry = odds
+                .ratings
+                .entry(r.contender)
+                .or_insert(Odds::entry(r.elo));
+            if counted {
+                entry.1 += i64::from(r.elo);
+                entry.2 += 1;
+                odds.sum += i64::from(r.elo);
+                odds.count += 1;
+            }
+        }
+        odds
     }
 
     /// The rival fighter still fighting closest in Elo to the club's fighter `i`, who
@@ -500,6 +514,39 @@ impl Colosseum {
                 elo: rules.elo_start.saturating_add(change),
             }),
         }
+    }
+}
+
+/// A colosseum's Elo as [`Colosseum::chance`] reads it (see [`Colosseum::odds`]).
+#[derive(Debug, Clone, PartialEq)]
+pub struct Odds {
+    /// Each one ranked: its Elo, and the sum and number of its ratings among the
+    /// outsiders still fighting.
+    ratings: BTreeMap<Contender, (i32, i64, i64)>,
+    /// Sum and number of the Elo of the outsiders still fighting.
+    sum: i64,
+    count: i64,
+    elo_start: i32,
+}
+
+impl Odds {
+    fn entry(elo: i32) -> (i32, i64, i64) {
+        (elo, 0, 0)
+    }
+
+    /// The chance, from 0 to 1, Elo gives `contender` against the average of the other
+    /// outsiders still fighting; even when there is none.
+    #[must_use]
+    pub fn chance(&self, contender: Contender) -> f64 {
+        let (elo, own_sum, own_count) = self
+            .ratings
+            .get(&contender)
+            .copied()
+            .unwrap_or(Self::entry(self.elo_start));
+        let average = (self.sum - own_sum)
+            .checked_div(self.count - own_count)
+            .and_then(|a| i32::try_from(a).ok());
+        average.map_or(0.5, |a| expected(elo, a))
     }
 }
 
