@@ -4,6 +4,7 @@
 #[pyo3::pymodule]
 mod lanista_py {
     use lanista_core::design_data::DesignData;
+    use lanista_core::fighter::Fighter;
     use lanista_core::{learning, log};
     use pyo3::exceptions::{PyRuntimeError, PyValueError};
     use pyo3::prelude::*;
@@ -26,16 +27,25 @@ mod lanista_py {
             self.0.reset(seed)
         }
 
-        /// Plays one action per fighter until the next decision; gives each fighter's
-        /// observation and reward, and whether the fight is over.
+        /// Starts the melee of `seed` with `count` generated fighters.
+        fn reset_melee(&mut self, seed: u64, count: u32) -> Vec<Vec<f64>> {
+            self.0.reset_melee(seed, count)
+        }
+
+        /// Plays one action per fighter (`None` for the utility AI) until the next
+        /// decision; gives each fighter's observation and reward, and whether the fight
+        /// is over.
         #[expect(
             clippy::needless_pass_by_value,
             reason = "PyO3 extracts a Python list into a Vec, not a slice"
         )]
-        fn step(&mut self, actions: Vec<usize>) -> PyResult<(Vec<Vec<f64>>, Vec<f64>, bool)> {
+        fn step(
+            &mut self,
+            actions: Vec<Option<usize>>,
+        ) -> PyResult<(Vec<Vec<f64>>, Vec<f64>, bool)> {
             let fighters = self.0.arena().fighters.len();
             let count = self.0.action_count();
-            if actions.len() != fighters || actions.iter().any(|&a| a >= count) {
+            if actions.len() != fighters || actions.iter().flatten().any(|&a| a >= count) {
                 return Err(PyValueError::new_err(format!(
                     "expected {fighters} actions below {count}, got {actions:?}"
                 )));
@@ -63,6 +73,13 @@ mod lanista_py {
         #[getter]
         fn fighters(&self) -> usize {
             self.0.arena().fighters.len()
+        }
+
+        /// Whether each fighter is still in the fight.
+        #[getter]
+        fn fighting(&self) -> Vec<bool> {
+            let fighters = &self.0.arena().fighters;
+            fighters.iter().map(Fighter::is_fighting).collect()
         }
 
         /// The fight so far as `simulate` prints it: its log, then its report.

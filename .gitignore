@@ -1,5 +1,7 @@
 target/
 python/.venv/
+# Training models and snapshots (python/train.py).
+python/models/
 __pycache__/
 .vscode/
 *.pdb

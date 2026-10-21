@@ -1,12 +1,17 @@
-//! The learning AI's environment (phase 7): a standard duel played one decision at a
-//! time by actions chosen from outside, each fighter seeing an observation and getting
-//! a reward. `lanista_py` exposes it to Python for training; the learned AI will read
+//! The learning AI's environment (phase 7): a standard duel or a melee played one
+//! decision at a time by actions chosen from outside or by the utility AI, each fighter
+//! seeing an observation and getting a reward. `lanista_py` exposes it to Python for training; the learned AI will read
 //! the same observations.
 
-use crate::ai::{Action, CombatAi};
-use crate::combat::{Arena, Pillar, TICKS_PER_DECISION, Vec2, edge_distance, tick};
+use rand::{RngExt, SeedableRng};
+use rand_chacha::ChaCha8Rng;
+
+use crate::ai::{Action, CombatAi, UtilityAi};
+use crate::combat::{Arena, ArenaKind, Pillar, TICKS_PER_DECISION, Vec2, edge_distance, tick};
 use crate::design_data::DesignData;
 use crate::duel::{STATS, random_duel};
+use crate::fighter::career::CareerFighter;
+use crate::fighter::equipment::Refused;
 use crate::fighter::form::Form;
 use crate::fighter::illness::IllnessLevel;
 use crate::fighter::injury::{Location, Severity, Side};
@@ -14,9 +19,10 @@ use crate::fighter::morale::Morale;
 use crate::fighter::personality::Personality;
 use crate::fighter::{Fighter, FighterId, Gauge, STAT_COUNT};
 use crate::log::EventKind;
+use crate::melee::melee_arena;
 
 // ponytail: reward weights in code; move them to `data/` once training tunes them.
-/// Reward of the winner, and minus that of the loser.
+/// Reward of the winner, and minus that of each fighter out of the fight.
 const WIN_REWARD: f64 = 1.0;
 /// Taken off each fighter at each decision, so stalling does not pay.
 const TIME_PENALTY: f64 = 0.001;
@@ -51,7 +57,8 @@ const OTHER_VALUES: usize = 6;
 /// Meters an arena's side is measured against.
 const ARENA_SCALE: f64 = 50.0;
 
-/// A standard duel ([`random_duel`]) whose two fighters are played from outside.
+/// A standard duel ([`random_duel`]) or a melee ([`Environment::reset_melee`]) whose
+/// fighters are played from outside.
 #[derive(Debug, Clone)]
 pub struct Environment {
     data: DesignData,
@@ -105,16 +112,41 @@ impl Environment {
         self.observations()
     }
 
+    /// Starts the melee of `seed`: `count` generated fighters on a drawn arena kind's
+    /// floor, as the season-opening melee; gives each fighter's observation.
+    pub fn reset_melee(&mut self, seed: u64, count: u32) -> Vec<Vec<f64>> {
+        let mut rng = ChaCha8Rng::seed_from_u64(seed);
+        let kind = ArenaKind::ALL[rng.random_range(0..ArenaKind::ALL.len())];
+        let fighters = (0..count)
+            .map(|id| {
+                let fighter = CareerFighter::random(&mut rng, &self.data);
+                let at = Vec2::new(0.0, 0.0);
+                fighter.combat_fighter(FighterId(id), Refused::NONE, &self.data, at)
+            })
+            .collect();
+        self.arena = melee_arena(fighters, kind, seed, &self.data.combat);
+        self.observations()
+    }
+
     /// Plays `actions[i]` (below [`Environment::action_count`]) for fighter `i` until the
     /// next decision: 0 waits, 1 to 8 move (see `MOVES`), then each spell slot casts on
-    /// the nearest opponent, waiting without one. A fighter down or out ignores its
-    /// action.
+    /// the nearest opponent, waiting without one; `None` lets the utility AI decide. A
+    /// fighter down or out ignores its action.
     ///
     /// # Panics
     /// If there is not one action per fighter.
-    pub fn step(&mut self, actions: &[usize]) -> Step {
+    pub fn step(&mut self, actions: &[Option<usize>]) -> Step {
         let mut ais: Vec<Box<dyn CombatAi>> = (0..self.arena.fighters.len())
-            .map(|i| Box::new(Chosen(self.action(i, actions[i]))) as Box<dyn CombatAi>)
+            .map(|i| match actions[i] {
+                Some(a) => Box::new(Chosen(self.action(i, a))) as Box<dyn CombatAi>,
+                None => Box::new(UtilityAi),
+            })
+            .collect();
+        let was_fighting: Vec<bool> = self
+            .arena
+            .fighters
+            .iter()
+            .map(Fighter::is_fighting)
             .collect();
         let log_start = self.arena.log.len();
         loop {
@@ -127,10 +159,10 @@ impl Environment {
         let rewards = (0..self.arena.fighters.len())
             .map(|i| {
                 let me = &self.arena.fighters[i];
-                let result = match (over, me.is_fighting()) {
-                    (false, _) => 0.0,
-                    (true, true) => WIN_REWARD,
+                let result = match (was_fighting[i], me.is_fighting()) {
                     (true, false) => -WIN_REWARD,
+                    (_, true) if over => WIN_REWARD,
+                    _ => 0.0,
                 };
                 self.damage_dealt(me.id, log_start) + result - TIME_PENALTY
             })
@@ -397,7 +429,7 @@ mod tests {
         let mut observations = env.reset(seed);
         let mut steps = Vec::new();
         loop {
-            let actions: Vec<usize> = observations
+            let actions: Vec<Option<usize>> = observations
                 .iter()
                 .map(|o| {
                     let start = env.spells_start();
@@ -412,7 +444,7 @@ mod tests {
                         (m.x * offset[0] + m.y * offset[1]) / m.length()
                     };
                     let closest = (0..MOVES.len()).max_by(|a, b| towards(a).total_cmp(&towards(b)));
-                    cast.map_or_else(|| 1 + closest.unwrap(), |s| 1 + MOVES.len() + s)
+                    Some(cast.map_or_else(|| 1 + closest.unwrap(), |s| 1 + MOVES.len() + s))
                 })
                 .collect();
             let step = env.step(&actions);
@@ -452,13 +484,37 @@ mod tests {
         let mut env = Environment::new(DesignData::load().unwrap());
         env.reset(3);
         loop {
-            let step = env.step(&[0, 0]);
+            let step = env.step(&[Some(0), Some(0)]);
             assert_eq!(step.rewards, [-TIME_PENALTY, -TIME_PENALTY]);
             if step.done {
                 break;
             }
         }
         assert!(!env.arena().is_over(), "a draw at the time limit");
+    }
+
+    #[test]
+    fn a_melee_against_the_utility_ai_ends_and_punishes_each_fighter_out_once() {
+        let mut env = Environment::new(DesignData::load().unwrap());
+        let observations = env.reset_melee(4, 6);
+        assert_eq!(observations.len(), 6);
+        let mut actions = vec![None; 6];
+        actions[0] = Some(0);
+        let mut punished = [0; 6];
+        loop {
+            let step = env.step(&actions);
+            for (i, reward) in step.rewards.iter().enumerate() {
+                punished[i] += usize::from(*reward < -0.5);
+            }
+            if step.done {
+                break;
+            }
+        }
+        let arena = env.arena();
+        assert!(arena.is_over(), "the utility AIs fought it out");
+        for (fighter, punished) in arena.fighters.iter().zip(punished) {
+            assert_eq!(punished, usize::from(!fighter.is_fighting()));
+        }
     }
 
     #[test]
