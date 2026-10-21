@@ -1678,6 +1678,81 @@ mod tests {
         assert!(screen.rival_lines()[1].ends_with("; relation +0, rival"));
     }
 
+    /// Phase 6 bis milestone: over three seasons on screen, a player who fills the club
+    /// and challenges, week after week, the club it gets along with least makes it a
+    /// declared rival, whose page tells the fights that did it; meanwhile a club closes
+    /// and another is founded, and every club's relation tells its reasons.
+    #[test]
+    fn three_seasons_where_a_club_becomes_a_rival_one_closes_and_one_is_founded() {
+        let data = Rc::new(DesignData::load().unwrap());
+        let mut screen = screen(7);
+        let mut rivalry = None;
+        let (mut closed, mut founded) = (false, false);
+        for _ in 0..3 * u64::from(data.calendar.season_weeks()) {
+            let state = &screen.state;
+            if state.can_hire(&data)
+                && let Some(a) = state
+                    .free_agents
+                    .iter()
+                    .position(|f| f.status == Status::Active)
+            {
+                screen.decisions.moves.push(Move::Sign(a));
+            }
+            for (i, plan) in screen.decisions.plans.iter_mut().enumerate() {
+                let Activity::Fight(id) = plan.activity else {
+                    continue;
+                };
+                let open = (0..state.rivals.len()).filter(|&c| state.rivals[c].is_open());
+                let target = open
+                    .flat_map(|club| {
+                        let fighters = 0..state.rivals[club].fighters.len();
+                        fighters.map(move |fighter| RivalId { club, fighter })
+                    })
+                    .filter(|&rival| state.may_challenge(i, id, rival, &data))
+                    .min_by_key(|rival| (state.relation(rival.club), rival.club));
+                if let Some(rival) = target {
+                    plan.activity = Activity::Challenge(id, rival);
+                }
+            }
+            screen.next_week();
+            let week = screen.state.week - 1;
+            for news in screen.state.news.iter().filter(|n| n.week == week) {
+                match news.what {
+                    WorldNews::Rivalry(club, true) if rivalry.is_none() => {
+                        rivalry = Some((club, screen.relation_lines(club)));
+                    }
+                    WorldNews::Closed(_) => closed = true,
+                    WorldNews::Founded(_) => founded = true,
+                    _ => {}
+                }
+            }
+        }
+        // The rival club's page, the week it declared itself, tells the fights between
+        // the two clubs that brought it there.
+        let (club, lines) = rivalry.unwrap();
+        assert_ne!(lines, Vec::<String>::new());
+        let changes = &screen.state.relations[&club].changes;
+        assert!(changes.iter().all(|c| match c.why {
+            Reason::Killed { victim: r, .. }
+            | Reason::Beaten { rival: r, .. }
+            | Reason::ChallengeRefused { rival: r, .. }
+            | Reason::PactKept { rival: r, .. }
+            | Reason::Betrayed { rival: r, .. } => r.club == club,
+            _ => true,
+        }));
+        assert!(
+            lines
+                .iter()
+                .any(|l| l.contains(" a battu ") || l.contains(" a tué ")),
+            "{lines:?}"
+        );
+        assert!(closed && founded);
+        // Every relation away from neutral tells why.
+        for (&club, relation) in &screen.state.relations {
+            assert!(relation.score == 0 || !screen.relation_lines(club).is_empty());
+        }
+    }
+
     #[test]
     fn a_fighter_who_just_joined_tells_when_it_may_be_sold() {
         let mut screen = screen(7);
