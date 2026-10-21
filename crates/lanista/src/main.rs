@@ -5,6 +5,7 @@ mod club_screen;
 mod combat_screen;
 mod fight_view;
 mod fighter_sprite;
+mod lang;
 mod saves;
 mod texts;
 mod theme;

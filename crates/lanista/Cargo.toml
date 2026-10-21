@@ -10,10 +10,12 @@ publish.workspace = true
 
 [dependencies]
 directories = "6.0.0"
+fluent-bundle = "0.16.0"
 lanista_core = { version = "0.1.0", path = "../lanista_core" }
 macroquad = "0.4.16"
 rand_chacha = "0.10.0"
 reesch = { version = "0.1.0", path = "../reesch" }
+unic-langid = "0.9.6"
 
 [lints]
 workspace = true

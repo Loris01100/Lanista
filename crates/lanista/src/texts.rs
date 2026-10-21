@@ -29,25 +29,34 @@ use lanista_core::staff::{
 };
 use lanista_core::state::{GameState, News, WorldNews};
 
+use crate::lang::text;
+
 /// Stat names, in `Stats::to_array` order.
 pub const STAT_NAMES: [&str; STAT_COUNT] = ["PV", "AC", "AL", "PRÉ", "VIT", "DC", "DL"];
 
 /// How the game names the fighter at `index` in the club, until fighters have names.
 pub fn fighter_name(index: usize, fighter: &CareerFighter, data: &DesignData) -> String {
-    format!("{} n° {}", class_name(fighter, data), index + 1)
+    text(
+        "fighter-name",
+        &[
+            ("class", class_name(fighter, data).into()),
+            ("number", (index + 1).into()),
+        ],
+    )
 }
 
 /// One word for a fighter's state, worst first.
-pub fn condition_text(fighter: &CareerFighter) -> &'static str {
-    match fighter.status {
-        Status::Dead => "mort",
-        Status::Retired => "retraité",
-        Status::Sold => "vendu",
-        Status::Released => "libéré",
-        Status::Active if !fighter.injuries.iter().all(Injury::is_permanent) => "blessé",
-        Status::Active if fighter.illness.is_some() => "malade",
-        Status::Active => "en forme",
-    }
+pub fn condition_text(fighter: &CareerFighter) -> String {
+    let key = match fighter.status {
+        Status::Dead => "condition-dead",
+        Status::Retired => "condition-retired",
+        Status::Sold => "condition-sold",
+        Status::Released => "condition-released",
+        Status::Active if !fighter.injuries.iter().all(Injury::is_permanent) => "condition-injured",
+        Status::Active if fighter.illness.is_some() => "condition-ill",
+        Status::Active => "condition-fit",
+    };
+    text(key, &[])
 }
 
 pub fn class_name(fighter: &CareerFighter, data: &DesignData) -> String {
