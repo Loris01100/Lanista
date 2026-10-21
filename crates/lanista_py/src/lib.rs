@@ -54,6 +54,12 @@ mod lanista_py {
             self.0.observation_size()
         }
 
+        /// The fight has a winner or no one left; false at the time limit.
+        #[getter]
+        fn over(&self) -> bool {
+            self.0.arena().is_over()
+        }
+
         #[getter]
         fn fighters(&self) -> usize {
             self.0.arena().fighters.len()
