@@ -9,9 +9,10 @@ mod lanista_py {
     use pyo3::exceptions::{PyRuntimeError, PyValueError};
     use pyo3::prelude::*;
 
-    /// A standard duel whose two fighters are played from Python.
+    /// A standard duel or a melee whose fighters are played from Python, with the
+    /// classes' keys.
     #[pyclass]
-    struct Environment(learning::Environment);
+    struct Environment(learning::Environment, Vec<String>);
 
     #[pymethods]
     impl Environment {
@@ -19,7 +20,8 @@ mod lanista_py {
         #[new]
         fn new() -> PyResult<Self> {
             let data = DesignData::load().map_err(|e| PyRuntimeError::new_err(e.to_string()))?;
-            Ok(Self(learning::Environment::new(data)))
+            let keys = data.classes.iter().map(|c| c.key.clone()).collect();
+            Ok(Self(learning::Environment::new(data), keys))
         }
 
         /// Starts the duel of `seed`; gives each fighter's observation.
@@ -80,6 +82,22 @@ mod lanista_py {
         fn fighting(&self) -> Vec<bool> {
             let fighters = &self.0.arena().fighters;
             fighters.iter().map(Fighter::is_fighting).collect()
+        }
+
+        /// Every class's key, in the order of `data/classes.ron`.
+        #[getter]
+        fn class_keys(&self) -> Vec<String> {
+            self.1.clone()
+        }
+
+        /// Each fighter's class key.
+        #[getter]
+        fn classes(&self) -> Vec<String> {
+            let fighters = &self.0.arena().fighters;
+            fighters
+                .iter()
+                .map(|f| self.1[usize::try_from(f.class.0).expect("a class index")].clone())
+                .collect()
         }
 
         /// The fight so far as `simulate` prints it: its log, then its report.

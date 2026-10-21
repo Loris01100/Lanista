@@ -1251,6 +1251,7 @@ dependencies = [
 name = "lanista_ia_onnx"
 version = "0.1.0"
 dependencies = [
+ "lanista_core",
  "tract-onnx",
 ]
 

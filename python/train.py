@@ -1,4 +1,5 @@
-"""Phase 7: trains the learned AI with PPO (Stable-Baselines3), duel first, then melee.
+"""Phase 7: trains the learned AI of one class with PPO (Stable-Baselines3), duel first,
+then melee.
 
 Each fight's opponents are drawn at its start (`Opponents`): the latest snapshot of the
 model being trained (self-play), an older snapshot, or the utility AI, a third each,
@@ -6,11 +7,12 @@ the utility AI alone until the first snapshot. The melee stage starts from the d
 model, which joins its older versions. At the end, the model plays duels against the
 utility AI and prints its win rate.
 
-From the repo root inside python/.venv (pip install stable-baselines3):
-    python python/train.py duel --steps 2000000
-    python python/train.py melee --steps 2000000
-Models and snapshots go to python/models/ (not committed).
-Self-check: python python/train.py duel --steps 4096 --envs 2 --check 20
+From the repo root inside python/.venv (pip install stable-baselines3), for each class:
+    python python/train.py mirmillon duel --steps 2000000
+    python python/train.py mirmillon melee --steps 2000000
+Models and snapshots go to python/models/<class>/ (not committed); export.py turns them
+into the game's ONNX models.
+Self-check: python python/train.py augure duel --steps 4096 --envs 2 --check 20
 """
 
 import argparse
@@ -54,9 +56,9 @@ class Opponents:
         return [int(a) for a in actions]
 
 
-def win_rate(model, fights):
+def win_rate(model, fights, fighter_class):
     """Share of `fights` the model wins against the utility AI, playing its likeliest action."""
-    env = FightEnv(utility_ai)
+    env = FightEnv(utility_ai, fighter_class=fighter_class)
     wins = 0
     for seed in range(fights):
         observation, _ = env.reset(seed=seed)
@@ -71,6 +73,7 @@ def win_rate(model, fights):
 
 def main():
     parser = argparse.ArgumentParser()
+    parser.add_argument("fighter_class", metavar="class", help="a class key of data/classes.ron")
     parser.add_argument("stage", choices=["duel", "melee"])
     parser.add_argument("--steps", type=int, default=2_000_000)
     parser.add_argument("--envs", type=int, default=8)
@@ -79,22 +82,24 @@ def main():
     args = parser.parse_args()
 
     melee = args.stage == "melee"
-    snapshots = MODELS / args.stage
+    models = MODELS / args.fighter_class
+    snapshots = models / args.stage
     snapshots.mkdir(parents=True, exist_ok=True)
+    # ponytail: the snapshots play every opponent, of any class, though trained for one.
     opponents = Opponents(snapshots)
-    envs = SubprocVecEnv([lambda: FightEnv(opponents, melee)] * args.envs)
+    envs = SubprocVecEnv([lambda: FightEnv(opponents, melee, args.fighter_class)] * args.envs)
     envs.seed(0)
     if melee:
-        shutil.copy(MODELS / "duel.zip", snapshots / "duel.zip")
-        model = PPO.load(MODELS / "duel.zip", envs, device="cpu")
+        shutil.copy(models / "duel.zip", snapshots / "duel.zip")
+        model = PPO.load(models / "duel.zip", envs, device="cpu")
     else:
         model = PPO("MlpPolicy", envs, device="cpu", verbose=1)
     every = max(args.snapshot_every // args.envs, 1)
     model.learn(args.steps, CheckpointCallback(every, snapshots), reset_num_timesteps=not melee)
-    model.save(MODELS / args.stage)
+    model.save(models / args.stage)
     envs.close()
-    rate = win_rate(model, args.check)
-    print(f"{args.stage}: {rate:.1%} of {args.check} duels won against the utility AI")
+    rate = win_rate(model, args.check, args.fighter_class)
+    print(f"{args.fighter_class} {args.stage}: {rate:.1%} of {args.check} duels won against the utility AI")
 
 
 if __name__ == "__main__":
