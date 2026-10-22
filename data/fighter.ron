@@ -146,6 +146,18 @@
         shield_defense_percent: 115,
         off_hand_attack_percent: 85,
     ),
+    // Ease with each loadout of its class, from 0 to 100. A recruit draws how lopsided it
+    // is: good with every loadout, or up to best with one and worst with the others.
+    // Below comfortable, attacks, defenses and accuracy lose up to malus_percent (at 0);
+    // each fight in a loadout raises its ease.
+    ease: (
+        good: 70,
+        best: 100,
+        worst: 10,
+        comfortable: 70,
+        malus_percent: 20,
+        per_fight: 4,
+    ),
     progression: (
         // No levels: each stat may improve after every training session and fight.
         // Chance in percent, at ages 20 to 27 and neutral morale.

@@ -6,11 +6,11 @@ use serde::{Deserialize, Serialize};
 
 use crate::colosseum::{ColosseumId, Contender};
 use crate::combat::{Arena, ArenaKind, Vec2};
-use crate::design_data::{DesignData, FighterRules, LoadoutData};
+use crate::design_data::{DesignData, FighterRules};
 use crate::duel::{STATS, play};
 use crate::fighter::appearance::Appearance;
 use crate::fighter::care::CareRules;
-use crate::fighter::equipment::{OffHand, Refused};
+use crate::fighter::equipment::Refused;
 use crate::fighter::fame::{Fame, FightOutcome, FightResult};
 use crate::fighter::form::{Form, FormEvent};
 use crate::fighter::illness::{Illness, IllnessLevel, roll_illness};
@@ -76,6 +76,10 @@ pub struct CareerFighter {
     /// (`WeekPlan::loadout`).
     #[serde(default)]
     pub loadout: usize,
+    /// Its ease with each loadout of its class, from 0 to 100 (`EaseRules`): drawn as a
+    /// recruit, raised by each fight in it.
+    #[serde(default)]
+    pub ease: Vec<u32>,
     /// In years.
     pub age: u32,
     /// Weeks played since the last birthday; a year is a season of `data/calendar.ron`.
@@ -112,7 +116,8 @@ pub struct CareerFighter {
 
 impl CareerFighter {
     /// A new fighter: random class, stats within `rules.career.stats_spread_percent` of the
-    /// standard duel's, hidden potential, dominant hand, age, personality and look;
+    /// standard duel's, hidden potential, dominant hand, age, personality, look and ease
+    /// with each loadout, in the one it is most at ease with;
     /// neutral morale, no fame, full form, healthy.
     ///
     /// # Panics
@@ -139,6 +144,8 @@ impl CareerFighter {
         let age = rng.random_range(youngest..=oldest);
         let personality = Personality::random(rng);
         let appearance = Appearance::random(rng, &rules.appearance);
+        let loadouts = data.class(class).map_or(0, |c| c.loadouts.len());
+        let ease = rules.ease.random(rng, loadouts);
         let mut fighter = Self {
             class,
             stats,
@@ -146,6 +153,7 @@ impl CareerFighter {
             dominant_hand,
             ambidextrous,
             loadout: 0,
+            ease,
             age,
             weeks_this_year: 0,
             personality,
@@ -162,22 +170,22 @@ impl CareerFighter {
             joined: None,
             moved_to: None,
         };
-        fighter.loadout = fighter.preferred_loadout(data);
+        fighter.loadout = fighter.preferred_loadout();
         fighter
     }
 
-    /// The loadout its club picks for it: one with two weapons for an ambidextrous
-    /// fighter, one without for the others, else the first.
-    // ponytail: handedness alone; the ease of each loadout (docs/Classes.md, step 6)
-    // will decide.
+    /// The loadout its club picks for it: the one it is most at ease with, the first
+    /// of them on a tie.
     #[must_use]
-    pub fn preferred_loadout(&self, data: &DesignData) -> usize {
-        let loadouts = data.class(self.class).map_or(&[][..], |c| &c.loadouts);
-        let two_weapons = |l: &LoadoutData| l.off_hand == OffHand::Weapon;
-        loadouts
-            .iter()
-            .position(|l| two_weapons(l) == self.ambidextrous)
-            .unwrap_or(0)
+    pub fn preferred_loadout(&self) -> usize {
+        let best = self.ease.iter().max().copied().unwrap_or(0);
+        self.ease.iter().position(|&e| e == best).unwrap_or(0)
+    }
+
+    /// Its ease with `loadout`; full for a loadout it has none for.
+    #[must_use]
+    pub fn ease_with(&self, loadout: usize) -> u32 {
+        self.ease.get(loadout).copied().unwrap_or(100)
     }
 
     /// The entry it leaves behind on going to `to`: its class, for its name, and its
@@ -195,6 +203,7 @@ impl CareerFighter {
             dominant_hand: Side::Right,
             ambidextrous: false,
             loadout: 0,
+            ease: Vec::new(),
             age: 0,
             weeks_this_year: 0,
             personality: Personality::neutral(),
@@ -256,6 +265,7 @@ impl CareerFighter {
         if let Some(loadout) = class_data.loadout(self.loadout) {
             stats = loadout.off_hand.stats(stats, self.ambidextrous, equipment);
         }
+        let stats = rules.ease.stats(stats, self.ease_with(self.loadout));
         let stats = refused.stats(stats, equipment);
         let class = (class_data, self.loadout);
         let mut fighter = Fighter::in_loadout(id, self.class, class, stats, position);
@@ -702,7 +712,8 @@ impl CareerFighter {
     /// What a fight `taken` leaves a survivor: morale, an injury (returned, with whether
     /// `medicine` kept it from leaving an after-effect): the wound of a fatal blow
     /// survived or of a stun, else a possible one, retiring at once if it leaves too many
-    /// limbs lost (`too_maimed`); form (`form`'s cost), illness worsening and progression.
+    /// limbs lost (`too_maimed`); form (`form`'s cost), illness worsening, progression,
+    /// and ease with the loadout fought in.
     pub(crate) fn after_fight<R: Rng + ?Sized>(
         &mut self,
         taken: Taken,
@@ -751,6 +762,9 @@ impl CareerFighter {
             .illness
             .map(|illness| illness.after_fight(rng, &rules.illness));
         self.progress(ProgressEvent::Fight, rng, rules);
+        if let Some(ease) = self.ease.get_mut(self.loadout) {
+            *ease = (*ease + rules.ease.per_fight).min(100);
+        }
         (injury, spared)
     }
 
@@ -1257,10 +1271,10 @@ mod tests {
         let data = data();
         let mut f = fighter(7);
         f.class = ClassId(0);
-        f.ambidextrous = false;
-        assert_eq!(f.preferred_loadout(&data), 0);
-        f.ambidextrous = true;
-        assert_eq!(f.preferred_loadout(&data), 1);
+        f.ease = vec![40, 90];
+        assert_eq!(f.preferred_loadout(), 1);
+        f.ease = vec![70, 70];
+        assert_eq!(f.preferred_loadout(), 0);
         let rest = WeekPlan {
             loadout: 1,
             ..plan(Activity::Rest)
@@ -1272,9 +1286,31 @@ mod tests {
         let at = Vec2::new(0.0, 0.0);
         let fighter = f.combat_fighter(FighterId(0), Refused::NONE, &data, at);
         assert_eq!(fighter.spells[1], data.classes[0].loadouts[1].spell);
-        // No augure loadout has two weapons: the first one.
-        f.class = ClassId(1);
-        assert_eq!(f.preferred_loadout(&data), 0);
+    }
+
+    #[test]
+    fn a_loadout_one_is_not_at_ease_with_weakens_and_fighting_in_it_helps() {
+        let data = data();
+        let rules = &data.fighter;
+        let mut f = fighter(7);
+        f.class = ClassId(0);
+        f.ease = vec![100, 0];
+        f.loadout = 1;
+        let at = Vec2::new(0.0, 0.0);
+        let awkward = f.combat_fighter(FighterId(0), Refused::NONE, &data, at);
+        f.ease = vec![100, 100];
+        let easy = f.combat_fighter(FighterId(0), Refused::NONE, &data, at);
+        assert!(awkward.stats.melee_defense < easy.stats.melee_defense);
+        assert_eq!(awkward.stats.hp, easy.stats.hp);
+        f.ease = vec![100, 0];
+        let mut rng = ChaCha8Rng::seed_from_u64(1);
+        let fight = plan(Activity::Fight(ColosseumId(0)));
+        let fight = WeekPlan {
+            loadout: 1,
+            ..fight
+        };
+        f.play_week(fight, None, StaffEffects::default(), &mut rng, &data);
+        assert_eq!(f.ease, [100, rules.ease.per_fight]);
     }
 
     #[test]
@@ -1296,6 +1332,7 @@ mod tests {
             loadout
                 .off_hand
                 .stats(f.fighting_stats(&rules), f.ambidextrous, &rules.equipment);
+        let equipped = rules.ease.stats(equipped, f.ease_with(f.loadout));
         assert_eq!(fighter.stats, equipped);
         assert_eq!(fighter.condition.injuries, f.injuries);
     }
@@ -1496,6 +1533,7 @@ mod tests {
         };
         let week = WeekPlan {
             refused: armour,
+            loadout: f.loadout,
             ..plan(Activity::Fight(ColosseumId(0)))
         };
         let expected = f.combat_fighter(FighterId(0), armour, &data, Vec2::new(0.0, 0.0));
@@ -1758,7 +1796,7 @@ mod tests {
                 activity: Activity::Rest,
                 care: true,
                 refused: Refused::NONE,
-                loadout: 0,
+                loadout: f.loadout,
             }
         );
     }

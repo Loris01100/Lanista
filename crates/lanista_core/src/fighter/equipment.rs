@@ -3,6 +3,7 @@
 // ponytail: only the player's fighters refuse; rival fighters and free agents keep
 // everything, as the statistical model has no such input.
 
+use rand::{Rng, RngExt};
 use serde::Deserialize;
 
 use crate::combat::DamageKind;
@@ -117,6 +118,61 @@ pub struct EquipmentRules {
     pub off_hand_attack_percent: u32,
 }
 
+/// How at ease a fighter is with each loadout of its class, from 0 to 100, from
+/// `data/fighter.ron`.
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct EaseRules {
+    /// A recruit's ease with every loadout when it is good at all of them; the more
+    /// lopsided, the closer to `best` with one and to `worst` with the others.
+    pub good: u32,
+    pub best: u32,
+    pub worst: u32,
+    /// The ease from which a loadout costs nothing.
+    pub comfortable: u32,
+    /// Percentage of the attacks, defenses and accuracy lost at ease 0, less the closer
+    /// to `comfortable`.
+    pub malus_percent: u32,
+    /// Ease gained with a loadout for each fight in it.
+    pub per_fight: u32,
+}
+
+impl EaseRules {
+    /// A recruit's ease with each of `loadouts` loadouts: one drawn as its strong one,
+    /// a lopsidedness drawn from 0 (`good` everywhere) to 100 (`best` with the strong
+    /// one, `worst` with the others).
+    pub fn random<R: Rng + ?Sized>(&self, rng: &mut R, loadouts: usize) -> Vec<u32> {
+        let lopsided = rng.random_range(0..=100);
+        let strong = rng.random_range(0..loadouts.max(1));
+        let good = self.good.min(100);
+        let best = good + percent_of(self.best.min(100).saturating_sub(good), lopsided);
+        let worst = good - percent_of(good.saturating_sub(self.worst), lopsided);
+        (0..loadouts)
+            .map(|i| if i == strong { best } else { worst })
+            .collect()
+    }
+
+    /// `stats` in a loadout the fighter is at `ease` with: attacks, defenses and
+    /// accuracy down by up to `malus_percent` below `comfortable`.
+    #[must_use]
+    pub fn stats(&self, stats: Stats, ease: u32) -> Stats {
+        let missing = self.comfortable.saturating_sub(ease);
+        let lost = self.malus_percent * missing / self.comfortable.max(1);
+        let kept = 100 - lost.min(100);
+        let mut stats = stats;
+        for stat in [
+            &mut stats.melee_attack,
+            &mut stats.ranged_attack,
+            &mut stats.accuracy,
+            &mut stats.melee_defense,
+            &mut stats.ranged_defense,
+        ] {
+            *stat = percent_of(*stat, kept);
+        }
+        stats
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -173,6 +229,33 @@ mod tests {
         let two = OffHand::Weapon.stats(STATS, false, &RULES);
         assert_eq!((two.melee_attack, two.ranged_attack), (16, 30));
         assert_eq!(OffHand::Weapon.stats(STATS, true, &RULES), STATS);
+    }
+
+    #[test]
+    fn ease_is_drawn_good_or_lopsided_and_costs_below_comfortable() {
+        use rand::SeedableRng;
+        let rules = EaseRules {
+            good: 70,
+            best: 100,
+            worst: 10,
+            comfortable: 70,
+            malus_percent: 20,
+            per_fight: 4,
+        };
+        let mut rng = rand_chacha::ChaCha8Rng::seed_from_u64(1);
+        for _ in 0..50 {
+            let ease = rules.random(&mut rng, 2);
+            // The further one goes up, the further the other goes down.
+            let (high, low) = (ease[0].max(ease[1]), ease[0].min(ease[1]));
+            assert!((70..=100).contains(&high) && (10..=70).contains(&low));
+            assert!((70 - low).abs_diff(2 * (high - 70)) <= 1);
+        }
+        assert_eq!(rules.stats(STATS, 70), STATS);
+        assert_eq!(rules.stats(STATS, 100), STATS);
+        let awkward = rules.stats(STATS, 0);
+        assert_eq!((awkward.melee_attack, awkward.ranged_defense), (16, 40));
+        assert_eq!((awkward.hp, awkward.speed), (100, 30));
+        assert_eq!(rules.stats(STATS, 35).melee_attack, 18);
     }
 
     #[test]

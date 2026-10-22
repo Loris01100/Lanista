@@ -408,7 +408,7 @@ pub fn plan(
         activity,
         care,
         refused: Refused::NONE,
-        loadout: fighter.preferred_loadout(data),
+        loadout: fighter.preferred_loadout(),
     }
 }
 
@@ -629,7 +629,7 @@ mod tests {
                 activity: Activity::Rest,
                 care: true,
                 refused: Refused::NONE,
-                loadout: 0,
+                loadout: fighter.loadout,
             }
         );
         assert_eq!(money, 100);
@@ -647,7 +647,7 @@ mod tests {
                 activity: Activity::Rest,
                 care: false,
                 refused: Refused::NONE,
-                loadout: 0,
+                loadout: fighter.loadout,
             }
         );
         // A doctor's care costs more, at its price.

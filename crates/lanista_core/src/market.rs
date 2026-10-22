@@ -228,6 +228,13 @@ pub fn personality_seen(fighter: &CareerFighter, scouting: &Scouting) -> bool {
     scouting.personality && fighter.observed_weeks > 0
 }
 
+/// Whether the recruiter's `scouting` sees the ease of `fighter` with each loadout, out
+/// of the club: once observed for a week, by a recruiter able to tell.
+#[must_use]
+pub fn ease_seen(fighter: &CareerFighter, scouting: &Scouting) -> bool {
+    scouting.ease && fighter.observed_weeks > 0
+}
+
 /// Whether `fighter` refuses to join the player's club, whose best fame is
 /// `club_fame`: `refusal_percent`, plus half its fame above the club's (less below),
 /// plus a fifth of its caution above the middle (less below), between 0 and 90 %.
@@ -361,6 +368,7 @@ mod tests {
             range_width_percent: 50,
             potential_range_percent: 20,
             personality: true,
+            ease: true,
         };
         let alone = Scouting::default();
         fighter.observed_weeks = 1;
@@ -379,9 +387,11 @@ mod tests {
         assert_eq!(high - low, percent_of(total, 20));
         assert!(potential_range(&fighter, &alone).is_none());
         assert!(personality_seen(&fighter, &scouting) && !personality_seen(&fighter, &alone));
+        assert!(ease_seen(&fighter, &scouting) && !ease_seen(&fighter, &alone));
         fighter.observed_weeks = 0;
         assert!(potential_range(&fighter, &scouting).is_none());
         assert!(!personality_seen(&fighter, &scouting));
+        assert!(!ease_seen(&fighter, &scouting));
         // A rival club's recruiter needs no observation, and takes the middle.
         assert_eq!(
             estimated_potential(&fighter, &scouting),

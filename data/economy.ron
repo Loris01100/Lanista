@@ -41,13 +41,14 @@
         // Recruiter levels 1 to 5: salary; stats revealed each week of observation on
         // top of the market's; width of the stat ranges in percent of the usual one;
         // width of the estimate of the potential in percent of it, once observed (0: no
-        // estimate); whether an observed fighter's personality is seen.
+        // estimate); whether an observed fighter's personality, then its ease with each
+        // loadout, is seen.
         recruiters: [
-            (salary: 10, scouting: (revealed_per_week: 0, range_width_percent: 90, potential_range_percent: 0, personality: false)),
-            (salary: 20, scouting: (revealed_per_week: 1, range_width_percent: 80, potential_range_percent: 0, personality: false)),
-            (salary: 30, scouting: (revealed_per_week: 1, range_width_percent: 70, potential_range_percent: 40, personality: false)),
-            (salary: 45, scouting: (revealed_per_week: 2, range_width_percent: 60, potential_range_percent: 30, personality: true)),
-            (salary: 65, scouting: (revealed_per_week: 2, range_width_percent: 50, potential_range_percent: 20, personality: true)),
+            (salary: 10, scouting: (revealed_per_week: 0, range_width_percent: 90, potential_range_percent: 0, personality: false, ease: false)),
+            (salary: 20, scouting: (revealed_per_week: 1, range_width_percent: 80, potential_range_percent: 0, personality: false, ease: false)),
+            (salary: 30, scouting: (revealed_per_week: 1, range_width_percent: 70, potential_range_percent: 40, personality: false, ease: true)),
+            (salary: 45, scouting: (revealed_per_week: 2, range_width_percent: 60, potential_range_percent: 30, personality: true, ease: true)),
+            (salary: 65, scouting: (revealed_per_week: 2, range_width_percent: 50, potential_range_percent: 20, personality: true, ease: true)),
         ],
         // The candidates on the market, for the player and the rival clubs alike: so
         // many for each post at the start of a week, missing ones arriving at the end

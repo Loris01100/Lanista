@@ -11,7 +11,7 @@ use crate::fighter::ClassId;
 use crate::fighter::appearance::AppearanceRules;
 use crate::fighter::care::CareRules;
 use crate::fighter::career::CareerRules;
-use crate::fighter::equipment::{EquipmentRules, OffHand};
+use crate::fighter::equipment::{EaseRules, EquipmentRules, OffHand};
 use crate::fighter::fame::FameRules;
 use crate::fighter::form::FormRules;
 use crate::fighter::illness::IllnessRules;
@@ -58,6 +58,7 @@ pub struct FighterRules {
     pub retirement: RetirementRules,
     pub career: CareerRules,
     pub equipment: EquipmentRules,
+    pub ease: EaseRules,
     pub appearance: AppearanceRules,
 }
 
@@ -524,8 +525,10 @@ impl DesignData {
             });
         }
         let equipment = &rules.equipment;
-        // A refused piece, or a second weapon, must not make the fighter stronger.
+        // A refused piece, a second weapon or a loadout one is not at ease with must not
+        // make the fighter stronger.
         for (field, percent) in [
+            ("ease.malus_percent", rules.ease.malus_percent),
             (
                 "equipment.off_hand_attack_percent",
                 equipment.off_hand_attack_percent,

@@ -19,7 +19,7 @@ use lanista_core::fighter::injury::{Injury, Location, Severity, Side};
 use lanista_core::fighter::personality::Personality;
 use lanista_core::fighter::retirement::too_maimed;
 use lanista_core::market::{
-    MarketNews, Move, Target, personality_seen, potential_range, stat_ranges,
+    MarketNews, Move, Target, ease_seen, personality_seen, potential_range, stat_ranges,
 };
 use lanista_core::names::ClubName;
 use lanista_core::relations::{Change, Reason, Standing};
@@ -79,6 +79,33 @@ pub fn loadout_name(fighter: &CareerFighter, loadout: usize, data: &DesignData) 
     data.class(fighter.class)
         .and_then(|c| c.loadout(loadout))
         .map_or_else(|| "?".into(), |l| data_name("loadout", &l.key))
+}
+
+/// Its ease with each loadout of its class: "Glaive et bouclier 85, Double glaive 40".
+pub fn ease_text(fighter: &CareerFighter, data: &DesignData) -> String {
+    let loadouts = data.class(fighter.class).map_or(0, |c| c.loadouts.len());
+    let each = (0..loadouts).map(|l| {
+        let loadout = loadout_name(fighter, l, data);
+        tr!(
+            "ease-loadout",
+            loadout = loadout,
+            ease = fighter.ease_with(l)
+        )
+    });
+    each.collect::<Vec<_>>().join(", ")
+}
+
+/// The ease of a fighter out of the club, if the recruiter sees it, or "?".
+pub fn outside_ease_text(
+    fighter: &CareerFighter,
+    scouting: &Scouting,
+    data: &DesignData,
+) -> String {
+    if ease_seen(fighter, scouting) {
+        ease_text(fighter, data)
+    } else {
+        "?".into()
+    }
 }
 
 pub fn activity_name(activity: Activity, data: &DesignData) -> String {
@@ -315,7 +342,7 @@ pub fn doctor_text(doctor: &DoctorRules, care: &CareRules) -> String {
 
 /// What a recruiter costs and brings: "salaire 30 par semaine, 1 stat de plus
 /// révélée par semaine, fourchettes à 70 %, potentiel estimé à 40 % près, personnalité
-/// cachée".
+/// cachée, aisance vue".
 pub fn recruiter_text(recruiter: &RecruiterRules) -> String {
     let scouting = &recruiter.scouting;
     tr!(
@@ -328,7 +355,8 @@ pub fn recruiter_text(recruiter: &RecruiterRules) -> String {
             "seen"
         } else {
             "hidden"
-        }
+        },
+        ease = if scouting.ease { "seen" } else { "hidden" }
     )
 }
 

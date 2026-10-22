@@ -42,7 +42,7 @@ use crate::saves;
 use crate::texts::{
     activity_name, challenger_text, change, class_name, club_name, colosseum_name,
     colosseum_rules_name, condition_text, contender_name, continent_name, date_in_sentence,
-    fight_text, fighter_name, illness_text, injury_text, loadout_name, market_news_text,
+    ease_text, fight_text, fighter_name, illness_text, injury_text, loadout_name, market_news_text,
     money_line, move_text, personality_text, priced, rival_fighter_name, staff_move_text,
     staff_news_text, stat_names, title_news_text, wealth_name, wealth_text, week_lines,
     world_news_text,
@@ -1128,6 +1128,7 @@ fn sheet(ui: &mut egui::Ui, index: usize, f: &CareerFighter, data: &DesignData) 
         "sheet-loadout",
         loadout = loadout_name(f, f.loadout, data)
     ));
+    ui.label(tr!("sheet-ease", ease = ease_text(f, data)));
     match f.status {
         Status::Active => {}
         Status::Retired if too_maimed(&f.injuries, &rules.retirement) => {
@@ -1205,8 +1206,8 @@ mod tests {
     use super::*;
     use crate::texts::{
         club_name as rival_club_name, date_in_sentence, free_agent_name, named_club,
-        outside_personality_text, potential_text, range_texts, staff_text, unsellable_text,
-        weeks_left_text,
+        outside_ease_text, outside_personality_text, potential_text, range_texts, staff_text,
+        unsellable_text, weeks_left_text,
     };
     use colosseums::reign_text;
     use lanista_core::colosseum::{Reign, ReignEnd, TitleLoss};
@@ -1436,15 +1437,20 @@ mod tests {
         );
         // The next week's decisions keep the staff, with no new change.
         assert_eq!(screen.decisions.staff, []);
-        // The recruiter sees the observed fighter's potential and personality.
+        // The recruiter sees the observed fighter's potential, personality and ease.
         let state = &screen.state;
         let scouting = state.scouting();
         let observed = state.rival_fighter(id).unwrap();
         assert_eq!(observed.observed_weeks, 1);
         assert_ne!(potential_text(observed, &scouting), "?");
         assert!(outside_personality_text(observed, &scouting).starts_with("Agr "));
+        let data = &screen.data;
+        let ease = outside_ease_text(observed, &scouting, data);
+        assert_eq!(ease, ease_text(observed, data));
+        assert_eq!(ease.matches(", ").count() + 1, observed.ease.len());
         let unseen = &state.free_agents[0];
         assert_eq!(outside_personality_text(unseen, &scouting), "?");
+        assert_eq!(outside_ease_text(unseen, &scouting, data), "?");
     }
 
     #[test]
@@ -1711,9 +1717,9 @@ mod tests {
         assert_eq!(
             lines[..3],
             [
-                "Familia Crassus (Rome), formateur et riche : 10 combattants ; relation +0, neutre",
-                "Dar Khawla (Monde arabe), agressif et pauvre : 10 combattants ; relation +0, neutre",
-                "Clan de Tatanka (Tribus amérindiennes), prudent et modeste : 10 combattants ; relation +0, neutre",
+                "Palestre d'Arrhichion (Grèce), agressif et pauvre : 10 combattants ; relation +0, neutre",
+                "Dar Zénobie (Monde arabe), vétéran et pauvre : 10 combattants ; relation +0, neutre",
+                "Clan de Cochise (Tribus amérindiennes), agressif et pauvre : 10 combattants ; relation +0, neutre",
             ]
         );
     }
@@ -1768,8 +1774,8 @@ mod tests {
         assert_eq!(
             screen.news_lines(),
             [
-                "Saison 2, semaine 1 : Fondation de Familia Crassus (Rome), en Europe",
-                "Saison 1, semaine 30 : Dar Khawla ferme, ruiné : ses combattants partent au marché",
+                "Saison 2, semaine 1 : Fondation de Palestre d'Arrhichion (Grèce), en Europe",
+                "Saison 1, semaine 30 : Dar Zénobie ferme, ruiné : ses combattants partent au marché",
             ]
         );
     }
@@ -1785,11 +1791,11 @@ mod tests {
         assert_eq!(
             screen.news_lines(),
             [
-                "Saison 1, semaine 4 : Dar Khawla se déclare votre rival : vos combats contre lui attirent les foules"
+                "Saison 1, semaine 4 : Dar Zénobie se déclare votre rival : vos combats contre lui attirent les foules"
             ]
         );
         assert!(screen.alerts().contains(
-            &"Dar Khawla est votre rival depuis saison 1, semaine 4 : recettes à 150 %, renommée +3 par combat"
+            &"Dar Zénobie est votre rival depuis saison 1, semaine 4 : recettes à 150 %, renommée +3 par combat"
                 .to_owned()
         ));
         assert!(screen.rival_lines()[1].ends_with("; relation +0, rival"));
@@ -1802,7 +1808,7 @@ mod tests {
     #[test]
     fn three_seasons_where_a_club_becomes_a_rival_one_closes_and_one_is_founded() {
         let data = Rc::new(DesignData::load().unwrap());
-        let mut screen = screen(1);
+        let mut screen = screen(2);
         let mut rivalry = None;
         let (mut closed, mut founded) = (false, false);
         for _ in 0..3 * u64::from(data.calendar.season_weeks()) {

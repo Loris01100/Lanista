@@ -225,6 +225,9 @@ recruiter = salaire { $salary } par semaine, { $revealed } stat de plus révél�
     }, { $personality ->
         [seen] personnalité vue
        *[hidden] personnalité cachée
+    }, { $ease ->
+        [seen] aisance vue
+       *[hidden] aisance cachée
     }
 
 ## Monde
@@ -372,6 +375,9 @@ sheet-right-handed = droitier
 sheet-left-handed = gaucher
 sheet-ambidextrous = ambidextre
 sheet-loadout = Configuration : { $loadout }
+sheet-ease = Aisance : { $ease }
+ease-loadout = { $loadout } { $ease }
+ease-title = Aisance
 sheet-retired-maimed = A pris sa retraite, trop mutilé
 sheet-retired = A pris sa retraite
 sheet-dead = Mort au combat

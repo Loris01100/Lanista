@@ -197,6 +197,9 @@ pub struct Scouting {
     pub potential_range_percent: u32,
     /// Whether the personality of a fighter observed is seen.
     pub personality: bool,
+    /// Whether its ease with each loadout of its class is seen, once observed.
+    #[serde(default)]
+    pub ease: bool,
 }
 
 impl Default for Scouting {
@@ -206,6 +209,7 @@ impl Default for Scouting {
             range_width_percent: 100,
             potential_range_percent: 0,
             personality: false,
+            ease: false,
         }
     }
 }
@@ -271,7 +275,7 @@ impl DoctorRules {
 
 impl RecruiterRules {
     /// A recruiter of this level, each stat and the salary varied (`varied`); it sees
-    /// the personality as its level does.
+    /// the personality and the ease as its level does.
     fn varied<R: Rng + ?Sized>(&self, spread: u32, rng: &mut R) -> Self {
         let scouting = &self.scouting;
         Self {
@@ -281,6 +285,7 @@ impl RecruiterRules {
                 range_width_percent: varied(scouting.range_width_percent, spread, rng),
                 potential_range_percent: varied(scouting.potential_range_percent, spread, rng),
                 personality: scouting.personality,
+                ease: scouting.ease,
             },
         }
     }

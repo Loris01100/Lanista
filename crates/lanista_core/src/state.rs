@@ -956,7 +956,7 @@ mod tests {
     #[test]
     fn the_club_s_fighters_share_a_melee_and_pay_and_earn_for_it() {
         let data = data();
-        let mut state = game(1, &data);
+        let mut state = game(2, &data);
         let mut rng = ChaCha8Rng::seed_from_u64(11);
         state.fighters.push(CareerFighter::random(&mut rng, &data));
         let capua = Activity::Melee(ColosseumId(0));
@@ -1453,7 +1453,7 @@ mod tests {
 
     /// A game of seed 7 whose fighter leads Rome's ranking.
     fn top_of_rome(data: &DesignData) -> GameState {
-        let mut state = game(7, data);
+        let mut state = game(1, data);
         state.colosseums[1].ranking.insert(
             0,
             crate::colosseum::Rating {
@@ -2544,7 +2544,7 @@ mod tests {
     #[test]
     fn rival_clubs_play_their_weeks_without_the_player() {
         let data = data();
-        let mut state = game(4, &data);
+        let mut state = game(5, &data);
         state.fighters[0].status = Status::Retired;
         let start = state.clone();
         for _ in 0..60 {
@@ -2586,7 +2586,7 @@ mod tests {
     #[test]
     fn three_seasons_live_without_the_player() {
         let data = DesignData::load().unwrap();
-        let mut state = GameState::new(1, &data);
+        let mut state = GameState::new(4, &data);
         state.fighters[0].status = Status::Retired;
         let start = state.clone();
         let season = u64::from(data.calendar.season_weeks());
