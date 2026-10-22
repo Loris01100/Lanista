@@ -59,7 +59,7 @@
             reach: 1.0,
             power: 40,
             cooldown: 45,
-            cost: Endurance(1),
+            cost: (endurance: 1),
             damage_kind: Cutting,
         ),
         "staff": (
@@ -68,22 +68,24 @@
             reach: 1.0,
             power: 30,
             cooldown: 45,
-            cost: Endurance(1),
+            cost: (endurance: 1),
             damage_kind: Blunt,
         ),
     },
     // Each colosseum's arena kind (data/world.ron) sets its floor: a size in meters,
-    // the percentage of their speed fighters walk at, and round pillars (center and
+    // the percentage of their speed fighters walk at, the element a spell may gather
+    // there (Sand or Stone; a spell's gathers and thrown, data/classes.ron), and round pillars (center and
     // radius in meters) that block the way and ranged spells, at least a fighter's
     // width from the walls. A duel starts at 15 % and 85 % of the width, mid-height.
     arenas: (
         // Deep sand slows everyone: ranged fighters shoot longer before melee closes in.
-        sand: (width: 20.0, height: 20.0, speed_percent: 70, pillars: []),
+        sand: (width: 20.0, height: 20.0, speed_percent: 70, element: Sand, pillars: []),
         // A row of pillars across the middle hides the fighters from each other's shots.
         pillars: (
             width: 20.0,
             height: 20.0,
             speed_percent: 100,
+            element: Stone,
             pillars: [
                 (x: 10.0, y: 4.0, radius: 1.2),
                 (x: 10.0, y: 10.0, radius: 1.2),
@@ -91,7 +93,7 @@
             ],
         ),
         // A small floor: melee fighters reach their opponent fast.
-        narrow: (width: 8.0, height: 6.0, speed_percent: 100, pillars: []),
+        narrow: (width: 8.0, height: 6.0, speed_percent: 100, element: Stone, pillars: []),
     ),
     // The melee, or King of the hill: everyone at once in the colosseum's arena, grown
     // so that each fighter has square_meters_per_fighter, starting on a circle, for at

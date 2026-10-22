@@ -1,11 +1,15 @@
 //! Design data (classes, spells, combat rules, fighter rules, calendar, economy, colosseums, cultures,
 //! statistical model) read from the RON files of `data/`.
 
+use std::collections::BTreeMap;
+
 use serde::Deserialize;
 
 use crate::calendar::CalendarRules;
 use crate::colosseum::{Continent, WorldRules};
-use crate::combat::{ArenaKind, ArenaLayout, CombatRules, DamageKind, Pillar, RADIUS, Range};
+use crate::combat::{
+    ArenaKind, ArenaLayout, CombatRules, DamageKind, Element, Pillar, RADIUS, Range,
+};
 use crate::economy::EconomyRules;
 use crate::fighter::ClassId;
 use crate::fighter::appearance::AppearanceRules;
@@ -72,6 +76,9 @@ pub struct ClassData {
     /// Mana, then endurance, recovered each second of a fight.
     pub mana_per_second: u32,
     pub endurance_per_second: u32,
+    /// Elements of the floor it carries at most (`SpellData::gathers`); none if left out.
+    #[serde(default)]
+    pub max_elements: u32,
     /// The spells of the first and third slots; the second comes from the loadout.
     pub spells: Vec<SpellData>,
     /// Its loadouts, two for each class; none for a class built by hand.
@@ -146,6 +153,25 @@ pub struct SpellData {
     /// others; none if left out.
     #[serde(default)]
     pub accuracy_drop: Option<AccuracyDrop>,
+    /// Elements of the arena's floor it adds to its caster's reserve, up to the class's
+    /// `max_elements`: a spell without target nor damage, cast on its caster (`combat`'s
+    /// `gather`); 0, a spell like the others, if left out.
+    #[serde(default)]
+    pub gathers: u32,
+    /// What it hits like when it throws each element, in place of its own `power`,
+    /// `damage_kind` and `accuracy_drop`, set by `Arena::with_layout`; nothing if left out.
+    #[serde(default)]
+    pub thrown: BTreeMap<Element, Thrown>,
+}
+
+/// How a spell hits with an element of the floor (`SpellData::thrown`).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct Thrown {
+    pub power: u32,
+    pub damage_kind: DamageKind,
+    #[serde(default)]
+    pub accuracy_drop: Option<AccuracyDrop>,
 }
 
 /// A share of a fighter's accuracy lost for a while (`fighter::Effect::Blinded`).
@@ -161,11 +187,14 @@ const fn full_accuracy() -> u32 {
     100
 }
 
-/// Resource spent to cast a spell.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize)]
-pub enum Cost {
-    Mana(u32),
-    Endurance(u32),
+/// What casting a spell spends, all of it needed; what is left out costs nothing.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Deserialize)]
+#[serde(default, deny_unknown_fields)]
+pub struct Cost {
+    pub mana: u32,
+    pub endurance: u32,
+    /// Elements of the floor, from the caster's reserve (`Fighter::elements`).
+    pub elements: u32,
 }
 
 const CLASSES_FILE: &str = "data/classes.ron";

@@ -4,6 +4,12 @@
 // reach: meters between the fighters' edges. power: % of the damage formula.
 // cooldown: ticks, 30 per second. mana_per_second, endurance_per_second: recovered
 // each second of a fight, up to the max.
+// cost: what a cast spends, all of it needed (mana, endurance, elements of the floor
+// from the fighter's reserve); what is left out costs nothing.
+// max_elements: elements of the floor a fighter carries at most, 0 if left out. A spell's
+// gathers adds that many of the arena's element (data/combat.ron) to its caster's
+// reserve, without target nor damage; its thrown gives, for each element, the power,
+// damage_kind and accuracy_drop it hits with in an arena of that element.
 // damage_kind: Blunt stuns three times as often as Cutting, which may sever a limb or
 // the head instead (data/combat.ron); Neutral (spells without an element yet) does neither.
 // spells: the first and third slots. Each of the class's two loadouts brings the second
@@ -30,7 +36,7 @@
                     reach: 1.0,
                     power: 150,
                     cooldown: 150,
-                    cost: Endurance(25),
+                    cost: (endurance: 25),
                     damage_kind: Blunt,
                 ),
             ),
@@ -44,7 +50,7 @@
                     reach: 1.0,
                     power: 150,
                     cooldown: 150,
-                    cost: Endurance(25),
+                    cost: (endurance: 25),
                     damage_kind: Cutting,
                 ),
             ),
@@ -56,7 +62,7 @@
                 reach: 1.0,
                 power: 100,
                 cooldown: 30,
-                cost: Endurance(5),
+                cost: (endurance: 5),
                 damage_kind: Cutting,
             ),
             (
@@ -65,7 +71,7 @@
                 reach: 1.0,
                 power: 250,
                 cooldown: 300,
-                cost: Endurance(40),
+                cost: (endurance: 40),
                 damage_kind: Cutting,
             ),
         ],
@@ -87,7 +93,7 @@
                     reach: 8.0,
                     power: 100,
                     cooldown: 45,
-                    cost: Mana(10),
+                    cost: (mana: 10),
                     damage_kind: Neutral,
                 ),
             ),
@@ -101,7 +107,7 @@
                     reach: 1.0,
                     power: 120,
                     cooldown: 120,
-                    cost: Endurance(15),
+                    cost: (endurance: 15),
                     damage_kind: Blunt,
                 ),
             ),
@@ -113,7 +119,7 @@
                 reach: 1.0,
                 power: 60,
                 cooldown: 30,
-                cost: Endurance(5),
+                cost: (endurance: 5),
                 damage_kind: Blunt,
             ),
             (
@@ -122,7 +128,7 @@
                 reach: 10.0,
                 power: 180,
                 cooldown: 180,
-                cost: Mana(30),
+                cost: (mana: 30),
                 damage_kind: Neutral,
             ),
         ],

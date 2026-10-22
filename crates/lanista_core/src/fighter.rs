@@ -178,6 +178,8 @@ pub struct Fighter {
     pub hp: u32,
     pub mana: Gauge,
     pub endurance: Gauge,
+    /// Elements of the floor it gathered and carries, none at first; it recovers none.
+    pub elements: Gauge,
     /// Its class's spells, copied from the design data.
     pub spells: Vec<SpellData>,
     /// Index in `spells` of its weapon's auto attack, the last one, cast only once it can
@@ -301,6 +303,11 @@ impl Fighter {
             hp: stats.hp,
             mana: Gauge::full(class_data.max_mana, class_data.mana_per_second),
             endurance: Gauge::full(class_data.max_endurance, class_data.endurance_per_second),
+            elements: Gauge {
+                current: 0,
+                max: class_data.max_elements,
+                per_second: 0,
+            },
             cooldowns: vec![0; spells.len()],
             spells,
             auto_attack,
@@ -408,20 +415,23 @@ impl Fighter {
     }
 
     fn can_afford_spell(&self, data: &SpellData) -> bool {
-        match data.cost {
-            Cost::Mana(n) => self.mana.current >= n,
-            Cost::Endurance(n) => self.endurance.current >= n,
-        }
+        let Cost {
+            mana,
+            endurance,
+            elements,
+        } = data.cost;
+        self.mana.current >= mana
+            && self.endurance.current >= endurance
+            && self.elements.current >= elements
     }
 
     /// Spends the cost of spell `spell` and starts its cooldown.
     /// Call only after `can_cast`.
     pub fn spend(&mut self, spell: usize) {
         let data = &self.spells[spell];
-        match data.cost {
-            Cost::Mana(n) => self.mana.current = self.mana.current.saturating_sub(n),
-            Cost::Endurance(n) => self.endurance.current = self.endurance.current.saturating_sub(n),
-        }
+        self.mana.current = self.mana.current.saturating_sub(data.cost.mana);
+        self.endurance.current = self.endurance.current.saturating_sub(data.cost.endurance);
+        self.elements.current = self.elements.current.saturating_sub(data.cost.elements);
         self.cooldowns[spell] = data.cooldown;
     }
 }
@@ -439,18 +449,24 @@ pub(crate) fn test_fighter(id: u32, x: f64, y: f64) -> Fighter {
         max_endurance: 50,
         mana_per_second: 0,
         endurance_per_second: 0,
+        max_elements: 0,
         spells: vec![SpellData {
             name: "Coup".into(),
             range: Range::Melee,
             reach: 1.0,
             power: 100,
             cooldown: 30,
-            cost: Cost::Endurance(10),
+            cost: Cost {
+                endurance: 10,
+                ..Cost::default()
+            },
             damage_kind: DamageKind::Blunt,
             accuracy_percent: 100,
             sure_cut_hits: None,
             bleed_percent: 0,
             accuracy_drop: None,
+            gathers: 0,
+            thrown: std::collections::BTreeMap::new(),
         }],
         loadouts: Vec::new(),
     };
@@ -464,4 +480,56 @@ pub(crate) fn test_fighter(id: u32, x: f64, y: f64) -> Fighter {
         ranged_defense: 10,
     };
     Fighter::new(FighterId(id), ClassId(0), &class, stats, Vec2::new(x, y))
+}
+
+/// [`test_fighter`] carrying 4 elements at most, with two more spells: 1 gathers 3 for
+/// 5 endurance, 2 throws them 8 m for 5 endurance and 2 elements, a blunt power 200
+/// with stone, power 50 and 20 % accuracy lost for 2 s with sand (set by
+/// `Arena::with_layout`).
+#[cfg(test)]
+pub(crate) fn test_thrower(id: u32, x: f64, y: f64) -> Fighter {
+    use crate::combat::{DamageKind, Element, Range};
+    use crate::design_data::{AccuracyDrop, Thrown};
+
+    let mut f = test_fighter(id, x, y);
+    f.elements.max = 4;
+    let strike = f.spells[0].clone();
+    let endurance = Cost {
+        endurance: 5,
+        ..Cost::default()
+    };
+    f.spells.push(SpellData {
+        name: "Récolte".into(),
+        power: 0,
+        cost: endurance,
+        gathers: 3,
+        ..strike.clone()
+    });
+    let thrown = |power, damage_kind, accuracy_drop| Thrown {
+        power,
+        damage_kind,
+        accuracy_drop,
+    };
+    let sand = AccuracyDrop {
+        percent: 20,
+        ticks: 60,
+    };
+    f.spells.push(SpellData {
+        name: "Jette".into(),
+        range: Range::Ranged,
+        reach: 8.0,
+        power: 0,
+        cost: Cost {
+            elements: 2,
+            ..endurance
+        },
+        thrown: [
+            (Element::Stone, thrown(200, DamageKind::Blunt, None)),
+            (Element::Sand, thrown(50, DamageKind::Neutral, Some(sand))),
+        ]
+        .into(),
+        ..strike
+    });
+    f.cooldowns = vec![0; f.spells.len()];
+    f
 }

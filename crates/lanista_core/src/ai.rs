@@ -45,6 +45,9 @@ const PRESS_MIN_DISTANCE: f64 = 0.1;
 const SHOW_WAIT_TICKS: f64 = 60.0;
 /// Share of the strongest spell's value a showman gives to waiting for it.
 const SHOW_WAIT_VALUE: f64 = 0.9;
+/// Share of its best throw's value a fighter gives to gathering elements for it: below
+/// the throw, so it throws whenever it can pay for it.
+const GATHER_VALUE: f64 = 0.9;
 
 /// Utility AI: gives every possible action a score and plays the best one.
 /// Its condition (personality, morale, form, injuries, illness) changes the scores,
@@ -90,7 +93,8 @@ pub fn fear(condition: &Condition) -> f64 {
 /// A cast scores the share of the target's HP it is expected to take, given its chance
 /// to hit; waiting scores 0, or the
 /// value a showman sees in its strongest spell about to be ready; closing in scores
-/// `MOVE_SCORE`; a fearful, hurt fighter scores backing away from a threatening enemy.
+/// `MOVE_SCORE`; gathering elements scores `GATHER_VALUE` of the best spell they pay for,
+/// while the reserve is not full; a fearful, hurt fighter scores backing away from a threatening enemy.
 /// A pillar between the two makes ranged spells useless: the fighter walks around it,
 /// as it closes in around any pillar in its way. In a melee, a fighter the next check
 /// would put out (`in_danger`), or in the final (`in_final`), neither backs away nor
@@ -108,7 +112,18 @@ pub fn score_actions(arena: &Arena, me: FighterId) -> Vec<(Action, f64)> {
     let blocked = shot_blocked(&arena.pillars, me.position, target.position);
     let usable = |data: &SpellData| !(blocked && data.range == Range::Ranged);
     for (spell, data) in me.spells.iter().enumerate() {
-        if me.can_cast(spell) && distance <= data.reach && usable(data) {
+        if data.gathers > 0 {
+            if me.can_cast(spell)
+                && arena.element.is_some()
+                && me.elements.current < me.elements.max
+            {
+                let gather = Action::Cast {
+                    spell,
+                    target: me.id,
+                };
+                scored.push((gather, gather_value(me, target, &arena.accuracy)));
+            }
+        } else if me.can_cast(spell) && distance <= data.reach && usable(data) {
             let cast = Action::Cast {
                 spell,
                 target: target.id,
@@ -176,6 +191,17 @@ fn share(part: u32, whole: u32) -> f64 {
 fn cast_value(me: &Fighter, target: &Fighter, spell: &SpellData, rules: &AccuracyRules) -> f64 {
     let hit = f64::from(spell_hit_percent(me, &target.stats, spell, rules)) / 100.0;
     share(spell_damage(&me.stats, &target.stats, spell), target.hp) * hit
+}
+
+/// What gathering elements is worth: `GATHER_VALUE` of the best spell that spends some,
+/// on the target, whatever its reach or cooldown.
+fn gather_value(me: &Fighter, target: &Fighter, rules: &AccuracyRules) -> f64 {
+    me.spells
+        .iter()
+        .filter(|data| data.cost.elements > 0)
+        .map(|data| cast_value(me, target, data, rules))
+        .fold(0.0, f64::max)
+        * GATHER_VALUE
 }
 
 /// What waiting is worth to a showman: a share of its strongest spell's value when
@@ -324,6 +350,42 @@ mod tests {
         let mut arena = Arena::new(20.0, 20.0, fighters, 0);
         arena.fighters[0].cooldowns[0] = 10;
         assert_eq!(UtilityAi.decide(&arena, FighterId(0)), Action::Wait);
+    }
+
+    #[test]
+    fn gathers_while_it_cannot_pay_for_a_throw_then_throws() {
+        use crate::combat::{ArenaLayout, Element};
+        use crate::fighter::test_thrower;
+
+        let fighters = vec![test_thrower(0, 5.0, 5.0), test_fighter(1, 10.0, 5.0)];
+        let floor = ArenaLayout {
+            width: 20.0,
+            height: 20.0,
+            speed_percent: 100,
+            element: Element::Stone,
+            pillars: Vec::new(),
+        };
+        let mut arena = Arena::new(20.0, 20.0, fighters.clone(), 0).with_layout(&floor);
+        let gather = Action::Cast {
+            spell: 1,
+            target: FighterId(0),
+        };
+        assert_eq!(UtilityAi.decide(&arena, FighterId(0)), gather);
+        arena.fighters[0].elements.current = 2;
+        assert_eq!(
+            UtilityAi.decide(&arena, FighterId(0)),
+            Action::Cast {
+                spell: 2,
+                target: FighterId(1)
+            }
+        );
+        // A full reserve, the throw cooling down: nothing more to gather.
+        arena.fighters[0].elements.current = 4;
+        arena.fighters[0].cooldowns[2] = 10;
+        assert_ne!(UtilityAi.decide(&arena, FighterId(0)), gather);
+        // Nothing to gather on a floor without an element.
+        let arena = Arena::new(20.0, 20.0, fighters, 0);
+        assert_ne!(UtilityAi.decide(&arena, FighterId(0)), gather);
     }
 
     fn shipped_classes() -> DesignData {

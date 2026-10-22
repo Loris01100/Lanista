@@ -73,6 +73,13 @@ pub enum EventKind {
         fighter: FighterId,
         effect: Effect,
     },
+    /// `fighter` cast its gathering spell `spell` and added `amount` elements of the
+    /// floor to its reserve, 0 if it was full.
+    Gather {
+        fighter: FighterId,
+        spell: usize,
+        amount: u32,
+    },
     /// `fighter`'s bleeding `part` took `damage` HP, dealt by `source`; a `Death` or
     /// `Surrender` may follow.
     Bled {
@@ -183,6 +190,11 @@ impl Report {
                 | EventKind::PactBroken { .. }
                 | EventKind::Eliminated { .. }
                 | EventKind::Afflicted { .. } => {}
+                EventKind::Gather { fighter, .. } => {
+                    if let Some(f) = index(fighter).and_then(|i| fighters.get_mut(i)) {
+                        f.spells_cast += 1;
+                    }
+                }
             }
         }
         let over = arena.is_over();
@@ -269,10 +281,7 @@ pub fn log_text(arena: &Arena) -> String {
                 missed,
                 part,
             } => {
-                let name = arena
-                    .fighter(caster)
-                    .and_then(|c| c.spells.get(spell))
-                    .map_or("?", |s| s.name.as_str());
+                let name = spell_name(arena, caster, spell);
                 let result = match (missed, part) {
                     (true, _) => "missed".to_owned(),
                     (false, Some(part)) => format!("{damage} damage to the {}", limb_name(part)),
@@ -346,9 +355,28 @@ pub fn log_text(arena: &Arena) -> String {
             EventKind::Afflicted { .. } | EventKind::Bled { .. } => {
                 writeln!(text, "[{:>5}] {}", event.tick, effect_line(event.kind))
             }
+            EventKind::Gather {
+                fighter,
+                spell,
+                amount,
+            } => writeln!(
+                text,
+                "[{:>5}] fighter {} casts {}: {amount} elements gathered",
+                event.tick,
+                fighter.0,
+                spell_name(arena, fighter, spell)
+            ),
         };
     }
     text
+}
+
+/// The name of `fighter`'s spell `spell`, "?" if there is none.
+fn spell_name(arena: &Arena, fighter: FighterId, spell: usize) -> &str {
+    arena
+        .fighter(fighter)
+        .and_then(|f| f.spells.get(spell))
+        .map_or("?", |s| s.name.as_str())
 }
 
 /// The log's line for a lasting effect left by a hit, or a bleeding's damage.
@@ -402,7 +430,8 @@ pub fn places(arena: &Arena) -> Vec<u32> {
                     | EventKind::Pact { .. }
                     | EventKind::PactBroken { .. }
                     | EventKind::Afflicted { .. }
-                    | EventKind::Bled { .. } => false,
+                    | EventKind::Bled { .. }
+                    | EventKind::Gather { .. } => false,
                 })
                 .map_or(u64::MAX, |e| u64::from(e.tick))
         })

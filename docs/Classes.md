@@ -104,13 +104,14 @@ Chaque étape laisse le jeu jouable avec mirmillon et augure, qui servent de ter
    - un combattant créé et les combattants des rivaux prennent la configuration où ils sont le plus à l'aise (`CareerFighter::preferred_loadout`) ;
    - l'ambidextrie ne pèse pas sur le tirage : elle retire seulement le malus de la deuxième arme.
 7. **Équipement refusé : l'armure seule** (`fighter/equipment.rs`, `fighter/fame.rs`, `data/fighter.ron`, `club_screen`, `fr.ftl`) — fait : `Refused` ne garde que `armour` ; le malus d'attaque (`weaponless_attack_percent`), les coups à mains nues, les bonus de célébrité `refused_weapon` et `refused_all` et la case « Sans arme » sont retirés. L'observation de l'IA apprise garde la place de l'arme, toujours à 0, jusqu'à l'étape 11.
-8. **Éléments du sol** (`data/combat.ron`, `combat.rs`, `design_data::Cost`) :
-   - chaque type d'arène dit son élément (sable, pierre) ;
-   - le combattant porte une réserve d'éléments, avec un maximum ;
-   - un sort peut coûter plusieurs choses (endurance et éléments) ;
-   - Récolte : un sort sans cible ni dégâts, qui remplit la réserve ;
-   - Jette : une puissance et un type de dégâts par élément (pierre contondante, sable avec sa baisse de précision de l'étape 3) ;
-   - l'IA utilitaire sait quand ramasser et quand jeter.
+8. **Éléments du sol** (`data/combat.ron`, `combat.rs`, `design_data::Cost`) — fait :
+   - chaque type d'arène dit son élément (`combat::Element`) : sable pour le sable, pierre pour les piliers et l'arène étroite ;
+   - le combattant porte une réserve d'éléments (`Fighter::elements`), vide au départ, jusqu'au `max_elements` de sa classe ;
+   - un coût est une somme, tout entière due (`Cost` : mana, endurance, éléments ; `cost: (endurance: 5)` dans `data/classes.ron`) ;
+   - Récolte : un sort qui ramasse (`gathers`), lancé sur soi, sans cible ni dégâts, sur un sol qui a un élément (`combat::gather`, `EventKind::Gather`) ;
+   - Jette : une puissance, un type de dégâts et une baisse de précision par élément (`thrown`), mis à la place des siens par `Arena::with_layout` ;
+   - l'IA utilitaire donne à la récolte 90 % de la valeur de son meilleur jet tant que la réserve n'est pas pleine : elle jette dès qu'elle peut payer.
+   Aucune classe ne s'en sert avant l'étape 10 : le combat de mirmillon et augure ne change pas.
 9. **Mines** (`combat.rs`, `melee.rs`, `ai.rs`, `fight_view.rs`) :
    - des objets sur l'arène (position, poseur, délai d'activation, 30 secondes de vie), lancés à un point de chute ;
    - l'explosion au contact de quiconque, des dégâts de zone, une chance d'étourdir et de trancher pour chaque combattant touché ;

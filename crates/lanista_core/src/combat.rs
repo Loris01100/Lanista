@@ -73,6 +73,9 @@ pub struct Arena {
     pub speed_percent: u32,
     /// What stands on the floor; nothing, unless set with [`Arena::with_layout`].
     pub pillars: Vec<Pillar>,
+    /// What the floor offers to gather (`SpellData::gathers`); nothing, unless set with
+    /// [`Arena::with_layout`].
+    pub element: Option<Element>,
     /// How fighters make and break pacts; never, unless set with [`Arena::with_pacts`].
     pub pact_rules: PactRules,
     /// The pairs of allies, who do not aim at each other; each fighter has one at most.
@@ -123,6 +126,13 @@ impl ArenaKind {
     pub const ALL: [Self; 3] = [Self::Sand, Self::Pillars, Self::Narrow];
 }
 
+/// What a fighter may gather from an arena's floor and throw (`SpellData::thrown`).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Deserialize)]
+pub enum Element {
+    Sand,
+    Stone,
+}
+
 /// A round pillar: fighters walk around it, and ranged spells do not go through it.
 #[derive(Debug, Clone, Copy, PartialEq, Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -143,6 +153,8 @@ pub struct ArenaLayout {
     pub height: f64,
     /// Percentage of their speed fighters walk at.
     pub speed_percent: u32,
+    /// What its floor offers to gather.
+    pub element: Element,
     pub pillars: Vec<Pillar>,
 }
 
@@ -308,6 +320,7 @@ impl Arena {
             bleed: BleedRules::NEVER,
             speed_percent: 100,
             pillars: Vec::new(),
+            element: None,
             pact_rules: PactRules::NEVER,
             pacts: Vec::new(),
             hunts: Vec::new(),
@@ -375,14 +388,23 @@ impl Arena {
             .any(|&pact| pact == (a, b) || pact == (b, a))
     }
 
-    /// This arena on `layout`'s floor: its size, its pillars, and its ground slowing
-    /// fighters down to its speed percentage.
+    /// This arena on `layout`'s floor: its size, its pillars, its ground slowing
+    /// fighters down to its speed percentage, and its element, which the fighters'
+    /// throwing spells now hit with (`SpellData::thrown`).
     #[must_use]
     pub fn with_layout(mut self, layout: &ArenaLayout) -> Self {
         self.width = layout.width;
         self.height = layout.height;
         self.speed_percent = layout.speed_percent;
         self.pillars.clone_from(&layout.pillars);
+        self.element = Some(layout.element);
+        for spell in self.fighters.iter_mut().flat_map(|f| &mut f.spells) {
+            if let Some(thrown) = spell.thrown.get(&layout.element) {
+                spell.power = thrown.power;
+                spell.damage_kind = thrown.damage_kind;
+                spell.accuracy_drop = thrown.accuracy_drop;
+            }
+        }
         self
     }
 
@@ -758,10 +780,48 @@ fn cast_order(arena: &mut Arena) -> Vec<usize> {
 /// down for `StunRules::ticks`.
 fn cast_spells(arena: &mut Arena) {
     for i in cast_order(arena) {
-        if let Some((spell, target, t)) = ready_cast(arena, i) {
+        if let Some(spell) = ready_gather(arena, i) {
+            gather(arena, i, spell);
+        } else if let Some((spell, target, t)) = ready_cast(arena, i) {
             cast(arena, i, spell, (target, t));
         }
     }
+}
+
+/// The gathering spell fighter `i` casts on itself (`SpellData::gathers`), if it may:
+/// standing, the spell ready and affordable, on a floor with an element.
+fn ready_gather(arena: &Arena, i: usize) -> Option<usize> {
+    let caster = &arena.fighters[i];
+    let Action::Cast { spell, target } = caster.action else {
+        return None;
+    };
+    let ready = target == caster.id
+        && arena.element.is_some()
+        && caster.spells.get(spell).is_some_and(|s| s.gathers > 0)
+        && caster.is_standing()
+        && caster.can_cast(spell);
+    ready.then_some(spell)
+}
+
+/// Fighter `i` casts its gathering spell `spell`: what it gathers fills its reserve, up
+/// to its max.
+fn gather(arena: &mut Arena, i: usize, spell: usize) {
+    let caster = &mut arena.fighters[i];
+    let before = caster.elements.current;
+    caster.elements.current = before
+        .saturating_add(caster.spells[spell].gathers)
+        .min(caster.elements.max);
+    caster.spend(spell);
+    caster.action = Action::Wait;
+    let (fighter, amount) = (caster.id, caster.elements.current - before);
+    arena.log.push(Event {
+        tick: arena.tick,
+        kind: EventKind::Gather {
+            fighter,
+            spell,
+            amount,
+        },
+    });
 }
 
 /// The spell, target and target index of fighter `i`'s cast, if it may land: both
@@ -778,6 +838,7 @@ fn ready_cast(arena: &Arena, i: usize) -> Option<(usize, FighterId, usize)> {
         && caster.id != target
         && !arena.allied(caster.id, target)
         && caster.can_cast(spell)
+        && caster.spells[spell].gathers == 0
         && edge_distance(caster, defender) <= caster.spells[spell].reach
         && (caster.spells[spell].range != Range::Ranged
             || !shot_blocked(&arena.pillars, caster.position, defender.position));
@@ -1065,7 +1126,7 @@ mod tests {
     use rand_chacha::rand_core::Rng;
 
     use super::*;
-    use crate::fighter::{FighterId, Gauge, Stats, test_fighter as fighter};
+    use crate::fighter::{FighterId, Gauge, Stats, test_fighter as fighter, test_thrower};
 
     struct Fixed(Action);
 
@@ -1910,6 +1971,95 @@ mod tests {
         assert_eq!(arena.fighters[0].position, Vec2::new(RADIUS, 10.0 - RADIUS));
     }
 
+    /// A 20 m floor of `element`, nothing on it.
+    fn floor_of(element: Element) -> ArenaLayout {
+        ArenaLayout {
+            width: 20.0,
+            height: 20.0,
+            speed_percent: 100,
+            element,
+            pillars: Vec::new(),
+        }
+    }
+
+    /// A thrower (`test_thrower`) 0.5 m from a test fighter, on a floor of `element`.
+    fn throwing_duel(element: Option<Element>) -> Arena {
+        let fighters = vec![test_thrower(0, 5.0, 5.0), fighter(1, 6.5, 5.0)];
+        let arena = Arena::new(20.0, 20.0, fighters, 0);
+        match element {
+            Some(element) => arena.with_layout(&floor_of(element)),
+            None => arena,
+        }
+    }
+
+    const GATHER: Action = Action::Cast {
+        spell: 1,
+        target: FighterId(0),
+    };
+    const THROW: Action = Action::Cast {
+        spell: 2,
+        target: FighterId(1),
+    };
+
+    #[test]
+    fn a_fighter_gathers_the_floor_s_element_up_to_its_max_and_throws_it() {
+        let mut arena = throwing_duel(Some(Element::Stone));
+        play(&mut arena, &[GATHER, Action::Wait], 31);
+        // Twice 3, kept to 4; 5 endurance each time.
+        assert_eq!(arena.fighters[0].elements.current, 4);
+        assert_eq!(arena.fighters[0].endurance.current, 40);
+        assert_eq!(arena.fighters[1].hp, 100);
+        let text = crate::log::log_text(&arena);
+        assert!(text.contains("fighter 0 casts Récolte: 3 elements gathered"));
+        assert!(text.contains("fighter 0 casts Récolte: 1 elements gathered"));
+        let throw = arena.fighters[0].spells[2].clone();
+        assert_eq!((throw.power, throw.damage_kind), (200, DamageKind::Blunt));
+        // Thrown at the next decision, tick 36.
+        play(&mut arena, &[THROW, Action::Wait], 6);
+        let damage = spell_damage(&arena.fighters[0].stats, &arena.fighters[1].stats, &throw);
+        assert_eq!(arena.fighters[1].hp, 100 - damage);
+        // Both costs paid.
+        assert_eq!(arena.fighters[0].elements.current, 2);
+        assert_eq!(arena.fighters[0].endurance.current, 35);
+    }
+
+    #[test]
+    fn a_throw_needs_all_its_costs_and_a_gathering_a_floor_with_an_element() {
+        // No elements gathered yet.
+        let mut arena = throwing_duel(Some(Element::Stone));
+        play(&mut arena, &[THROW, Action::Wait], 1);
+        assert_eq!(arena.fighters[1].hp, 100);
+        // Elements, but no endurance.
+        let mut arena = throwing_duel(Some(Element::Stone));
+        arena.fighters[0].elements.current = 2;
+        arena.fighters[0].endurance.current = 4;
+        play(&mut arena, &[THROW, Action::Wait], 1);
+        assert_eq!(arena.fighters[1].hp, 100);
+        // Nothing to gather, nor anyone to gather on but oneself.
+        let mut arena = throwing_duel(None);
+        play(&mut arena, &[GATHER, Action::Wait], 1);
+        assert_eq!(arena.fighters[0].elements.current, 0);
+        assert_eq!(arena.fighters[0].endurance.current, 50);
+        let mut arena = throwing_duel(Some(Element::Stone));
+        let aimed = Action::Cast {
+            spell: 1,
+            target: FighterId(1),
+        };
+        play(&mut arena, &[aimed, Action::Wait], 1);
+        assert_eq!(arena.fighters[0].elements.current, 0);
+        assert_eq!(arena.log, Vec::new());
+    }
+
+    #[test]
+    fn thrown_sand_takes_accuracy_off() {
+        let mut arena = throwing_duel(Some(Element::Sand));
+        assert_eq!(arena.fighters[0].spells[2].power, 50);
+        arena.fighters[0].elements.current = 2;
+        play(&mut arena, &[THROW, Action::Wait], 1);
+        assert!(arena.fighters[1].hp < 100);
+        assert_eq!(arena.fighters[1].accuracy(), 24);
+    }
+
     fn pillar(x: f64, y: f64, radius: f64) -> Pillar {
         Pillar { x, y, radius }
     }
@@ -1920,6 +2070,7 @@ mod tests {
             width: 20.0,
             height: 20.0,
             speed_percent: 50,
+            element: Element::Sand,
             pillars: Vec::new(),
         };
         let mut arena = Arena::new(1.0, 1.0, vec![fighter(0, 5.0, 5.0)], 0).with_layout(&floor);

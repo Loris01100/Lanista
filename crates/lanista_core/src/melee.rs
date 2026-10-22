@@ -109,6 +109,7 @@ pub fn melee_layout(layout: &ArenaLayout, count: usize, rules: &MeleeRules) -> A
         width: layout.width * scale,
         height: layout.height * scale,
         speed_percent: layout.speed_percent,
+        element: layout.element,
         pillars: layout
             .pillars
             .iter()
