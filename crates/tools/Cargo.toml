@@ -16,3 +16,29 @@ rayon = "1.12.0"
 
 [lints]
 workspace = true
+
+# No doctests: rustdoc would only compile an empty run.
+[lib]
+doctest = false
+
+# The binaries have no unit tests; tests/ runs them through CARGO_BIN_EXE_*.
+
+[[bin]]
+name = "batch"
+test = false
+
+[[bin]]
+name = "calibrate"
+test = false
+
+[[bin]]
+name = "career"
+test = false
+
+[[bin]]
+name = "compare"
+test = false
+
+[[bin]]
+name = "simulate"
+test = false

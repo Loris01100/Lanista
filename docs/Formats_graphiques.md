@@ -1,6 +1,6 @@
 # Formats graphiques et sonores
 
-Ce document fixe les formats des sprites, arènes, effets et sons du jeu, et la façon de les exporter depuis Aseprite. Il complète la [feuille de route](Gladiator_Manager_Feuille_de_route_Rust.md) (phase 6 : apparence aléatoire des combattants).
+Ce document fixe les formats des sprites, arènes, effets et sons du jeu, et la façon de les exporter depuis Aseprite. Il complète la [feuille de route](feuille_de_route/README.md) (phase 6 : apparence aléatoire des combattants).
 
 ## Règles communes
 

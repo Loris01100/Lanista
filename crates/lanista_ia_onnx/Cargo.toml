@@ -17,3 +17,7 @@ workspace = true
 [dev-dependencies]
 lanista_core = { path = "../lanista_core" }
 serde_json = "1.0.154"
+
+# No doctests: rustdoc would only compile an empty run.
+[lib]
+doctest = false

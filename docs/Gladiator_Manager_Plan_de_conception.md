@@ -16,7 +16,7 @@ Gladiator Manager est un projet passion et d'apprentissage, sans objectif commer
 
 ## Vision et piliers
 
-Un jeu de management de gladiateurs en 2D, en Rust sur un moteur maison (voir la [feuille de route technique](Gladiator_Manager_Feuille_de_route_Rust.md)), où le joueur dirige un club sans jamais contrôler les combats. Il prépare, inscrit et soigne ses combattants, puis regarde en spectateur une IA les faire combattre. Le joueur ne peut pas perdre : il vise la complétion de tous les succès, et chaque combattant perdu l'oblige à remonter la pente.
+Un jeu de management de gladiateurs en 2D, en Rust sur un moteur maison (voir la [feuille de route technique](feuille_de_route/README.md)), où le joueur dirige un club sans jamais contrôler les combats. Il prépare, inscrit et soigne ses combattants, puis regarde en spectateur une IA les faire combattre. Le joueur ne peut pas perdre : il vise la complétion de tous les succès, et chaque combattant perdu l'oblige à remonter la pente.
 
 Quatre piliers guident toutes les décisions :
 
@@ -336,7 +336,7 @@ Chaque fonctionnalité est débloquée progressivement, présentée par une pop-
 
 ## Architecture technique et feuille de route
 
-Le plan Godot (C#, Godot RL Agents) est abandonné pour un moteur maison en Rust. La pile technique, l'architecture, les règles de déterminisme, les outils et les phases du développement, avec leurs jalons, sont tenus dans la [feuille de route technique](Gladiator_Manager_Feuille_de_route_Rust.md), qui fait foi. La règle d'or reste celle du départ : la logique du jeu est séparée de l'affichage, pour pouvoir simuler sans rendu, entraîner l'IA et tester ; le même moteur de combat tourne à l'écran, en arrière-plan et pendant l'entraînement. Le jeu est complet avec l'IA scriptée à la fin de la phase 6 ; le machine learning arrive ensuite comme amélioration.
+Le plan Godot (C#, Godot RL Agents) est abandonné pour un moteur maison en Rust. La pile technique, l'architecture, les règles de déterminisme, les outils et les phases du développement, avec leurs jalons, sont tenus dans la [feuille de route technique](feuille_de_route/README.md), qui fait foi. La règle d'or reste celle du départ : la logique du jeu est séparée de l'affichage, pour pouvoir simuler sans rendu, entraîner l'IA et tester ; le même moteur de combat tourne à l'écran, en arrière-plan et pendant l'entraînement. Le jeu est complet avec l'IA scriptée à la fin de la phase 6 ; le machine learning arrive ensuite comme amélioration.
 
 ## Décisions prises et points ouverts
 
