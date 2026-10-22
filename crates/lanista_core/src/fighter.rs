@@ -467,6 +467,7 @@ pub(crate) fn test_fighter(id: u32, x: f64, y: f64) -> Fighter {
             accuracy_drop: None,
             gathers: 0,
             thrown: std::collections::BTreeMap::new(),
+            mine: false,
         }],
         loadouts: Vec::new(),
     };

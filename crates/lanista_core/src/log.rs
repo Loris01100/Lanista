@@ -80,6 +80,21 @@ pub enum EventKind {
         spell: usize,
         amount: u32,
     },
+    /// `fighter` cast its mine spell `spell`: a mine lies at its target's feet
+    /// (`Arena::mines`).
+    Lay {
+        fighter: FighterId,
+        spell: usize,
+    },
+    /// `owner`'s mine, laid with its spell `spell`, blasted and took `damage` HP from
+    /// `target`, on `part`, drawn only in an arena with rules; `owner` itself may be one.
+    Blast {
+        owner: FighterId,
+        spell: usize,
+        target: FighterId,
+        damage: u32,
+        part: Option<Location>,
+    },
     /// `fighter`'s bleeding `part` took `damage` HP, dealt by `source`; a `Death` or
     /// `Surrender` may follow.
     Bled {
@@ -168,17 +183,26 @@ impl Report {
                         f.stuns += 1;
                     }
                 }
+                // A fighter caught in its own mine deals itself nothing.
                 EventKind::Bled {
-                    fighter,
-                    source,
+                    fighter: target,
+                    source: owner,
+                    damage,
+                    ..
+                }
+                | EventKind::Blast {
+                    owner,
+                    target,
                     damage,
                     ..
                 } => {
-                    if let Some(s) = index(source).and_then(|i| fighters.get_mut(i)) {
-                        s.damage_dealt = s.damage_dealt.saturating_add(damage);
+                    if let Some(o) = index(owner).and_then(|i| fighters.get_mut(i))
+                        && owner != target
+                    {
+                        o.damage_dealt = o.damage_dealt.saturating_add(damage);
                     }
-                    if let Some(f) = index(fighter).and_then(|i| fighters.get_mut(i)) {
-                        f.damage_taken = f.damage_taken.saturating_add(damage);
+                    if let Some(t) = index(target).and_then(|i| fighters.get_mut(i)) {
+                        t.damage_taken = t.damage_taken.saturating_add(damage);
                     }
                 }
                 EventKind::Death { .. }
@@ -190,7 +214,7 @@ impl Report {
                 | EventKind::PactBroken { .. }
                 | EventKind::Eliminated { .. }
                 | EventKind::Afflicted { .. } => {}
-                EventKind::Gather { fighter, .. } => {
+                EventKind::Gather { fighter, .. } | EventKind::Lay { fighter, .. } => {
                     if let Some(f) = index(fighter).and_then(|i| fighters.get_mut(i)) {
                         f.spells_cast += 1;
                     }
@@ -355,17 +379,14 @@ pub fn log_text(arena: &Arena) -> String {
             EventKind::Afflicted { .. } | EventKind::Bled { .. } => {
                 writeln!(text, "[{:>5}] {}", event.tick, effect_line(event.kind))
             }
-            EventKind::Gather {
-                fighter,
-                spell,
-                amount,
-            } => writeln!(
-                text,
-                "[{:>5}] fighter {} casts {}: {amount} elements gathered",
-                event.tick,
-                fighter.0,
-                spell_name(arena, fighter, spell)
-            ),
+            EventKind::Gather { .. } | EventKind::Lay { .. } | EventKind::Blast { .. } => {
+                writeln!(
+                    text,
+                    "[{:>5}] {}",
+                    event.tick,
+                    ground_line(arena, event.kind)
+                )
+            }
         };
     }
     text
@@ -377,6 +398,40 @@ fn spell_name(arena: &Arena, fighter: FighterId, spell: usize) -> &str {
         .fighter(fighter)
         .and_then(|f| f.spells.get(spell))
         .map_or("?", |s| s.name.as_str())
+}
+
+/// The log's line for elements gathered, or a mine laid or blasting.
+fn ground_line(arena: &Arena, kind: EventKind) -> String {
+    match kind {
+        EventKind::Gather {
+            fighter,
+            spell,
+            amount,
+        } => format!(
+            "fighter {} casts {}: {amount} elements gathered",
+            fighter.0,
+            spell_name(arena, fighter, spell)
+        ),
+        EventKind::Lay { fighter, spell } => format!(
+            "fighter {} casts {}: a mine is laid",
+            fighter.0,
+            spell_name(arena, fighter, spell)
+        ),
+        EventKind::Blast {
+            owner,
+            spell,
+            target,
+            damage,
+            part,
+        } => format!(
+            "fighter {}'s {} blasts: fighter {} takes {damage} damage{}",
+            owner.0,
+            spell_name(arena, owner, spell),
+            target.0,
+            part.map_or(String::new(), |p| format!(" to the {}", limb_name(p)))
+        ),
+        _ => String::new(),
+    }
 }
 
 /// The log's line for a lasting effect left by a hit, or a bleeding's damage.
@@ -431,7 +486,9 @@ pub fn places(arena: &Arena) -> Vec<u32> {
                     | EventKind::PactBroken { .. }
                     | EventKind::Afflicted { .. }
                     | EventKind::Bled { .. }
-                    | EventKind::Gather { .. } => false,
+                    | EventKind::Gather { .. }
+                    | EventKind::Lay { .. }
+                    | EventKind::Blast { .. } => false,
                 })
                 .map_or(u64::MAX, |e| u64::from(e.tick))
         })

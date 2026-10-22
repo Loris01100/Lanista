@@ -49,6 +49,18 @@
         arm_seconds: 5,
         leg_seconds: 5,
     ),
+    // A mine spell (mine: true in data/classes.ron) lays a mine at its target's feet,
+    // seen by everyone. Armed after arm_ticks (30 per second), it blasts under whoever
+    // touches it (radius, in meters), its layer too, hitting everyone within
+    // blast_radius with the spell's power and damage kind, never missed; gone after
+    // life_ticks. Past max_per_fighter, a fighter's oldest mine is gone. Provisional.
+    mines: (
+        arm_ticks: 45,
+        life_ticks: 900,
+        radius: 0.3,
+        blast_radius: 1.5,
+        max_per_fighter: 3,
+    ),
     // Each weapon type's auto attack, a spell outside the class's three, cheap: a fighter
     // strikes with it only once it can pay for none of its spells, so it always has a
     // little attack left. The weapon types wait for balancing.

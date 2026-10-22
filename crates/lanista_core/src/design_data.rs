@@ -162,6 +162,10 @@ pub struct SpellData {
     /// `damage_kind` and `accuracy_drop`, set by `Arena::with_layout`; nothing if left out.
     #[serde(default)]
     pub thrown: BTreeMap<Element, Thrown>,
+    /// Lays a mine at its target's feet instead of hitting it: the mine blasts with this
+    /// spell's power, range and damage kind (`combat::MineRules`); false if left out.
+    #[serde(default)]
+    pub mine: bool,
 }
 
 /// How a spell hits with an element of the floor (`SpellData::thrown`).

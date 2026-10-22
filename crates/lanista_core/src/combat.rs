@@ -76,6 +76,11 @@ pub struct Arena {
     /// What the floor offers to gather (`SpellData::gathers`); nothing, unless set with
     /// [`Arena::with_layout`].
     pub element: Option<Element>,
+    /// How mines wait, last and blast; laid mines vanish at once, unless set with
+    /// [`Arena::with_rules`].
+    pub mine_rules: MineRules,
+    /// The mines on the floor, oldest first.
+    pub mines: Vec<Mine>,
     /// How fighters make and break pacts; never, unless set with [`Arena::with_pacts`].
     pub pact_rules: PactRules,
     /// The pairs of allies, who do not aim at each other; each fighter has one at most.
@@ -104,6 +109,7 @@ pub struct CombatRules {
     /// Where a hit lands: relative chances of the head, the body, an arm and a leg.
     pub hits: LocationWeights,
     pub bleed: BleedRules,
+    pub mines: MineRules,
     /// Each weapon type's auto attack, by key: what a fighter strikes with once it can
     /// pay for none of its spells (`ClassData::weapon`).
     pub weapons: BTreeMap<String, SpellData>,
@@ -271,6 +277,47 @@ impl BleedRules {
     }
 }
 
+/// How a mine laid by a spell (`SpellData::mine`) waits, lasts and blasts, from
+/// `data/combat.ron`.
+#[derive(Debug, Clone, Copy, PartialEq, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct MineRules {
+    /// Ticks from its fall until it blasts under whoever touches it.
+    pub arm_ticks: u32,
+    /// Ticks from its fall until it is gone, blasted or not.
+    pub life_ticks: u32,
+    /// In meters: a fighter touching it once armed sets it off.
+    pub radius: f64,
+    /// It hits every fighter whose center is this close, in meters.
+    pub blast_radius: f64,
+    /// A fighter's mines on the floor at once: a new one takes the oldest's place.
+    pub max_per_fighter: usize,
+}
+
+impl MineRules {
+    /// A mine is gone as soon as it is laid.
+    pub const NEVER: Self = Self {
+        arm_ticks: 0,
+        life_ticks: 0,
+        radius: 0.0,
+        blast_radius: 0.0,
+        max_per_fighter: 0,
+    };
+}
+
+/// A mine on the floor, seen by everyone.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct Mine {
+    pub position: Vec2,
+    /// Who laid it, with which of its spells: the blast hits with that spell.
+    pub owner: FighterId,
+    pub spell: usize,
+    /// Tick from which it blasts under whoever touches it.
+    pub armed_at: u32,
+    /// Tick it is gone at.
+    pub gone_at: u32,
+}
+
 /// What a spell hits with: a blunt blow stuns more often than a cutting one, a cutting
 /// one may sever a limb or the head, a neutral one (spells without an element yet) does
 /// neither.
@@ -321,6 +368,8 @@ impl Arena {
             speed_percent: 100,
             pillars: Vec::new(),
             element: None,
+            mine_rules: MineRules::NEVER,
+            mines: Vec::new(),
             pact_rules: PactRules::NEVER,
             pacts: Vec::new(),
             hunts: Vec::new(),
@@ -353,6 +402,7 @@ impl Arena {
         self.cut = rules.cut;
         self.hits = Some(rules.hits);
         self.bleed = rules.bleed;
+        self.mine_rules = rules.mines;
         self
     }
 
@@ -408,6 +458,17 @@ impl Arena {
         self
     }
 
+    /// What fighters walk around: the pillars, and the mines on the floor, armed or not.
+    #[must_use]
+    pub fn obstacles(&self) -> Vec<Pillar> {
+        let mines = self.mines.iter().map(|m| Pillar {
+            x: m.position.x,
+            y: m.position.y,
+            radius: self.mine_rules.radius,
+        });
+        self.pillars.iter().copied().chain(mines).collect()
+    }
+
     /// At most one fighter still fighting: the others are dead, gave up, were knocked
     /// out or lost a limb.
     #[must_use]
@@ -444,6 +505,7 @@ pub fn tick(arena: &mut Arena, ais: &mut [Box<dyn CombatAi>]) {
     move_fighters(arena);
     separate(arena);
     keep_inside(arena);
+    blast_mines(arena);
     cast_spells(arena);
     eliminate(arena);
     arena.tick += 1;
@@ -783,7 +845,11 @@ fn cast_spells(arena: &mut Arena) {
         if let Some(spell) = ready_gather(arena, i) {
             gather(arena, i, spell);
         } else if let Some((spell, target, t)) = ready_cast(arena, i) {
-            cast(arena, i, spell, (target, t));
+            if arena.fighters[i].spells[spell].mine {
+                lay(arena, i, spell, t);
+            } else {
+                cast(arena, i, spell, (target, t));
+            }
         }
     }
 }
@@ -822,6 +888,112 @@ fn gather(arena: &mut Arena, i: usize, spell: usize) {
             amount,
         },
     });
+}
+
+/// Fighter `i` lays a mine with `spell` at the feet of fighter `t`; past
+/// `max_per_fighter`, its oldest mine is gone.
+// ponytail: the mine falls on its target's feet; a free landing point when an AI needs one.
+fn lay(arena: &mut Arena, i: usize, spell: usize, t: usize) {
+    let position = arena.fighters[t].position;
+    let caster = &mut arena.fighters[i];
+    caster.spend(spell);
+    caster.action = Action::Wait;
+    let owner = caster.id;
+    let (tick, rules) = (arena.tick, arena.mine_rules);
+    arena.mines.push(Mine {
+        position,
+        owner,
+        spell,
+        armed_at: tick.saturating_add(rules.arm_ticks),
+        gone_at: tick.saturating_add(rules.life_ticks),
+    });
+    if arena.mines.iter().filter(|m| m.owner == owner).count() > rules.max_per_fighter
+        && let Some(oldest) = arena.mines.iter().position(|m| m.owner == owner)
+    {
+        arena.mines.remove(oldest);
+    }
+    arena.log.push(Event {
+        tick,
+        kind: EventKind::Lay {
+            fighter: owner,
+            spell,
+        },
+    });
+}
+
+/// Distance between two points, in meters.
+fn distance(a: Vec2, b: Vec2) -> f64 {
+    Vec2::new(b.x - a.x, b.y - a.y).length()
+}
+
+/// Mines whose time is up are gone; an armed mine touched by a fighter still in the
+/// fight blasts (`blast`).
+fn blast_mines(arena: &mut Arena) {
+    let tick = arena.tick;
+    arena.mines.retain(|m| tick < m.gone_at);
+    let reach = RADIUS + arena.mine_rules.radius;
+    let mut k = 0;
+    while k < arena.mines.len() {
+        let mine = arena.mines[k];
+        let touched = tick >= mine.armed_at
+            && arena
+                .fighters
+                .iter()
+                .any(|f| f.is_fighting() && distance(f.position, mine.position) < reach);
+        if touched {
+            arena.mines.remove(k);
+            blast(arena, mine);
+        } else {
+            k += 1;
+        }
+    }
+}
+
+/// `mine` blasts: every fighter still in the fight within `blast_radius`, its owner
+/// included, takes its spell's damage, never missed, on a part drawn by `Arena::hits`,
+/// then the hit's effects (`strike`, `afflict`); the damage to others counts for its owner.
+fn blast(arena: &mut Arena, mine: Mine) {
+    let Some(o) = usize::try_from(mine.owner.0)
+        .ok()
+        .filter(|&o| o < arena.fighters.len())
+    else {
+        return;
+    };
+    let data = &arena.fighters[o].spells[mine.spell];
+    let (kind, bleed_percent, accuracy_drop) =
+        (data.damage_kind, data.bleed_percent, data.accuracy_drop);
+    for t in 0..arena.fighters.len() {
+        let target = &arena.fighters[t];
+        if !target.is_fighting()
+            || distance(target.position, mine.position) > arena.mine_rules.blast_radius
+        {
+            continue;
+        }
+        let owner = &arena.fighters[o];
+        let amount = spell_damage(&owner.stats, &target.stats, &owner.spells[mine.spell]);
+        let part = arena.hits.map(|w| roll_location(&mut arena.rng, &w));
+        let target = &mut arena.fighters[t];
+        let hp_before = target.hp;
+        target.take_damage(amount);
+        let (damage, id) = (hp_before - target.hp, target.id);
+        arena.log.push(Event {
+            tick: arena.tick,
+            kind: EventKind::Blast {
+                owner: mine.owner,
+                spell: mine.spell,
+                target: id,
+                damage,
+                part,
+            },
+        });
+        let cut = part.filter(|_| kind == DamageKind::Cutting);
+        strike(arena, (id, t), (damage, false), kind, cut);
+        afflict(arena, (mine.owner, t), (bleed_percent, part), accuracy_drop);
+        if t != o {
+            let owner = &mut arena.fighters[o];
+            owner.round_damage = owner.round_damage.saturating_add(damage);
+        }
+    }
 }
 
 /// The spell, target and target index of fighter `i`'s cast, if it may land: both
@@ -2058,6 +2230,76 @@ mod tests {
         play(&mut arena, &[THROW, Action::Wait], 1);
         assert!(arena.fighters[1].hp < 100);
         assert_eq!(arena.fighters[1].accuracy(), 24);
+    }
+
+    const MINES: MineRules = MineRules {
+        arm_ticks: 30,
+        life_ticks: 300,
+        radius: 0.3,
+        blast_radius: 1.5,
+        max_per_fighter: 1,
+    };
+    const LAY: Action = Action::Cast {
+        spell: 0,
+        target: FighterId(1),
+    };
+
+    /// Fighter 0, its strike made a mine spell reaching 20 m, ready again after
+    /// `cooldown` ticks, aims at fighter 1, 4 m away; fighter 2 stands just behind it.
+    fn mining(cooldown: u32) -> Arena {
+        let fighters = vec![
+            fighter(0, 5.0, 5.0),
+            fighter(1, 10.0, 5.0),
+            fighter(2, 11.0, 5.0),
+        ];
+        let mut arena = Arena::new(20.0, 20.0, fighters, 0);
+        arena.mine_rules = MINES;
+        let spell = &mut arena.fighters[0].spells[0];
+        (spell.mine, spell.range, spell.reach, spell.cooldown) =
+            (true, Range::Ranged, 20.0, cooldown);
+        arena
+    }
+
+    #[test]
+    fn a_mine_falls_at_its_target_s_feet_and_blasts_on_everyone_around_once_armed() {
+        let mut arena = mining(600);
+        let actions = [LAY, Action::Wait, Action::Wait];
+        play(&mut arena, &actions, 1);
+        assert_eq!(arena.mines.len(), 1);
+        assert_eq!(arena.mines[0].position, Vec2::new(10.0, 5.0));
+        assert_eq!(arena.fighters[0].endurance.current, 40);
+        play(&mut arena, &actions, 29);
+        assert_eq!(arena.fighters[1].hp, 100, "not armed yet");
+        play(&mut arena, &actions, 1);
+        assert_eq!(arena.mines, Vec::new());
+        // Ranged 10 against 10, power 100: 10 to both, nothing to the layer, 5 m off.
+        let hp: Vec<u32> = arena.fighters.iter().map(|f| f.hp).collect();
+        assert_eq!(hp, [100, 90, 90]);
+        assert_eq!(crate::log::Report::new(&arena).fighters[0].damage_dealt, 20);
+        let text = crate::log::log_text(&arena);
+        assert!(text.contains("fighter 0 casts Coup: a mine is laid"));
+        assert!(text.contains("fighter 0's Coup blasts: fighter 2 takes 10 damage"));
+    }
+
+    #[test]
+    fn an_untouched_mine_is_gone_in_time_and_a_new_one_takes_the_oldest_s_place() {
+        let mut arena = mining(60);
+        let away = Action::Move(Vec2::new(1.0, 0.0));
+        arena.fighters.pop();
+        // Laid at tick 0, then at tick 60 where fighter 1 walked to.
+        play(&mut arena, &[LAY, away], 61);
+        assert_eq!(arena.mines.len(), 1);
+        assert!(arena.mines[0].position.x > 15.0);
+        play(&mut arena, &[Action::Wait, away], 299);
+        assert_eq!(arena.mines.len(), 1);
+        play(&mut arena, &[Action::Wait, away], 1);
+        assert_eq!(arena.mines, Vec::new());
+        assert!(
+            !arena
+                .log
+                .iter()
+                .any(|e| matches!(e.kind, EventKind::Blast { .. }))
+        );
     }
 
     fn pillar(x: f64, y: f64, radius: f64) -> Pillar {

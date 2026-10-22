@@ -112,12 +112,13 @@ Chaque étape laisse le jeu jouable avec mirmillon et augure, qui servent de ter
    - Jette : une puissance, un type de dégâts et une baisse de précision par élément (`thrown`), mis à la place des siens par `Arena::with_layout` ;
    - l'IA utilitaire donne à la récolte 90 % de la valeur de son meilleur jet tant que la réserve n'est pas pleine : elle jette dès qu'elle peut payer.
    Aucune classe ne s'en sert avant l'étape 10 : le combat de mirmillon et augure ne change pas.
-9. **Mines** (`combat.rs`, `melee.rs`, `ai.rs`, `fight_view.rs`) :
-   - des objets sur l'arène (position, poseur, délai d'activation, 30 secondes de vie), lancés à un point de chute ;
-   - l'explosion au contact de quiconque, des dégâts de zone, une chance d'étourdir et de trancher pour chaque combattant touché ;
-   - un nombre maximum de mines au sol ;
-   - l'IA utilitaire les voit et les contourne, comme les piliers (`combat::path_direction`) ;
-   - l'écran de combat les dessine (format dans `docs/Formats_graphiques.md`).
+9. **Mines** (`combat.rs`, `ai.rs`, `fight_view.rs`) — fait :
+   - un sort de mine (`mine: true`) pose une mine (`combat::Mine`, `Arena::mines` : position, poseur, sort, armée après `arm_ticks`, partie après `life_ticks`, 30 secondes) aux pieds de sa cible ; pour l'instant, le point de chute est toujours là ;
+   - armée, elle explose au contact de quiconque, poseur compris, et frappe sans jet tous ceux qui sont dans `blast_radius` : partie du corps, étourdissement, tranchage et saignement comme un coup (`combat::blast`) ;
+   - au plus `max_per_fighter` mines par combattant : une nouvelle prend la place de la plus ancienne (`mines` de `data/combat.ron`) ;
+   - l'IA utilitaire les contourne comme les piliers (`Arena::obstacles`), s'écarte d'une mine pas encore armée qui l'atteindrait, et ne pose pas une mine qui l'atteindrait elle-même ;
+   - l'écran de combat les dessine en cercles, au cœur rouge une fois armées (format dans `docs/Formats_graphiques.md`).
+   Les deux mines de la double dague viendront avec la classe (étape 10).
 10. **Les deux classes** (`data/classes.ron`, `fr.ftl`, `assets/fighters/`) : gladiateur et maître du terrain, avec des valeurs provisoires ; leurs sprites (bouclier, deux armes) en substituts.
 11. **Retrait de mirmillon et augure, IA apprise et modèle statistique** :
     - retirer les deux anciennes classes, leurs clés de `fr.ftl`, leurs modèles de `assets/ai/` ; mettre à jour le test qui compte les classes (`design_data.rs`) et les snapshots `insta` ;

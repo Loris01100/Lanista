@@ -87,6 +87,7 @@ Un personnage unique est dessiné à la main, sans calques générés ni teintes
 
 - Tache de sang : 1,4 m de diamètre, environ **28 × 28 px**. Le jeu la fait grandir.
 - Projectiles et sorts : cases de 16 × 16 ou 32 × 32 px, même échelle.
+- Mine au sol : 0,6 m de diamètre (`radius` de `mines` dans `data/combat.ron`), soit une case de **16 × 16 px**, en deux images : posée, puis armée. Le jeu la dessine pour l'instant en cercles. Son explosion : 3 m de diamètre (`blast_radius`), soit **64 × 64 px**, à venir.
 
 ## Interface
 

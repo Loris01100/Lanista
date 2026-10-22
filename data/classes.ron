@@ -10,6 +10,8 @@
 // gathers adds that many of the arena's element (data/combat.ron) to its caster's
 // reserve, without target nor damage; its thrown gives, for each element, the power,
 // damage_kind and accuracy_drop it hits with in an arena of that element.
+// mine: true lays a mine at the target's feet instead of hitting it; it blasts with the
+// spell's power and damage_kind (mines in data/combat.ron). False if left out.
 // damage_kind: Blunt stuns three times as often as Cutting, which may sever a limb or
 // the head instead (data/combat.ron); Neutral (spells without an element yet) does neither.
 // spells: the first and third slots. Each of the class's two loadouts brings the second

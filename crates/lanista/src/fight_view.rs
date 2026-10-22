@@ -25,6 +25,9 @@ const DEEP_SAND: Color = Color::new(0.66, 0.54, 0.36, 1.0);
 // ponytail: pillars drawn with shapes until the arenas get their sprites.
 const PILLAR: Color = Color::new(0.55, 0.53, 0.5, 1.0);
 const PILLAR_TOP: Color = Color::new(0.72, 0.7, 0.66, 1.0);
+/// A mine on the floor, and its heart, red once armed.
+const MINE: Color = Color::new(0.25, 0.22, 0.2, 1.0);
+const MINE_ARMED: Color = Color::new(0.85, 0.15, 0.1, 1.0);
 /// Around the floor.
 pub const STANDS: Color = Color::new(0.16, 0.13, 0.11, 1.0);
 /// The ring under the club's fighters.
@@ -378,7 +381,7 @@ impl FightView {
     }
 
     /// Draws the fight in world coordinates, a camera on it: the floor of its arena kind
-    /// (deep sand, pillars), blood under the dead and those bleeding, the lines between allies, the rings under the club's
+    /// (deep sand, pillars), the mines, blood under the dead and those bleeding, the lines between allies, the rings under the club's
     /// fighters, then the fighters, the dead first, those out of the fight dimmed.
     pub fn draw(&self, assets: &Assets, data: &DesignData) {
         let (width, height) = (to_f32(self.arena.width), to_f32(self.arena.height));
@@ -392,6 +395,14 @@ impl FightView {
             let (x, y, radius) = (to_f32(pillar.x), to_f32(pillar.y), to_f32(pillar.radius));
             draw_circle(x, y, radius, PILLAR);
             draw_circle(x, y, radius * 0.75, PILLAR_TOP);
+        }
+        for mine in &self.arena.mines {
+            let (x, y) = (to_f32(mine.position.x), to_f32(mine.position.y));
+            let radius = to_f32(self.arena.mine_rules.radius);
+            draw_circle(x, y, radius, MINE);
+            if self.arena.tick >= mine.armed_at {
+                draw_circle(x, y, radius * 0.4, MINE_ARMED);
+            }
         }
         // Blood under everyone.
         for (fighter, look) in self.arena.fighters.iter().zip(&self.looks) {

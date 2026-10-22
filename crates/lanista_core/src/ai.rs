@@ -1,6 +1,6 @@
 use crate::combat::{
-    AccuracyRules, Arena, Range, Vec2, edge_distance, path_direction, shot_blocked, spell_damage,
-    spell_hit_percent,
+    AccuracyRules, Arena, RADIUS, Range, Vec2, edge_distance, path_direction, shot_blocked,
+    spell_damage, spell_hit_percent,
 };
 use crate::design_data::SpellData;
 use crate::fighter::form::Form;
@@ -96,7 +96,9 @@ pub fn fear(condition: &Condition) -> f64 {
 /// `MOVE_SCORE`; gathering elements scores `GATHER_VALUE` of the best spell they pay for,
 /// while the reserve is not full; a fearful, hurt fighter scores backing away from a threatening enemy.
 /// A pillar between the two makes ranged spells useless: the fighter walks around it,
-/// as it closes in around any pillar in its way. In a melee, a fighter the next check
+/// as it closes in around any pillar or mine in its way (`Arena::obstacles`). A mine
+/// not yet armed whose blast would reach it scores stepping away (`escape_mine`); a mine
+/// spell is not cast on a target within its own blast. In a melee, a fighter the next check
 /// would put out (`in_danger`), or in the final (`in_final`), neither backs away nor
 /// waits: it goes for a hit.
 #[must_use]
@@ -123,7 +125,11 @@ pub fn score_actions(arena: &Arena, me: FighterId) -> Vec<(Action, f64)> {
                 };
                 scored.push((gather, gather_value(me, target, &arena.accuracy)));
             }
-        } else if me.can_cast(spell) && distance <= data.reach && usable(data) {
+        } else if me.can_cast(spell)
+            && distance <= data.reach
+            && usable(data)
+            && !(data.mine && distance + 2.0 * RADIUS <= arena.mine_rules.blast_radius)
+        {
             let cast = Action::Cast {
                 spell,
                 target: target.id,
@@ -142,7 +148,7 @@ pub fn score_actions(arena: &Arena, me: FighterId) -> Vec<(Action, f64)> {
     } else {
         fear(&me.condition) * (1.0 - share(me.hp, me.stats.hp)) * RETREAT_WEIGHT
     };
-    let toward = path_direction(&arena.pillars, me.position, target.position);
+    let toward = path_direction(&arena.obstacles(), me.position, target.position);
     let longest_reach = |f: &Fighter| f.spells.iter().map(|s| s.reach).fold(0.0, f64::max);
     let usable_reach = me
         .spells
@@ -174,7 +180,34 @@ pub fn score_actions(arena: &Arena, me: FighterId) -> Vec<(Action, f64)> {
             scored.push((Action::Move(toward), press * PRESS_SCORE));
         }
     }
+    scored.extend(escape_mine(arena, me, target));
     scored
+}
+
+/// Stepping away from the mine not yet armed whose blast would hurt `me` most, worth
+/// the share of its HP that blast would take; straight away from `target` when the mine
+/// lies right under it. Nothing without such a mine.
+fn escape_mine(arena: &Arena, me: &Fighter, target: &Fighter) -> Option<(Action, f64)> {
+    let gap = |from: Vec2| Vec2::new(me.position.x - from.x, me.position.y - from.y);
+    arena
+        .mines
+        .iter()
+        .filter(|m| {
+            m.armed_at > arena.tick && gap(m.position).length() <= arena.mine_rules.blast_radius
+        })
+        .filter_map(|m| {
+            let owner = arena.fighter(m.owner)?;
+            let spell = owner.spells.get(m.spell)?;
+            let value = share(spell_damage(&owner.stats, &me.stats, spell), me.hp);
+            let away = gap(m.position);
+            let away = if away.length() > 0.0 {
+                away
+            } else {
+                gap(target.position)
+            };
+            Some((Action::Move(away), value))
+        })
+        .max_by(|a, b| a.1.total_cmp(&b.1))
 }
 
 /// `part` / `whole`, 0 when `whole` is 0.
@@ -350,6 +383,46 @@ mod tests {
         let mut arena = Arena::new(20.0, 20.0, fighters, 0);
         arena.fighters[0].cooldowns[0] = 10;
         assert_eq!(UtilityAi.decide(&arena, FighterId(0)), Action::Wait);
+    }
+
+    #[test]
+    fn steps_off_a_mine_before_it_is_armed_and_lays_none_on_a_target_too_close() {
+        use crate::combat::{Mine, MineRules};
+        let fighters = vec![test_fighter(0, 5.0, 5.0), test_fighter(1, 6.5, 5.0)];
+        let mut arena = Arena::new(20.0, 20.0, fighters, 0);
+        arena.mine_rules = MineRules {
+            arm_ticks: 30,
+            life_ticks: 900,
+            radius: 0.3,
+            blast_radius: 1.5,
+            max_per_fighter: 3,
+        };
+        arena.fighters[1].spells[0].power = 300;
+        arena.mines.push(Mine {
+            position: Vec2::new(5.0, 5.0),
+            owner: FighterId(1),
+            spell: 0,
+            armed_at: 30,
+            gone_at: 900,
+        });
+        // Right under it: away from the enemy, rather than a weaker hit.
+        assert_eq!(
+            UtilityAi.decide(&arena, FighterId(0)),
+            Action::Move(Vec2::new(-1.5, 0.0))
+        );
+        arena.mines.clear();
+        let spell = &mut arena.fighters[0].spells[0];
+        (spell.mine, spell.reach) = (true, 8.0);
+        // 1.5 m between centers: its own mine would blast it too.
+        assert_eq!(UtilityAi.decide(&arena, FighterId(0)), Action::Wait);
+        arena.fighters[1].position = Vec2::new(10.0, 5.0);
+        assert_eq!(
+            UtilityAi.decide(&arena, FighterId(0)),
+            Action::Cast {
+                spell: 0,
+                target: FighterId(1)
+            }
+        );
     }
 
     #[test]
