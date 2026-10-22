@@ -90,6 +90,18 @@ pub struct SpellData {
     pub cost: Cost,
     /// What it hits with, which sets how often it stuns.
     pub damage_kind: DamageKind,
+    /// Percentage of the hit chance it keeps (`combat::spell_hit_percent`): below 100 for
+    /// a clumsy blow; 100 if left out.
+    #[serde(default = "full_accuracy")]
+    pub accuracy_percent: u32,
+    /// From its how-manyth hit on the same target a cutting hit of this spell severs the
+    /// part it lands on for sure, if it can be (`combat::severs`); never if left out.
+    #[serde(default)]
+    pub sure_cut_hits: Option<u32>,
+}
+
+const fn full_accuracy() -> u32 {
+    100
 }
 
 /// Resource spent to cast a spell.

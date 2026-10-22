@@ -199,6 +199,8 @@ pub struct Fighter {
     pub knocked_out: bool,
     /// What a cutting hit severed: its head, dead, or a limb, out of the fight alive.
     pub severed: Option<Location>,
+    /// Hits taken from spells that sever for sure after some (`SpellData::sure_cut_hits`).
+    pub cleaving_hits: u32,
     /// Dealt too little damage before a melee's check: out of the fight alive, a defeat
     /// (see `melee::QuotaRules`).
     pub eliminated: bool,
@@ -266,6 +268,7 @@ impl Fighter {
             stuns: 0,
             knocked_out: false,
             severed: None,
+            cleaving_hits: 0,
             eliminated: false,
             round_damage: 0,
             condition: Condition::default(),
@@ -369,6 +372,8 @@ pub(crate) fn test_fighter(id: u32, x: f64, y: f64) -> Fighter {
             cooldown: 30,
             cost: Cost::Endurance(10),
             damage_kind: DamageKind::Blunt,
+            accuracy_percent: 100,
+            sure_cut_hits: None,
         }],
     };
     let stats = Stats {

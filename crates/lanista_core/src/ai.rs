@@ -1,6 +1,6 @@
 use crate::combat::{
-    AccuracyRules, Arena, Range, Vec2, edge_distance, hit_percent, path_direction, shot_blocked,
-    spell_damage,
+    AccuracyRules, Arena, Range, Vec2, edge_distance, path_direction, shot_blocked, spell_damage,
+    spell_hit_percent,
 };
 use crate::design_data::SpellData;
 use crate::fighter::form::Form;
@@ -174,7 +174,7 @@ fn share(part: u32, whole: u32) -> f64 {
 /// Share of the target's current HP a spell is expected to take: what it takes on a hit,
 /// above 1 for overkill, times the chance to hit.
 fn cast_value(me: &Fighter, target: &Fighter, spell: &SpellData, rules: &AccuracyRules) -> f64 {
-    let hit = f64::from(hit_percent(&me.stats, &target.stats, rules)) / 100.0;
+    let hit = f64::from(spell_hit_percent(&me.stats, &target.stats, spell, rules)) / 100.0;
     share(spell_damage(&me.stats, &target.stats, spell), target.hp) * hit
 }
 

@@ -425,6 +425,20 @@ pub fn hit_percent(attacker: &Stats, defender: &Stats, rules: &AccuracyRules) ->
     percent.clamp(rules.min_percent, rules.max_percent.max(rules.min_percent))
 }
 
+/// Chance in percent that `spell` hits: `hit_percent`, times the spell's
+/// `accuracy_percent`.
+#[must_use]
+pub fn spell_hit_percent(
+    attacker: &Stats,
+    defender: &Stats,
+    spell: &SpellData,
+    rules: &AccuracyRules,
+) -> u32 {
+    let percent =
+        u64::from(hit_percent(attacker, defender, rules)) * u64::from(spell.accuracy_percent) / 100;
+    u32::try_from(percent).unwrap_or(u32::MAX)
+}
+
 /// `hundredths` of a percent per tenth of `max_hp` that `damage` takes, in hundredths
 /// of a percent, at most 10 000 (sure); 0 for no HP.
 fn per_tenth(hundredths: u32, damage: u32, max_hp: u32) -> u64 {
@@ -466,21 +480,26 @@ pub fn stun_chance(damage: u32, kind: DamageKind, target: &Fighter, rules: &Stun
 /// hit left it: the head with `fatal_head_percent` if the hit brought it to 0 HP, else
 /// with `head_hundredths` per tenth of its max HP the hit takes; a limb, if it still
 /// fights, with `limb_hundredths` per tenth, unless it already lost it (a stump); the
-/// body never. Drawn only above 0.
+/// body never. `sure` severs the head or a limb that can be. Drawn only above 0.
 pub fn severs<R: rand::Rng + ?Sized>(
     rng: &mut R,
-    damage: u32,
+    (damage, sure): (u32, bool),
     target: &Fighter,
     part: Location,
     rules: &CutRules,
 ) -> bool {
     let chance = match part {
+        Location::Head if sure => 10_000,
         Location::Head if target.is_alive() => {
             per_tenth(rules.head_hundredths, damage, target.stats.hp)
         }
         Location::Head => u64::from(rules.fatal_head_percent.min(100)) * 100,
         Location::Arm(_) | Location::Leg(_) if target.is_fighting() && !target.has_lost(part) => {
-            per_tenth(rules.limb_hundredths, damage, target.stats.hp)
+            if sure {
+                10_000
+            } else {
+                per_tenth(rules.limb_hundredths, damage, target.stats.hp)
+            }
         }
         Location::Arm(_) | Location::Leg(_) | Location::Body => 0,
     };
@@ -718,7 +737,8 @@ fn ready_cast(arena: &Arena, i: usize) -> Option<(usize, FighterId, usize)> {
 /// damage dealt and logged, then its effects on the target follow (`strike`).
 fn cast(arena: &mut Arena, i: usize, spell: usize, (target, t): (FighterId, usize)) {
     let (caster, defender) = (&arena.fighters[i], &arena.fighters[t]);
-    let chance = hit_percent(&caster.stats, &defender.stats, &arena.accuracy);
+    let data = &caster.spells[spell];
+    let chance = spell_hit_percent(&caster.stats, &defender.stats, data, &arena.accuracy);
     let missed = chance < 100 && arena.rng.random_range(0..100) >= chance;
     let part = match arena.hits {
         Some(weights) if !missed => Some(roll_location(&mut arena.rng, &weights)),
@@ -727,9 +747,10 @@ fn cast(arena: &mut Arena, i: usize, spell: usize, (target, t): (FighterId, usiz
     let amount = if missed {
         0
     } else {
-        spell_damage(&caster.stats, &defender.stats, &caster.spells[spell])
+        spell_damage(&caster.stats, &defender.stats, data)
     };
-    let kind = caster.spells[spell].damage_kind;
+    let kind = data.damage_kind;
+    let sure_cut_hits = data.sure_cut_hits.filter(|_| !missed);
     let caster = &mut arena.fighters[i];
     caster.spend(spell);
     caster.action = Action::Wait;
@@ -738,6 +759,10 @@ fn cast(arena: &mut Arena, i: usize, spell: usize, (target, t): (FighterId, usiz
     let hp_before = defender.hp;
     defender.take_damage(amount);
     let damage = hp_before - defender.hp;
+    let sure = sure_cut_hits.is_some_and(|hits| {
+        defender.cleaving_hits += 1;
+        defender.cleaving_hits >= hits
+    });
     arena.log.push(Event {
         tick: arena.tick,
         kind: EventKind::Cast {
@@ -750,23 +775,24 @@ fn cast(arena: &mut Arena, i: usize, spell: usize, (target, t): (FighterId, usiz
         },
     });
     let cut = part.filter(|_| kind == DamageKind::Cutting);
-    strike(arena, (target, t), damage, kind, cut);
+    strike(arena, (target, t), (damage, sure), kind, cut);
     let caster = &mut arena.fighters[i];
     caster.round_damage = caster.round_damage.saturating_add(damage);
 }
 
 /// The effects of a hit on the target: a cut on its head may sever it, killing, or on a
-/// limb, taking it out of the fight alive (`severs`); it dies at 0 HP, gives up at its
+/// limb, taking it out of the fight alive (`severs`, for sure if `sure`); it dies at 0 HP, gives up at its
 /// surrender threshold, or else may be stunned with `stun_chance`, drawn only above 0.
 fn strike(
     arena: &mut Arena,
     (target, t): (FighterId, usize),
-    damage: u32,
+    (damage, sure): (u32, bool),
     kind: DamageKind,
     cut: Option<Location>,
 ) {
     let defender = &mut arena.fighters[t];
-    let severed = cut.filter(|&part| severs(&mut arena.rng, damage, defender, part, &arena.cut));
+    let severed =
+        cut.filter(|&part| severs(&mut arena.rng, (damage, sure), defender, part, &arena.cut));
     if let Some(part) = severed {
         defender.severed = Some(part);
         defender.action = Action::Wait;
@@ -1345,33 +1371,57 @@ mod tests {
         let mut target = fighter(1, 0.0, 0.0);
         let arm = Location::Arm(Side::Left);
         // Standing after the hit: the limb hit, never the body.
-        assert!(severs(&mut rng, 10, &target, arm, &SURE));
+        assert!(severs(&mut rng, (10, false), &target, arm, &SURE));
         assert!(severs(
             &mut rng,
-            10,
+            (10, false),
             &target,
             Location::Leg(Side::Right),
             &SURE
         ));
-        assert!(!severs(&mut rng, 10, &target, Location::Body, &SURE));
+        assert!(!severs(
+            &mut rng,
+            (10, false),
+            &target,
+            Location::Body,
+            &SURE
+        ));
         let no_head = CutRules {
             head_hundredths: 0,
             ..SURE
         };
-        assert!(!severs(&mut rng, 10, &target, Location::Head, &no_head));
+        assert!(!severs(
+            &mut rng,
+            (10, false),
+            &target,
+            Location::Head,
+            &no_head
+        ));
         // Gave up: no limb is cut off a fighter out of the fight.
         target.surrendered = true;
-        assert!(!severs(&mut rng, 10, &target, arm, &SURE));
+        assert!(!severs(&mut rng, (10, false), &target, arm, &SURE));
         // Brought to 0 HP: the head, by fatal_head_percent.
         target.hp = 0;
-        assert!(severs(&mut rng, 10, &target, Location::Head, &no_head));
+        assert!(severs(
+            &mut rng,
+            (10, false),
+            &target,
+            Location::Head,
+            &no_head
+        ));
         let never = CutRules {
             fatal_head_percent: 0,
             ..no_head
         };
-        assert!(!severs(&mut rng, 10, &target, Location::Head, &never));
+        assert!(!severs(
+            &mut rng,
+            (10, false),
+            &target,
+            Location::Head,
+            &never
+        ));
         let beheaded = (0..10_000)
-            .filter(|_| severs(&mut rng, 10, &target, Location::Head, &CUT))
+            .filter(|_| severs(&mut rng, (10, false), &target, Location::Head, &CUT))
             .count();
         assert!(beheaded.abs_diff(3_000) < 150, "{beheaded}");
         // Standing, 10 % of the HP: 0.05 % for the head, 0.2 % for a limb.
@@ -1379,7 +1429,7 @@ mod tests {
         target.hp = 90;
         let cut = |rng: &mut ChaCha8Rng, part| {
             (0..100_000)
-                .filter(|_| severs(rng, 10, &target, part, &CUT))
+                .filter(|_| severs(rng, (10, false), &target, part, &CUT))
                 .count()
         };
         let head = cut(&mut rng, Location::Head);
@@ -1399,14 +1449,14 @@ mod tests {
         let mut rng = ChaCha8Rng::seed_from_u64(4);
         assert!(!severs(
             &mut rng,
-            10,
+            (10, false),
             &target,
             Location::Arm(Side::Left),
             &SURE
         ));
         assert!(severs(
             &mut rng,
-            10,
+            (10, false),
             &target,
             Location::Arm(Side::Right),
             &SURE
@@ -1455,6 +1505,57 @@ mod tests {
                 .iter()
                 .all(|e| matches!(e.kind, EventKind::Cast { part: None, .. }))
         );
+    }
+
+    #[test]
+    fn a_clumsy_spell_keeps_its_share_of_the_hit_chance() {
+        let (attacker, defender) = (fighter(0, 0.0, 0.0), fighter(1, 0.0, 0.0));
+        let mut spell = attacker.spells[0].clone();
+        let full = spell_hit_percent(&attacker.stats, &defender.stats, &spell, &ACCURACY);
+        assert_eq!(
+            full,
+            hit_percent(&attacker.stats, &defender.stats, &ACCURACY)
+        );
+        spell.accuracy_percent = 50;
+        let half = spell_hit_percent(&attacker.stats, &defender.stats, &spell, &ACCURACY);
+        assert_eq!(half, full / 2);
+        // It misses even in an arena that always hits.
+        let mut arena = duel(0.5);
+        arena.fighters[0].spells[0].accuracy_percent = 0;
+        play(&mut arena, &[HIT, Action::Wait], 30);
+        assert!(
+            arena
+                .log
+                .iter()
+                .all(|e| matches!(e.kind, EventKind::Cast { missed: true, .. }))
+        );
+    }
+
+    #[test]
+    fn a_sure_cut_spell_severs_from_its_second_hit_on_a_target() {
+        let mut arena = cutting_duel(CutRules::NEVER, landing(0, 0, 1, 0));
+        arena.fighters[0].spells[0].sure_cut_hits = Some(2);
+        play(&mut arena, &[HIT, Action::Wait], 1);
+        assert_eq!(arena.fighters[1].cleaving_hits, 1);
+        assert_eq!(arena.fighters[1].severed, None);
+        play(&mut arena, &[HIT, Action::Wait], 30);
+        assert!(matches!(arena.fighters[1].severed, Some(Location::Arm(_))));
+        // Never the body, however many hits.
+        let mut arena = cutting_duel(CutRules::NEVER, landing(0, 1, 0, 0));
+        arena.fighters[0].spells[0].sure_cut_hits = Some(2);
+        play(&mut arena, &[HIT, Action::Wait], 61);
+        assert_eq!(arena.fighters[1].cleaving_hits, 3);
+        assert_eq!(arena.fighters[1].severed, None);
+        // The head too, standing.
+        let mut rng = ChaCha8Rng::seed_from_u64(5);
+        let target = fighter(1, 0.0, 0.0);
+        assert!(severs(
+            &mut rng,
+            (1, true),
+            &target,
+            Location::Head,
+            &CutRules::NEVER
+        ));
     }
 
     #[test]
