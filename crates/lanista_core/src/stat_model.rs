@@ -14,10 +14,10 @@ use rand::{Rng, RngExt};
 use serde::{Deserialize, Serialize};
 
 use crate::ai::fear;
-use crate::combat::{Arena, ArenaKind, CutRules, severed_limb};
+use crate::combat::{Arena, ArenaKind, severed_limb};
 use crate::duel::STATS;
 use crate::fighter::fame::{FameRules, FightOutcome, FightResult};
-use crate::fighter::injury::Location;
+use crate::fighter::injury::{Location, LocationWeights};
 use crate::fighter::personality::Personality;
 use crate::fighter::{Fighter, FighterId};
 
@@ -328,12 +328,12 @@ impl StatModel {
     }
 
     /// The fight between `a` and `b`, as the model draws it: what each side gets. A
-    /// limb the loser lost is drawn by `cut` (see [`severed_limb`]).
+    /// limb the loser lost is drawn by `locations` (see [`severed_limb`]).
     pub fn resolve<R: Rng + ?Sized>(
         &self,
         a: &Fighter,
         b: &Fighter,
-        cut: &CutRules,
+        locations: &LocationWeights,
         rng: &mut R,
     ) -> [Ending; 2] {
         let hits = &self.spectacular_hits;
@@ -359,7 +359,7 @@ impl StatModel {
         let severed = if knocked_out {
             None
         } else if out < lost_limb_below {
-            Some(severed_limb(rng, cut))
+            Some(severed_limb(rng, locations))
         } else if out < beheaded_below {
             Some(Location::Head)
         } else {
@@ -517,7 +517,7 @@ mod tests {
         let f = fighter(&data, 0, STATS);
         let mut rng = ChaCha8Rng::seed_from_u64(1);
         for _ in 0..20 {
-            let endings = model.resolve(&f, &f, &data.combat.cut, &mut rng);
+            let endings = model.resolve(&f, &f, &data.combat.hits, &mut rng);
             assert_eq!(
                 endings
                     .iter()
@@ -559,9 +559,9 @@ mod tests {
             let model = data.stat_model.get(ArenaKind::ALL[usize::try_from(seed % 3).unwrap()]);
             let first = fighter(&data, a, STATS);
             let second = determined(fighter(&data, b, crate::fighter::Stats { hp, ..STATS }), determination);
-            let cut = &data.combat.cut;
-            let endings = model.resolve(&first, &second, cut, &mut ChaCha8Rng::seed_from_u64(seed));
-            prop_assert_eq!(endings, model.resolve(&first, &second, cut, &mut ChaCha8Rng::seed_from_u64(seed)));
+            let hits = &data.combat.hits;
+            let endings = model.resolve(&first, &second, hits, &mut ChaCha8Rng::seed_from_u64(seed));
+            prop_assert_eq!(endings, model.resolve(&first, &second, hits, &mut ChaCha8Rng::seed_from_u64(seed)));
             let winners = endings.iter().filter(|e| e.result == FightResult::Won).count();
             if winners == 0 {
                 prop_assert!(endings.iter().all(|e| e.result == FightResult::Unfinished && !e.died && !e.knocked_out && e.severed.is_none()));

@@ -25,18 +25,19 @@
         rise_percent_most_determined: 90,
         rise_percent_lost_per_stun: 20,
     ),
-    // A cutting hit that lands may sever: the head, killing, with head_hundredths per
-    // tenth of the target's max HP the hit takes, or with fatal_head_percent on a hit that
-    // brings it to 0 HP (no surviving that fatal blow); else, if the target still fights,
-    // a limb with limb_hundredths per tenth: out of the fight alive, with a permanent
-    // injury there. The limb is an arm or a leg by their weights, the side 50/50.
+    // A cutting hit that lands may sever the part it lands on: the head, killing, with
+    // head_hundredths per tenth of the target's max HP the hit takes, or with
+    // fatal_head_percent on a hit that brings it to 0 HP (no surviving that fatal blow);
+    // a limb, if the target still fights, with limb_hundredths per tenth: out of the
+    // fight alive, with a permanent injury there; the body, never.
     cut: (
-        limb_hundredths: 30,
-        head_hundredths: 5,
-        fatal_head_percent: 30,
-        arm_weight: 1,
-        leg_weight: 1,
+        limb_hundredths: 75,
+        head_hundredths: 17,
+        fatal_head_percent: 100,
     ),
+    // Where a hit lands, by relative chances; the side of an arm or leg is drawn 50/50.
+    // The model draws a lost limb's arm or leg by these weights too.
+    hits: (head: 3, body: 3, arm: 2, leg: 2),
     // Each colosseum's arena kind (data/world.ron) sets its floor: a size in meters,
     // the percentage of their speed fighters walk at, and round pillars (center and
     // radius in meters) that block the way and ranged spells, at least a fighter's

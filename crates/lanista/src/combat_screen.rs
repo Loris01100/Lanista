@@ -489,11 +489,11 @@ mod tests {
         assert!(screen.fight().looks[1 - dead].dead_for.is_none());
     }
 
-    /// In the standard duel of seed 15, fighter 0 is knocked out: it lies down, alive,
+    /// In the standard duel of seed 23, fighter 0 is knocked out: it lies down, alive,
     /// without blood.
     #[test]
     fn a_fighter_knocked_out_lies_down_without_bleeding() {
-        let mut screen = screen(15);
+        let mut screen = screen(23);
         while screen.running() {
             screen.advance(1.0 / 60.0);
         }
@@ -552,10 +552,10 @@ mod tests {
         );
     }
 
-    /// In the standard duel of seed 62, fighter 1 loses a leg: it lies down, alive.
+    /// In the standard duel of seed 2, fighter 1 loses a leg: it lies down, alive.
     #[test]
     fn a_fighter_that_lost_a_limb_lies_down_alive() {
-        let mut screen = screen(62);
+        let mut screen = screen(2);
         while screen.running() {
             screen.advance(1.0 / 60.0);
         }

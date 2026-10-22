@@ -47,23 +47,23 @@ fn standard_duel(seed: u64) -> String {
     )
 }
 
-/// The standard duel of seed 15: the first fighter is stunned twice, gets up once, then
+/// The standard duel of seed 24: the second fighter is stunned twice, gets up once, then
 /// is knocked out.
 #[test]
 fn a_standard_duel_with_a_knock_out() {
-    insta::assert_snapshot!(standard_duel(15));
+    insta::assert_snapshot!(standard_duel(24));
 }
 
-/// The standard duel of seed 62: a cutting hit takes off the second fighter's leg.
+/// The standard duel of seed 2: a cutting hit takes off the second fighter's leg.
 #[test]
 fn a_standard_duel_with_a_lost_limb() {
-    insta::assert_snapshot!(standard_duel(62));
+    insta::assert_snapshot!(standard_duel(2));
 }
 
-/// The standard duel of seed 13: the killing blow, a cutting one, takes the head off.
+/// The standard duel of seed 6: the killing blow, a cutting one, takes the head off.
 #[test]
 fn a_standard_duel_with_a_beheading() {
-    insta::assert_snapshot!(standard_duel(13));
+    insta::assert_snapshot!(standard_duel(6));
 }
 
 /// A murmillo against an augur on the floor of `kind`, starting at 15 % and 85 % of

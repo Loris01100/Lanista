@@ -17,13 +17,15 @@ pub struct Event {
 pub enum EventKind {
     /// `caster` hit `target` with spell `spell` (index in the caster's `spells`).
     /// `damage` is the hit points actually lost, so a killing blow counts only what was left,
-    /// and a missed spell (`missed`) none.
+    /// and a missed spell (`missed`) none. `part` is where it landed, drawn only for a hit
+    /// in an arena with rules (`Arena::hits`).
     Cast {
         caster: FighterId,
         target: FighterId,
         spell: usize,
         damage: u32,
         missed: bool,
+        part: Option<Location>,
     },
     Death {
         fighter: FighterId,
@@ -238,15 +240,16 @@ pub fn log_text(arena: &Arena) -> String {
                 spell,
                 damage,
                 missed,
+                part,
             } => {
                 let name = arena
                     .fighter(caster)
                     .and_then(|c| c.spells.get(spell))
                     .map_or("?", |s| s.name.as_str());
-                let result = if missed {
-                    "missed".to_owned()
-                } else {
-                    format!("{damage} damage")
+                let result = match (missed, part) {
+                    (true, _) => "missed".to_owned(),
+                    (false, Some(part)) => format!("{damage} damage to the {}", limb_name(part)),
+                    (false, None) => format!("{damage} damage"),
                 };
                 writeln!(
                     text,

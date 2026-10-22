@@ -101,7 +101,7 @@ pub fn roll_injury<R: Rng + ?Sized>(
     if !rng.random_bool(form.risk(rules.chance_per_fight, form_rules)) {
         return None;
     }
-    let location = roll_location(rng, rules);
+    let location = roll_location(rng, &rules.location_weights);
     let weights = &rules.severity_weights;
     let severity = pick(
         rng,
@@ -127,7 +127,7 @@ pub fn roll_injury<R: Rng + ?Sized>(
 
 /// The severe injury of a fighter who survives a fatal blow, at a drawn location.
 pub fn fatal_blow_wound<R: Rng + ?Sized>(rng: &mut R, rules: &InjuryRules) -> Injury {
-    let location = roll_location(rng, rules);
+    let location = roll_location(rng, &rules.location_weights);
     let (low, high) = rules.healing_weeks.severe;
     Injury {
         location,
@@ -156,14 +156,13 @@ pub fn severed_limb_wound(location: Location) -> Injury {
     }
 }
 
-/// Where an injury lands, by `rules.location_weights`.
-fn roll_location<R: Rng + ?Sized>(rng: &mut R, rules: &InjuryRules) -> Location {
+/// A part of the body drawn by `weights`: where an injury or a hit lands.
+pub fn roll_location<R: Rng + ?Sized>(rng: &mut R, weights: &LocationWeights) -> Location {
     let side = if rng.random_bool(0.5) {
         Side::Left
     } else {
         Side::Right
     };
-    let weights = &rules.location_weights;
     pick(
         rng,
         &[

@@ -530,11 +530,11 @@ impl DesignData {
                 problem: "lowest above highest",
             });
         }
-        let cut = &self.combat.cut;
-        if cut.arm_weight.saturating_add(cut.leg_weight) == 0 {
+        let (cut, hits) = (&self.combat.cut, &self.combat.hits);
+        if hits.arm.saturating_add(hits.leg) == 0 {
             return Err(LoadError::Invalid {
                 file: COMBAT_FILE,
-                field: "cut",
+                field: "hits",
                 problem: "no limb to sever",
             });
         }

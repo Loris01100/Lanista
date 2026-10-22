@@ -1,17 +1,19 @@
 ---
 source: crates/lanista_core/tests/reference_fights.rs
-expression: standard_duel(15)
+expression: standard_duel(24)
 ---
-[   18] fighter 0 casts Éclair on fighter 1: 35 damage
-[   36] fighter 0 casts Trait de feu on fighter 1: 19 damage
-[   84] fighter 0 casts Trait de feu on fighter 1: 19 damage
-[  102] fighter 1 casts Frappe brutale on fighter 0: 48 damage
-[  102] fighter 0 is stunned
-[  162] fighter 0 gets up
-[  162] fighter 1 casts Charge au bouclier on fighter 0: 29 damage
-[  162] fighter 0 is stunned
-[  222] fighter 0 is knocked out
+[   48] fighter 1 casts Éclair on fighter 0: 35 damage to the left arm
+[   66] fighter 1 casts Trait de feu on fighter 0: missed
+[  114] fighter 1 casts Trait de feu on fighter 0: missed
+[  138] fighter 1 casts Coup de bâton on fighter 0: 12 damage to the body
+[  138] fighter 0 casts Frappe brutale on fighter 1: 48 damage to the body
+[  144] fighter 0 casts Charge au bouclier on fighter 1: 29 damage to the body
+[  144] fighter 1 is stunned
+[  204] fighter 1 gets up
+[  204] fighter 0 casts Coup de glaive on fighter 1: 19 damage to the head
+[  204] fighter 1 is stunned
+[  264] fighter 1 is knocked out
 
-over after 223 ticks, winner: fighter 1
-fighter 0: 23/100 HP, dealt 73, taken 77, 3 spells cast, 0 missed, stunned 2 times, knocked out
-fighter 1: 27/100 HP, dealt 77, taken 73, 2 spells cast, 0 missed
+over after 265 ticks, winner: fighter 0
+fighter 0: 53/100 HP, dealt 96, taken 47, 3 spells cast, 0 missed
+fighter 1: 4/100 HP, dealt 47, taken 96, 4 spells cast, 2 missed, stunned 2 times, knocked out

@@ -81,7 +81,7 @@ Une mine est lancée au sol ; elle s'active après un délai et reste 30 seconde
 
 Chaque étape laisse le jeu jouable avec mirmillon et augure, qui servent de terrain d'essai, et finit par `cargo test`, clippy et, quand le combat change, `calibrate` puis `compare`. L'IA utilitaire suit à chaque étape ; l'IA apprise ne suit qu'à la fin (étape 11), ses modèles n'étant que des substituts jusqu'à la phase 9.
 
-1. **Partie du corps touchée** (`combat.rs`, `fighter/injury.rs`) : chaque coup tire la partie du corps qu'il touche, avec des poids dans `data/combat.ron`. Le tranchage actuel (`combat::severed_part`) part de la partie touchée au lieu de la tirer après coup. Le journal de combat la dit.
+1. **Partie du corps touchée** (`combat.rs`, `fighter/injury.rs`) — fait : chaque coup qui touche tire la partie du corps qu'il touche, avec les poids `hits` de `data/combat.ron`. Le tranchage (`combat::severs`) ne coupe que cette partie, jamais le corps. Le journal de combat la dit.
 2. **Modificateurs par sort** (`design_data::SpellData`, `combat.rs`) : un modificateur de précision (Guillotine peu précise) et un tranchage forcé de la partie touchée (Guillotine), facultatifs dans `data/classes.ron`.
 3. **Effets dans la durée** (`fighter.rs`, `combat.rs`, `log.rs`) : des effets qui durent sur le combattant, chacun avec sa durée et ses ticks. Deux pour commencer :
    - le saignement, un par partie du corps, sa chance par sort et sa durée par partie dans les données ; il peut tuer (en passant par la survie au coup fatal) ou pousser à l'abandon, et laisse au plus une blessure moyenne (`injury`) ;

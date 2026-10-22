@@ -566,7 +566,7 @@ impl CareerFighter {
         let [mine, theirs] = data.stat_model.get(kind).resolve(
             &self.combat_fighter(FighterId(0), Refused::NONE, data, origin),
             &opponent.combat_fighter(FighterId(1), Refused::NONE, data, origin),
-            &data.combat.cut,
+            &data.combat.hits,
             rng,
         );
         let stronger = opponent.stronger_than(self, rules);
