@@ -154,7 +154,7 @@ Les combats se déroulent en temps réel dans une arène 2D vue de dessus, pilot
 
 Chaque classe a son propre jeu de sorts, avec un temps de recharge et un coût en ressource (mana ou endurance). Le mana et l'endurance remontent un peu à chaque seconde du combat, chaque classe à son rythme : un combattant à court doit patienter avant de frapper de nouveau, mais n'est jamais à sec pour de bon. Pour le prototype : 2 classes et 3 sorts chacune, puis élargir. La liste définitive des classes et des sorts reste à écrire.
 
-L'équipement est fourni par le colisée et identique pour tous. Un combattant peut refuser tout ou partie de l'équipement. Chaque pièce refusée réduit ses capacités et rapporte un bonus de renommée proportionnel au risque : combattre sans arme rapporte plus que combattre sans armure.
+L'équipement est fourni par le colisée et identique pour tous. Un combattant peut refuser son armure, jamais ses armes. Sans armure, ses défenses baissent et il gagne un bonus de renommée.
 
 | Pièce refusée | Malus | Bonus de renommée |
 | --- | --- | --- |
@@ -164,7 +164,7 @@ L'équipement est fourni par le colisée et identique pour tous. Un combattant p
 
 ### Armes et étourdissement
 
-Chaque coup frappe avec un type de dégâts, qui vient de l'arme ou du sort. Une arme contondante (bouclier, bâton, ou les mains nues d'un combattant qui refuse son arme) étourdit plus souvent. Une arme tranchante (glaive) étourdit rarement, mais peut trancher un membre ou la tête. Les sorts sans élément pour l'instant (feu, éclair) n'étourdissent pas.
+Chaque coup frappe avec un type de dégâts, qui vient de l'arme ou du sort. Une arme contondante (bouclier, bâton) étourdit plus souvent. Une arme tranchante (glaive) étourdit rarement, mais peut trancher un membre ou la tête. Les sorts sans élément pour l'instant (feu, éclair) n'étourdissent pas.
 
 Plus le coup est fort, plus il risque d'étourdir, et une blessure à la tête augmente encore ce risque. Un combattant étourdi tombe : il ne fait plus rien et son adversaire attend qu'il se relève. Sa détermination décide s'il se relève, de moins en moins à chaque nouvel étourdissement du même combat. S'il se relève, le combat reprend et l'adversaire attaque de nouveau. Sinon, il est mis K.-O. : le combat s'arrête sur sa défaite, sans la honte d'un abandon, et il survit. Un combattant étourdi, relevé ou non, peut garder une blessure grave à la tête après le combat.
 
@@ -349,7 +349,7 @@ Le plan Godot (C#, Godot RL Agents) est abandonné pour un moteur maison en Rust
 | Soins | Choisis par le joueur, jamais automatiques |
 | Durée de la compétition | 22 semaines par saison, puis 4 de grand événement et 4 d'intersaison |
 | Titre de champion | Défense au minimum toutes les 4 semaines, plus souvent si le champion le souhaite |
-| Combat sans équipement | Malus et bonus selon la pièce refusée ; refuser l'arme rapporte plus que refuser l'armure |
+| Combat sans armure | Défenses réduites, bonus de renommée ; les armes ne se refusent pas |
 | Refus de défi | Perte de renommée et d'Elo si le combattant ne combat pas assez |
 | Mêlée | Une par colisée et par saison, plusieurs combattants d'un même club autorisés, sans lien d'office, pactes spontanés en combat |
 | Mort à l'écran | Tâche de sang et petite animation, selon ce qui est faisable |

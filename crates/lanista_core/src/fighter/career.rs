@@ -269,9 +269,6 @@ impl CareerFighter {
         let stats = refused.stats(stats, equipment);
         let class = (class_data, self.loadout);
         let mut fighter = Fighter::in_loadout(id, self.class, class, stats, position);
-        for spell in &mut fighter.spells {
-            spell.damage_kind = refused.damage_kind(spell.damage_kind);
-        }
         fighter.surrender_hp = self.personality.surrender_hp(stats.hp, &rules.personality);
         fighter.appearance = self.appearance.clone();
         fighter.refused = refused;
@@ -1472,29 +1469,20 @@ mod tests {
     }
 
     #[test]
-    fn a_fighter_without_its_equipment_fights_weaker_and_bare_handed() {
+    fn a_fighter_without_its_armour_defends_weaker() {
         let data = data();
         let mut rng = ChaCha8Rng::seed_from_u64(4);
         let f = CareerFighter::random(&mut rng, &data);
         let at = Vec2::new(3.0, 10.0);
         let equipped = f.combat_fighter(FighterId(0), Refused::NONE, &data, at);
-        let nothing = Refused {
-            armour: true,
-            weapon: true,
-        };
-        let bare = f.combat_fighter(FighterId(0), nothing, &data, at);
+        let naked = Refused { armour: true };
+        let bare = f.combat_fighter(FighterId(0), naked, &data, at);
         assert_eq!(
             bare.stats,
-            nothing.stats(equipped.stats, &data.fighter.equipment)
+            naked.stats(equipped.stats, &data.fighter.equipment)
         );
-        assert!(bare.stats.melee_attack < equipped.stats.melee_attack);
         assert!(bare.stats.melee_defense < equipped.stats.melee_defense);
-        assert_eq!(bare.stats.hp, equipped.stats.hp);
-        assert!(
-            bare.spells
-                .iter()
-                .all(|s| s.damage_kind != crate::combat::DamageKind::Cutting)
-        );
+        assert_eq!(bare.stats.melee_attack, equipped.stats.melee_attack);
     }
 
     #[test]
@@ -1510,15 +1498,12 @@ mod tests {
             bled: None,
             spectacular_hits: 0,
         };
-        let weapon = Refused {
-            armour: false,
-            weapon: true,
-        };
+        let armour = Refused { armour: true };
         let mut rng = ChaCha8Rng::seed_from_u64(5);
         let mut f = CareerFighter::random(&mut rng, &data);
         let equipped = f.clone().take_side(lost, false, 0, &mut rng, rules);
-        let bare = f.take_side(lost, false, weapon.fame_bonus(&rules.fame), &mut rng, rules);
-        let bonus = i32::try_from(rules.fame.refused_weapon).unwrap();
+        let bare = f.take_side(lost, false, armour.fame_bonus(&rules.fame), &mut rng, rules);
+        let bonus = i32::try_from(rules.fame.refused_armour).unwrap();
         assert_eq!(bare.fame_change, equipped.fame_change + bonus);
     }
 
@@ -1527,10 +1512,7 @@ mod tests {
         let data = data();
         let mut rng = ChaCha8Rng::seed_from_u64(6);
         let mut f = CareerFighter::random(&mut rng, &data);
-        let armour = Refused {
-            armour: true,
-            weapon: false,
-        };
+        let armour = Refused { armour: true };
         let week = WeekPlan {
             refused: armour,
             loadout: f.loadout,

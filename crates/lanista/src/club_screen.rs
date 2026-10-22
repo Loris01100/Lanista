@@ -1018,21 +1018,11 @@ fn plan_editor(
         ui.checkbox(&mut plan.care, tr!("plan-care", cost = cost));
     }
     let fights = plan.activity.fights();
-    // The colosseum's equipment, refused for fame; nothing to refuse without a fight.
+    // The colosseum's armour, refused for fame; nothing to refuse without a fight.
     if fights {
-        let fame = &data.fighter.fame;
+        let fame = data.fighter.fame.refused_armour;
         ui.checkbox(&mut plan.refused.armour, tr!("plan-no-armour"))
-            .on_hover_text(tr!(
-                "plan-no-armour-effect",
-                fame = fame.refused_armour,
-                all = fame.refused_all
-            ));
-        ui.checkbox(&mut plan.refused.weapon, tr!("plan-no-weapon"))
-            .on_hover_text(tr!(
-                "plan-no-weapon-effect",
-                fame = fame.refused_weapon,
-                all = fame.refused_all
-            ));
+            .on_hover_text(tr!("plan-no-armour-effect", fame = fame));
     } else {
         plan.refused = Refused::NONE;
     }
@@ -1350,16 +1340,13 @@ mod tests {
     #[test]
     fn refused_equipment_is_kept_from_week_to_week_and_told() {
         let mut screen = screen(7);
-        let weapon = Refused {
-            armour: false,
-            weapon: true,
-        };
+        let armour = Refused { armour: true };
         screen.decisions.plans[0].activity = Activity::Fight(ColosseumId(0));
-        screen.decisions.plans[0].refused = weapon;
+        screen.decisions.plans[0].refused = armour;
         screen.next_week();
-        assert_eq!(screen.decisions.plans[0].refused, weapon);
+        assert_eq!(screen.decisions.plans[0].refused, armour);
         let lines = &screen.histories[0][0].1;
-        assert!(lines[1].contains(", sans arme :"), "{lines:?}");
+        assert!(lines[1].contains(", sans armure :"), "{lines:?}");
     }
 
     #[test]

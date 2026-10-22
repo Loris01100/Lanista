@@ -801,11 +801,10 @@ pub fn fight_text(fight: &FightSummary, data: &DesignData) -> String {
     } else {
         "false"
     };
-    let refused = match (fight.refused.armour, fight.refused.weapon) {
-        (true, true) => "both",
-        (true, false) => "armour",
-        (false, true) => "weapon",
-        (false, false) => "none",
+    let refused = if fight.refused.armour {
+        "armour"
+    } else {
+        "none"
     };
     let against = if fight.is_melee() {
         tr!(

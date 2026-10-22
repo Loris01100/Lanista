@@ -134,11 +134,8 @@ pub struct FameRules {
     pub surrender: u32,
     /// Lost by every fighter when the fight ends on the time limit.
     pub dull_fight: u32,
-    /// Gained for fighting without armour, without weapon, or without either
-    /// (see `equipment::Refused::fame_bonus`).
+    /// Gained for fighting without armour (see `equipment::Refused::fame_bonus`).
     pub refused_armour: u32,
-    pub refused_weapon: u32,
-    pub refused_all: u32,
     /// Gained in a melee by the last one standing, less for each place below, none
     /// for the first one out.
     pub melee_survival: u32,
@@ -172,8 +169,6 @@ mod tests {
         surrender: 8,
         dull_fight: 3,
         refused_armour: 3,
-        refused_weapon: 6,
-        refused_all: 12,
         melee_survival: 10,
     };
 

@@ -103,11 +103,8 @@
         surrender: 8,
         // A fight stopped by the time limit, for every fighter in it.
         dull_fight: 3,
-        // For daring to fight without part of the colosseum's equipment, whatever the
-        // result: more without weapon than without armour, most without anything.
+        // For daring to fight without armour, whatever the result.
         refused_armour: 3,
-        refused_weapon: 6,
-        refused_all: 12,
         // In a melee, shared out by place: all of it to the last one standing, none to
         // the first one out.
         melee_survival: 10,
@@ -135,14 +132,12 @@
             (-2.7, 0.1, -22.5), (-4.6, 2.4, -45.0), (-4.9, 7.3, -67.5), (-3.0, 12.0, -90.0),
         ],
     ),
-    // The colosseum's equipment is the same for everyone. A refused piece costs, in
-    // percent of what is left: defenses without armour, attacks without weapon, whose
-    // cutting hits turn blunt (bare hands).
+    // The colosseum's equipment is the same for everyone. Refusing the armour costs, in
+    // percent of what is left, the defenses; the weapons are never refused.
     // A loadout's off hand (data/classes.ron), in percent: melee and ranged defenses with
     // a shield; melee attack with a second weapon, for a fighter not ambidextrous.
     equipment: (
         armourless_defense_percent: 30,
-        weaponless_attack_percent: 40,
         shield_defense_percent: 115,
         off_hand_attack_percent: 85,
     ),

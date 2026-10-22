@@ -103,7 +103,7 @@ Chaque étape laisse le jeu jouable avec mirmillon et augure, qui servent de ter
    - la fiche montre l'aisance avec chaque configuration ; pour un combattant extérieur, elle se voit une fois observé, avec un recruteur de niveau 3 ou plus (`Scouting::ease`, `market::ease_seen`) ;
    - un combattant créé et les combattants des rivaux prennent la configuration où ils sont le plus à l'aise (`CareerFighter::preferred_loadout`) ;
    - l'ambidextrie ne pèse pas sur le tirage : elle retire seulement le malus de la deuxième arme.
-7. **Équipement refusé : l'armure seule** (`fighter/equipment.rs`, `fighter/fame.rs`, `data/fighter.ron`, `club_screen`, `fr.ftl`) : retirer `Refused::weapon`, son malus, les bonus de célébrité `refused_weapon` et `refused_all`, et leur choix à l'écran.
+7. **Équipement refusé : l'armure seule** (`fighter/equipment.rs`, `fighter/fame.rs`, `data/fighter.ron`, `club_screen`, `fr.ftl`) — fait : `Refused` ne garde que `armour` ; le malus d'attaque (`weaponless_attack_percent`), les coups à mains nues, les bonus de célébrité `refused_weapon` et `refused_all` et la case « Sans arme » sont retirés. L'observation de l'IA apprise garde la place de l'arme, toujours à 0, jusqu'à l'étape 11.
 8. **Éléments du sol** (`data/combat.ron`, `combat.rs`, `design_data::Cost`) :
    - chaque type d'arène dit son élément (sable, pierre) ;
    - le combattant porte une réserve d'éléments, avec un maximum ;

@@ -378,7 +378,9 @@ impl Senses {
                     IllnessLevel::Severe => 1.0,
                 }),
         );
-        values.extend([flag(me.refused.armour), flag(me.refused.weapon)]);
+        // ponytail: the refused weapon's slot, always 0, kept for the trained models
+        // until the observation is redone (docs/Classes.md, step 11).
+        values.extend([flag(me.refused.armour), 0.0]);
         values.extend(self.class_values(me));
         values.extend([
             (arena.width / ARENA_SCALE).min(1.0),
@@ -576,7 +578,7 @@ mod tests {
         env.arena.fighters.push(ally);
         env.arena.pacts.push((FighterId(0), FighterId(2)));
         let me = &mut env.arena.fighters[0];
-        me.refused.weapon = true;
+        me.refused.armour = true;
         me.condition.injuries.push(crate::fighter::injury::Injury {
             location: Location::Arm(Side::Left),
             severity: Severity::Lost,
@@ -589,7 +591,7 @@ mod tests {
             o[injuries..injuries + INJURY_LOCATIONS],
             [0.0, 0.0, 1.0, 0.0, 0.0, 0.0]
         );
-        assert_eq!(o[OWN_VALUES - 2..OWN_VALUES], [0.0, 1.0]);
+        assert_eq!(o[OWN_VALUES - 2..OWN_VALUES], [1.0, 0.0]);
         let seen = OTHER_VALUES + env.senses.class_count;
         let opponents = env.senses.spells_start() + SPELL_VALUES * env.senses.max_spells;
         let allies = opponents + OTHERS_SEEN * seen;

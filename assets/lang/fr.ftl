@@ -132,9 +132,7 @@ against-melee = Mêlée à { $size }, { $place }{ $stronger ->
        *[false] {""}
     }
 fight = { $against }{ $refused ->
-        [both] , sans armure ni arme
         [armour] , sans armure
-        [weapon] , sans arme
        *[none] {""}
     } : { $result }, renommée { $fame }
 
@@ -408,9 +406,7 @@ plan-care = Soigner ({ $cost })
 plan-care-unaffordable = Soigner ({ $cost }) : pas assez d'argent
 plan-loadout = Configuration :
 plan-no-armour = Sans armure
-plan-no-armour-effect = Défenses très réduites, renommée +{ $fame } (+{ $all } sans rien)
-plan-no-weapon = Sans arme
-plan-no-weapon-effect = Attaques très réduites, coups à mains nues, renommée +{ $fame } (+{ $all } sans rien)
+plan-no-armour-effect = Défenses très réduites, renommée +{ $fame }
 plan-fight-ill-advised = Combat déconseillé
 plan-challenge = Défier :
 plan-challenge-rival = { $name }, Elo { $elo }{ $accepts ->

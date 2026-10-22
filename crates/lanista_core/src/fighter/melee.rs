@@ -400,10 +400,7 @@ mod tests {
     fn each_fighter_sees_the_melee_from_its_place() {
         let data = data();
         let (mut fighters, mut rng) = twenty(&data, 3);
-        let refused = Refused {
-            armour: true,
-            weapon: false,
-        };
+        let refused = Refused { armour: true };
         let entrants = [
             Entrant::default(),
             Entrant {

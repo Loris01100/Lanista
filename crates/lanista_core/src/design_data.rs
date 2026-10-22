@@ -525,7 +525,7 @@ impl DesignData {
             });
         }
         let equipment = &rules.equipment;
-        // A refused piece, a second weapon or a loadout one is not at ease with must not
+        // A refused armour, a second weapon or a loadout one is not at ease with must not
         // make the fighter stronger.
         for (field, percent) in [
             ("ease.malus_percent", rules.ease.malus_percent),
@@ -536,10 +536,6 @@ impl DesignData {
             (
                 "equipment.armourless_defense_percent",
                 equipment.armourless_defense_percent,
-            ),
-            (
-                "equipment.weaponless_attack_percent",
-                equipment.weaponless_attack_percent,
             ),
         ] {
             if percent > 100 {
@@ -806,15 +802,6 @@ mod tests {
         assert_eq!(field(&unarmed, FIGHTER), "weapon");
         let upside_down = FIGHTER.replacen("start_age: (20, 30)", "start_age: (30, 20)", 1);
         assert_eq!(field(CLASSES, &upside_down), "career.start_age");
-        let stronger = FIGHTER.replacen(
-            "weaponless_attack_percent: 40",
-            "weaponless_attack_percent: 140",
-            1,
-        );
-        assert_eq!(
-            field(CLASSES, &stronger),
-            "equipment.weaponless_attack_percent"
-        );
         let stronger = FIGHTER.replacen(
             "off_hand_attack_percent: 85",
             "off_hand_attack_percent: 185",
