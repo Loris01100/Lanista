@@ -98,6 +98,23 @@ pub struct SpellData {
     /// part it lands on for sure, if it can be (`combat::severs`); never if left out.
     #[serde(default)]
     pub sure_cut_hits: Option<u32>,
+    /// Chance, in percent, that a hit of it makes the part it lands on bleed, if that
+    /// part does not already (`combat::BleedRules`); never if left out.
+    #[serde(default)]
+    pub bleed_percent: u32,
+    /// The accuracy a hit of it takes off its target for a while, adding up with the
+    /// others; none if left out.
+    #[serde(default)]
+    pub accuracy_drop: Option<AccuracyDrop>,
+}
+
+/// A share of a fighter's accuracy lost for a while (`fighter::Effect::Blinded`).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct AccuracyDrop {
+    pub percent: u32,
+    /// 30 per second.
+    pub ticks: u32,
 }
 
 const fn full_accuracy() -> u32 {

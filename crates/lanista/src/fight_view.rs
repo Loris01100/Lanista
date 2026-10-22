@@ -6,8 +6,8 @@ use lanista_core::ai::{self, CombatAi};
 use lanista_core::combat::{self, Arena, RADIUS};
 use lanista_core::design_data::DesignData;
 use lanista_core::duel::ais;
-use lanista_core::fighter::FighterId;
 use lanista_core::fighter::injury::Location;
+use lanista_core::fighter::{Effect, FighterId};
 use lanista_core::log::EventKind;
 use lanista_core::melee::{in_danger, in_final, next_cut};
 use macroquad::prelude::*;
@@ -47,6 +47,8 @@ const BLOOD_SPREAD_SECONDS: f32 = 1.2;
 const BLOOD_RADIUS: f32 = 0.7;
 /// The stain sits this far below the fighter's center, under the body lying down, in meters.
 const BLOOD_DROP: f32 = 0.25;
+/// Share of a full stain under a fighter still bleeding.
+const BLEEDING_SPREAD: f32 = 0.3;
 /// Smaller blots around the stain: offset from its center and radius, as shares of
 /// `BLOOD_RADIUS`. Mirrored for every other fighter so two stains differ.
 const BLOOD_BLOTS: [(f32, f32, f32); 4] = [
@@ -376,7 +378,7 @@ impl FightView {
     }
 
     /// Draws the fight in world coordinates, a camera on it: the floor of its arena kind
-    /// (deep sand, pillars), blood, the lines between allies, the rings under the club's
+    /// (deep sand, pillars), blood under the dead and those bleeding, the lines between allies, the rings under the club's
     /// fighters, then the fighters, the dead first, those out of the fight dimmed.
     pub fn draw(&self, assets: &Assets, data: &DesignData) {
         let (width, height) = (to_f32(self.arena.width), to_f32(self.arena.height));
@@ -397,6 +399,15 @@ impl FightView {
                 let x = to_f32(fighter.position.x);
                 let y = to_f32(fighter.position.y) + BLOOD_DROP;
                 draw_blood(x, y, blood_spread(dead_for), fighter.id.0 % 2 == 1);
+            } else if fighter.is_fighting()
+                && fighter
+                    .effects
+                    .iter()
+                    .any(|l| matches!(l.effect, Effect::Bleeding { .. }))
+            {
+                let x = to_f32(fighter.position.x);
+                let y = to_f32(fighter.position.y) + BLOOD_DROP;
+                draw_blood(x, y, BLEEDING_SPREAD, fighter.id.0 % 2 == 1);
             }
         }
         let at = self.drawn_positions();

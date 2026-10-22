@@ -4,10 +4,10 @@ use rand_chacha::rand_core::SeedableRng;
 use serde::Deserialize;
 
 use crate::ai::{Action, CombatAi};
-use crate::design_data::SpellData;
+use crate::design_data::{AccuracyDrop, SpellData};
 use crate::fighter::injury::{Location, LocationWeights, Side, roll_location};
 use crate::fighter::personality::Personality;
-use crate::fighter::{Fighter, FighterId, Stats, pick};
+use crate::fighter::{Effect, Fighter, FighterId, Lasting, Stats, percent_of, pick};
 use crate::log::{Event, EventKind};
 use crate::melee::{EliminationRules, MeleeRules, PactRules, eliminate, update_pacts};
 
@@ -63,6 +63,9 @@ pub struct Arena {
     pub cut: CutRules,
     /// Where hits land; none is drawn, unless set with [`Arena::with_rules`].
     pub hits: Option<LocationWeights>,
+    /// How long and how much a part hit bleeds; never, unless set with
+    /// [`Arena::with_rules`].
+    pub bleed: BleedRules,
     /// Percentage of their speed fighters walk at: 100, unless set with
     /// [`Arena::with_layout`].
     pub speed_percent: u32,
@@ -95,6 +98,7 @@ pub struct CombatRules {
     pub cut: CutRules,
     /// Where a hit lands: relative chances of the head, the body, an arm and a leg.
     pub hits: LocationWeights,
+    pub bleed: BleedRules,
     pub arenas: ArenaLayouts,
     pub melee: MeleeRules,
 }
@@ -215,6 +219,41 @@ impl CutRules {
     };
 }
 
+/// How a part bleeds once a hit made it (`SpellData::bleed_percent`): each second for
+/// its part's seconds, it takes `hp_percent_per_second` of the fighter's max HP, at
+/// least 1.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct BleedRules {
+    pub hp_percent_per_second: u32,
+    pub head_seconds: u32,
+    pub body_seconds: u32,
+    pub arm_seconds: u32,
+    pub leg_seconds: u32,
+}
+
+impl BleedRules {
+    /// Nothing ever bleeds.
+    pub const NEVER: Self = Self {
+        hp_percent_per_second: 0,
+        head_seconds: 0,
+        body_seconds: 0,
+        arm_seconds: 0,
+        leg_seconds: 0,
+    };
+
+    /// How long `part` bleeds, in seconds.
+    #[must_use]
+    pub fn seconds(&self, part: Location) -> u32 {
+        match part {
+            Location::Head => self.head_seconds,
+            Location::Body => self.body_seconds,
+            Location::Arm(_) => self.arm_seconds,
+            Location::Leg(_) => self.leg_seconds,
+        }
+    }
+}
+
 /// What a spell hits with: a blunt blow stuns more often than a cutting one, a cutting
 /// one may sever a limb or the head, a neutral one (spells without an element yet) does
 /// neither.
@@ -261,6 +300,7 @@ impl Arena {
             stun: StunRules::NEVER,
             cut: CutRules::NEVER,
             hits: None,
+            bleed: BleedRules::NEVER,
             speed_percent: 100,
             pillars: Vec::new(),
             pact_rules: PactRules::NEVER,
@@ -294,6 +334,7 @@ impl Arena {
         self.stun = rules.stun;
         self.cut = rules.cut;
         self.hits = Some(rules.hits);
+        self.bleed = rules.bleed;
         self
     }
 
@@ -372,6 +413,7 @@ pub fn tick(arena: &mut Arena, ais: &mut [Box<dyn CombatAi>]) {
     }
     cool_down(arena);
     recover(arena);
+    wear_off(arena);
     move_fighters(arena);
     separate(arena);
     keep_inside(arena);
@@ -425,17 +467,21 @@ pub fn hit_percent(attacker: &Stats, defender: &Stats, rules: &AccuracyRules) ->
     percent.clamp(rules.min_percent, rules.max_percent.max(rules.min_percent))
 }
 
-/// Chance in percent that `spell` hits: `hit_percent`, times the spell's
-/// `accuracy_percent`.
+/// Chance in percent that `spell` hits: `hit_percent` with the accuracy the attacker
+/// has for now (`Fighter::accuracy`), times the spell's `accuracy_percent`.
 #[must_use]
 pub fn spell_hit_percent(
-    attacker: &Stats,
+    attacker: &Fighter,
     defender: &Stats,
     spell: &SpellData,
     rules: &AccuracyRules,
 ) -> u32 {
+    let aim = Stats {
+        accuracy: attacker.accuracy(),
+        ..attacker.stats
+    };
     let percent =
-        u64::from(hit_percent(attacker, defender, rules)) * u64::from(spell.accuracy_percent) / 100;
+        u64::from(hit_percent(&aim, defender, rules)) * u64::from(spell.accuracy_percent) / 100;
     u32::try_from(percent).unwrap_or(u32::MAX)
 }
 
@@ -738,7 +784,7 @@ fn ready_cast(arena: &Arena, i: usize) -> Option<(usize, FighterId, usize)> {
 fn cast(arena: &mut Arena, i: usize, spell: usize, (target, t): (FighterId, usize)) {
     let (caster, defender) = (&arena.fighters[i], &arena.fighters[t]);
     let data = &caster.spells[spell];
-    let chance = spell_hit_percent(&caster.stats, &defender.stats, data, &arena.accuracy);
+    let chance = spell_hit_percent(caster, &defender.stats, data, &arena.accuracy);
     let missed = chance < 100 && arena.rng.random_range(0..100) >= chance;
     let part = match arena.hits {
         Some(weights) if !missed => Some(roll_location(&mut arena.rng, &weights)),
@@ -751,6 +797,7 @@ fn cast(arena: &mut Arena, i: usize, spell: usize, (target, t): (FighterId, usiz
     };
     let kind = data.damage_kind;
     let sure_cut_hits = data.sure_cut_hits.filter(|_| !missed);
+    let (bleed_percent, accuracy_drop) = (data.bleed_percent, data.accuracy_drop);
     let caster = &mut arena.fighters[i];
     caster.spend(spell);
     caster.action = Action::Wait;
@@ -776,8 +823,107 @@ fn cast(arena: &mut Arena, i: usize, spell: usize, (target, t): (FighterId, usiz
     });
     let cut = part.filter(|_| kind == DamageKind::Cutting);
     strike(arena, (target, t), (damage, sure), kind, cut);
+    if !missed {
+        afflict(arena, (caster, t), (bleed_percent, part), accuracy_drop);
+    }
     let caster = &mut arena.fighters[i];
     caster.round_damage = caster.round_damage.saturating_add(damage);
+}
+
+/// What a hit from `source` leaves on the target, if it still fights: the part it
+/// landed on bleeds with `bleed_percent`, drawn only if that part can and does not
+/// already; its accuracy drops by `accuracy_drop`, adding up with the drops it has.
+fn afflict(
+    arena: &mut Arena,
+    (source, t): (FighterId, usize),
+    (bleed_percent, part): (u32, Option<Location>),
+    accuracy_drop: Option<AccuracyDrop>,
+) {
+    let defender = &arena.fighters[t];
+    if !defender.is_fighting() {
+        return;
+    }
+    let mut effects = Vec::new();
+    if let Some(part) = part {
+        let seconds = arena.bleed.seconds(part);
+        if bleed_percent > 0
+            && seconds > 0
+            && !defender.bleeds(part)
+            && arena.rng.random_range(0..100) < bleed_percent
+        {
+            let effect = Effect::Bleeding { part, source };
+            effects.push((effect, seconds.saturating_mul(TICKS_PER_SECOND)));
+        }
+    }
+    if let Some(drop) = accuracy_drop.filter(|d| d.percent > 0 && d.ticks > 0) {
+        let effect = Effect::Blinded {
+            percent: drop.percent,
+        };
+        effects.push((effect, drop.ticks));
+    }
+    let fighter = arena.fighters[t].id;
+    for (effect, ticks_left) in effects {
+        arena.fighters[t]
+            .effects
+            .push(Lasting { effect, ticks_left });
+        arena.log.push(Event {
+            tick: arena.tick,
+            kind: EventKind::Afflicted { fighter, effect },
+        });
+    }
+}
+
+/// Counts down the effects on every fighter still in the fight, which wear off at 0. A
+/// bleeding part takes `BleedRules::hp_percent_per_second` of the fighter's max HP, at
+/// least 1, at the end of each of its seconds, as damage its source dealt: it may die
+/// or give up.
+fn wear_off(arena: &mut Arena) {
+    let percent = arena.bleed.hp_percent_per_second;
+    for t in 0..arena.fighters.len() {
+        let f = &mut arena.fighters[t];
+        if !f.is_fighting() {
+            continue;
+        }
+        let mut bled = Vec::new();
+        for lasting in &mut f.effects {
+            lasting.ticks_left = lasting.ticks_left.saturating_sub(1);
+            if let Effect::Bleeding { part, source } = lasting.effect
+                && lasting.ticks_left.is_multiple_of(TICKS_PER_SECOND)
+            {
+                bled.push((part, source));
+            }
+        }
+        f.effects.retain(|l| l.ticks_left > 0);
+        for (part, source) in bled {
+            let f = &mut arena.fighters[t];
+            if !f.is_fighting() {
+                break;
+            }
+            let hp_before = f.hp;
+            f.take_damage(percent_of(f.stats.hp, percent).max(1));
+            let damage = hp_before - f.hp;
+            let (fighter, died, surrendered) = (f.id, !f.is_alive(), f.surrendered);
+            if let Some(s) = usize::try_from(source.0)
+                .ok()
+                .and_then(|s| arena.fighters.get_mut(s))
+            {
+                s.round_damage = s.round_damage.saturating_add(damage);
+            }
+            let tick = arena.tick;
+            let mut log = |kind| arena.log.push(Event { tick, kind });
+            log(EventKind::Bled {
+                fighter,
+                source,
+                part,
+                damage,
+            });
+            if died {
+                log(EventKind::Death { fighter });
+            } else if surrendered {
+                log(EventKind::Surrender { fighter });
+            }
+        }
+    }
 }
 
 /// The effects of a hit on the target: a cut on its head may sever it, killing, or on a
@@ -1511,13 +1657,13 @@ mod tests {
     fn a_clumsy_spell_keeps_its_share_of_the_hit_chance() {
         let (attacker, defender) = (fighter(0, 0.0, 0.0), fighter(1, 0.0, 0.0));
         let mut spell = attacker.spells[0].clone();
-        let full = spell_hit_percent(&attacker.stats, &defender.stats, &spell, &ACCURACY);
+        let full = spell_hit_percent(&attacker, &defender.stats, &spell, &ACCURACY);
         assert_eq!(
             full,
             hit_percent(&attacker.stats, &defender.stats, &ACCURACY)
         );
         spell.accuracy_percent = 50;
-        let half = spell_hit_percent(&attacker.stats, &defender.stats, &spell, &ACCURACY);
+        let half = spell_hit_percent(&attacker, &defender.stats, &spell, &ACCURACY);
         assert_eq!(half, full / 2);
         // It misses even in an arena that always hits.
         let mut arena = duel(0.5);
@@ -1556,6 +1702,108 @@ mod tests {
             Location::Head,
             &CutRules::NEVER
         ));
+    }
+
+    /// `duel(0.5)` where fighter 0's hits land on the body and make it bleed for 3 s,
+    /// 2 % of the max HP a second.
+    fn bleeding_duel() -> Arena {
+        let mut arena = duel(0.5);
+        arena.fighters[0].spells[0].bleed_percent = 100;
+        arena.hits = Some(landing(0, 1, 0, 0));
+        arena.bleed = BleedRules {
+            hp_percent_per_second: 2,
+            body_seconds: 3,
+            ..BleedRules::NEVER
+        };
+        arena
+    }
+
+    fn bleeds(arena: &Arena) -> usize {
+        let bled = |e: &&Event| {
+            matches!(
+                e.kind,
+                EventKind::Bled {
+                    fighter: FighterId(1),
+                    ..
+                }
+            )
+        };
+        arena.log.iter().filter(bled).count()
+    }
+
+    #[test]
+    fn a_bleeding_part_loses_hp_each_second_for_its_time_and_never_bleeds_twice() {
+        let mut arena = bleeding_duel();
+        play(&mut arena, &[HIT, Action::Wait], 1);
+        assert_eq!(arena.fighters[1].hp, 100 - HIT_DAMAGE);
+        assert!(arena.fighters[1].bleeds(Location::Body));
+        play(&mut arena, &[Action::Wait, Action::Wait], 120);
+        assert_eq!(arena.fighters[1].hp, 100 - HIT_DAMAGE - 3 * 2);
+        assert_eq!(bleeds(&arena), 3);
+        let text = crate::log::log_text(&arena);
+        assert!(text.contains("fighter 1's body bleeds"));
+        assert!(text.contains("fighter 1 bleeds 2 from the body"));
+        assert_eq!(arena.fighters[1].effects, Vec::new());
+        // The bleeding counts as damage its source dealt.
+        assert_eq!(arena.fighters[0].round_damage, HIT_DAMAGE + 6);
+        assert_eq!(
+            crate::log::Report::new(&arena).fighters[0].damage_dealt,
+            HIT_DAMAGE + 6
+        );
+        // A second hit on the part still bleeding adds no bleeding.
+        let mut arena = bleeding_duel();
+        play(&mut arena, &[HIT, Action::Wait], 31);
+        let afflicted = |e: &&Event| matches!(e.kind, EventKind::Afflicted { .. });
+        assert_eq!(arena.log.iter().filter(afflicted).count(), 1);
+        // Without bleeding rules, nothing bleeds.
+        let mut arena = bleeding_duel();
+        arena.bleed = BleedRules::NEVER;
+        play(&mut arena, &[HIT, Action::Wait], 1);
+        assert_eq!(arena.fighters[1].effects, Vec::new());
+    }
+
+    #[test]
+    fn a_bleeding_may_kill() {
+        let mut arena = bleeding_duel();
+        arena.fighters[1].hp = HIT_DAMAGE + 2;
+        play(&mut arena, &[HIT, Action::Wait], 1);
+        play(&mut arena, &[Action::Wait, Action::Wait], 30);
+        assert!(!arena.fighters[1].is_alive());
+        assert!(matches!(
+            arena.log.last().map(|e| e.kind),
+            Some(EventKind::Death {
+                fighter: FighterId(1)
+            })
+        ));
+        assert_eq!(bleeds(&arena), 1);
+    }
+
+    #[test]
+    fn accuracy_drops_add_up_then_wear_off() {
+        let mut arena = duel(0.5);
+        arena.fighters[0].spells[0].accuracy_drop = Some(AccuracyDrop {
+            percent: 30,
+            ticks: 60,
+        });
+        let before = spell_hit_percent(
+            &arena.fighters[1],
+            &arena.fighters[0].stats,
+            &arena.fighters[1].spells[0],
+            &ACCURACY,
+        );
+        play(&mut arena, &[HIT, Action::Wait], 31);
+        // Two hits: 60 % of 30 lost.
+        assert_eq!(arena.fighters[1].accuracy(), 12);
+        let after = spell_hit_percent(
+            &arena.fighters[1],
+            &arena.fighters[0].stats,
+            &arena.fighters[1].spells[0],
+            &ACCURACY,
+        );
+        assert!(after < before);
+        play(&mut arena, &[Action::Wait, Action::Wait], 60);
+        assert_eq!(arena.fighters[1].accuracy(), 30);
+        assert_eq!(arena.fighters[1].effects, Vec::new());
     }
 
     #[test]

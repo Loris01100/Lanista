@@ -136,6 +136,32 @@ pub fn fatal_blow_wound<R: Rng + ?Sized>(rng: &mut R, rules: &InjuryRules) -> In
     }
 }
 
+/// The injury a bleeding leaves at `part`: light or medium, drawn by their weights.
+pub fn bleeding_wound<R: Rng + ?Sized>(
+    rng: &mut R,
+    location: Location,
+    rules: &InjuryRules,
+) -> Injury {
+    let weights = &rules.severity_weights;
+    let severity = pick(
+        rng,
+        &[
+            (weights.light, Severity::Light),
+            (weights.medium, Severity::Medium),
+        ],
+    );
+    let (low, high) = if severity == Severity::Light {
+        rules.healing_weeks.light
+    } else {
+        rules.healing_weeks.medium
+    };
+    Injury {
+        location,
+        severity,
+        weeks_left: rng.random_range(low..=high),
+    }
+}
+
 /// The severe head injury a stun may leave (see `InjuryRules::stun_wound_chance`).
 pub fn stun_wound<R: Rng + ?Sized>(rng: &mut R, rules: &InjuryRules) -> Injury {
     let (low, high) = rules.healing_weeks.severe;

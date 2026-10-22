@@ -3,8 +3,8 @@
 use std::fmt::{self, Write};
 
 use crate::combat::Arena;
-use crate::fighter::FighterId;
 use crate::fighter::injury::{Location, Side};
+use crate::fighter::{Effect, FighterId};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct Event {
@@ -67,6 +67,19 @@ pub enum EventKind {
     /// `fighter` dealt too little damage before a melee's check: out, alive.
     Eliminated {
         fighter: FighterId,
+    },
+    /// The hit just logged left `effect` on `fighter` for a while.
+    Afflicted {
+        fighter: FighterId,
+        effect: Effect,
+    },
+    /// `fighter`'s bleeding `part` took `damage` HP, dealt by `source`; a `Death` or
+    /// `Surrender` may follow.
+    Bled {
+        fighter: FighterId,
+        source: FighterId,
+        part: Location,
+        damage: u32,
     },
 }
 
@@ -148,6 +161,19 @@ impl Report {
                         f.stuns += 1;
                     }
                 }
+                EventKind::Bled {
+                    fighter,
+                    source,
+                    damage,
+                    ..
+                } => {
+                    if let Some(s) = index(source).and_then(|i| fighters.get_mut(i)) {
+                        s.damage_dealt = s.damage_dealt.saturating_add(damage);
+                    }
+                    if let Some(f) = index(fighter).and_then(|i| fighters.get_mut(i)) {
+                        f.damage_taken = f.damage_taken.saturating_add(damage);
+                    }
+                }
                 EventKind::Death { .. }
                 | EventKind::Surrender { .. }
                 | EventKind::Rise { .. }
@@ -155,7 +181,8 @@ impl Report {
                 | EventKind::Sever { .. }
                 | EventKind::Pact { .. }
                 | EventKind::PactBroken { .. }
-                | EventKind::Eliminated { .. } => {}
+                | EventKind::Eliminated { .. }
+                | EventKind::Afflicted { .. } => {}
             }
         }
         let over = arena.is_over();
@@ -316,9 +343,37 @@ pub fn log_text(arena: &Arena) -> String {
                     event.tick, fighter.0
                 )
             }
+            EventKind::Afflicted { .. } | EventKind::Bled { .. } => {
+                writeln!(text, "[{:>5}] {}", event.tick, effect_line(event.kind))
+            }
         };
     }
     text
+}
+
+/// The log's line for a lasting effect left by a hit, or a bleeding's damage.
+fn effect_line(kind: EventKind) -> String {
+    match kind {
+        EventKind::Afflicted {
+            fighter,
+            effect: Effect::Bleeding { part, .. },
+        } => format!("fighter {}'s {} bleeds", fighter.0, limb_name(part)),
+        EventKind::Afflicted {
+            fighter,
+            effect: Effect::Blinded { percent },
+        } => format!("fighter {} loses {percent} % accuracy", fighter.0),
+        EventKind::Bled {
+            fighter,
+            part,
+            damage,
+            ..
+        } => format!(
+            "fighter {} bleeds {damage} from the {}",
+            fighter.0,
+            limb_name(part)
+        ),
+        _ => String::new(),
+    }
 }
 
 /// Each fighter's place in a fight, in the arena's order, from the elimination order:
@@ -345,7 +400,9 @@ pub fn places(arena: &Arena) -> Vec<u32> {
                     | EventKind::Stun { .. }
                     | EventKind::Rise { .. }
                     | EventKind::Pact { .. }
-                    | EventKind::PactBroken { .. } => false,
+                    | EventKind::PactBroken { .. }
+                    | EventKind::Afflicted { .. }
+                    | EventKind::Bled { .. } => false,
                 })
                 .map_or(u64::MAX, |e| u64::from(e.tick))
         })

@@ -201,6 +201,8 @@ pub struct Fighter {
     pub severed: Option<Location>,
     /// Hits taken from spells that sever for sure after some (`SpellData::sure_cut_hits`).
     pub cleaving_hits: u32,
+    /// What lasts on it for a while: bleeding parts, lost accuracy.
+    pub effects: Vec<Lasting>,
     /// Dealt too little damage before a melee's check: out of the fight alive, a defeat
     /// (see `melee::QuotaRules`).
     pub eliminated: bool,
@@ -215,6 +217,22 @@ pub struct Fighter {
     pub appearance: Appearance,
     /// The learned AI that plays it; the utility AI without one (see `duel::ais`).
     pub model: Option<Arc<Model>>,
+}
+
+/// What a hit leaves on a fighter for a while (see `combat::wear_off`).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Effect {
+    /// `part` loses HP each second, dealt by `source`; one per part at most.
+    Bleeding { part: Location, source: FighterId },
+    /// Its attacks hit less often: `percent` of its accuracy lost, adding up.
+    Blinded { percent: u32 },
+}
+
+/// An effect and the ticks it lasts still.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct Lasting {
+    pub effect: Effect,
+    pub ticks_left: u32,
 }
 
 /// Everything about a fighter's state that its combat AI reads, beyond HP and resources.
@@ -269,6 +287,7 @@ impl Fighter {
             knocked_out: false,
             severed: None,
             cleaving_hits: 0,
+            effects: Vec::new(),
             eliminated: false,
             round_damage: 0,
             condition: Condition::default(),
@@ -298,6 +317,28 @@ impl Fighter {
     #[must_use]
     pub fn has_lost(&self, part: Location) -> bool {
         self.severed == Some(part) || injury::has_lost(&self.condition.injuries, part)
+    }
+
+    /// Whether `part` is bleeding.
+    #[must_use]
+    pub fn bleeds(&self, part: Location) -> bool {
+        self.effects
+            .iter()
+            .any(|l| matches!(l.effect, Effect::Bleeding { part: p, .. } if p == part))
+    }
+
+    /// Its accuracy, less what it lost for now (`Effect::Blinded`), down to 0.
+    #[must_use]
+    pub fn accuracy(&self) -> u32 {
+        let lost: u32 = self
+            .effects
+            .iter()
+            .map(|l| match l.effect {
+                Effect::Blinded { percent } => percent,
+                Effect::Bleeding { .. } => 0,
+            })
+            .sum();
+        percent_of(self.stats.accuracy, 100 - lost.min(100))
     }
 
     /// Fighting and not down: acts, and can be hit.
@@ -374,6 +415,8 @@ pub(crate) fn test_fighter(id: u32, x: f64, y: f64) -> Fighter {
             damage_kind: DamageKind::Blunt,
             accuracy_percent: 100,
             sure_cut_hits: None,
+            bleed_percent: 0,
+            accuracy_drop: None,
         }],
     };
     let stats = Stats {

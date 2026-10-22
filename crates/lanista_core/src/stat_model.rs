@@ -19,7 +19,8 @@ use crate::duel::STATS;
 use crate::fighter::fame::{FameRules, FightOutcome, FightResult};
 use crate::fighter::injury::{Location, LocationWeights};
 use crate::fighter::personality::Personality;
-use crate::fighter::{Fighter, FighterId};
+use crate::fighter::{Effect, Fighter, FighterId};
+use crate::log::EventKind;
 
 /// Features of a fighter besides its class: the seven stats, fear, surrender
 /// threshold, aggression and showmanship.
@@ -145,6 +146,8 @@ pub struct Ending {
     pub knocked_out: bool,
     /// What a cutting hit severed: the head (`died` too) or a limb (lost, alive).
     pub severed: Option<Location>,
+    /// The first part of it that bled; the model draws none.
+    pub bled: Option<Location>,
     pub spectacular_hits: u32,
 }
 
@@ -160,6 +163,13 @@ impl Ending {
             stunned: fighter.is_some_and(|f| f.stuns > 0),
             knocked_out: fighter.is_some_and(|f| f.knocked_out),
             severed: fighter.and_then(|f| f.severed),
+            bled: arena.log.iter().find_map(|e| match e.kind {
+                EventKind::Afflicted {
+                    fighter,
+                    effect: Effect::Bleeding { part, .. },
+                } if fighter == id => Some(part),
+                _ => None,
+            }),
             spectacular_hits: outcome.spectacular_hits,
         }
     }
@@ -344,6 +354,7 @@ impl StatModel {
                 stunned: rng.random::<f64>() < self.stunned_chance(opponent),
                 knocked_out: false,
                 severed: None,
+                bled: None,
                 spectacular_hits: draw(rng, &hits.unfinished),
             };
             return [side(rng, b), side(rng, a)];
@@ -373,6 +384,7 @@ impl StatModel {
             stunned: rng.random::<f64>() < self.stunned_chance(second),
             knocked_out: false,
             severed: None,
+            bled: None,
             spectacular_hits: draw(rng, &hits.won),
         };
         let loser = Ending {
@@ -385,6 +397,7 @@ impl StatModel {
             stunned: knocked_out || rng.random::<f64>() < self.stunned_chance(first),
             knocked_out,
             severed,
+            bled: None,
             spectacular_hits: draw(rng, &hits.lost),
         };
         if a_wins {

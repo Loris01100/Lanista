@@ -15,8 +15,8 @@ use crate::fighter::fame::{Fame, FightOutcome, FightResult};
 use crate::fighter::form::{Form, FormEvent};
 use crate::fighter::illness::{Illness, IllnessLevel, roll_illness};
 use crate::fighter::injury::{
-    Injury, Location, Severity, Side, fatal_blow_wound, has_lost, heal_week, injured_stats,
-    roll_injury, severed_limb_wound, spare_after_effect, stun_wound,
+    Injury, Location, Severity, Side, bleeding_wound, fatal_blow_wound, has_lost, heal_week,
+    injured_stats, roll_injury, severed_limb_wound, spare_after_effect, stun_wound,
 };
 use crate::fighter::morale::{Morale, MoraleEvent};
 use crate::fighter::personality::Personality;
@@ -463,7 +463,8 @@ impl CareerFighter {
     /// The fame, record and death `side` brings: a beheaded fighter dies; one brought
     /// to 0 HP otherwise survives with a chance of `InjuryRules::fatal_blow_survival`,
     /// and a severe wound; one that lost a limb keeps it lost (a permanent injury); a
-    /// stunned one keeps a severe head wound with `InjuryRules::stun_wound_chance`.
+    /// stunned one keeps a severe head wound with `InjuryRules::stun_wound_chance`; one
+    /// that bled, a light or medium wound where it first bled (`bleeding_wound`).
     /// `bonus` fame comes whatever the result: refused equipment, a place in a melee.
     /// The wound is returned with the outcome and the fame change, not yet taken.
     pub(crate) fn take_side<R: Rng + ?Sized>(
@@ -515,6 +516,8 @@ impl CareerFighter {
             wound = (!has_lost(&self.injuries, limb)).then(|| severed_limb_wound(limb));
         } else if side.stunned && rng.random_bool(rules.injury.stun_wound_chance) {
             wound = Some(stun_wound(rng, &rules.injury));
+        } else if let Some(part) = side.bled {
+            wound = Some(bleeding_wound(rng, part, &rules.injury));
         }
         Taken {
             outcome,
@@ -1327,6 +1330,7 @@ mod tests {
             stunned: false,
             knocked_out: false,
             severed: None,
+            bled: None,
             spectacular_hits: 0,
         };
         let mut rng = ChaCha8Rng::seed_from_u64(1);
@@ -1390,6 +1394,7 @@ mod tests {
             stunned: false,
             knocked_out: false,
             severed: None,
+            bled: None,
             spectacular_hits: 0,
         };
         let weapon = Refused {
@@ -1512,6 +1517,7 @@ mod tests {
             stunned: true,
             knocked_out: false,
             severed: Some(severed),
+            bled: None,
             spectacular_hits: 0,
         };
         let mut rng = ChaCha8Rng::seed_from_u64(1);
@@ -1562,6 +1568,7 @@ mod tests {
             stunned: true,
             knocked_out: true,
             severed: None,
+            bled: None,
             spectacular_hits: 0,
         };
         let mut rng = ChaCha8Rng::seed_from_u64(1);
@@ -1580,6 +1587,28 @@ mod tests {
         rules.injury.stun_wound_chance = 0.0;
         let taken = fighter(1).take_side(knocked_out, false, 0, &mut rng, rules);
         assert_eq!(taken.wound, None);
+    }
+
+    #[test]
+    fn a_bleeding_leaves_at_most_a_medium_wound_where_it_bled() {
+        let data = data();
+        let arm = Location::Arm(Side::Left);
+        let bled = Ending {
+            result: FightResult::GaveUp,
+            died: false,
+            stunned: false,
+            knocked_out: false,
+            severed: None,
+            bled: Some(arm),
+            spectacular_hits: 0,
+        };
+        let mut rng = ChaCha8Rng::seed_from_u64(2);
+        for _ in 0..50 {
+            let taken = fighter(1).take_side(bled, false, 0, &mut rng, &data.fighter);
+            let wound = taken.wound.unwrap();
+            assert_eq!(wound.location, arm);
+            assert!(matches!(wound.severity, Severity::Light | Severity::Medium));
+        }
     }
 
     #[test]

@@ -38,6 +38,17 @@
     // Where a hit lands, by relative chances; the side of an arm or leg is drawn 50/50.
     // The model draws a lost limb's arm or leg by these weights too.
     hits: (head: 3, body: 3, arm: 2, leg: 2),
+    // A spell's bleed_percent (data/classes.ron) is its chance to make the part it lands
+    // on bleed, if that part does not already: it then takes hp_percent_per_second of
+    // the fighter's max HP (at least 1) each second, for its part's seconds. Bleedings
+    // of different parts add up; a bleeding may kill or make give up.
+    bleed: (
+        hp_percent_per_second: 1,
+        head_seconds: 4,
+        body_seconds: 6,
+        arm_seconds: 5,
+        leg_seconds: 5,
+    ),
     // Each colosseum's arena kind (data/world.ron) sets its floor: a size in meters,
     // the percentage of their speed fighters walk at, and round pillars (center and
     // radius in meters) that block the way and ranged spells, at least a fighter's
