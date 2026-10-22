@@ -12,6 +12,10 @@ From the repo root inside python/.venv (pip install stable-baselines3), for each
     python python/train.py mirmillon melee --steps 2000000
 Models and snapshots go to python/models/<class>/ (not committed); export.py turns them
 into the game's ONNX models.
+
+Curves (reward, fight length, losses, entropy, and the win rate against the utility AI
+over `--live-check` duels at each snapshot, `check/win_rate`) go to python/models/<class>/logs/;
+watch them live with: tensorboard --logdir python/models
 Self-check: python python/train.py augure duel --steps 4096 --envs 2 --check 20
 """
 
@@ -21,7 +25,7 @@ from pathlib import Path
 
 import numpy as np
 from stable_baselines3 import PPO
-from stable_baselines3.common.callbacks import CheckpointCallback
+from stable_baselines3.common.callbacks import BaseCallback, CallbackList, CheckpointCallback
 from stable_baselines3.common.vec_env import SubprocVecEnv
 
 from lanista_env import FightEnv, utility_ai
@@ -71,6 +75,20 @@ def win_rate(model, fights, fighter_class):
     return wins / fights
 
 
+class LiveCheck(BaseCallback):
+    """Logs the win rate against the utility AI every `every` calls."""
+
+    def __init__(self, every, fights, fighter_class):
+        super().__init__()
+        self.every, self.fights, self.fighter_class = every, fights, fighter_class
+
+    def _on_step(self):
+        if self.fights and self.n_calls % self.every == 0:
+            rate = win_rate(self.model, self.fights, self.fighter_class)
+            self.logger.record("check/win_rate", rate)
+        return True
+
+
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("fighter_class", metavar="class", help="a class key of data/classes.ron")
@@ -79,6 +97,9 @@ def main():
     parser.add_argument("--envs", type=int, default=8)
     parser.add_argument("--snapshot-every", type=int, default=100_000, help="steps")
     parser.add_argument("--check", type=int, default=1000, help="duels against the utility AI")
+    parser.add_argument(
+        "--live-check", type=int, default=100, help="duels against the utility AI at each snapshot"
+    )
     args = parser.parse_args()
 
     melee = args.stage == "melee"
@@ -89,13 +110,20 @@ def main():
     opponents = Opponents(snapshots)
     envs = SubprocVecEnv([lambda: FightEnv(opponents, melee, args.fighter_class)] * args.envs)
     envs.seed(0)
+    logs = models / "logs"
     if melee:
         shutil.copy(models / "duel.zip", snapshots / "duel.zip")
-        model = PPO.load(models / "duel.zip", envs, device="cpu")
+        model = PPO.load(models / "duel.zip", envs, device="cpu", tensorboard_log=logs)
     else:
-        model = PPO("MlpPolicy", envs, device="cpu", verbose=1)
+        model = PPO("MlpPolicy", envs, device="cpu", verbose=1, tensorboard_log=logs)
     every = max(args.snapshot_every // args.envs, 1)
-    model.learn(args.steps, CheckpointCallback(every, snapshots), reset_num_timesteps=not melee)
+    callbacks = CallbackList(
+        [
+            CheckpointCallback(every, snapshots),
+            LiveCheck(every, args.live_check, args.fighter_class),
+        ]
+    )
+    model.learn(args.steps, callbacks, tb_log_name=args.stage, reset_num_timesteps=not melee)
     model.save(models / args.stage)
     envs.close()
     rate = win_rate(model, args.check, args.fighter_class)
