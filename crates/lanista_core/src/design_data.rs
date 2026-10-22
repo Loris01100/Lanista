@@ -72,6 +72,12 @@ pub struct ClassData {
     pub mana_per_second: u32,
     pub endurance_per_second: u32,
     pub spells: Vec<SpellData>,
+    /// Its weapon type, a key of `weapons` in `data/combat.ron`.
+    pub weapon: String,
+    /// Its weapon's auto attack, set at loading from [`CombatRules::weapons`]; none for a
+    /// class built by hand.
+    #[serde(skip)]
+    pub auto_attack: Option<SpellData>,
 }
 
 #[derive(Debug, Clone, PartialEq, Deserialize)]
@@ -205,7 +211,7 @@ impl DesignData {
         names: &str,
         stat_model: &str,
     ) -> Result<Self, LoadError> {
-        let data = Self {
+        let mut data = Self {
             classes: ron::from_str(classes).map_err(|source| LoadError::Ron {
                 file: CLASSES_FILE,
                 source,
@@ -240,6 +246,14 @@ impl DesignData {
             })?,
             models: Vec::new(),
         };
+        for class in &mut data.classes {
+            let attack = data.combat.weapons.get(&class.weapon);
+            class.auto_attack = Some(attack.cloned().ok_or(LoadError::Invalid {
+                file: CLASSES_FILE,
+                field: "weapon",
+                problem: "a weapon not in the weapons of data/combat.ron",
+            })?);
+        }
         data.validate()?;
         if let Some(field) = data.stat_model.invalid_field() {
             return Err(LoadError::Invalid {
@@ -689,6 +703,12 @@ mod tests {
         assert_eq!(data.classes.len(), 2);
         for class in &data.classes {
             assert_eq!(class.spells.len(), 3, "{}", class.key);
+            assert_eq!(
+                class.auto_attack.as_ref(),
+                data.combat.weapons.get(&class.weapon),
+                "{}",
+                class.key
+            );
         }
         assert_eq!(data.calendar.season_weeks(), 30);
         // Five continents, each with its major colosseum and one or two minor ones, one
@@ -737,6 +757,8 @@ mod tests {
             other => panic!("expected an invalid field, got {other:?}"),
         };
         assert_eq!(field("[]", FIGHTER), "classes");
+        let unarmed = CLASSES.replacen("weapon: \"glaive\"", "weapon: \"fork\"", 1);
+        assert_eq!(field(&unarmed, FIGHTER), "weapon");
         let upside_down = FIGHTER.replacen("start_age: (20, 30)", "start_age: (30, 20)", 1);
         assert_eq!(field(CLASSES, &upside_down), "career.start_age");
         let stronger = FIGHTER.replacen(

@@ -361,6 +361,38 @@ mod tests {
         assert_eq!(UtilityAi.decide(&arena, FighterId(0)), cast(1));
     }
 
+    #[test]
+    fn strikes_with_its_weapon_only_once_it_can_pay_for_no_spell() {
+        let data = shipped_classes();
+        let murmillo = &data.classes[0];
+        let fighters = [5.0, 6.5]
+            .into_iter()
+            .zip(0..)
+            .map(|(x, id)| {
+                Fighter::new(
+                    FighterId(id),
+                    ClassId(0),
+                    murmillo,
+                    STATS,
+                    Vec2::new(x, 5.0),
+                )
+            })
+            .collect();
+        let mut arena = Arena::new(20.0, 20.0, fighters, 0);
+        let auto = arena.fighters[0].auto_attack.unwrap();
+        assert_eq!(auto, 3);
+        // Every spell on cooldown but affordable: it waits.
+        arena.fighters[0].cooldowns[..3].fill(10);
+        assert_eq!(UtilityAi.decide(&arena, FighterId(0)), Action::Wait);
+        // Too tired for its cheapest spell (5 endurance): it strikes with its glaive.
+        arena.fighters[0].endurance.current = 4;
+        let strike = Action::Cast {
+            spell: auto,
+            target: FighterId(1),
+        };
+        assert_eq!(UtilityAi.decide(&arena, FighterId(0)), strike);
+    }
+
     /// Fighter 0 at (`x`, 5) with `hp` left, against fighter 1 touching it on its right.
     fn face_to_face(x: f64, hp: u32, condition: Condition) -> Arena {
         let mut me = test_fighter(0, x, 5.0);

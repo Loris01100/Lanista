@@ -180,6 +180,9 @@ pub struct Fighter {
     pub endurance: Gauge,
     /// Its class's spells, copied from the design data.
     pub spells: Vec<SpellData>,
+    /// Index in `spells` of its weapon's auto attack, the last one, cast only once it can
+    /// pay for none of the others (`can_cast`); none for a class without one.
+    pub auto_attack: Option<usize>,
     /// Ticks left before each spell of `spells` can be cast again; 0 when ready.
     pub cooldowns: Vec<u32>,
     /// Center, in meters.
@@ -269,6 +272,11 @@ impl Fighter {
         stats: Stats,
         position: Vec2,
     ) -> Self {
+        let mut spells = class_data.spells.clone();
+        let auto_attack = class_data.auto_attack.clone().map(|attack| {
+            spells.push(attack);
+            spells.len() - 1
+        });
         Self {
             id,
             class,
@@ -276,8 +284,9 @@ impl Fighter {
             hp: stats.hp,
             mana: Gauge::full(class_data.max_mana, class_data.mana_per_second),
             endurance: Gauge::full(class_data.max_endurance, class_data.endurance_per_second),
-            spells: class_data.spells.clone(),
-            cooldowns: vec![0; class_data.spells.len()],
+            cooldowns: vec![0; spells.len()],
+            spells,
+            auto_attack,
             position,
             action: Action::Wait,
             surrender_hp: 0,
@@ -356,13 +365,21 @@ impl Fighter {
         }
     }
 
-    /// Whether spell `spell` exists, is off cooldown and is affordable.
+    /// Whether spell `spell` exists, is off cooldown and is affordable; the auto attack
+    /// only once none of the other spells is affordable, a last resort.
     #[must_use]
     pub fn can_cast(&self, spell: usize) -> bool {
         let Some(data) = self.spells.get(spell) else {
             return false;
         };
-        self.cooldowns[spell] == 0 && self.can_afford_spell(data)
+        let last_resort = || {
+            (0..self.spells.len())
+                .filter(|&s| Some(s) != self.auto_attack)
+                .all(|s| !self.can_afford(s))
+        };
+        self.cooldowns[spell] == 0
+            && self.can_afford_spell(data)
+            && (Some(spell) != self.auto_attack || last_resort())
     }
 
     /// Whether spell `spell` exists and its cost can be paid now, cooldown aside.
@@ -418,6 +435,8 @@ pub(crate) fn test_fighter(id: u32, x: f64, y: f64) -> Fighter {
             bleed_percent: 0,
             accuracy_drop: None,
         }],
+        weapon: "test".into(),
+        auto_attack: None,
     };
     let stats = Stats {
         hp: 100,

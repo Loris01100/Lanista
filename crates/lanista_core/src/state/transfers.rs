@@ -336,42 +336,59 @@ fn wanted_agent(state: &GameState, club: usize, data: &DesignData) -> Option<usi
 /// `sell_percent` keeping its own `care_reserve`, if the fighter agrees
 /// (`market::refuses_to_join`, against the buyer's best fame); failing that, it signs
 /// the free agent anyway. A poor club signs the free agent of the best potential it
-/// sees, whatever it is worth now. A club that just sold a fighter this way fills its
-/// place from the free agents only, so that it never buys back the fighter it sold.
+/// sees, whatever it is worth now. A club that sold a fighter this way fills its place
+/// from the free agents only, so that it never buys back the fighter it sold, even when
+/// its own turn had passed.
 pub(super) fn rival_signings(state: &mut GameState, data: &DesignData) {
-    let market = &data.economy.market;
-    let wanted = usize::try_from(data.world.roster.wanted).unwrap_or(0);
     let mut sold = vec![false; state.rivals.len()];
     for buyer in 0..state.rivals.len() {
-        if !state.rivals[buyer].is_open() {
-            continue;
+        let tried = sold[buyer] || state.rivals[buyer].wealth == Wealth::Poor;
+        sign_up(state, buyer, tried, &mut sold, data);
+    }
+    for club in 0..state.rivals.len() {
+        if sold[club] {
+            sign_up(state, club, true, &mut sold, data);
         }
-        let poor = state.rivals[buyer].wealth == Wealth::Poor;
-        let mut tried = sold[buyer] || poor;
-        while state.rivals[buyer].active() < wanted {
-            let weakest = weakest(state, buyer, data).map_or(0, |(worth, _)| worth);
-            let agent = wanted_agent(state, buyer, data);
-            let eye = state.rivals[buyer].rules(data).recruits;
-            let suits = agent.is_some_and(|a| eye.appeal(&state.free_agents[a], market) >= weakest);
-            if !suits && !tried {
-                tried = true;
-                if let Some(seller) = buy_from_rival(state, buyer, weakest, data) {
-                    sold[seller] = true;
-                    continue;
-                }
+    }
+}
+
+/// Rival club `buyer`'s recruiting of `rival_signings`, buying from another club unless
+/// it `tried` already; marks the club it bought from in `sold`.
+fn sign_up(
+    state: &mut GameState,
+    buyer: usize,
+    mut tried: bool,
+    sold: &mut [bool],
+    data: &DesignData,
+) {
+    let market = &data.economy.market;
+    let wanted = usize::try_from(data.world.roster.wanted).unwrap_or(0);
+    if !state.rivals[buyer].is_open() {
+        return;
+    }
+    while state.rivals[buyer].active() < wanted {
+        let weakest = weakest(state, buyer, data).map_or(0, |(worth, _)| worth);
+        let agent = wanted_agent(state, buyer, data);
+        let eye = state.rivals[buyer].rules(data).recruits;
+        let suits = agent.is_some_and(|a| eye.appeal(&state.free_agents[a], market) >= weakest);
+        if !suits && !tried {
+            tried = true;
+            if let Some(seller) = buy_from_rival(state, buyer, weakest, data) {
+                sold[seller] = true;
+                continue;
             }
-            let Some(agent) = agent else { break };
-            let mut signed = state.free_agents[agent].clone();
-            signed.joined = Some(state.week);
-            state.free_agents[agent].status = Status::Sold;
-            let roster = &mut state.rivals[buyer].fighters;
-            roster.push(signed);
-            let to = RivalId {
-                club: buyer,
-                fighter: roster.len() - 1,
-            };
-            state.transfer(Contender::FreeAgent(agent), Contender::Rival(to));
         }
+        let Some(agent) = agent else { break };
+        let mut signed = state.free_agents[agent].clone();
+        signed.joined = Some(state.week);
+        state.free_agents[agent].status = Status::Sold;
+        let roster = &mut state.rivals[buyer].fighters;
+        roster.push(signed);
+        let to = RivalId {
+            club: buyer,
+            fighter: roster.len() - 1,
+        };
+        state.transfer(Contender::FreeAgent(agent), Contender::Rival(to));
     }
 }
 

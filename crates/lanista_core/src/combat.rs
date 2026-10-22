@@ -1,3 +1,5 @@
+use std::collections::BTreeMap;
+
 use rand::RngExt;
 use rand_chacha::ChaCha8Rng;
 use rand_chacha::rand_core::SeedableRng;
@@ -99,6 +101,9 @@ pub struct CombatRules {
     /// Where a hit lands: relative chances of the head, the body, an arm and a leg.
     pub hits: LocationWeights,
     pub bleed: BleedRules,
+    /// Each weapon type's auto attack, by key: what a fighter strikes with once it can
+    /// pay for none of its spells (`ClassData::weapon`).
+    pub weapons: BTreeMap<String, SpellData>,
     pub arenas: ArenaLayouts,
     pub melee: MeleeRules,
 }

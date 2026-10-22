@@ -1774,7 +1774,7 @@ mod tests {
     #[test]
     fn three_seasons_where_a_club_becomes_a_rival_one_closes_and_one_is_founded() {
         let data = Rc::new(DesignData::load().unwrap());
-        let mut screen = screen(8);
+        let mut screen = screen(7);
         let mut rivalry = None;
         let (mut closed, mut founded) = (false, false);
         for _ in 0..3 * u64::from(data.calendar.season_weeks()) {

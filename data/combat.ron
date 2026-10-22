@@ -49,6 +49,29 @@
         arm_seconds: 5,
         leg_seconds: 5,
     ),
+    // Each weapon type's auto attack, a spell outside the class's three, cheap: a fighter
+    // strikes with it only once it can pay for none of its spells, so it always has a
+    // little attack left. The weapon types wait for balancing.
+    weapons: {
+        "glaive": (
+            name: "Estoc",
+            range: Melee,
+            reach: 1.0,
+            power: 40,
+            cooldown: 45,
+            cost: Endurance(1),
+            damage_kind: Cutting,
+        ),
+        "staff": (
+            name: "Revers de bâton",
+            range: Melee,
+            reach: 1.0,
+            power: 30,
+            cooldown: 45,
+            cost: Endurance(1),
+            damage_kind: Blunt,
+        ),
+    },
     // Each colosseum's arena kind (data/world.ron) sets its floor: a size in meters,
     // the percentage of their speed fighters walk at, and round pillars (center and
     // radius in meters) that block the way and ranged spells, at least a fighter's

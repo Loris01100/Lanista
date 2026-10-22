@@ -6,6 +6,8 @@
 // each second of a fight, up to the max.
 // damage_kind: Blunt stuns three times as often as Cutting, which may sever a limb or
 // the head instead (data/combat.ron); Neutral (spells without an element yet) does neither.
+// weapon: a key of weapons in data/combat.ron, whose auto attack the class strikes with
+// once it can pay for none of its spells.
 [
     (
         key: "mirmillon",
@@ -13,6 +15,7 @@
         max_endurance: 100,
         mana_per_second: 0,
         endurance_per_second: 3,
+        weapon: "glaive",
         spells: [
             (
                 name: "Coup de glaive",
@@ -49,6 +52,7 @@
         max_endurance: 50,
         mana_per_second: 4,
         endurance_per_second: 2,
+        weapon: "staff",
         spells: [
             (
                 name: "Coup de bâton",
