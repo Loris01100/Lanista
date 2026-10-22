@@ -8,7 +8,7 @@ Classes prévues pour remplacer les prototypes actuels de `data/classes.ron` (mi
 
 Chaque classe a deux configurations d'équipement ; le deuxième sort (ou l'effet d'un sort) en dépend. Le joueur choisit la configuration de chacun de ses combattants.
 
-Chaque combattant a, pour chaque configuration de sa classe, une aisance : s'il n'est pas à l'aise avec la configuration choisie, il perd des statistiques.
+Chaque combattant a, pour chaque configuration de sa classe, une aisance, visible du joueur : s'il n'est pas à l'aise avec la configuration choisie, il perd des statistiques. L'aisance progresse avec une configuration souvent utilisée.
 
 ### Attaque automatique
 
@@ -32,7 +32,7 @@ Combattant de corps à corps uniquement, armes tranchantes uniquement.
 | 1 | Slash sanguin | Coup tranchant aux dégâts immédiats faibles, avec une chance de faire saigner. |
 | 2 | Bouclier tranchant (épée et bouclier) | Coup porté avec le bouclier, tranchant. |
 | 2 | Lacération (double épée) | Enchaînement des deux épées, aux dégâts immédiats faibles, avec une chance de faire saigner. |
-| 3 | Guillotine | Coup peu précis aux dégâts élevés ; s'il touche une partie du corps qui peut être tranchée (tête, bras, jambe), il la tranche. |
+| 3 | Guillotine | Coup peu précis aux dégâts élevés ; s'il touche une partie du corps qui peut être tranchée (tête, bras, jambe), il la tranche ; sur le torse, seulement des dégâts. |
 
 ## Maître du terrain
 
@@ -45,14 +45,15 @@ Combattant qui tire parti du sol de l'arène. Les dagues runiques frappent au co
 
 | Emplacement | Sort | Coût | Description |
 | --- | --- | --- | --- |
-| 1 | Récolte | endurance | Ramasse des éléments du sol de l'arène : sable, pierre ou bois. |
-| 2 | Jette | endurance et une partie des éléments ramassés | Lance les éléments ramassés sur un adversaire (exemple : du sable dans les yeux). |
+| 1 | Récolte | endurance | Ramasse des éléments du sol de l'arène : sable, pierre, plus tard bois. |
+| 2 | Jette | endurance et une partie des éléments ramassés | Lance les éléments ramassés sur un adversaire : des dégâts, plus ou moins selon l'élément ; le sable baisse en plus sa précision. |
 | 3 | Mine | mana | Pose une mine (dague et bouclier) ou deux mines (double dague). |
+
+### Mines
+
+Une mine reste 30 secondes sur le sol. Elle explose sous quiconque marche dessus, allié, adversaire ou le poseur lui-même, et blesse tous ceux qui sont dans la zone de l'explosion.
 
 ## Questions ouvertes
 
-- Quels éléments offre chaque type d'arène (sable, piliers, étroite) ? Aucune n'a de bois aujourd'hui.
-- Quel effet a chaque élément jeté (le sable aveugle ; la pierre, le bois ?) ?
-- Guillotine qui touche le torse : seulement des dégâts ?
-- L'aisance avec une configuration : visible du joueur, et progresse-t-elle à l'usage ?
-- La mine : quels dégâts ou effets, se déclenche-t-elle sur un allié d'un pacte, combien de temps reste-t-elle ?
+- Les éléments qu'offre chaque arène attendent la définition des arènes ; le bois viendra plus tard.
+- Les effets des éléments autres que le sable (pierre, bois) : des dégâts seulement, pour l'instant.
