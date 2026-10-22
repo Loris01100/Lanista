@@ -42,6 +42,7 @@ const REST: WeekPlan = WeekPlan {
     activity: Activity::Rest,
     care: false,
     refused: Refused::NONE,
+    loadout: 0,
 };
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -890,6 +891,7 @@ mod tests {
                 activity,
                 care,
                 refused: Refused::NONE,
+                loadout: 0,
             }],
             ..Decisions::default()
         }
@@ -962,6 +964,7 @@ mod tests {
             activity: capua,
             care: false,
             refused: Refused::NONE,
+            loadout: 0,
         };
         let decisions = Decisions {
             plans: vec![entered; 2],
@@ -1872,6 +1875,7 @@ mod tests {
                 activity: Activity::Train,
                 care: false,
                 refused: Refused::NONE,
+                loadout: 0,
             }],
             moves: list.moves.clone(),
             staff: Vec::new(),

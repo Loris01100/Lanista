@@ -263,7 +263,7 @@ impl Default for Condition {
 
 impl Fighter {
     /// A fighter at full health, mana and endurance, all spells ready, who fights to the death,
-    /// in a neutral condition.
+    /// in a neutral condition, in its class's first loadout.
     #[must_use]
     pub fn new(
         id: FighterId,
@@ -272,8 +272,25 @@ impl Fighter {
         stats: Stats,
         position: Vec2,
     ) -> Self {
-        let mut spells = class_data.spells.clone();
-        let auto_attack = class_data.auto_attack.clone().map(|attack| {
+        Self::in_loadout(id, class, (class_data, 0), stats, position)
+    }
+
+    /// A fighter of `class` in loadout `loadout` of `class_data`, the first one if it has
+    /// no such loadout: the loadout's spell in the second slot, its weapon's auto attack
+    /// after the others.
+    #[must_use]
+    pub fn in_loadout(
+        id: FighterId,
+        class: ClassId,
+        (class_data, loadout): (&ClassData, usize),
+        stats: Stats,
+        position: Vec2,
+    ) -> Self {
+        let mut spells = class_data.spells_in(loadout);
+        let attack = class_data
+            .loadout(loadout)
+            .and_then(|l| l.auto_attack.clone());
+        let auto_attack = attack.map(|attack| {
             spells.push(attack);
             spells.len() - 1
         });
@@ -435,8 +452,7 @@ pub(crate) fn test_fighter(id: u32, x: f64, y: f64) -> Fighter {
             bleed_percent: 0,
             accuracy_drop: None,
         }],
-        weapon: "test".into(),
-        auto_attack: None,
+        loadouts: Vec::new(),
     };
     let stats = Stats {
         hp: 100,

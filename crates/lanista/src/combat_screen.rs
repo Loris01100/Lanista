@@ -392,6 +392,7 @@ mod tests {
             activity: Activity::Fight(ColosseumId(0)),
             care: false,
             refused: Refused::NONE,
+            loadout: 0,
         };
         let fight = fighter
             .play_week(plan, None, StaffEffects::default(), &mut rng, &data)

@@ -166,6 +166,8 @@ mod tests {
             .iter()
             .map(|c| format!("class-{}", c.key))
             .collect();
+        let loadouts = data.classes.iter().flat_map(|c| &c.loadouts);
+        keys.extend(loadouts.map(|l| format!("loadout-{}", l.key)));
         keys.extend(
             data.world
                 .colosseums

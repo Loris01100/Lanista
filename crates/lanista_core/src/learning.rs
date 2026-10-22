@@ -245,7 +245,7 @@ impl Senses {
             max_spells: data
                 .classes
                 .iter()
-                .map(|c| c.spells.len())
+                .map(|c| c.spells_in(0).len())
                 .max()
                 .unwrap_or(0),
             class_count: data.classes.len(),

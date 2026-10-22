@@ -74,6 +74,13 @@ pub fn class_name(fighter: &CareerFighter, data: &DesignData) -> String {
         .map_or_else(|| "?".into(), |c| data_name("class", &c.key))
 }
 
+/// The name of loadout `loadout` of the fighter's class (`ClassData::loadout`).
+pub fn loadout_name(fighter: &CareerFighter, loadout: usize, data: &DesignData) -> String {
+    data.class(fighter.class)
+        .and_then(|c| c.loadout(loadout))
+        .map_or_else(|| "?".into(), |l| data_name("loadout", &l.key))
+}
+
 pub fn activity_name(activity: Activity, data: &DesignData) -> String {
     match activity {
         Activity::Rest => tr!("activity-rest"),

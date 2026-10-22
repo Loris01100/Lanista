@@ -370,6 +370,8 @@ sheet-history = Historique
 sheet-title = { $fighter }, { $age } ans
 sheet-right-handed = droitier
 sheet-left-handed = gaucher
+sheet-ambidextrous = ambidextre
+sheet-loadout = Configuration : { $loadout }
 sheet-retired-maimed = A pris sa retraite, trop mutilé
 sheet-retired = A pris sa retraite
 sheet-dead = Mort au combat
@@ -398,6 +400,7 @@ summary-watch-again = Revoir le combat
 plan-abroad = À l'étranger (voyage { $travel })
 plan-care = Soigner ({ $cost })
 plan-care-unaffordable = Soigner ({ $cost }) : pas assez d'argent
+plan-loadout = Configuration :
 plan-no-armour = Sans armure
 plan-no-armour-effect = Défenses très réduites, renommée +{ $fame } (+{ $all } sans rien)
 plan-no-weapon = Sans arme
@@ -542,6 +545,11 @@ elimination-standing = { $fighter } : { $damage } dégâts, { $danger ->
 
 class-mirmillon = Mirmillon
 class-augure = Augure
+
+loadout-glaive-shield = Glaive et bouclier
+loadout-two-glaives = Double glaive
+loadout-staff = Bâton
+loadout-staff-shield = Bâton et bouclier
 
 colosseum-capoue = Capoue
 colosseum-rome = Rome

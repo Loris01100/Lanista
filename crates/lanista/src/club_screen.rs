@@ -42,9 +42,10 @@ use crate::saves;
 use crate::texts::{
     activity_name, challenger_text, change, class_name, club_name, colosseum_name,
     colosseum_rules_name, condition_text, contender_name, continent_name, date_in_sentence,
-    fight_text, fighter_name, illness_text, injury_text, market_news_text, money_line, move_text,
-    personality_text, priced, rival_fighter_name, staff_move_text, staff_news_text, stat_names,
-    title_news_text, wealth_name, wealth_text, week_lines, world_news_text,
+    fight_text, fighter_name, illness_text, injury_text, loadout_name, market_news_text,
+    money_line, move_text, personality_text, priced, rival_fighter_name, staff_move_text,
+    staff_news_text, stat_names, title_news_text, wealth_name, wealth_text, week_lines,
+    world_news_text,
 };
 
 /// Seed of the standard duel offered from the club.
@@ -952,6 +953,15 @@ fn plan_editor(
     (state, care): (&GameState, &CareRules),
     data: &DesignData,
 ) {
+    // The loadout, changed freely from one week to the next.
+    let loadouts = data.class(fighter.class).map_or(0, |c| c.loadouts.len());
+    ui.horizontal(|ui| {
+        ui.label(tr!("plan-loadout"));
+        for loadout in 0..loadouts {
+            let name = loadout_name(fighter, loadout, data);
+            ui.selectable_value(&mut plan.loadout, loadout, name);
+        }
+    });
     let money = state.money;
     for activity in [Activity::Rest, Activity::Train] {
         ui.selectable_value(&mut plan.activity, activity, activity_name(activity, data));
@@ -1109,10 +1119,15 @@ fn sheet(ui: &mut egui::Ui, index: usize, f: &CareerFighter, data: &DesignData) 
         age = f.age
     ));
     let hand = match f.dominant_hand {
+        _ if f.ambidextrous => tr!("sheet-ambidextrous"),
         Side::Right => tr!("sheet-right-handed"),
         Side::Left => tr!("sheet-left-handed"),
     };
     ui.label(hand);
+    ui.label(tr!(
+        "sheet-loadout",
+        loadout = loadout_name(f, f.loadout, data)
+    ));
     match f.status {
         Status::Active => {}
         Status::Retired if too_maimed(&f.injuries, &rules.retirement) => {
@@ -1314,6 +1329,7 @@ mod tests {
             activity: Activity::Melee(ColosseumId(0)),
             care: false,
             refused: Refused::NONE,
+            loadout: 0,
         };
         screen.decisions.plans = vec![melee; 3];
         screen.next_week();
@@ -1343,6 +1359,16 @@ mod tests {
         assert_eq!(screen.decisions.plans[0].refused, weapon);
         let lines = &screen.histories[0][0].1;
         assert!(lines[1].contains(", sans arme :"), "{lines:?}");
+    }
+
+    #[test]
+    fn the_loadout_chosen_is_kept_from_week_to_week() {
+        let mut screen = screen(7);
+        let other = 1 - screen.state.fighters[0].loadout;
+        screen.decisions.plans[0].loadout = other;
+        screen.next_week();
+        assert_eq!(screen.state.fighters[0].loadout, other);
+        assert_eq!(screen.decisions.plans[0].loadout, other);
     }
 
     #[test]
@@ -1428,6 +1454,7 @@ mod tests {
             activity: Activity::Rest,
             care: false,
             refused: Refused::NONE,
+            loadout: 0,
         };
         screen.next_week();
         assert_eq!(screen.to_watch, []);
@@ -1612,6 +1639,7 @@ mod tests {
             activity,
             care: false,
             refused: Refused::NONE,
+            loadout: 0,
         };
         let opening = Decisions {
             plans: vec![
@@ -1774,7 +1802,7 @@ mod tests {
     #[test]
     fn three_seasons_where_a_club_becomes_a_rival_one_closes_and_one_is_founded() {
         let data = Rc::new(DesignData::load().unwrap());
-        let mut screen = screen(7);
+        let mut screen = screen(1);
         let mut rivalry = None;
         let (mut closed, mut founded) = (false, false);
         for _ in 0..3 * u64::from(data.calendar.season_weeks()) {

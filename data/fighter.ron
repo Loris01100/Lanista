@@ -138,9 +138,13 @@
     // The colosseum's equipment is the same for everyone. A refused piece costs, in
     // percent of what is left: defenses without armour, attacks without weapon, whose
     // cutting hits turn blunt (bare hands).
+    // A loadout's off hand (data/classes.ron), in percent: melee and ranged defenses with
+    // a shield; melee attack with a second weapon, for a fighter not ambidextrous.
     equipment: (
         armourless_defense_percent: 30,
         weaponless_attack_percent: 40,
+        shield_defense_percent: 115,
+        off_hand_attack_percent: 85,
     ),
     progression: (
         // No levels: each stat may improve after every training session and fight.
@@ -184,10 +188,13 @@
     ),
     career: (
         // Generated fighters: age, stats within this percentage of the standard
-        // duel's, chance of being right-handed.
+        // duel's, chance of being right-handed, and of being ambidextrous, taken from the
+        // same roll as the right-handed (its right hand then counts as dominant for
+        // injuries).
         start_age: (20, 30),
         stats_spread_percent: 20,
         right_handed_percent: 85,
+        ambidextrous_percent: 5,
         // Fights from which a fighter is a veteran, played by its class's most advanced
         // learned model (assets/ai/<class>-veteran.json), a recruit's before.
         veteran_fights: 10,

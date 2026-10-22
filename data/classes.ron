@@ -6,8 +6,12 @@
 // each second of a fight, up to the max.
 // damage_kind: Blunt stuns three times as often as Cutting, which may sever a limb or
 // the head instead (data/combat.ron); Neutral (spells without an element yet) does neither.
-// weapon: a key of weapons in data/combat.ron, whose auto attack the class strikes with
-// once it can pay for none of its spells.
+// spells: the first and third slots. Each of the class's two loadouts brings the second
+// (spell), its weapon (a key of weapons in data/combat.ron, whose auto attack the fighter
+// strikes with once it can pay for none of its spells) and what its off hand holds: Free,
+// Shield (a defense bonus) or Weapon (a second one, weaker for who is not ambidextrous;
+// equipment in data/fighter.ron). A loadout's key names it in the language files
+// (loadout-<key>).
 [
     (
         key: "mirmillon",
@@ -15,7 +19,36 @@
         max_endurance: 100,
         mana_per_second: 0,
         endurance_per_second: 3,
-        weapon: "glaive",
+        loadouts: [
+            (
+                key: "glaive-shield",
+                weapon: "glaive",
+                off_hand: Shield,
+                spell: (
+                    name: "Charge au bouclier",
+                    range: Melee,
+                    reach: 1.0,
+                    power: 150,
+                    cooldown: 150,
+                    cost: Endurance(25),
+                    damage_kind: Blunt,
+                ),
+            ),
+            (
+                key: "two-glaives",
+                weapon: "glaive",
+                off_hand: Weapon,
+                spell: (
+                    name: "Double taille",
+                    range: Melee,
+                    reach: 1.0,
+                    power: 150,
+                    cooldown: 150,
+                    cost: Endurance(25),
+                    damage_kind: Cutting,
+                ),
+            ),
+        ],
         spells: [
             (
                 name: "Coup de glaive",
@@ -25,15 +58,6 @@
                 cooldown: 30,
                 cost: Endurance(5),
                 damage_kind: Cutting,
-            ),
-            (
-                name: "Charge au bouclier",
-                range: Melee,
-                reach: 1.0,
-                power: 150,
-                cooldown: 150,
-                cost: Endurance(25),
-                damage_kind: Blunt,
             ),
             (
                 name: "Frappe brutale",
@@ -52,7 +76,36 @@
         max_endurance: 50,
         mana_per_second: 4,
         endurance_per_second: 2,
-        weapon: "staff",
+        loadouts: [
+            (
+                key: "staff",
+                weapon: "staff",
+                off_hand: Free,
+                spell: (
+                    name: "Trait de feu",
+                    range: Ranged,
+                    reach: 8.0,
+                    power: 100,
+                    cooldown: 45,
+                    cost: Mana(10),
+                    damage_kind: Neutral,
+                ),
+            ),
+            (
+                key: "staff-shield",
+                weapon: "staff",
+                off_hand: Shield,
+                spell: (
+                    name: "Coup de bouclier",
+                    range: Melee,
+                    reach: 1.0,
+                    power: 120,
+                    cooldown: 120,
+                    cost: Endurance(15),
+                    damage_kind: Blunt,
+                ),
+            ),
+        ],
         spells: [
             (
                 name: "Coup de bâton",
@@ -62,15 +115,6 @@
                 cooldown: 30,
                 cost: Endurance(5),
                 damage_kind: Blunt,
-            ),
-            (
-                name: "Trait de feu",
-                range: Ranged,
-                reach: 8.0,
-                power: 100,
-                cooldown: 45,
-                cost: Mana(10),
-                damage_kind: Neutral,
             ),
             (
                 name: "Éclair",

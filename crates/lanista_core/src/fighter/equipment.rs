@@ -71,7 +71,39 @@ impl Refused {
     }
 }
 
-/// What refusing a piece costs, from `data/fighter.ron`.
+/// What a loadout's off hand holds (`design_data::LoadoutData`).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize)]
+pub enum OffHand {
+    Free,
+    /// A defense bonus; it does not parry.
+    Shield,
+    /// A second weapon, which strikes weaker unless the fighter is ambidextrous.
+    Weapon,
+}
+
+impl OffHand {
+    /// `stats` with what the off hand brings: melee and ranged defenses up to
+    /// `shield_defense_percent` with a shield, melee attack down to
+    /// `off_hand_attack_percent` with a second weapon, unless `ambidextrous`.
+    #[must_use]
+    pub fn stats(self, stats: Stats, ambidextrous: bool, rules: &EquipmentRules) -> Stats {
+        let mut stats = stats;
+        match self {
+            Self::Shield => {
+                stats.melee_defense = percent_of(stats.melee_defense, rules.shield_defense_percent);
+                stats.ranged_defense =
+                    percent_of(stats.ranged_defense, rules.shield_defense_percent);
+            }
+            Self::Weapon if !ambidextrous => {
+                stats.melee_attack = percent_of(stats.melee_attack, rules.off_hand_attack_percent);
+            }
+            Self::Weapon | Self::Free => {}
+        }
+        stats
+    }
+}
+
+/// What refusing a piece costs, and what the off hand brings, from `data/fighter.ron`.
 #[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct EquipmentRules {
@@ -79,6 +111,10 @@ pub struct EquipmentRules {
     pub armourless_defense_percent: u32,
     /// Melee and ranged attack left without weapon, in percent.
     pub weaponless_attack_percent: u32,
+    /// Melee and ranged defense with a shield, in percent.
+    pub shield_defense_percent: u32,
+    /// Melee attack with two weapons, for a fighter not ambidextrous, in percent.
+    pub off_hand_attack_percent: u32,
 }
 
 #[cfg(test)]
@@ -89,6 +125,8 @@ mod tests {
     const RULES: EquipmentRules = EquipmentRules {
         armourless_defense_percent: 40,
         weaponless_attack_percent: 50,
+        shield_defense_percent: 120,
+        off_hand_attack_percent: 80,
     };
 
     const STATS: Stats = Stats {
@@ -124,6 +162,17 @@ mod tests {
         };
         assert_eq!(all.stats(STATS, &RULES).melee_attack, 10);
         assert_eq!(all.stats(STATS, &RULES).melee_defense, 4);
+    }
+
+    #[test]
+    fn a_shield_defends_and_a_second_weapon_weakens_who_is_not_ambidextrous() {
+        assert_eq!(OffHand::Free.stats(STATS, false, &RULES), STATS);
+        let shield = OffHand::Shield.stats(STATS, false, &RULES);
+        assert_eq!((shield.melee_defense, shield.ranged_defense), (12, 60));
+        assert_eq!(shield.melee_attack, 20);
+        let two = OffHand::Weapon.stats(STATS, false, &RULES);
+        assert_eq!((two.melee_attack, two.ranged_attack), (16, 30));
+        assert_eq!(OffHand::Weapon.stats(STATS, true, &RULES), STATS);
     }
 
     #[test]

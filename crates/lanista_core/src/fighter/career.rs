@@ -6,11 +6,11 @@ use serde::{Deserialize, Serialize};
 
 use crate::colosseum::{ColosseumId, Contender};
 use crate::combat::{Arena, ArenaKind, Vec2};
-use crate::design_data::{DesignData, FighterRules};
+use crate::design_data::{DesignData, FighterRules, LoadoutData};
 use crate::duel::{STATS, play};
 use crate::fighter::appearance::Appearance;
 use crate::fighter::care::CareRules;
-use crate::fighter::equipment::Refused;
+use crate::fighter::equipment::{OffHand, Refused};
 use crate::fighter::fame::{Fame, FightOutcome, FightResult};
 use crate::fighter::form::{Form, FormEvent};
 use crate::fighter::illness::{Illness, IllnessLevel, roll_illness};
@@ -69,6 +69,13 @@ pub struct CareerFighter {
     /// Hidden: the highest each stat can reach by progressing.
     pub potential: Stats,
     pub dominant_hand: Side,
+    /// Strikes as well with both hands: no malus with two weapons.
+    #[serde(default)]
+    pub ambidextrous: bool,
+    /// Its loadout, an index of its class's `loadouts`: the last one its club chose
+    /// (`WeekPlan::loadout`).
+    #[serde(default)]
+    pub loadout: usize,
     /// In years.
     pub age: u32,
     /// Weeks played since the last birthday; a year is a season of `data/calendar.ron`.
@@ -121,7 +128,9 @@ impl CareerFighter {
             crate::fighter::percent_of(value, percent).max(1)
         }));
         let potential = random_potential(rng, stats, &rules.progression);
-        let dominant_hand = if rng.random_range(0..100) < rules.career.right_handed_percent {
+        let hand = rng.random_range(0..100);
+        let ambidextrous = hand < rules.career.ambidextrous_percent;
+        let dominant_hand = if hand < rules.career.right_handed_percent {
             Side::Right
         } else {
             Side::Left
@@ -130,11 +139,13 @@ impl CareerFighter {
         let age = rng.random_range(youngest..=oldest);
         let personality = Personality::random(rng);
         let appearance = Appearance::random(rng, &rules.appearance);
-        Self {
+        let mut fighter = Self {
             class,
             stats,
             potential,
             dominant_hand,
+            ambidextrous,
+            loadout: 0,
             age,
             weeks_this_year: 0,
             personality,
@@ -150,7 +161,23 @@ impl CareerFighter {
             appearance,
             joined: None,
             moved_to: None,
-        }
+        };
+        fighter.loadout = fighter.preferred_loadout(data);
+        fighter
+    }
+
+    /// The loadout its club picks for it: one with two weapons for an ambidextrous
+    /// fighter, one without for the others, else the first.
+    // ponytail: handedness alone; the ease of each loadout (docs/Classes.md, step 6)
+    // will decide.
+    #[must_use]
+    pub fn preferred_loadout(&self, data: &DesignData) -> usize {
+        let loadouts = data.class(self.class).map_or(&[][..], |c| &c.loadouts);
+        let two_weapons = |l: &LoadoutData| l.off_hand == OffHand::Weapon;
+        loadouts
+            .iter()
+            .position(|l| two_weapons(l) == self.ambidextrous)
+            .unwrap_or(0)
     }
 
     /// The entry it leaves behind on going to `to`: its class, for its name, and its
@@ -166,6 +193,8 @@ impl CareerFighter {
             stats: Stats::default(),
             potential: Stats::default(),
             dominant_hand: Side::Right,
+            ambidextrous: false,
+            loadout: 0,
             age: 0,
             weeks_this_year: 0,
             personality: Personality::neutral(),
@@ -206,9 +235,9 @@ impl CareerFighter {
         u32::try_from(count).unwrap_or(u32::MAX)
     }
 
-    /// This fighter ready to fight in an arena, as fighter `id` at `position`, without
-    /// the `refused` pieces of equipment: their maluses on its stats, its cutting hits
-    /// blunt without weapon.
+    /// This fighter ready to fight in an arena, as fighter `id` at `position`, in its
+    /// loadout, with what its off hand brings, and without the `refused` pieces of
+    /// equipment: their maluses on its stats, its cutting hits blunt without weapon.
     ///
     /// # Panics
     /// If its class is not in `data`.
@@ -222,8 +251,14 @@ impl CareerFighter {
     ) -> Fighter {
         let class_data = data.class(self.class).expect("a class of the design data");
         let rules = &data.fighter;
-        let stats = refused.stats(self.fighting_stats(rules), &rules.equipment);
-        let mut fighter = Fighter::new(id, self.class, class_data, stats, position);
+        let equipment = &rules.equipment;
+        let mut stats = self.fighting_stats(rules);
+        if let Some(loadout) = class_data.loadout(self.loadout) {
+            stats = loadout.off_hand.stats(stats, self.ambidextrous, equipment);
+        }
+        let stats = refused.stats(stats, equipment);
+        let class = (class_data, self.loadout);
+        let mut fighter = Fighter::in_loadout(id, self.class, class, stats, position);
         for spell in &mut fighter.spells {
             spell.damage_kind = refused.damage_kind(spell.damage_kind);
         }
@@ -315,9 +350,9 @@ impl CareerFighter {
     }
 
     /// The start of a week whose melee the world plays with everyone in it
-    /// (`fighter::melee::play_melee`), and of every week: care following `plan`, at the
-    /// prices of `staff`'s doctor. `None`, and nothing changes, if the fighter is
-    /// retired or dead.
+    /// (`fighter::melee::play_melee`), and of every week: `plan`'s loadout, then care
+    /// following `plan`, at the prices of `staff`'s doctor. `None`, and nothing changes,
+    /// if the fighter is retired or dead.
     pub fn begin_melee_week(
         &mut self,
         plan: WeekPlan,
@@ -327,6 +362,7 @@ impl CareerFighter {
         if self.status != Status::Active {
             return None;
         }
+        self.loadout = plan.loadout;
         let care = staff.medicine.care_rules(&data.fighter.care);
         let care_cost = if plan.care { self.care(&care) } else { 0 };
         Some(WeekReport::new(plan, care_cost))
@@ -726,6 +762,7 @@ impl CareerFighter {
                 activity: Activity::Rest,
                 care: false,
                 refused: Refused::NONE,
+                loadout: self.loadout,
             };
             self.end_week(&mut WeekReport::new(plan, 0), rng, data);
         }
@@ -833,6 +870,7 @@ pub fn suggested_plan(fighter: &CareerFighter, week: u64) -> WeekPlan {
         activity,
         care: hurt,
         refused: Refused::NONE,
+        loadout: fighter.loadout,
     }
 }
 
@@ -859,6 +897,8 @@ pub struct WeekPlan {
     pub care: bool,
     /// The pieces of the colosseum's equipment the fighter leaves, if it fights.
     pub refused: Refused,
+    /// Its loadout from this week on (`CareerFighter::loadout`).
+    pub loadout: usize,
 }
 
 /// What happened in a week.
@@ -959,6 +999,9 @@ pub struct CareerRules {
     pub stats_spread_percent: u32,
     /// Chance, in percent, that a generated fighter is right-handed.
     pub right_handed_percent: u32,
+    /// Chance, in percent, that a generated fighter is ambidextrous: the lowest rolls
+    /// of the right-handed ones.
+    pub ambidextrous_percent: u32,
     /// Fights from which a fighter is a veteran, played by its class's most advanced
     /// learned model rather than the recruits' one.
     pub veteran_fights: u32,
@@ -1050,6 +1093,7 @@ mod tests {
             activity,
             care: false,
             refused: Refused::NONE,
+            loadout: 0,
         }
     }
 
@@ -1152,6 +1196,7 @@ mod tests {
                 activity: Activity::Rest,
                 care: true,
                 refused: Refused::NONE,
+                loadout: 0,
             };
             let report = f.play_week(rest, None, staff, &mut rng, &data).unwrap();
             (report.care_cost, f.injuries[0].weeks_left)
@@ -1208,6 +1253,31 @@ mod tests {
     }
 
     #[test]
+    fn a_fighter_keeps_the_loadout_its_plan_chose_and_fights_in_it() {
+        let data = data();
+        let mut f = fighter(7);
+        f.class = ClassId(0);
+        f.ambidextrous = false;
+        assert_eq!(f.preferred_loadout(&data), 0);
+        f.ambidextrous = true;
+        assert_eq!(f.preferred_loadout(&data), 1);
+        let rest = WeekPlan {
+            loadout: 1,
+            ..plan(Activity::Rest)
+        };
+        let mut rng = ChaCha8Rng::seed_from_u64(1);
+        f.play_week(rest, None, StaffEffects::default(), &mut rng, &data);
+        assert_eq!(f.loadout, 1);
+        assert_eq!(suggested_plan(&f, 2).loadout, 1);
+        let at = Vec2::new(0.0, 0.0);
+        let fighter = f.combat_fighter(FighterId(0), Refused::NONE, &data, at);
+        assert_eq!(fighter.spells[1], data.classes[0].loadouts[1].spell);
+        // No augure loadout has two weapons: the first one.
+        f.class = ClassId(1);
+        assert_eq!(f.preferred_loadout(&data), 0);
+    }
+
+    #[test]
     fn injuries_illness_and_morale_shape_the_fighting_stats() {
         let rules = data().fighter;
         let mut f = fighter(7);
@@ -1219,8 +1289,14 @@ mod tests {
             weeks_left: 3,
         });
         assert!(f.fighting_stats(&rules).speed < healthy.speed);
-        let fighter = f.combat_fighter(FighterId(0), Refused::NONE, &data(), Vec2::new(3.0, 10.0));
-        assert_eq!(fighter.stats, f.fighting_stats(&rules));
+        let data = data();
+        let fighter = f.combat_fighter(FighterId(0), Refused::NONE, &data, Vec2::new(3.0, 10.0));
+        let loadout = data.class(f.class).unwrap().loadout(f.loadout).unwrap();
+        let equipped =
+            loadout
+                .off_hand
+                .stats(f.fighting_stats(&rules), f.ambidextrous, &rules.equipment);
+        assert_eq!(fighter.stats, equipped);
         assert_eq!(fighter.condition.injuries, f.injuries);
     }
 
@@ -1682,6 +1758,7 @@ mod tests {
                 activity: Activity::Rest,
                 care: true,
                 refused: Refused::NONE,
+                loadout: 0,
             }
         );
     }

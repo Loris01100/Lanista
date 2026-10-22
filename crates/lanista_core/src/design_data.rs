@@ -11,7 +11,7 @@ use crate::fighter::ClassId;
 use crate::fighter::appearance::AppearanceRules;
 use crate::fighter::care::CareRules;
 use crate::fighter::career::CareerRules;
-use crate::fighter::equipment::EquipmentRules;
+use crate::fighter::equipment::{EquipmentRules, OffHand};
 use crate::fighter::fame::FameRules;
 use crate::fighter::form::FormRules;
 use crate::fighter::illness::IllnessRules;
@@ -71,11 +71,44 @@ pub struct ClassData {
     /// Mana, then endurance, recovered each second of a fight.
     pub mana_per_second: u32,
     pub endurance_per_second: u32,
+    /// The spells of the first and third slots; the second comes from the loadout.
     pub spells: Vec<SpellData>,
+    /// Its loadouts, two for each class; none for a class built by hand.
+    pub loadouts: Vec<LoadoutData>,
+}
+
+impl ClassData {
+    /// Loadout `i`, or the first one if there is no such loadout.
+    #[must_use]
+    pub fn loadout(&self, i: usize) -> Option<&LoadoutData> {
+        self.loadouts.get(i).or(self.loadouts.first())
+    }
+
+    /// A fighter's spell slots in loadout `i` (see [`ClassData::loadout`]): the class's
+    /// spells, the loadout's in the second slot.
+    #[must_use]
+    pub fn spells_in(&self, i: usize) -> Vec<SpellData> {
+        let mut spells = self.spells.clone();
+        if let Some(loadout) = self.loadout(i) {
+            spells.insert(spells.len().min(1), loadout.spell.clone());
+        }
+        spells
+    }
+}
+
+/// One of a class's equipments, chosen for each fighter.
+#[derive(Debug, Clone, PartialEq, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct LoadoutData {
+    /// Names it in the language files (`loadout-<key>`).
+    pub key: String,
     /// Its weapon type, a key of `weapons` in `data/combat.ron`.
     pub weapon: String,
+    pub off_hand: OffHand,
+    /// The spell of the second slot.
+    pub spell: SpellData,
     /// Its weapon's auto attack, set at loading from [`CombatRules::weapons`]; none for a
-    /// class built by hand.
+    /// loadout built by hand.
     #[serde(skip)]
     pub auto_attack: Option<SpellData>,
 }
@@ -246,9 +279,9 @@ impl DesignData {
             })?,
             models: Vec::new(),
         };
-        for class in &mut data.classes {
-            let attack = data.combat.weapons.get(&class.weapon);
-            class.auto_attack = Some(attack.cloned().ok_or(LoadError::Invalid {
+        for loadout in data.classes.iter_mut().flat_map(|c| &mut c.loadouts) {
+            let attack = data.combat.weapons.get(&loadout.weapon);
+            loadout.auto_attack = Some(attack.cloned().ok_or(LoadError::Invalid {
                 file: CLASSES_FILE,
                 field: "weapon",
                 problem: "a weapon not in the weapons of data/combat.ron",
@@ -491,8 +524,12 @@ impl DesignData {
             });
         }
         let equipment = &rules.equipment;
-        // A refused piece must not make the fighter stronger.
+        // A refused piece, or a second weapon, must not make the fighter stronger.
         for (field, percent) in [
+            (
+                "equipment.off_hand_attack_percent",
+                equipment.off_hand_attack_percent,
+            ),
             (
                 "equipment.armourless_defense_percent",
                 equipment.armourless_defense_percent,
@@ -702,13 +739,18 @@ mod tests {
         .unwrap();
         assert_eq!(data.classes.len(), 2);
         for class in &data.classes {
-            assert_eq!(class.spells.len(), 3, "{}", class.key);
-            assert_eq!(
-                class.auto_attack.as_ref(),
-                data.combat.weapons.get(&class.weapon),
-                "{}",
-                class.key
-            );
+            assert_eq!(class.loadouts.len(), 2, "{}", class.key);
+            for (i, loadout) in class.loadouts.iter().enumerate() {
+                assert_eq!(class.spells_in(i).len(), 3, "{}", class.key);
+                assert_eq!(class.spells_in(i)[1], loadout.spell, "{}", loadout.key);
+                assert_eq!(
+                    loadout.auto_attack.as_ref(),
+                    data.combat.weapons.get(&loadout.weapon),
+                    "{}",
+                    loadout.key
+                );
+            }
+            assert_eq!(class.loadout(9), class.loadouts.first());
         }
         assert_eq!(data.calendar.season_weeks(), 30);
         // Five continents, each with its major colosseum and one or two minor ones, one
@@ -769,6 +811,15 @@ mod tests {
         assert_eq!(
             field(CLASSES, &stronger),
             "equipment.weaponless_attack_percent"
+        );
+        let stronger = FIGHTER.replacen(
+            "off_hand_attack_percent: 85",
+            "off_hand_attack_percent: 185",
+            1,
+        );
+        assert_eq!(
+            field(CLASSES, &stronger),
+            "equipment.off_hand_attack_percent"
         );
         let bald = FIGHTER.replacen(r#"hair: ["short", "long"]"#, "hair: []", 1);
         assert_eq!(field(CLASSES, &bald), "appearance.hair");
