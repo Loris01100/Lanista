@@ -7,6 +7,9 @@ use std::rc::Rc;
 
 use lanista_core::design_data::DesignData;
 use lanista_core::duel::random_duel;
+use lanista_core::fighter::injury::{Location, Side};
+use lanista_core::fighter::{Fighter, FighterId};
+use lanista_core::log::{Event, EventKind};
 use macroquad::prelude::*;
 use reesch::{Assets, Audio, Bindings, SceneTarget, Screen, Transition, egui, pixel_camera};
 
@@ -16,6 +19,7 @@ use crate::fight_view::{Cast, FightView, STANDS};
 use crate::fighter_sprite::PIXELS_PER_METRE;
 use crate::lang::tr;
 use crate::options;
+use crate::texts::part_name;
 
 pub use crate::fight_view::{DEATH_SOUND, HIT_SOUND};
 // ponytail: placeholder music.
@@ -261,8 +265,8 @@ impl CombatScreen {
             });
     }
 
-    /// Hit points, mana and endurance of the fight shown big, bottom left: both
-    /// fighters of a duel, the club's in a melee.
+    /// Hit points, mana and endurance of the fight shown big, bottom left, and where
+    /// each fighter was hit: both fighters of a duel, the club's in a melee.
     fn gauges(&self, ui: &egui::Context) {
         let fight = self.fight();
         let fighters = &fight.arena.fighters;
@@ -278,18 +282,79 @@ impl CombatScreen {
             .resizable(false)
             .anchor(egui::Align2::LEFT_BOTTOM, [12.0, -12.0])
             .show(ui, |ui| {
-                ui.set_width(220.0);
-                for f in shown {
-                    ui.strong(fight.name(f.id));
-                    gauge(ui, &tr!("stat-hp"), f.hp, f.stats.hp);
-                    for (name, g) in [(tr!("mana"), &f.mana), (tr!("endurance"), &f.endurance)] {
-                        if g.max > 0 {
-                            gauge(ui, &name, g.current, g.max);
+                ui.set_width(260.0);
+                let height = ui.ctx().screen_rect().height() * 0.7;
+                egui::ScrollArea::vertical()
+                    .max_height(height)
+                    .show(ui, |ui| {
+                        for f in shown {
+                            ui.strong(fight.name(f.id));
+                            gauge(ui, &tr!("stat-hp"), f.hp, f.stats.hp);
+                            for (name, g) in
+                                [(tr!("mana"), &f.mana), (tr!("endurance"), &f.endurance)]
+                            {
+                                if g.max > 0 {
+                                    gauge(ui, &name, g.current, g.max);
+                                }
+                            }
+                            anatomy(ui, &fight.arena.log, f);
                         }
-                    }
-                }
+                    });
             });
     }
+}
+
+/// Where `f` was hit this fight, laid out like a body: the hit points lost on each
+/// part, redder the closer to half its max they are; a severed part struck through.
+fn anatomy(ui: &mut egui::Ui, log: &[Event], f: &Fighter) {
+    use Location::{Arm, Body, Head, Leg};
+    let rows = [
+        [None, Some(Head), None],
+        [Some(Arm(Side::Left)), Some(Body), Some(Arm(Side::Right))],
+        [Some(Leg(Side::Left)), None, Some(Leg(Side::Right))],
+    ];
+    let red = ui.visuals().error_fg_color;
+    let text = ui.visuals().text_color();
+    egui::Grid::new(("anatomy", f.id.0)).show(ui, |ui| {
+        for row in rows {
+            for part in row {
+                let Some(part) = part else {
+                    ui.label("");
+                    continue;
+                };
+                let damage = part_damage(log, f.id, part);
+                let percent = u64::from(damage) * 200 / u64::from(f.stats.hp.max(1));
+                let share = f32::from(u8::try_from(percent.min(100)).unwrap_or(100)) / 100.0;
+                let mut name = egui::RichText::new(part_name(part)).small();
+                if f.has_lost(part) {
+                    name = name.strikethrough().color(red);
+                }
+                ui.vertical_centered(|ui| {
+                    ui.label(name);
+                    ui.label(
+                        egui::RichText::new(damage.to_string())
+                            .color(text.lerp_to_gamma(red, share)),
+                    );
+                });
+            }
+            ui.end_row();
+        }
+    });
+}
+
+/// Hit points `id` lost to hits landing on `part` in `log`.
+fn part_damage(log: &[Event], id: FighterId, part: Location) -> u32 {
+    log.iter()
+        .filter_map(|e| match e.kind {
+            EventKind::Cast {
+                target,
+                damage,
+                part: Some(p),
+                ..
+            } if target == id && p == part => Some(damage),
+            _ => None,
+        })
+        .sum()
 }
 
 /// Where the `count` thumbnails go on a screen `width` pixels wide: down the left side,
@@ -379,9 +444,8 @@ impl Screen for CombatScreen {
 mod tests {
     use lanista_core::combat::Arena;
     use lanista_core::duel::play;
-    use lanista_core::fighter::FighterId;
     use lanista_core::fighter::equipment::Refused;
-    use lanista_core::log::{EventKind, Report, log_text};
+    use lanista_core::log::{Report, log_text};
 
     use super::*;
     use crate::fight_view::Pose;
@@ -663,6 +727,30 @@ mod tests {
         };
         assert_eq!(count(DEATH_SOUND), 1);
         assert!((casts(true)..=casts(false)).contains(&count(HIT_SOUND)));
+    }
+
+    /// Every hit point lost lands on one of the six parts the anatomy shows.
+    #[test]
+    fn the_anatomy_counts_every_hit_point_lost() {
+        use Location::{Arm, Body, Head, Leg};
+        let mut screen = screen(42);
+        screen.skip();
+        let arena = &screen.fight().arena;
+        for f in &arena.fighters {
+            let parts = [
+                Head,
+                Body,
+                Arm(Side::Left),
+                Arm(Side::Right),
+                Leg(Side::Left),
+                Leg(Side::Right),
+            ];
+            let total: u32 = parts
+                .iter()
+                .map(|&p| part_damage(&arena.log, f.id, p))
+                .sum();
+            assert_eq!(total, f.stats.hp - f.hp);
+        }
     }
 
     #[test]

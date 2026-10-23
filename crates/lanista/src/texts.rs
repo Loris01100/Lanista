@@ -782,9 +782,16 @@ fn side_key(side: Side) -> &'static str {
 
 pub fn location_name(location: Location, dominant: Side) -> String {
     match location {
+        Location::Arm(s) if s == dominant => tr!("location-arm-dominant", side = side_key(s)),
+        _ => part_name(location),
+    }
+}
+
+/// A body part's name, without saying which arm is dominant.
+pub fn part_name(location: Location) -> String {
+    match location {
         Location::Head => tr!("location-head"),
         Location::Body => tr!("location-body"),
-        Location::Arm(s) if s == dominant => tr!("location-arm-dominant", side = side_key(s)),
         Location::Arm(s) => tr!("location-arm", side = side_key(s)),
         Location::Leg(s) => tr!("location-leg", side = side_key(s)),
     }
