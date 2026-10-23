@@ -225,6 +225,7 @@ Chaque phase a son fichier : ce qu'elle contient, comment elle est faite, son ja
 | Performances en mêlée à 20 avec multi-vue | Ralentissements | IA à basse fréquence, mesures `criterion`, nombre de vignettes limité |
 | Écart entre modèle statistique et vrais combats | Résultats incohérents | Outil `compare`, recalibrage après chaque changement d'équilibrage |
 | Monde de 40 clubs et jusqu'à 15 colisées | Saisons lentes, sauvegarde lourde, équilibre perdu | Combats entre clubs de l'ordinateur par le modèle statistique, mesure d'une saison, recalibrage par étapes |
+| Graphismes et sons sans auteur désigné | Jeu publié avec des formes et des sons provisoires, ou phase 9 bloquée | Décider tôt qui les produit (points ouverts), formats fixés dans [Formats_graphiques.md](../Formats_graphiques.md) pour remplacer les fichiers sans toucher au code |
 | Temps de compilation | Itérations lentes | Workspace découpé, profil dev optimisé pour les dépendances, données en RON hors du code |
 
 ## Points encore ouverts
@@ -234,6 +235,7 @@ Chaque phase a son fichier : ce qu'elle contient, comment elle est faite, son ja
 - [ ] Calendrier des grands événements : confirmer l'Inter-Coliseum aux saisons impaires.
 - [x] `ort` ou `tract` pour l'inférence : `tract`, tranché en phase 0.
 - [x] Cadence de la logique et fréquence de décision de l'IA : 30 ticks par seconde, 5 décisions par seconde, retenus en phase 1 (à revoir si l'équilibrage l'exige).
+- [ ] Production des graphismes et des sons (sprites, arènes, effets, interface, musique), à décider avant la phase 9 : dessinés soi-même dans Aseprite, repris de bibliothèques libres (Kenney.nl en CC0, OpenGameArt en vérifiant la licence de chaque fichier), ou commandés à un artiste et un compositeur (budget, droits cédés par contrat). Le choix dépend aussi de la licence retenue pour les graphismes et les sons (point suivant). Inventaire de ce qui est provisoire : [phase 9](phase-9.md).
 - [ ] Extraction du moteur dans son propre dépôt : à reconsidérer après la publication, pas avant.
 - [ ] Ouverture du code : le jeu sera gratuit, sans microtransactions, et son code open-source sur GitHub. Le dépôt dit encore le contraire (`LICENSE` « all rights reserved », « proprietary » dans AGENTS.md). Reste à décider et à faire :
   - la licence du code : MIT/Apache-2.0 (réutilisable partout, même dans un jeu fermé) ou GPL-3.0 (les versions modifiées restent ouvertes) ;
