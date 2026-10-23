@@ -1,8 +1,10 @@
 // The world's cultures, from data/world.ron's `clubs.cultures`: the continent its
-// clubs are at home on, the names a club of that culture may take, and the patterns
-// it is named by. A culture's shown name is `culture-<key>` in the language files
-// (assets/lang), a pattern's `club-<pattern>`, which puts the drawn name in place
-// of `$name`.
+// clubs are at home on, the names a club of that culture may take, the patterns it
+// is named by, and the stage names of its fighters. No two fighters in activity
+// bear the same name: few names, so that they come back once their fighter is gone;
+// when all are borne, the least borne is numbered ("Flamma II"). A culture's shown
+// name is `culture-<key>` in the language files (assets/lang), a pattern's
+// `club-<pattern>`, which puts the drawn name in place of `$name`.
 [
     (
         key: "rome",
@@ -13,6 +15,18 @@
             "Claudius", "Fabius", "Marcellus", "Lucullus", "Capito", "Gracchus",
         ],
         clubs: ["ludus", "familia", "domus"],
+        fighters: [
+            "Spiculus", "Flamma", "Carpophorus", "Priscus", "Verus", "Triumphus",
+            "Tetraites", "Prudes", "Hermes", "Celadus", "Crescens", "Calamus", "Columbus",
+            "Marcianus", "Pugnax", "Felix", "Ferox", "Victor", "Rufus", "Severus", "Durus",
+            "Taurus", "Leo", "Ursus", "Lupus", "Niger", "Audax", "Vitalis", "Fortis",
+            "Celer", "Aquila", "Hilarus", "Iucundus", "Fortunatus", "Primus", "Secundus",
+            "Tertius", "Faustus", "Laetus", "Placidus", "Probus", "Valens", "Velox",
+            "Martialis", "Saturninus", "Amandus", "Philerus", "Rusticus", "Bellicus",
+            "Sabinus", "Narcissus", "Asteropaeus", "Callimorphus", "Pardus", "Aper",
+            "Corvus", "Draco", "Gaudens", "Ingenuus", "Pertinax", "Sextus", "Quintus",
+            "Decimus", "Crispus", "Silvanus",
+        ],
     ),
     (
         key: "grece",
@@ -23,6 +37,14 @@
             "Hipposthénès",
         ],
         clubs: ["palestre", "gymnase"],
+        fighters: [
+            "Agathon", "Alcimos", "Aristodème", "Brasidas", "Callias", "Clitos", "Damon",
+            "Dexios", "Diomède", "Eumène", "Glaucos", "Hector", "Iphicrate", "Lysandre",
+            "Méléagre", "Ménélas", "Nicias", "Pausanias", "Philon", "Straton", "Teucros",
+            "Thrasybule", "Xanthos", "Zénon", "Patrocle", "Néoptolème", "Démétrios",
+            "Ptolémée", "Aristomène", "Épaminondas", "Pélopidas", "Timoléon", "Philopoemen",
+            "Chabrias", "Phormion", "Lamachos", "Gylippe", "Xénophon",
+        ],
     ),
     (
         key: "celtes",
@@ -33,6 +55,15 @@
             "Teutomatos", "Caratacos",
         ],
         clubs: ["clan", "tribu"],
+        fighters: [
+            "Bellovèse", "Ségovèse", "Diviciacos", "Éporédorix", "Litaviccos", "Luctérios",
+            "Tasgétios", "Viridomaros", "Critognatos", "Drappès", "Camulogène",
+            "Cativolcos", "Moritasgos", "Adiatunnos", "Luernios", "Bituit", "Corréos",
+            "Gutruatos", "Ollovico", "Cingétorix", "Andecamulos", "Atepomaros", "Togirix",
+            "Comboiomaros", "Cavaros", "Epasnactos", "Galba", "Cotos", "Caturix",
+            "Dubnovellaunos", "Tincomaros", "Verica", "Togodumnos", "Cunobelinos",
+            "Adminios", "Prasutagos", "Venutios", "Calgacos",
+        ],
     ),
     (
         key: "germains",
@@ -42,6 +73,14 @@
             "Fritigern", "Alaric", "Genséric", "Odoacre", "Thorgrim", "Hrolf",
         ],
         clubs: ["halle", "bande"],
+        fighters: [
+            "Arbogast", "Athanaric", "Bérig", "Chlodomir", "Childéric", "Cniva",
+            "Ermanaric", "Gaïnas", "Gondebaud", "Hengist", "Horsa", "Malaric", "Mallobaud",
+            "Radagaise", "Ricimer", "Sigebert", "Stilicon", "Théodemir", "Totila",
+            "Vidigoia", "Walia", "Witigès", "Wulf", "Egil", "Ragnar", "Sigurd", "Gunnar",
+            "Hagen", "Clovis", "Théodoric", "Euric", "Gélimer", "Teias", "Alboïn",
+            "Agilulf", "Liutprand", "Ragnachar", "Childebert",
+        ],
     ),
     (
         key: "steppe",
@@ -51,6 +90,13 @@
             "Toghril", "Mukhali", "Börte", "Khutulun",
         ],
         clubs: ["ordu", "horde"],
+        fighters: [
+            "Attila", "Bleda", "Ruga", "Ellac", "Dengizich", "Bumin", "Bilge", "Tonyukuk",
+            "Arslan", "Jamukha", "Khasar", "Belgutei", "Jelme", "Chilaun", "Bo'orchu",
+            "Sorgan", "Uriyangkhadaï", "Naya", "Kaïdu", "Möngke", "Berke", "Nogaï", "Mamaï",
+            "Toqtamych", "Esen", "Dayan", "Kutlug", "Oghouz", "Modu", "Kubrat", "Asparukh",
+            "Krum", "Tervel", "Ilterish", "Kapagan", "Timour", "Edigu", "Jochi",
+        ],
     ),
     (
         key: "asie_est",
@@ -60,6 +106,15 @@
             "Taira", "Kusunoki", "Gyebaek", "Eulji", "Gwanggaeto",
         ],
         clubs: ["dojo", "maison_asie", "ecole"],
+        fighters: [
+            "Zhang Fei", "Ma Chao", "Huang Zhong", "Dian Wei", "Xu Chu", "Gan Ning",
+            "Taishi Ci", "Zhou Tai", "Yue Fei", "Qi Jiguang", "Wei Qing", "Huo Qubing",
+            "Benkei", "Musashi", "Yoshitsune", "Kenshin", "Shingen", "Tadakatsu",
+            "Yukimura", "Kojirō", "Raikō", "Hanzō", "Gang Gam-chan", "Yi Sun-sin",
+            "Gim Yu-sin", "Gwon Yul", "Jumong", "Yeon Gaesomun", "Sun Ce", "Lü Meng",
+            "Zhang Liao", "Pang De", "Wei Yan", "Kiyomasa", "Masamune", "Nobunaga",
+            "Kanetsugu", "Yoshimitsu",
+        ],
     ),
     (
         key: "inde",
@@ -69,6 +124,14 @@
             "Vikrama", "Rudra", "Abhimanyu", "Ghatotkacha", "Prithviraj",
         ],
         clubs: ["akhara", "ashram"],
+        fighters: [
+            "Nakula", "Sahadeva", "Bhishma", "Duryodhana", "Dushasana", "Ashwatthama",
+            "Shalya", "Jarasandha", "Kichaka", "Satyaki", "Drupada", "Shikhandi",
+            "Dhrishtadyumna", "Iravan", "Barbarika", "Rana Sanga", "Hammir", "Shivaji",
+            "Tanaji", "Baji", "Hemu", "Pulakeshin", "Rajendra", "Samudragupta", "Skanda",
+            "Vira", "Uday", "Bappa", "Harsha", "Rajaraja", "Krishnadeva", "Lachit", "Banda",
+            "Ranjit", "Hari Singh", "Tipu", "Haidar", "Malhar",
+        ],
     ),
     (
         key: "asie_ouest",
@@ -78,6 +141,14 @@
             "Enkidu", "Tigrane", "Mithridate", "Cyrus", "Darius",
         ],
         clubs: ["zourkhaneh", "maison"],
+        fighters: [
+            "Garshasp", "Zal", "Bijan", "Giv", "Goudarz", "Tous", "Faramarz", "Bahram",
+            "Ardachir", "Shapur", "Suréna", "Spitamenès", "Datis", "Mardonios", "Artabaze",
+            "Hydarnès", "Vartan", "Vahagn", "Arsace", "Sargon", "Assurbanipal", "Tiglath",
+            "Hammourabi", "Arbace", "Mégabyze", "Hormizd", "Narsès", "Kartir", "Afshin",
+            "Nader", "Tahmasp", "Ismaïl", "Bahman", "Manuchehr", "Khosrow", "Pirouz",
+            "Vologèse", "Tiridate",
+        ],
     ),
     (
         key: "arabe",
@@ -87,6 +158,13 @@
             "Zénobie", "Qutuz", "Sayf", "Khawla",
         ],
         clubs: ["dar", "bayt"],
+        fighters: [
+            "Dhirar", "Ikrima", "Qaqa", "Muthanna", "Usama", "Bilal", "Zayd", "Jafar",
+            "Abbas", "Uqba", "Musa", "Harun", "Qasim", "Nasir", "Rashid", "Faris", "Layth",
+            "Malik", "Salim", "Yazid", "Nur ad-Din", "Shirkuh", "Ayyub", "Ziyad", "Hisham",
+            "Talha", "Mansur", "Anas", "Ammar", "Miqdad", "Saad", "Numan", "Shurahbil",
+            "Hurr", "Muhallab", "Qutayba", "Abd al-Rahman", "Sharif",
+        ],
     ),
     (
         key: "afrique",
@@ -96,6 +174,24 @@
             "Askia", "Sonni", "Moshoeshoe", "Makeda", "Ezana", "Dingane",
         ],
         clubs: ["kraal", "lignee", "maison"],
+        fighters: [
+            "Sakura", "Tiramakhan", "Fakoli", "Samory", "Tiéba", "Babemba", "Béhanzin",
+            "Ghézo", "Agadja", "Osei Tutu", "Opoku", "Mzilikazi", "Lobengula", "Cetshwayo",
+            "Mpande", "Sekhukhune", "Mirambo", "Mkwawa", "Kabarega", "Mutesa", "Tewodros",
+            "Ménélik", "Alula", "Yohannès", "Lat Dior", "Lamine", "Taharqa", "Piânkhy",
+            "Sumanguru", "Abubakari", "Daoud", "Ishaq", "Tiémoko", "Bakary", "Biton",
+            "Ngolo", "Monzon", "Bokar", "Alfa Yaya", "Ahmadou", "Wobgo", "Oubri", "Kango",
+            "Kwaku Dua", "Kofi Karikari", "Prempeh", "Anokye", "Oduduwa", "Oranmiyan",
+            "Sango", "Abiodun", "Afonja", "Ogunmola", "Kurunmi", "Ibikunle", "Latosa",
+            "Ogedengbe", "Wegbaja", "Tegbessou", "Kpengla", "Agonglo", "Glélé", "Idris",
+            "Dunama", "Kanta", "Bayajidda", "Rabih", "Mvemba", "Kinguri", "Kazembe",
+            "Msiri", "Kasongo", "Shamba", "Nyatsimba", "Changamire", "Dombo",
+            "Senzangakhona", "Dingiswayo", "Zwide", "Sobhuza", "Faku", "Hintsa", "Maqoma",
+            "Sandile", "Makhanda", "Moorosi", "Sekonyela", "Khama", "Ngqika", "Kimweri",
+            "Rumanyika", "Ntare", "Rwabugiri", "Zara Yaqob", "Amda Seyon", "Lalibela",
+            "Fasil", "Iyasu", "Gobana", "Balcha", "Shabaka", "Arkamani", "Natakamani",
+            "Aspelta",
+        ],
     ),
     (
         key: "amerindiens",
@@ -105,6 +201,14 @@
             "Metacom", "Hiawatha", "Mangas", "Ouray", "Sequoyah",
         ],
         clubs: ["clan", "loge", "cercle"],
+        fighters: [
+            "Washakie", "Quanah", "Satanta", "Satank", "Keokuk", "Shabonee", "Taoyateduta",
+            "Ohiyesa", "Mahpiya", "Phizi", "Mato", "Wanbli", "Hehaka", "Tenskwatawa",
+            "Ollokot", "Victorio", "Nana", "Juh", "Naiche", "Massasoit", "Opechancanough",
+            "Powhatan", "Tuscaluza", "Pushmataha", "Attakullakulla", "Thayendanegea",
+            "Tsiyu", "Wingina", "Neolin", "Canonchet", "Uncas", "Miantonomo", "Sassacus",
+            "Opitchapam", "Sagoyewatha", "Tamanend", "Wabasha", "Shakopee",
+        ],
     ),
     (
         key: "mesoamerique",
@@ -115,6 +219,15 @@
             "Tecún",
         ],
         clubs: ["maison_aigle", "maison_jaguar", "calmecac"],
+        fighters: [
+            "Tlahuicole", "Huitzilihuitl", "Chimalpopoca", "Acamapichtli", "Ocelotl",
+            "Cuauhtli", "Mixcóatl", "Tezozómoc", "Maxtla", "Totoquihuaztli",
+            "Nezahualpilli", "Cacamatzin", "Coanacoch", "Tetlepanquetzal", "Ixtlilxóchitl",
+            "Topiltzin", "Siyaj K'ak'", "K'ak' Tiliw", "Jasaw", "Yuknoom", "Yaxun Balam",
+            "Chak Tok", "Balam", "Cocom", "Tutul Xiu", "Nachi Cocom", "Hunac Ceel",
+            "Tlacotzin", "Tenoch", "Quinatzin", "Techotlala", "Huémac", "Tlotzin", "Xólotl",
+            "Coxcox", "Kan Balam", "Ahkal Mo' Naab", "Yax K'uk' Mo'", "Chan Imix",
+        ],
     ),
     (
         key: "amerique_sud",
@@ -124,6 +237,15 @@
             "Caupolicán", "Galvarino", "Pelantaro", "Sepé", "Cunhambebe", "Arariboia",
         ],
         clubs: ["ayllu", "clan"],
+        fighters: [
+            "Huáscar", "Huayna", "Ollantay", "Quisquis", "Chalcuchímac", "Yupanqui",
+            "Sinchi Roca", "Viracocha", "Colocolo", "Lientur", "Michimalonco", "Tucapel",
+            "Calfucurá", "Namuncurá", "Pincén", "Mañil", "Quilapán", "Aimberê", "Ajuricaba",
+            "Tibiriçá", "Poty", "Paillamachu", "Anganamón", "Huenchullán", "Curiñancu",
+            "Nahuelpán", "Painé", "Cayrú", "Inca Roca", "Mayta Capac", "Lloque",
+            "Titu Cusi", "Ninan", "Colipí", "Catriel", "Sayhueque", "Ñeenguirú", "Huaman",
+            "Apu Mayta",
+        ],
     ),
     (
         key: "oceanie",
@@ -133,5 +255,23 @@
             "Māui", "Rata", "Tangaroa", "Malietoa", "Kahekili", "Hinemoa",
         ],
         clubs: ["whare", "pa"],
+        fighters: [
+            "Titokowaru", "Te Kooti", "Rewi", "Te Whiti", "Tāmati Wāka", "Pōmare",
+            "Te Wherowhero", "Kawiti", "Patuone", "Ruatara", "Uenuku", "Kuali'i",
+            "Kalani'ōpu'u", "Keōua", "Kekuaokalani", "Kalanikūpule", "Kīwala'ō", "Boki",
+            "Finau", "Tupou", "Taufa'āhau", "Ma'afu", "Cakobau", "Tanoa", "Mata'afa",
+            "Tamasese", "Tupua", "Fonoti", "Te Rangihaeata", "Te Waharoa", "Tāmihana",
+            "Te Heuheu", "Tūkino", "Te Ua", "Kereopa", "Ngātai", "Tūhaere", "Te Pēhi",
+            "Te Morenga", "Te Pahi", "Moka", "Tamatea", "Tūrongo", "Whatonga", "Toi", "Rua",
+            "Kupe", "Hotunui", "Tama-te-kapua", "Ngātoro", "Hape", "Tutanekai", "Paoa",
+            "Raumati", "Rangitāke", "Kīngi", "Te Kani", "Tītore", "Hōri", "Keawe",
+            "Kalākaua", "Liholiho", "Kauikeaouli", "Umi", "Līloa", "Kekaulike", "Alapa'i",
+            "Peleioholani", "Kahahana", "Kaumuali'i", "Ka'eo", "Kamanawa", "Kame'eiamoku",
+            "Kaiana", "Kekūhaupi'o", "Kalaimoku", "Hoapili", "Ulukalala", "Tuku'aho",
+            "Laufilitonga", "Mumui", "Lavaka", "Tamafaigā", "Lauaki", "Leiataua",
+            "Seumanutafa", "Seru", "Naulivou", "Ritova", "Teriitaria", "Vehiatua", "Tutaha",
+            "Hitoti", "Mahine", "Ariipaea", "Temoana", "Pakoko", "Keatonui", "Hotu Matu'a",
+            "Tu'u Ko Iho", "Nga'ara", "Kaimakoi", "Tamatoa", "Tupa'ia",
+        ],
     ),
 ]

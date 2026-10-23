@@ -43,9 +43,9 @@ use crate::texts::{
     activity_name, challenger_text, change, class_name, club_name, colosseum_name,
     colosseum_rules_name, condition_text, contender_name, continent_name, date_in_sentence,
     ease_text, fight_text, fighter_name, illness_text, injury_text, loadout_name, market_news_text,
-    money_line, move_text, personality_text, priced, rival_fighter_name, staff_move_text,
-    staff_news_text, stat_names, title_news_text, wealth_name, wealth_text, week_lines,
-    world_news_text,
+    money_line, move_text, origin_text, personality_text, priced, rival_fighter_name,
+    staff_move_text, staff_news_text, stat_names, title_news_text, vowel, wealth_name, wealth_text,
+    week_lines, world_news_text,
 };
 
 /// Seed of the standard duel offered from the club.
@@ -284,12 +284,14 @@ impl ClubScreen {
         let refusal = &data.world.challenges;
         overview.extend(summary.refusals.iter().map(|&ch| {
             let club = &self.state.fighters;
+            let challenger = challenger_text(ch, &self.state, data);
             tr!(
                 "challenge-refused",
                 fighter = club
                     .get(ch.fighter)
                     .map_or_else(|| "?".into(), |f| fighter_name(ch.fighter, f, data)),
-                challenger = challenger_text(ch, &self.state, data),
+                vowel = vowel(&challenger),
+                challenger = challenger,
                 fame = refusal.refusal_fame,
                 elo = refusal.refusal_elo
             )
@@ -556,10 +558,12 @@ impl ClubScreen {
         let refusal = &self.data.world.challenges;
         for &ch in &self.state.challenges {
             if let Some(f) = self.state.fighters.get(ch.fighter) {
+                let challenger = challenger_text(ch, &self.state, &self.data);
                 alerts.push(tr!(
                     "alert-challenge",
                     fighter = fighter_name(ch.fighter, f, &self.data),
-                    challenger = challenger_text(ch, &self.state, &self.data),
+                    vowel = vowel(&challenger),
+                    challenger = challenger,
                     fame = refusal.refusal_fame,
                     elo = refusal.refusal_elo
                 ));
@@ -623,7 +627,7 @@ impl ClubScreen {
                 let name = challenger_text(ch, &self.state, data);
                 (
                     Activity::Challenge(ch.colosseum, ch.rival),
-                    tr!("challenge-from", challenger = name),
+                    tr!("challenge-from", vowel = vowel(&name), challenger = name),
                 )
             });
         melees.chain(titles).chain(challenges).collect()
@@ -1108,6 +1112,9 @@ fn sheet(ui: &mut egui::Ui, index: usize, f: &CareerFighter, data: &DesignData) 
         fighter = fighter_name(index, f, data),
         age = f.age
     ));
+    if let Some(origin) = origin_text(f, data) {
+        ui.label(origin);
+    }
     let hand = match f.dominant_hand {
         _ if f.ambidextrous => tr!("sheet-ambidextrous"),
         Side::Right => tr!("sheet-right-handed"),
@@ -1197,7 +1204,7 @@ mod tests {
     use crate::texts::{
         club_name as rival_club_name, date_in_sentence, free_agent_name, named_club,
         outside_ease_text, outside_personality_text, potential_text, range_texts, staff_text,
-        unsellable_text, weeks_left_text,
+        stage_name, unsellable_text, weeks_left_text,
     };
     use colosseums::reign_text;
     use lanista_core::colosseum::{Reign, ReignEnd, TitleLoss};
@@ -1291,11 +1298,12 @@ mod tests {
             Activity::Challenge(challenge.colosseum, challenge.rival)
         );
         let name = rival_fighter_name(challenge.rival, &screen.state, &screen.data);
+        let mine = fighter_name(0, &screen.state.fighters[0], &screen.data);
         assert!(
             screen
                 .alerts()
                 .iter()
-                .any(|a| a.starts_with(&format!("Mirmillon n° 1 : défi de {name}"))),
+                .any(|a| a.starts_with(&format!("{mine} : défi ")) && a.contains(&name)),
             "{:?}",
             screen.alerts()
         );
@@ -1380,7 +1388,8 @@ mod tests {
             menu[0].starts_with("Argent ") && menu[0].contains("entretien -10"),
             "{menu:?}"
         );
-        assert!(menu[1].starts_with("Mirmillon n° 1 : "), "{menu:?}");
+        let name = fighter_name(0, &screen.state.fighters[0], &screen.data);
+        assert!(menu[1].starts_with(&format!("{name} : ")), "{menu:?}");
     }
 
     #[test]
@@ -1483,7 +1492,9 @@ mod tests {
         let (_, overview) = screen.last_week.as_ref().unwrap();
         let name = fighter_name(1, &screen.state.fighters[1], &screen.data);
         assert_eq!(overview[1], format!("Recrute {name}"));
-        assert!(signed.starts_with(&format!("Free agent n° {}", a + 1)));
+        // Signed, it keeps its name.
+        let stage = stage_name(&screen.state.fighters[1].name);
+        assert!(signed.starts_with(&format!("{stage} (")), "{signed}");
     }
 
     #[test]
@@ -1498,9 +1509,10 @@ mod tests {
         let wanted = state.rival_fighter(target).unwrap();
         let class = class_name(wanted, &data);
         let owner = club_name(2, state);
+        let shown = stage_name(&wanted.name);
         assert_eq!(
             move_text(Move::Offer(target, 100), state, &data),
-            format!("Offrir 100 pour {class} n° 2 ({owner})")
+            format!("Offrir 100 pour {shown} ({class}, {owner})")
         );
         // Two stats seen at first, the others hidden.
         let seen = range_texts(wanted, &Scouting::default(), &data);
@@ -1511,7 +1523,7 @@ mod tests {
         let (_, overview) = screen.last_week.as_ref().unwrap();
         assert_eq!(
             overview[1],
-            format!("{owner} refuse l'offre pour {class} n° 2 ({owner})")
+            format!("{owner} refuse l'offre pour {shown} ({class}, {owner})")
         );
         assert_eq!(screen.state.transfer_list, [0]);
         // Offers came for the listed fighter.
@@ -1676,9 +1688,12 @@ mod tests {
     fn titles_are_told_in_the_menu() {
         let mut screen = screen(7);
         screen.state.colosseums[1].champion = Some(Contender::Club(0));
+        let name = fighter_name(0, &screen.state.fighters[0], &screen.data);
         assert_eq!(
             screen.alerts(),
-            ["Mirmillon n° 1 : titre de Rome à défendre au plus tard en semaine 5"]
+            [format!(
+                "{name} : titre de Rome à défendre au plus tard en semaine 5"
+            )]
         );
         // The rival champions defend in week 5, without the player.
         let mut screen = self::screen(7);
@@ -1691,7 +1706,7 @@ mod tests {
             menu.iter().any(|line| line.starts_with("Titre de ")
                 && clubs
                     .iter()
-                    .any(|c| line.contains(&format!(" ({})", named_club(&c.name))))),
+                    .any(|c| line.contains(&format!(", {})", named_club(&c.name))))),
             "{menu:?}"
         );
     }
@@ -1795,7 +1810,7 @@ mod tests {
     #[test]
     fn three_seasons_where_a_club_becomes_a_rival_one_closes_and_one_is_founded() {
         let data = Rc::new(DesignData::load().unwrap());
-        let mut screen = screen(2);
+        let mut screen = screen(3);
         let mut rivalry = None;
         let (mut closed, mut founded) = (false, false);
         for _ in 0..3 * u64::from(data.calendar.season_weeks()) {
@@ -2006,7 +2021,10 @@ mod tests {
         let arm = injury_text(screen.state.fighters[0].injuries[0], hand);
         assert_eq!(
             screen.alerts(),
-            [format!("Mirmillon n° 1 : blessure, {arm}")]
+            [format!(
+                "{} : blessure, {arm}",
+                fighter_name(0, &screen.state.fighters[0], &screen.data)
+            )]
         );
         assert!(arm.starts_with("Bras droit"), "{arm}");
     }

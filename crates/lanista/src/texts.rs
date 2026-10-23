@@ -21,7 +21,7 @@ use lanista_core::fighter::retirement::too_maimed;
 use lanista_core::market::{
     MarketNews, Move, Target, ease_seen, personality_seen, potential_range, stat_ranges,
 };
-use lanista_core::names::ClubName;
+use lanista_core::names::{ClubName, FighterName};
 use lanista_core::relations::{Change, Reason, Standing};
 use lanista_core::rivals::{Profile, RivalId};
 use lanista_core::staff::{
@@ -45,13 +45,44 @@ pub fn stat_names() -> [String; STAT_COUNT] {
     ]
 }
 
-/// How the game names the fighter at `index` in the club, until fighters have names.
+/// "Flamma (Mirmillon)": how the game names the fighter at `index` in the club; by its
+/// class and that index if it has no name.
 pub fn fighter_name(index: usize, fighter: &CareerFighter, data: &DesignData) -> String {
-    tr!(
-        "fighter-name",
-        class = class_name(fighter, data),
-        number = index + 1
-    )
+    let class = class_name(fighter, data);
+    if fighter.name.is_empty() {
+        tr!("fighter-unnamed", class = class, number = index + 1)
+    } else {
+        tr!(
+            "fighter-name",
+            name = stage_name(&fighter.name),
+            class = class
+        )
+    }
+}
+
+/// "Flamma II": a fighter's stage name, numbered when every name of its culture was
+/// borne.
+pub fn stage_name(name: &FighterName) -> String {
+    if name.number < 2 {
+        name.name.clone()
+    } else {
+        tr!(
+            "fighter-numbered",
+            name = name.name.as_str(),
+            number = roman(name.number)
+        )
+    }
+}
+
+/// "Origine : Grèce (Europe)": the culture a fighter comes from and its continent;
+/// `None` for one with no culture.
+pub fn origin_text(fighter: &CareerFighter, data: &DesignData) -> Option<String> {
+    let culture = data.culture(&fighter.culture)?;
+    Some(tr!(
+        "sheet-origin",
+        culture = culture_name(&culture.key),
+        continent = continent_name(culture.continent)
+    ))
 }
 
 /// One word for a fighter's state, worst first.
@@ -119,26 +150,40 @@ pub fn activity_name(activity: Activity, data: &DesignData) -> String {
     }
 }
 
-/// How the market names the free agent at `index`.
+/// "Flamma (Mirmillon, free agent)": how the market names the free agent at `index`.
 pub fn free_agent_name(index: usize, fighter: &CareerFighter, data: &DesignData) -> String {
-    tr!(
-        "free-agent-name",
-        number = index + 1,
-        class = class_name(fighter, data)
-    )
+    let class = class_name(fighter, data);
+    if fighter.name.is_empty() {
+        tr!("free-agent-unnamed", number = index + 1, class = class)
+    } else {
+        tr!(
+            "free-agent-name",
+            name = stage_name(&fighter.name),
+            class = class
+        )
+    }
 }
 
-/// "Augure n° 3 (Ludus Magnus)": how the game names a rival club's fighter.
+/// "Flamma (Augure, Ludus Magnus)": how the game names a rival club's fighter; by its
+/// class and place in the roster if it has no name.
 pub fn rival_fighter_name(id: RivalId, state: &GameState, data: &DesignData) -> String {
-    let class = state
-        .rival_fighter(id)
-        .map_or_else(|| "?".into(), |f| class_name(f, data));
-    tr!(
-        "rival-fighter-name",
-        class = class,
-        number = id.fighter + 1,
-        club = club_name(id.club, state)
-    )
+    let fighter = state.rival_fighter(id);
+    let class = fighter.map_or_else(|| "?".into(), |f| class_name(f, data));
+    let club = club_name(id.club, state);
+    match fighter {
+        Some(f) if !f.name.is_empty() => tr!(
+            "rival-fighter-name",
+            name = stage_name(&f.name),
+            class = class,
+            club = club
+        ),
+        _ => tr!(
+            "rival-fighter-unnamed",
+            class = class,
+            number = id.fighter + 1,
+            club = club
+        ),
+    }
 }
 
 /// "40-60", or "?" for what is not seen.
@@ -395,7 +440,10 @@ pub fn market_news_text(news: MarketNews, state: &GameState, data: &DesignData) 
             fighter = rival(id)
         ),
         MarketNews::FighterRefused(id) => tr!("market-fighter-refused", fighter = rival(id)),
-        MarketNews::Failed(id) => tr!("market-failed", fighter = rival(id)),
+        MarketNews::Failed(id) => {
+            let fighter = rival(id);
+            tr!("market-failed", vowel = vowel(&fighter), fighter = fighter)
+        }
     }
 }
 
@@ -537,10 +585,12 @@ pub fn relation_change_text(change: Change, state: &GameState, data: &DesignData
                 .map_or_else(|| "?".into(), colosseum_rules_name)
         ),
         Reason::ChallengeRefused { fighter, rival: r } => {
+            let rival = rival(r);
             tr!(
                 "reason-challenge-refused",
                 fighter = club(fighter),
-                rival = rival(r)
+                vowel = vowel(&rival),
+                rival = rival
             )
         }
         Reason::Sold { fighter } => tr!("reason-sold", fighter = club(fighter)),
@@ -648,11 +698,10 @@ pub fn club_name(club: usize, state: &GameState) -> String {
 /// "Palestre d'Achille", "Ludus Magnus II": its pattern filled with its name, told
 /// whether that name starts with a vowel for the languages that elide before one.
 pub fn named_club(name: &ClubName) -> String {
-    let vowel = name.name.starts_with(is_vowel);
     let club = tr!(
         &format!("club-{}", name.pattern),
         name = name.name.as_str(),
-        vowel = if vowel { "true" } else { "false" }
+        vowel = vowel(&name.name)
     );
     if name.number < 2 {
         club
@@ -663,6 +712,16 @@ pub fn named_club(name: &ClubName) -> String {
 
 fn is_vowel(c: char) -> bool {
     "AEIOUYÂÄÀÉÈÊËÎÏÔÖÛÜŪĀĒĪŌ".contains(c)
+}
+
+/// "true" when `name` starts with a vowel, for the `$vowel` of the languages that
+/// elide before one ("le défi d'Ursus").
+pub fn vowel(name: &str) -> &'static str {
+    if name.starts_with(is_vowel) {
+        "true"
+    } else {
+        "false"
+    }
 }
 
 /// `n` in Roman numerals, from 1 to 39 (beyond, a figure).

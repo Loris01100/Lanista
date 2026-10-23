@@ -20,6 +20,7 @@ use crate::fighter::equipment::Refused;
 use crate::fighter::fame::{Fame, FightResult};
 use crate::fighter::percent_of;
 use crate::market::{self, Move, SaleOffer, Target, value};
+use crate::names::{self, FighterName};
 use crate::relations::{Reason, Relation, Standing, StandingRules};
 use crate::rivals::{self, Rival, RivalId, Venue};
 use crate::staff::{
@@ -141,7 +142,7 @@ impl GameState {
     /// ranked there; then each new club gets
     /// generated fighters up to `roster.wanted`, ranked nowhere yet. Then brings the free agents up
     /// to their fewest, and the staff candidates up to `StaffMarketRules::candidates`
-    /// for each post.
+    /// for each post. Last, names the fighters in activity who have none.
     pub fn open_world(&mut self, data: &DesignData) {
         let drawn = self.rivals.len();
         let count = usize::try_from(data.world.clubs.count).unwrap_or(0);
@@ -167,6 +168,7 @@ impl GameState {
                 let fighter = CareerFighter::random(&mut self.rng, data);
                 let fighter = market::with_prestige(fighter, rules.prestige, data);
                 let club = homes[(c + r) % homes.len()];
+                let fighter = self.named(fighter, Some(self.rivals[club].continent), data);
                 let roster = &mut self.rivals[club].fighters;
                 ranked.push(RivalId {
                     club,
@@ -192,9 +194,11 @@ impl GameState {
         let fewest = usize::try_from(data.economy.market.min_free_agents).unwrap_or(0);
         while self.available_free_agents() < fewest {
             let agent = market::free_agent(&mut self.rng, data);
+            let agent = self.named(agent, None, data);
             self.free_agents.push(agent);
         }
         staff::fill_market(&mut self.staff_market, &data.economy.staff, &mut self.rng);
+        self.name_the_nameless(data);
     }
 
     /// Rival club `club` gets generated fighters up to `roster.wanted`, ranked nowhere.
@@ -202,7 +206,65 @@ impl GameState {
         let wanted = usize::try_from(data.world.roster.wanted).unwrap_or(0);
         while self.rivals[club].active() < wanted {
             let fighter = CareerFighter::random(&mut self.rng, data);
+            let fighter = self.named(fighter, Some(self.rivals[club].continent), data);
             self.rivals[club].fighters.push(fighter);
+        }
+    }
+
+    /// `fighter` named as it comes into the world: a culture drawn on `continent` (on
+    /// any without one, `rivals::culture_on`), then one of its fighters' names that no
+    /// fighter in activity bears (`names::fighter_name`).
+    fn named(
+        &mut self,
+        mut fighter: CareerFighter,
+        continent: Option<Continent>,
+        data: &DesignData,
+    ) -> CareerFighter {
+        let culture = rivals::culture_on(&mut self.rng, continent, data);
+        let Some(culture) = culture.and_then(|key| data.culture(&key)) else {
+            return fighter;
+        };
+        let rivals = self.rivals.iter().flat_map(|r| &r.fighters);
+        let taken: Vec<&FighterName> = self
+            .fighters
+            .iter()
+            .chain(rivals)
+            .chain(&self.free_agents)
+            .filter(|f| f.status == Status::Active && f.moved_to.is_none())
+            .map(|f| &f.name)
+            .collect();
+        fighter.name = names::fighter_name(&mut self.rng, culture, &taken);
+        fighter.culture.clone_from(&culture.key);
+        fighter
+    }
+
+    /// Names the fighters in activity who have none: the club's first, and all those
+    /// of a game saved before fighters had names. The club's are of its continent, a
+    /// rival club's of its own, the free agents of any.
+    fn name_the_nameless(&mut self, data: &DesignData) {
+        let nameless = |f: &CareerFighter| {
+            f.status == Status::Active && f.moved_to.is_none() && f.name.is_empty()
+        };
+        for i in 0..self.fighters.len() {
+            if nameless(&self.fighters[i]) {
+                let fighter = self.fighters[i].clone();
+                self.fighters[i] = self.named(fighter, Some(self.continent), data);
+            }
+        }
+        for club in 0..self.rivals.len() {
+            let home = self.rivals[club].continent;
+            for i in 0..self.rivals[club].fighters.len() {
+                if nameless(&self.rivals[club].fighters[i]) {
+                    let fighter = self.rivals[club].fighters[i].clone();
+                    self.rivals[club].fighters[i] = self.named(fighter, Some(home), data);
+                }
+            }
+        }
+        for a in 0..self.free_agents.len() {
+            if nameless(&self.free_agents[a]) {
+                let fighter = self.free_agents[a].clone();
+                self.free_agents[a] = self.named(fighter, None, data);
+            }
         }
     }
 
@@ -1017,7 +1079,14 @@ mod tests {
         let wealth = &data.economy.wealth;
         assert_eq!(state.wealth, Wealth::Modest);
         assert_eq!(state.money, i64::from(wealth.modest.starting_money));
-        let fighter = CareerFighter::random(&mut ChaCha8Rng::seed_from_u64(7), &data);
+        // Named as it comes into the world, by a culture of the club's continent.
+        let mut fighter = CareerFighter::random(&mut ChaCha8Rng::seed_from_u64(7), &data);
+        let named = &state.fighters[0];
+        let culture = data.culture(&named.culture).unwrap();
+        assert_eq!(culture.continent, state.continent);
+        assert!(culture.fighters.contains(&named.name.name), "{named:?}");
+        fighter.name.clone_from(&named.name);
+        fighter.culture.clone_from(&named.culture);
         assert_eq!(state.fighters, [fighter]);
         // A rich club starts with more money, and the same fighter.
         let rich = game_of(7, Wealth::Rich, &data);
@@ -1102,6 +1171,12 @@ mod tests {
             for &k in &home {
                 let culture = data.culture(&state.rivals[k].culture).unwrap();
                 assert_eq!(culture.continent, continent);
+                // Its fighters are of its continent too.
+                for f in &state.rivals[k].fighters {
+                    let culture = data.culture(&f.culture).unwrap();
+                    assert_eq!(culture.continent, continent);
+                    assert!(culture.fighters.contains(&f.name.name), "{:?}", f.name);
+                }
             }
             for id in data.world.colosseums_of(continent) {
                 let colosseum = &state.colosseums[usize::try_from(id.0).unwrap()];
@@ -2585,6 +2660,24 @@ mod tests {
             .collect()
     }
 
+    /// Every fighter in activity has a name, and no two share it.
+    fn assert_names_apart(state: &GameState, week: u64) {
+        let rivals = state.rivals.iter().flat_map(|r| &r.fighters);
+        let mut names: Vec<_> = state
+            .fighters
+            .iter()
+            .chain(rivals)
+            .chain(&state.free_agents)
+            .filter(|f| f.status == Status::Active && f.moved_to.is_none())
+            .map(|f| &f.name)
+            .collect();
+        assert!(names.iter().all(|n| !n.is_empty()), "week {week}");
+        let count = names.len();
+        names.sort_unstable();
+        names.dedup();
+        assert_eq!(names.len(), count, "week {week}");
+    }
+
     /// The milestone of phase 5: seasons follow one another where rankings, champions and
     /// markets change without the player.
     #[test]
@@ -2614,6 +2707,7 @@ mod tests {
                     rival.name
                 );
             }
+            assert_names_apart(&state, week);
             if week % season == 0 {
                 let rosters = state.rosters();
                 let firsts: Vec<Contender> = state

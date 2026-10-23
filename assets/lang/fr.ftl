@@ -12,9 +12,13 @@ stat-speed = VIT
 stat-melee-defense = DC
 stat-ranged-defense = DL
 
-fighter-name = { $class } n° { $number }
-free-agent-name = Free agent n° { $number } ({ $class })
-rival-fighter-name = { $class } n° { $number } ({ $club })
+fighter-name = { $name } ({ $class })
+fighter-unnamed = { $class } n° { $number }
+fighter-numbered = { $name } { $number }
+free-agent-name = { $name } ({ $class }, free agent)
+free-agent-unnamed = Free agent n° { $number } ({ $class })
+rival-fighter-name = { $name } ({ $class }, { $club })
+rival-fighter-unnamed = { $class } n° { $number } ({ $club })
 contender-yours = { $fighter } (votre club)
 
 condition-dead = mort
@@ -179,7 +183,7 @@ market-bought = Achète { $fighter } à { $club } pour { $price }
 market-countered = { $club } demande { $price } pour { $fighter } (offre possible cette semaine)
 market-club-refused = { $club } refuse l'offre pour { $fighter }
 market-fighter-refused = { $fighter } refuse de rejoindre le club
-market-failed = Transfert de { $fighter } impossible : pas de place, pas assez d'argent ou combattant parti
+market-failed = Transfert { club-de }{ $fighter } impossible : pas de place, pas assez d'argent ou combattant parti
 
 unsellable = Arrivé récemment : vendable à partir de la { $date }
 
@@ -280,7 +284,7 @@ relation-change = { $points } : { $why } ({ $date })
 reason-killed = { $fighter } a tué { $rival }
 reason-beaten = { $fighter } a battu { $rival }
 reason-title-taken = { $fighter } lui a pris le titre de { $place }
-reason-challenge-refused = { $fighter } a refusé le défi de { $rival }
+reason-challenge-refused = { $fighter } a refusé le défi { club-de }{ $rival }
 reason-sold = vous lui avez vendu { $fighter }
 reason-bought = vous lui avez acheté { $fighter }
 reason-pact-kept = { $fighter } a tenu son pacte avec { $rival } en mêlée
@@ -313,8 +317,8 @@ save-none = Aucune sauvegarde
 save-unreadable = Sauvegarde illisible : { $error }
 
 club-becomes = Le club devient { $wealth }
-challenge-refused = { $fighter } refuse le défi de { $challenger } sans combattre : renommée -{ $fame }, Elo -{ $elo }
-challenge-from = Défi de { $challenger }
+challenge-refused = { $fighter } refuse le défi { club-de }{ $challenger } sans combattre : renommée -{ $fame }, Elo -{ $elo }
+challenge-from = Défi { club-de }{ $challenger }
 
 top-date = Saison { $season }, semaine { $week } : { $phase ->
         [competition] compétition
@@ -352,7 +356,7 @@ alert-debts = Dettes : { $money }
 alert-injury = { $fighter } : blessure, { $injury }
 alert-tired = { $fighter } : fatigué (forme { $form })
 alert-title-defense = { $fighter } : titre de { $place } à défendre au plus tard en semaine { $week }
-alert-challenge = { $fighter } : défi de { $challenger } (refus sans combattre : renommée -{ $fame }, Elo -{ $elo })
+alert-challenge = { $fighter } : défi { club-de }{ $challenger } (refus sans combattre : renommée -{ $fame }, Elo -{ $elo })
 alert-sale-offer = { $club } veut acheter { $fighter } pour { $price } (à accepter au marché cette semaine)
 alert-rival = { $club } est votre rival depuis { $since } : recettes à { $receipts } %, renommée +{ $fame } par combat
 alert-no-fighter = Plus aucun combattant : recrutez un free agent au marché
@@ -374,6 +378,7 @@ sheet-left-handed = gaucher
 sheet-ambidextrous = ambidextre
 sheet-loadout = Configuration : { $loadout }
 sheet-ease = Aisance : { $ease }
+sheet-origin = Origine : { $culture } ({ $continent })
 ease-loadout = { $loadout } { $ease }
 ease-title = Aisance
 sheet-retired-maimed = A pris sa retraite, trop mutilé
@@ -588,7 +593,7 @@ culture-mesoamerique = Mésoamérique
 culture-amerique_sud = Tribus d'Amérique du Sud
 culture-oceanie = Tribus d'Océanie
 
-# « de » devant le nom d'un club, élidé devant une voyelle ($vowel).
+# « de » devant un nom de club ou de combattant, élidé devant une voyelle ($vowel).
 club-de = { $vowel ->
         [true] d'
        *[false] {"de "}

@@ -218,6 +218,7 @@ pub(super) fn rival_market(state: &mut GameState, data: &DesignData) {
         }
         for _ in 0..market.rookies {
             let rookie = market::rookie(&mut state.rng, data);
+            let rookie = state.named(rookie, None, data);
             state.free_agents.push(rookie);
         }
     }

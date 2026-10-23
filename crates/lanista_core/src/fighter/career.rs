@@ -26,6 +26,7 @@ use crate::fighter::progression::{
 use crate::fighter::retirement::{decides_to_retire, too_maimed};
 use crate::fighter::{ClassId, Condition, Fighter, FighterId, Stats};
 use crate::log::{Report, places};
+use crate::names::FighterName;
 use crate::rivals::RivalId;
 use crate::staff::{Medicine, StaffEffects};
 use crate::stat_model::Ending;
@@ -64,6 +65,14 @@ impl Record {
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct CareerFighter {
     pub class: ClassId,
+    /// Its stage name, given as it comes into the world (`GameState::named`); empty
+    /// for a fighter out of a game.
+    #[serde(default)]
+    pub name: FighterName,
+    /// The key of its culture in `data/names.ron`, which named it: its continent is
+    /// the culture's.
+    #[serde(default)]
+    pub culture: String,
     /// Trained stats, before injuries, illness and morale.
     pub stats: Stats,
     /// Hidden: the highest each stat can reach by progressing.
@@ -148,6 +157,8 @@ impl CareerFighter {
         let ease = rules.ease.random(rng, loadouts);
         let mut fighter = Self {
             class,
+            name: FighterName::default(),
+            culture: String::new(),
             stats,
             potential,
             dominant_hand,
@@ -188,16 +199,22 @@ impl CareerFighter {
         self.ease.get(loadout).copied().unwrap_or(100)
     }
 
-    /// The entry it leaves behind on going to `to`: its class, for its name, and its
-    /// status; the rest is blank, the fighter living on at `to`.
+    /// The entry it leaves behind on going to `to`: its class, name and culture, and
+    /// its status; the rest is blank, the fighter living on at `to`.
     #[must_use]
     pub fn moved(&self, to: Contender) -> Self {
-        Self::moved_entry(self.class, self.status, to)
+        Self {
+            name: self.name.clone(),
+            culture: self.culture.clone(),
+            ..Self::moved_entry(self.class, self.status, to)
+        }
     }
 
     fn moved_entry(class: ClassId, status: Status, to: Contender) -> Self {
         Self {
             class,
+            name: FighterName::default(),
+            culture: String::new(),
             stats: Stats::default(),
             potential: Stats::default(),
             dominant_hand: Side::Right,
@@ -1036,12 +1053,17 @@ pub mod entries {
     use super::{CareerFighter, Status};
     use crate::colosseum::Contender;
     use crate::fighter::ClassId;
+    use crate::names::FighterName;
 
     #[derive(Serialize, Deserialize)]
     #[serde(untagged)]
     enum Entry<F> {
         Moved {
             class: ClassId,
+            #[serde(default)]
+            name: FighterName,
+            #[serde(default)]
+            culture: String,
             status: Status,
             moved_to: Contender,
         },
@@ -1057,6 +1079,8 @@ pub mod entries {
         serializer.collect_seq(fighters.iter().map(|f| match f.moved_to {
             Some(moved_to) => Entry::Moved {
                 class: f.class,
+                name: f.name.clone(),
+                culture: f.culture.clone(),
                 status: f.status,
                 moved_to,
             },
@@ -1075,9 +1099,15 @@ pub mod entries {
             .map(|entry| match entry {
                 Entry::Moved {
                     class,
+                    name,
+                    culture,
                     status,
                     moved_to,
-                } => CareerFighter::moved_entry(class, status, moved_to),
+                } => CareerFighter {
+                    name,
+                    culture,
+                    ..CareerFighter::moved_entry(class, status, moved_to)
+                },
                 Entry::Here(fighter) => fighter,
             })
             .collect())

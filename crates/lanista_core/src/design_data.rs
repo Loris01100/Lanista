@@ -537,12 +537,13 @@ impl DesignData {
                 "a continent of clubs without a culture",
             ));
         }
-        let unnamed = |c: &Culture| c.names.is_empty() || c.clubs.is_empty();
+        let unnamed =
+            |c: &Culture| c.names.is_empty() || c.clubs.is_empty() || c.fighters.is_empty();
         if self.cultures.iter().any(unnamed) {
             return Err(LoadError::Invalid {
                 file: NAMES_FILE,
                 field: "cultures",
-                problem: "no name or no pattern",
+                problem: "no name, pattern or fighter's name",
             });
         }
         if self.world.roster.max < self.world.roster.wanted {

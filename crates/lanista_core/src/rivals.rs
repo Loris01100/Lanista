@@ -214,27 +214,49 @@ impl Rival {
     }
 }
 
+/// The key of a culture of `data/world.ron`'s `clubs.cultures` drawn by its weight
+/// among those of `continent`, or of any continent without one or when `continent`
+/// has none; `None` when no culture has a weight.
+pub fn culture_on<R: Rng + ?Sized>(
+    rng: &mut R,
+    continent: Option<Continent>,
+    data: &DesignData,
+) -> Option<String> {
+    let rules = &data.world.clubs;
+    let of = |continent: Option<Continent>| -> Vec<(u32, usize)> {
+        (0..)
+            .zip(&rules.cultures)
+            .filter(|(_, (_, key))| {
+                continent.is_none_or(|home| data.culture(key).is_some_and(|c| c.continent == home))
+            })
+            .map(|(i, (weight, _))| (*weight, i))
+            .collect()
+    };
+    let weighed = |cultures: &[(u32, usize)]| cultures.iter().any(|&(w, _)| w > 0);
+    let mut cultures = of(continent);
+    if !weighed(&cultures) {
+        cultures = of(None);
+    }
+    weighed(&cultures).then(|| rules.cultures[pick(rng, &cultures)].1.clone())
+}
+
 /// A new rival club: profile and wealth drawn by `data/world.ron`'s `clubs` weights,
 /// the continent furthest below its share of the clubs (`home`), then a culture of
-/// that continent drawn by its weight, named by its culture unlike any of
-/// `others`, with its wealth's starting money, neither fighters nor staff.
+/// that continent drawn by its weight, named by its culture unlike any open club of
+/// `others` (a closed club's name may come back), with its wealth's starting money,
+/// neither fighters nor staff.
 pub fn random_club<R: Rng + ?Sized>(rng: &mut R, others: &[Rival], data: &DesignData) -> Rival {
     let rules = &data.world.clubs;
     let profile = pick(rng, &rules.profiles);
     let wealth = pick(rng, &rules.wealth);
     let continent = home(others, data);
-    let cultures: Vec<(u32, usize)> = (0..)
-        .zip(&rules.cultures)
-        .filter(|(_, (_, key))| data.culture(key).is_some_and(|c| c.continent == continent))
-        .map(|(i, (weight, _))| (*weight, i))
-        .collect();
     // Loading makes sure each continent drawn has a culture.
-    let key = if cultures.iter().any(|&(w, _)| w > 0) {
-        rules.cultures[pick(rng, &cultures)].1.clone()
-    } else {
-        String::new()
-    };
-    let taken: Vec<&names::ClubName> = others.iter().map(|r| &r.name).collect();
+    let key = culture_on(rng, Some(continent), data).unwrap_or_default();
+    let taken: Vec<&names::ClubName> = others
+        .iter()
+        .filter(|r| r.is_open())
+        .map(|r| &r.name)
+        .collect();
     let name = data
         .culture(&key)
         .map(|c| names::club_name(rng, c, &taken))

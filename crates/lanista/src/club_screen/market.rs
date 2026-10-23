@@ -14,8 +14,8 @@ use super::{ClubScreen, View};
 use crate::lang::tr;
 use crate::texts::{
     club_name, colosseum_name, colosseum_rules_name, condition_text, fighter_name, free_agent_name,
-    move_text, outside_ease_text, outside_personality_text, potential_text, range_texts,
-    record_text, rival_fighter_name, stat_names, unsellable_text, weeks,
+    move_text, origin_text, outside_ease_text, outside_personality_text, potential_text,
+    range_texts, record_text, rival_fighter_name, stat_names, unsellable_text, weeks,
 };
 
 /// What a click on the market asks for.
@@ -154,6 +154,9 @@ impl ClubScreen {
         };
         let scouting = state.scouting();
         ui.heading(tr!("sheet-title", fighter = name, age = f.age));
+        if let Some(origin) = origin_text(f, data) {
+            ui.label(origin);
+        }
         let mut goto = None;
         if let Target::Rival(id) = target
             && ui
