@@ -802,7 +802,16 @@ pub fn weeks(n: u32) -> String {
 }
 
 pub fn injury_text(injury: Injury, dominant: Side) -> String {
-    let location = location_name(injury.location, dominant);
+    injury_at(injury, location_name(injury.location, dominant))
+}
+
+/// An injury, without saying whether the arm is the dominant one.
+pub fn part_injury_text(injury: Injury) -> String {
+    injury_at(injury, part_name(injury.location))
+}
+
+/// An injury, its location already named.
+fn injury_at(injury: Injury, location: String) -> String {
     let severity = match injury.severity {
         Severity::Light => "light",
         Severity::Medium => "medium",

@@ -19,7 +19,7 @@ use crate::fight_view::{Cast, FightView, STANDS};
 use crate::fighter_sprite::PIXELS_PER_METRE;
 use crate::lang::tr;
 use crate::options;
-use crate::texts::part_name;
+use crate::texts::{part_injury_text, part_name};
 
 pub use crate::fight_view::{DEATH_SOUND, HIT_SOUND};
 // ponytail: placeholder music.
@@ -305,7 +305,8 @@ impl CombatScreen {
 }
 
 /// Where `f` was hit this fight, laid out like a body: the hit points lost on each
-/// part, redder the closer to half its max they are; a severed part struck through.
+/// part, redder the closer to half its max they are; a severed part struck through, an
+/// injured one, from before the fight, on bronze (red if lasting), its injuries on hover.
 fn anatomy(ui: &mut egui::Ui, log: &[Event], f: &Fighter) {
     use Location::{Arm, Body, Head, Leg};
     let rows = [
@@ -315,6 +316,8 @@ fn anatomy(ui: &mut egui::Ui, log: &[Event], f: &Fighter) {
     ];
     let red = ui.visuals().error_fg_color;
     let text = ui.visuals().text_color();
+    let bronze = ui.visuals().warn_fg_color;
+    let dark = ui.visuals().extreme_bg_color;
     egui::Grid::new(("anatomy", f.id.0)).show(ui, |ui| {
         for row in rows {
             for part in row {
@@ -325,12 +328,30 @@ fn anatomy(ui: &mut egui::Ui, log: &[Event], f: &Fighter) {
                 let damage = part_damage(log, f.id, part);
                 let percent = u64::from(damage) * 200 / u64::from(f.stats.hp.max(1));
                 let share = f32::from(u8::try_from(percent.min(100)).unwrap_or(100)) / 100.0;
+                let injuries: Vec<_> = f
+                    .condition
+                    .injuries
+                    .iter()
+                    .filter(|i| i.location == part && !i.is_lost())
+                    .collect();
                 let mut name = egui::RichText::new(part_name(part)).small();
                 if f.has_lost(part) {
                     name = name.strikethrough().color(red);
+                } else if !injuries.is_empty() {
+                    let lasting = injuries.iter().any(|i| i.is_permanent());
+                    let back = if lasting { red } else { bronze };
+                    name = name.background_color(back).color(dark);
                 }
                 ui.vertical_centered(|ui| {
-                    ui.label(name);
+                    let label = ui.label(name);
+                    if !injuries.is_empty() {
+                        let texts: Vec<_> =
+                            injuries.iter().map(|&&i| part_injury_text(i)).collect();
+                        label.on_hover_text(texts.join(
+                            "
+",
+                        ));
+                    }
                     ui.label(
                         egui::RichText::new(damage.to_string())
                             .color(text.lerp_to_gamma(red, share)),
