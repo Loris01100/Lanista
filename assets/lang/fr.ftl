@@ -294,6 +294,7 @@ reason-betrayed = { $fighter } a trahi son pacte avec { $rival } en mêlée
 
 labelled = { $label } : { $text }
 this-week = Cette semaine : { $what }
+confirm = Confirmer
 cancel = Annuler
 back = Retour
 back-to-list = Retour à la liste
@@ -315,6 +316,10 @@ save-failed = Sauvegarde impossible : { $error }
 save-loaded = Partie chargée
 save-none = Aucune sauvegarde
 save-unreadable = Sauvegarde illisible : { $error }
+save-slot = Emplacement { $slot } : { $game }
+save-slot-empty = vide
+save-slot-unreadable = illisible
+save-slot-game = { $date }, club { $wealth } en { $continent }
 
 club-becomes = Le club devient { $wealth }
 challenge-refused = { $fighter } refuse le défi { club-de }{ $challenger } sans combattre : renommée -{ $fame }, Elo -{ $elo }
@@ -346,6 +351,9 @@ menu-load = Charger
 menu-new-game = Nouvelle partie :
 menu-new-club = club { $wealth }
 menu-new-game-started = Nouvelle partie, club { $wealth } en { $continent }, graine { $seed }
+confirm-new-game = Commencer une nouvelle partie avec un club { $wealth } en { $continent } ? La partie en cours sera perdue si elle n'est pas sauvegardée.
+confirm-load = Charger l'emplacement { $slot } ({ $game }) ? La partie en cours sera perdue si elle n'est pas sauvegardée.
+confirm-overwrite = Écraser l'emplacement { $slot } ({ $game }) ?
 menu-language = Langue :
 
 pending-market = Marché : { $what }

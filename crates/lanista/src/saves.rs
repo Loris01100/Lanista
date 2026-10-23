@@ -9,8 +9,9 @@ use lanista_core::state::GameState;
 
 /// Written after every week, so quitting never loses a week played.
 pub const AUTO: &str = "autosave.json";
-/// Written when the player asks.
-pub const MANUAL: &str = "save.json";
+/// The save slots, written when the player asks; the first keeps the name of the
+/// single manual save of before.
+pub const SLOTS: [&str; 3] = ["save.json", "save-2.json", "save-3.json"];
 /// The code of the language the player chose.
 const LANGUAGE: &str = "language.txt";
 
@@ -57,10 +58,10 @@ mod tests {
     fn a_written_save_reads_back() {
         let data = DesignData::load().unwrap();
         let folder = std::env::temp_dir().join(format!("lanista-saves-{}", std::process::id()));
-        assert_eq!(read(&folder, MANUAL, &data), Ok(None));
+        assert_eq!(read(&folder, SLOTS[0], &data), Ok(None));
         let state = GameState::new(7, &data);
-        write(&folder, MANUAL, &state).unwrap();
-        assert_eq!(read(&folder, MANUAL, &data), Ok(Some(state)));
+        write(&folder, SLOTS[0], &state).unwrap();
+        assert_eq!(read(&folder, SLOTS[0], &data), Ok(Some(state)));
         std::fs::remove_dir_all(folder).unwrap();
     }
 

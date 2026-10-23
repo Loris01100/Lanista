@@ -42,10 +42,10 @@ use crate::saves;
 use crate::texts::{
     activity_name, challenger_text, change, class_name, club_name, colosseum_name,
     colosseum_rules_name, condition_text, contender_name, continent_name, date_in_sentence,
-    ease_text, fight_text, fighter_name, illness_text, injury_text, loadout_name, market_news_text,
-    money_line, move_text, origin_text, personality_text, priced, rival_fighter_name,
-    staff_move_text, staff_news_text, stat_names, title_news_text, vowel, wealth_name, wealth_text,
-    week_lines, world_news_text,
+    date_text, ease_text, fight_text, fighter_name, illness_text, injury_text, loadout_name,
+    market_news_text, money_line, move_text, origin_text, personality_text, priced,
+    rival_fighter_name, staff_move_text, staff_news_text, stat_names, title_news_text, vowel,
+    wealth_name, wealth_text, week_lines, world_news_text,
 };
 
 /// Seed of the standard duel offered from the club.
@@ -74,6 +74,26 @@ enum View {
     Outside(Target),
     /// The rival club at this index: profile, money, titles and fighters.
     Rival(usize),
+}
+
+/// What a save slot holds, as the menu shows it.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum Slot {
+    Empty,
+    /// A game at this week, of a club of this wealth on this continent.
+    Game(u64, Wealth, Continent),
+    Unreadable,
+}
+
+/// A choice that loses a game, carried out only once the player confirms it.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum Confirm {
+    /// Saves over the game in this slot.
+    Save(usize),
+    /// Loads this slot over the game being played.
+    Load(usize),
+    /// Starts a new game over the one being played.
+    NewGame(Wealth, Continent),
 }
 
 /// One of the club's fights, as the fight summary shows it.
@@ -111,6 +131,10 @@ pub struct ClubScreen {
     saves: Option<PathBuf>,
     /// The outcome of the last save or load, for the player.
     message: Option<String>,
+    /// What each of `saves::SLOTS` holds.
+    slots: [Slot; saves::SLOTS.len()],
+    /// The choice waiting for the player to confirm it.
+    confirm: Option<Confirm>,
     /// The offer being written on the market: the rival fighter and the price.
     offer_draft: Option<(RivalId, u32)>,
     /// The continent the colosseums view shows, the club's at first.
@@ -162,6 +186,7 @@ impl ClubScreen {
             shown_continent: state.continent,
             shown_prestige: None,
             new_continent: state.continent,
+            slots: read_slots(saves.as_deref(), &data),
             data,
             state,
             view: View::Menu,
@@ -171,6 +196,7 @@ impl ClubScreen {
             to_watch: Vec::new(),
             saves,
             message: None,
+            confirm: None,
             offer_draft: None,
             bindings,
         }
@@ -196,15 +222,49 @@ impl ClubScreen {
         }
     }
 
-    fn load(&mut self) {
+    /// Writes the game to the save slot `slot`.
+    fn save_slot(&mut self, slot: usize) {
+        self.save(saves::SLOTS[slot], true);
+        self.slots = read_slots(self.saves.as_deref(), &self.data);
+    }
+
+    /// Loads the save slot `slot` over the game being played.
+    fn load(&mut self, slot: usize) {
         let Some(folder) = &self.saves else { return };
-        match saves::read(folder, saves::MANUAL, &self.data) {
+        match saves::read(folder, saves::SLOTS[slot], &self.data) {
             Ok(Some(state)) => {
                 self.replace(state);
                 self.message = Some(tr!("save-loaded"));
             }
             Ok(None) => self.message = Some(tr!("save-none")),
             Err(e) => self.message = Some(tr!("save-unreadable", error = e)),
+        }
+    }
+
+    /// Asks the player to confirm `choice`, or carries it out at once when it loses
+    /// nothing: saving to an empty slot.
+    fn ask(&mut self, choice: Confirm) {
+        match choice {
+            Confirm::Save(slot) if self.slots[slot] == Slot::Empty => self.carry_out(choice),
+            _ => self.confirm = Some(choice),
+        }
+    }
+
+    fn carry_out(&mut self, choice: Confirm) {
+        self.confirm = None;
+        match choice {
+            Confirm::Save(slot) => self.save_slot(slot),
+            Confirm::Load(slot) => self.load(slot),
+            Confirm::NewGame(wealth, continent) => {
+                let seed = new_seed();
+                self.replace(GameState::start(seed, (wealth, continent), &self.data));
+                self.message = Some(tr!(
+                    "menu-new-game-started",
+                    wealth = wealth_name(wealth),
+                    continent = continent_name(continent),
+                    seed = seed.to_string()
+                ));
+            }
         }
     }
 
@@ -385,7 +445,7 @@ impl ClubScreen {
         }
         let play = ui.button(tr!("menu-next-week")).clicked();
         if self.saves.is_some() {
-            ui.horizontal(|ui| self.files(ui));
+            self.files(ui);
         }
         ui.horizontal(|ui| self.language(ui));
         ui.separator();
@@ -432,41 +492,95 @@ impl ClubScreen {
         }
     }
 
-    /// Saving, loading and starting a new game.
+    /// The save slots, saved and loaded, and starting a new game; a choice that loses
+    /// a game waits for the player to confirm it.
     fn files(&mut self, ui: &mut egui::Ui) {
-        if ui.button(tr!("menu-save")).clicked() {
-            self.save(saves::MANUAL, true);
-        }
-        if ui.button(tr!("menu-load")).clicked() {
-            self.load();
-        }
-        ui.label(tr!("menu-new-game"));
-        egui::ComboBox::from_id_salt("new continent")
-            .selected_text(continent_name(self.new_continent))
-            .show_ui(ui, |ui| {
-                for continent in Continent::ALL {
-                    ui.selectable_value(
-                        &mut self.new_continent,
-                        continent,
-                        continent_name(continent),
-                    );
+        if let Some(choice) = self.confirm {
+            ui.horizontal(|ui| {
+                ui.colored_label(egui::Color32::LIGHT_RED, self.question(choice));
+                if ui.button(tr!("confirm")).clicked() {
+                    self.carry_out(choice);
+                }
+                if ui.button(tr!("cancel")).clicked() {
+                    self.confirm = None;
                 }
             });
-        for wealth in Wealth::ALL {
-            if ui
-                .button(tr!("menu-new-club", wealth = wealth_name(wealth)))
-                .clicked()
-            {
-                let seed = new_seed();
-                let start = (wealth, self.new_continent);
-                self.replace(GameState::start(seed, start, &self.data));
-                self.message = Some(tr!(
-                    "menu-new-game-started",
-                    wealth = wealth_name(wealth),
-                    continent = continent_name(start.1),
-                    seed = seed.to_string()
-                ));
+            return;
+        }
+        let mut chosen = None;
+        for (i, &slot) in self.slots.iter().enumerate() {
+            ui.horizontal(|ui| {
+                ui.label(tr!("save-slot", slot = i + 1, game = self.slot_text(slot)));
+                if ui.button(tr!("menu-save")).clicked() {
+                    chosen = Some(Confirm::Save(i));
+                }
+                let loadable = matches!(slot, Slot::Game(..));
+                if ui
+                    .add_enabled(loadable, egui::Button::new(tr!("menu-load")))
+                    .clicked()
+                {
+                    chosen = Some(Confirm::Load(i));
+                }
+            });
+        }
+        ui.horizontal(|ui| {
+            ui.label(tr!("menu-new-game"));
+            egui::ComboBox::from_id_salt("new continent")
+                .selected_text(continent_name(self.new_continent))
+                .show_ui(ui, |ui| {
+                    for continent in Continent::ALL {
+                        ui.selectable_value(
+                            &mut self.new_continent,
+                            continent,
+                            continent_name(continent),
+                        );
+                    }
+                });
+            for wealth in Wealth::ALL {
+                if ui
+                    .button(tr!("menu-new-club", wealth = wealth_name(wealth)))
+                    .clicked()
+                {
+                    chosen = Some(Confirm::NewGame(wealth, self.new_continent));
+                }
             }
+        });
+        if let Some(choice) = chosen {
+            self.ask(choice);
+        }
+    }
+
+    fn slot_text(&self, slot: Slot) -> String {
+        match slot {
+            Slot::Empty => tr!("save-slot-empty"),
+            Slot::Game(week, wealth, continent) => tr!(
+                "save-slot-game",
+                date = date_text(week, &self.data),
+                wealth = wealth_name(wealth),
+                continent = continent_name(continent)
+            ),
+            Slot::Unreadable => tr!("save-slot-unreadable"),
+        }
+    }
+
+    /// The question asked before carrying out `choice`.
+    fn question(&self, choice: Confirm) -> String {
+        match choice {
+            Confirm::Save(slot) => tr!(
+                "confirm-overwrite",
+                slot = slot + 1,
+                game = self.slot_text(self.slots[slot])
+            ),
+            Confirm::Load(slot) => tr!(
+                "confirm-load",
+                slot = slot + 1,
+                game = self.slot_text(self.slots[slot])
+            ),
+            Confirm::NewGame(wealth, continent) => tr!(
+                "confirm-new-game",
+                wealth = wealth_name(wealth),
+                continent = continent_name(continent)
+            ),
         }
     }
 
@@ -937,6 +1051,15 @@ fn to_watch(fights: &[FightReport], state: &GameState, data: &DesignData) -> Vec
         });
     }
     watched
+}
+
+/// What each save slot in `folder` holds; all empty without a folder.
+fn read_slots(folder: Option<&std::path::Path>, data: &DesignData) -> [Slot; saves::SLOTS.len()] {
+    saves::SLOTS.map(|file| match folder.map(|f| saves::read(f, file, data)) {
+        None | Some(Ok(None)) => Slot::Empty,
+        Some(Ok(Some(state))) => Slot::Game(state.week, state.wealth, state.continent),
+        Some(Err(_)) => Slot::Unreadable,
+    })
 }
 
 /// A seed for a new game: the game, unlike `lanista_core`, may read the clock.
@@ -1573,12 +1696,51 @@ mod tests {
         assert_eq!(resumed.state, screen.state);
         assert_eq!(resumed.message.as_deref(), Some("Partie reprise"));
         // A manual save is loaded back over a game played further.
-        screen.save(saves::MANUAL, true);
+        screen.save_slot(0);
         screen.next_week();
-        screen.load();
+        screen.load(0);
         assert_eq!(screen.state, resumed.state);
         // Quitting right after loading resumes the loaded game, not the one before.
         assert_eq!(open().state, resumed.state);
+        std::fs::remove_dir_all(folder).unwrap();
+    }
+
+    #[test]
+    fn a_choice_that_loses_a_game_waits_for_confirmation() {
+        let data = Rc::new(DesignData::load().unwrap());
+        let folder = std::env::temp_dir().join(format!("lanista-slots-{}", std::process::id()));
+        let mut screen = ClubScreen::open(
+            Rc::clone(&data),
+            7,
+            Some(folder.clone()),
+            Bindings::new(Vec::new()),
+        );
+        screen.next_week();
+        // Saving to an empty slot loses nothing: it is done at once.
+        screen.ask(Confirm::Save(1));
+        assert_eq!(screen.confirm, None);
+        let saved = screen.state.clone();
+        assert_eq!(
+            screen.slots,
+            [
+                Slot::Empty,
+                Slot::Game(saved.week, saved.wealth, saved.continent),
+                Slot::Empty
+            ]
+        );
+        screen.next_week();
+        // A new game cancelled leaves the game and its autosave as they were.
+        screen.ask(Confirm::NewGame(Wealth::Rich, screen.state.continent));
+        assert_eq!(screen.state.week, 3);
+        screen.confirm = None;
+        // Saving over a slot and loading wait for the player too.
+        screen.ask(Confirm::Save(1));
+        assert_eq!(screen.confirm, Some(Confirm::Save(1)));
+        screen.confirm = None;
+        screen.ask(Confirm::Load(1));
+        assert_eq!(screen.state.week, 3);
+        screen.carry_out(Confirm::Load(1));
+        assert_eq!((screen.state.clone(), screen.confirm), (saved, None));
         std::fs::remove_dir_all(folder).unwrap();
     }
 
