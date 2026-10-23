@@ -2,6 +2,7 @@
 //! and the others in clickable thumbnails drawn into render targets. Speed and « Passer
 //! au résultat » are shared; each fight goes at its own pace and stops on its own.
 
+use std::path::PathBuf;
 use std::rc::Rc;
 
 use lanista_core::design_data::DesignData;
@@ -13,6 +14,7 @@ use crate::Action;
 use crate::fight_view::{Cast, FightView, STANDS};
 use crate::fighter_sprite::PIXELS_PER_METRE;
 use crate::lang::tr;
+use crate::saves;
 
 pub use crate::fight_view::{DEATH_SOUND, HIT_SOUND};
 // ponytail: placeholder music.
@@ -61,6 +63,8 @@ pub struct CombatScreen {
     bindings: Bindings<Action>,
     /// Fight speed, a factor of real time: one of `SPEEDS`.
     speed: f32,
+    /// Folder where the volumes chosen are kept; `None` keeps nothing.
+    settings: Option<PathBuf>,
 }
 
 impl CombatScreen {
@@ -96,7 +100,15 @@ impl CombatScreen {
             hovered: None,
             bindings,
             speed: 1.0,
+            settings: None,
         }
+    }
+
+    /// Keeps the volumes chosen on this screen in `folder`.
+    #[must_use]
+    pub fn keeping_volumes_in(mut self, folder: Option<PathBuf>) -> Self {
+        self.settings = folder;
+        self
     }
 
     /// The fight shown big.
@@ -300,7 +312,13 @@ impl Screen for CombatScreen {
                 });
         }
         self.elimination(ui);
-        volumes(ui, audio);
+        if volumes(ui, audio)
+            && let Some(folder) = &self.settings
+        {
+            // ponytail: no screen to tell a failure on; the volumes then last until
+            // the game closes, as before.
+            let _ = saves::write_volumes(folder, audio);
+        }
         audio.play_music(assets, MUSIC);
         // Speed scales time: more or fewer ticks per frame, animations alike.
         for sound in self.advance(get_frame_time() * self.speed) {
@@ -329,28 +347,31 @@ impl Screen for CombatScreen {
     }
 }
 
-/// Music and effects volume sliders, top right.
-fn volumes(ui: &egui::Context, audio: &mut Audio) {
+/// Music and effects volume sliders, top right; returns whether a volume was set,
+/// once the slider is let go, to keep it.
+fn volumes(ui: &egui::Context, audio: &mut Audio) -> bool {
+    let mut set = false;
+    // Set when changed or let go: a slider dragged changes at every frame.
+    let mut slide = |ui: &mut egui::Ui, volume: &mut f32, text: String| {
+        let slider = ui.add(egui::Slider::new(volume, 0.0..=1.0).text(text));
+        set |= slider.drag_stopped() || (slider.changed() && !slider.dragged());
+        slider.changed()
+    };
     egui::Window::new(tr!("sound"))
         .resizable(false)
         .default_open(false)
         .anchor(egui::Align2::RIGHT_TOP, [-12.0, 12.0])
         .show(ui, |ui| {
             let mut music = audio.music_volume();
-            if ui
-                .add(egui::Slider::new(&mut music, 0.0..=1.0).text(tr!("music")))
-                .changed()
-            {
+            if slide(ui, &mut music, tr!("music")) {
                 audio.set_music_volume(music);
             }
             let mut effects = audio.effects_volume();
-            if ui
-                .add(egui::Slider::new(&mut effects, 0.0..=1.0).text(tr!("effects")))
-                .changed()
-            {
+            if slide(ui, &mut effects, tr!("effects")) {
                 audio.set_effects_volume(effects);
             }
         });
+    set
 }
 
 #[cfg(test)]

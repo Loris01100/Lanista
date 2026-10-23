@@ -446,7 +446,8 @@ impl ClubScreen {
             ui.separator();
             if ui.button(tr!("standard-duel")).clicked() {
                 let duel =
-                    CombatScreen::new(Rc::clone(&self.data), FREE_DUEL_SEED, self.bindings.clone());
+                    CombatScreen::new(Rc::clone(&self.data), FREE_DUEL_SEED, self.bindings.clone())
+                        .keeping_volumes_in(self.saves.clone());
                 transition = Some(Transition::Push(Box::new(duel)));
             }
         });
@@ -1048,7 +1049,8 @@ impl ClubScreen {
     /// Watches all the week's `fights` at once.
     fn watch(&self, fights: Vec<Watched>) -> Transition {
         let data = Rc::clone(&self.data);
-        let screen = CombatScreen::watch(data, fights, self.bindings.clone());
+        let screen = CombatScreen::watch(data, fights, self.bindings.clone())
+            .keeping_volumes_in(self.saves.clone());
         Transition::Push(Box::new(screen))
     }
 }

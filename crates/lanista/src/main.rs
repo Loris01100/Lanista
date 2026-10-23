@@ -16,7 +16,7 @@ use club_screen::ClubScreen;
 use combat_screen::{DEATH_SOUND, HIT_SOUND, MUSIC};
 use lanista_core::design_data::DesignData;
 use macroquad::prelude::*;
-use reesch::{Assets, Bindings, Button};
+use reesch::{Assets, Audio, Bindings, Button};
 
 /// What the player can do; bound to keys in `main`.
 #[derive(Clone, PartialEq)]
@@ -72,15 +72,16 @@ async fn main() {
         (Action::Skip, Button::Key(KeyCode::Enter)),
         (Action::NextWeek, Button::Key(KeyCode::Space)),
     ]);
+    let folder = saves::folder();
+    let mut audio = Audio::default();
+    if let Some(folder) = &folder {
+        saves::read_volumes(folder, &mut audio);
+    }
     reesch::run(
         assets,
+        audio,
         theme::apply,
-        Box::new(ClubScreen::open(
-            data,
-            CAREER_SEED,
-            saves::folder(),
-            bindings,
-        )),
+        Box::new(ClubScreen::open(data, CAREER_SEED, folder, bindings)),
     )
     .await;
 }

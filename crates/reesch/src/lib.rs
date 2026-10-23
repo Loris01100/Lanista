@@ -27,11 +27,16 @@ const UI_DESIGN_HEIGHT: f32 = 800.0;
 
 /// Runs the game from its first screen until the last one is popped.
 /// Load every asset before, then call it from the `#[macroquad::main]` function.
-/// `setup_ui` runs once to set the egui theme and fonts.
-pub async fn run(assets: Assets, setup_ui: impl FnOnce(&egui::Context), first: Box<dyn Screen>) {
+/// `audio` starts at the volumes the game kept; `setup_ui` runs once to set the egui
+/// theme and fonts.
+pub async fn run(
+    assets: Assets,
+    mut audio: Audio,
+    setup_ui: impl FnOnce(&egui::Context),
+    first: Box<dyn Screen>,
+) {
     egui_macroquad::cfg(setup_ui);
     let mut stack = ScreenStack::new(first);
-    let mut audio = Audio::default();
     while !stack.is_empty() {
         // One egui pass per frame: the top screen builds its UI there.
         egui_macroquad::ui(|ui| {
