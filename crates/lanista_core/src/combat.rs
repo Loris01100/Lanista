@@ -890,24 +890,44 @@ fn gather(arena: &mut Arena, i: usize, spell: usize) {
     });
 }
 
-/// Fighter `i` lays a mine with `spell` at the feet of fighter `t`; past
-/// `max_per_fighter`, its oldest mine is gone.
+/// Fighter `i` lays its `spell`'s mines (`SpellData::blows`): the first at the feet of
+/// fighter `t`, each next one `blast_radius` and a mine's radius further aside, across
+/// the caster's line, on the other side if that one is past the walls; past
+/// `max_per_fighter`, its oldest mines are gone.
 // ponytail: the mine falls on its target's feet; a free landing point when an AI needs one.
 fn lay(arena: &mut Arena, i: usize, spell: usize, t: usize) {
-    let position = arena.fighters[t].position;
+    let (from, at) = (arena.fighters[i].position, arena.fighters[t].position);
     let caster = &mut arena.fighters[i];
+    let blows = caster.spells[spell].blows.max(1);
     caster.spend(spell);
     caster.action = Action::Wait;
     let owner = caster.id;
     let (tick, rules) = (arena.tick, arena.mine_rules);
-    arena.mines.push(Mine {
-        position,
-        owner,
-        spell,
-        armed_at: tick.saturating_add(rules.arm_ticks),
-        gone_at: tick.saturating_add(rules.life_ticks),
-    });
-    if arena.mines.iter().filter(|m| m.owner == owner).count() > rules.max_per_fighter
+    let line = Vec2::new(at.x - from.x, at.y - from.y);
+    let length = line.length();
+    let side = if length > 0.0 {
+        Vec2::new(-line.y / length, line.x / length)
+    } else {
+        Vec2::new(0.0, 1.0)
+    };
+    let (low, high) = arena.reachable();
+    let inside = |p: Vec2| (low.x..=high.x).contains(&p.x) && (low.y..=high.y).contains(&p.y);
+    for k in 0..blows {
+        let offset = (rules.blast_radius + rules.radius) * f64::from(k);
+        let aside =
+            |sign: f64| Vec2::new(at.x + sign * side.x * offset, at.y + sign * side.y * offset);
+        let position = Some(aside(1.0))
+            .filter(|&p| inside(p))
+            .unwrap_or_else(|| aside(-1.0));
+        arena.mines.push(Mine {
+            position,
+            owner,
+            spell,
+            armed_at: tick.saturating_add(rules.arm_ticks),
+            gone_at: tick.saturating_add(rules.life_ticks),
+        });
+    }
+    while arena.mines.iter().filter(|m| m.owner == owner).count() > rules.max_per_fighter
         && let Some(oldest) = arena.mines.iter().position(|m| m.owner == owner)
     {
         arena.mines.remove(oldest);
@@ -1017,17 +1037,16 @@ fn ready_cast(arena: &Arena, i: usize) -> Option<(usize, FighterId, usize)> {
     ready.then_some((spell, target, t))
 }
 
-/// Fighter `i` casts `spell` on the target: the hit and where it lands are drawn, the
-/// damage dealt and logged, then its effects on the target follow (`strike`).
+/// Fighter `i` casts `spell` on the target: one hit roll for all its blows
+/// (`SpellData::blows`), then, for each blow while the target still fights, where it
+/// lands is drawn, the same damage dealt and logged, and its effects on the target
+/// follow (`strike`, `afflict`).
 fn cast(arena: &mut Arena, i: usize, spell: usize, (target, t): (FighterId, usize)) {
     let (caster, defender) = (&arena.fighters[i], &arena.fighters[t]);
     let data = &caster.spells[spell];
     let chance = spell_hit_percent(caster, &defender.stats, data, &arena.accuracy);
     let missed = chance < 100 && arena.rng.random_range(0..100) >= chance;
-    let part = match arena.hits {
-        Some(weights) if !missed => Some(roll_location(&mut arena.rng, &weights)),
-        _ => None,
-    };
+    let blows = if missed { 1 } else { data.blows.max(1) };
     let amount = if missed {
         0
     } else {
@@ -1040,32 +1059,41 @@ fn cast(arena: &mut Arena, i: usize, spell: usize, (target, t): (FighterId, usiz
     caster.spend(spell);
     caster.action = Action::Wait;
     let caster = caster.id;
-    let defender = &mut arena.fighters[t];
-    let hp_before = defender.hp;
-    defender.take_damage(amount);
-    let damage = hp_before - defender.hp;
-    let sure = sure_cut_hits.is_some_and(|hits| {
-        defender.cleaving_hits += 1;
-        defender.cleaving_hits >= hits
-    });
-    arena.log.push(Event {
-        tick: arena.tick,
-        kind: EventKind::Cast {
-            caster,
-            target,
-            spell,
-            damage,
-            missed,
-            part,
-        },
-    });
-    let cut = part.filter(|_| kind == DamageKind::Cutting);
-    strike(arena, (target, t), (damage, sure), kind, cut);
-    if !missed {
-        afflict(arena, (caster, t), (bleed_percent, part), accuracy_drop);
+    for blow in 0..blows {
+        if blow > 0 && !arena.fighters[t].is_fighting() {
+            break;
+        }
+        let part = match arena.hits {
+            Some(weights) if !missed => Some(roll_location(&mut arena.rng, &weights)),
+            _ => None,
+        };
+        let defender = &mut arena.fighters[t];
+        let hp_before = defender.hp;
+        defender.take_damage(amount);
+        let damage = hp_before - defender.hp;
+        let sure = sure_cut_hits.is_some_and(|hits| {
+            defender.cleaving_hits += 1;
+            defender.cleaving_hits >= hits
+        });
+        arena.log.push(Event {
+            tick: arena.tick,
+            kind: EventKind::Cast {
+                caster,
+                target,
+                spell,
+                damage,
+                missed,
+                part,
+            },
+        });
+        let cut = part.filter(|_| kind == DamageKind::Cutting);
+        strike(arena, (target, t), (damage, sure), kind, cut);
+        if !missed {
+            afflict(arena, (caster, t), (bleed_percent, part), accuracy_drop);
+        }
+        let caster = &mut arena.fighters[i];
+        caster.round_damage = caster.round_damage.saturating_add(damage);
     }
-    let caster = &mut arena.fighters[i];
-    caster.round_damage = caster.round_damage.saturating_add(damage);
 }
 
 /// What a hit from `source` leaves on the target, if it still fights: the part it
@@ -2300,6 +2328,23 @@ mod tests {
                 .iter()
                 .any(|e| matches!(e.kind, EventKind::Blast { .. }))
         );
+    }
+
+    #[test]
+    fn a_second_mine_falls_aside_out_of_the_first_s_blast_inside_the_walls() {
+        for (target_y, second_y) in [(5.0, 6.8), (19.4, 17.6)] {
+            let mut arena = mining(600);
+            arena.mine_rules.max_per_fighter = 2;
+            arena.fighters[0].spells[0].blows = 2;
+            // Across a line along x: aside is along y.
+            arena.fighters[0].position.y = target_y;
+            arena.fighters[1].position.y = target_y;
+            play(&mut arena, &[LAY, Action::Wait, Action::Wait], 1);
+            let positions: Vec<Vec2> = arena.mines.iter().map(|m| m.position).collect();
+            assert_eq!(positions[0], Vec2::new(10.0, target_y));
+            assert_eq!(positions[1].x, 10.0);
+            assert!((positions[1].y - second_y).abs() < 1e-9, "{positions:?}");
+        }
     }
 
     fn pillar(x: f64, y: f64, radius: f64) -> Pillar {

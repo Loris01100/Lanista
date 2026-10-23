@@ -64,7 +64,7 @@ pub fn record(seed: u64, kind: ArenaKind, data: &DesignData) -> Sample {
 
 /// The model fitted on `samples`, for `classes` classes: a logistic regression on the
 /// fights with a winner, then the share of each ending (knock-out, lost limb, beheading,
-/// death by determination of the others) and of the stunned.
+/// death by determination of the others), of the stunned and of the bled.
 #[must_use]
 pub fn fit(samples: &[Sample], classes: usize) -> StatModel {
     let class = |f: &Fighter| usize::try_from(f.class.0).unwrap_or(0).min(classes - 1);
@@ -76,6 +76,7 @@ pub fn fit(samples: &[Sample], classes: usize) -> StatModel {
     let mut lost_limb = vec![(0_u64, 0_u64); classes];
     let mut beheaded = vec![(0_u64, 0_u64); classes];
     let mut stunned = vec![(0_u64, 0_u64); classes];
+    let mut bled = vec![(0_u64, 0_u64); classes];
     let mut death = [(0_u64, 0_u64); DEATH_BANDS];
     let mut hits = [[0_u64; HIT_COUNTS]; 3];
     for s in samples {
@@ -87,10 +88,13 @@ pub fn fit(samples: &[Sample], classes: usize) -> StatModel {
             *cell = (cell.0 + u64::from(timed_out), cell.1 + 1);
         }
         for (i, side) in s.sides.iter().enumerate() {
+            let opponent = class(&s.fighters[1 - i]);
             if !side.knocked_out {
-                let cell = &mut stunned[class(&s.fighters[1 - i])];
+                let cell = &mut stunned[opponent];
                 *cell = (cell.0 + u64::from(side.stunned), cell.1 + 1);
             }
+            let cell = &mut bled[opponent];
+            *cell = (cell.0 + u64::from(side.bled.is_some()), cell.1 + 1);
             let table = match side.result {
                 FightResult::Won => 0,
                 FightResult::Lost | FightResult::GaveUp => 1,
@@ -152,6 +156,7 @@ pub fn fit(samples: &[Sample], classes: usize) -> StatModel {
             .map(|&(dead, losers)| share(dead, losers, share(all_deaths.0, all_deaths.1, 0.0)))
             .collect(),
         stunned: stunned.iter().map(|&(s, n)| share(s, n, 0.0)).collect(),
+        bled: bled.iter().map(|&(b, n)| share(b, n, 0.0)).collect(),
         spectacular_hits: SpectacularHits {
             won: shares(&hits[0]),
             lost: shares(&hits[1]),

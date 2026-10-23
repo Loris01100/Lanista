@@ -17,7 +17,7 @@ use crate::ai::fear;
 use crate::combat::{Arena, ArenaKind, severed_limb};
 use crate::duel::STATS;
 use crate::fighter::fame::{FameRules, FightOutcome, FightResult};
-use crate::fighter::injury::{Location, LocationWeights};
+use crate::fighter::injury::{Location, LocationWeights, roll_location};
 use crate::fighter::personality::Personality;
 use crate::fighter::{Effect, Fighter, FighterId};
 use crate::log::EventKind;
@@ -99,6 +99,9 @@ pub struct StatModel {
     pub death: Vec<f64>,
     /// Chance a fighter not knocked out was stunned in the fight, by its opponent's class.
     pub stunned: Vec<f64>,
+    /// Chance a fighter bled in the fight, by its opponent's class; none if left out.
+    #[serde(default)]
+    pub bled: Vec<f64>,
     pub spectacular_hits: SpectacularHits,
 }
 
@@ -146,7 +149,7 @@ pub struct Ending {
     pub knocked_out: bool,
     /// What a cutting hit severed: the head (`died` too) or a limb (lost, alive).
     pub severed: Option<Location>,
-    /// The first part of it that bled; the model draws none.
+    /// The first part of it that bled; the model draws it by `Arena::hits`' weights.
     pub bled: Option<Location>,
     pub spectacular_hits: u32,
 }
@@ -276,6 +279,7 @@ impl StatModel {
             beheaded: Vec::new(),
             death: vec![0.0],
             stunned: Vec::new(),
+            bled: Vec::new(),
             spectacular_hits: SpectacularHits {
                 won: vec![1.0],
                 lost: vec![1.0],
@@ -324,6 +328,19 @@ impl StatModel {
         by_class(&self.stunned, opponent)
     }
 
+    /// Where a fighter fighting `opponent` first bled, if it did: drawn with the
+    /// chance of `opponent`'s class (0 for a class the model does not know), then by
+    /// `locations`.
+    fn bled<R: Rng + ?Sized>(
+        &self,
+        opponent: &Fighter,
+        locations: &LocationWeights,
+        rng: &mut R,
+    ) -> Option<Location> {
+        (rng.random::<f64>() < by_class(&self.bled, opponent))
+            .then(|| roll_location(rng, locations))
+    }
+
     /// Chance that `loser`, beaten in a finished fight, neither knocked out nor cut,
     /// falls to 0 HP rather than gives up.
     #[must_use]
@@ -338,7 +355,8 @@ impl StatModel {
     }
 
     /// The fight between `a` and `b`, as the model draws it: what each side gets. A
-    /// limb the loser lost is drawn by `locations` (see [`severed_limb`]).
+    /// limb the loser lost and a first bleeding part are drawn by `locations` (see
+    /// [`severed_limb`]).
     pub fn resolve<R: Rng + ?Sized>(
         &self,
         a: &Fighter,
@@ -354,7 +372,7 @@ impl StatModel {
                 stunned: rng.random::<f64>() < self.stunned_chance(opponent),
                 knocked_out: false,
                 severed: None,
-                bled: None,
+                bled: self.bled(opponent, locations, rng),
                 spectacular_hits: draw(rng, &hits.unfinished),
             };
             return [side(rng, b), side(rng, a)];
@@ -384,7 +402,7 @@ impl StatModel {
             stunned: rng.random::<f64>() < self.stunned_chance(second),
             knocked_out: false,
             severed: None,
-            bled: None,
+            bled: self.bled(second, locations, rng),
             spectacular_hits: draw(rng, &hits.won),
         };
         let loser = Ending {
@@ -397,7 +415,7 @@ impl StatModel {
             stunned: knocked_out || rng.random::<f64>() < self.stunned_chance(first),
             knocked_out,
             severed,
-            bled: None,
+            bled: self.bled(first, locations, rng),
             spectacular_hits: draw(rng, &hits.lost),
         };
         if a_wins {
@@ -428,6 +446,8 @@ impl StatModel {
             Some("death")
         } else if !self.stunned.iter().all(chance) {
             Some("stunned")
+        } else if !self.bled.iter().all(chance) {
+            Some("bled")
         } else if !(table(&self.spectacular_hits.won)
             && table(&self.spectacular_hits.lost)
             && table(&self.spectacular_hits.unfinished))

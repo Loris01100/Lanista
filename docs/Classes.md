@@ -45,7 +45,7 @@ Combattant de corps à corps uniquement, armes tranchantes uniquement.
 | --- | --- | --- |
 | 1 | Slash sanguin | Coup tranchant aux dégâts immédiats faibles, avec une chance de faire saigner. |
 | 2 | Bouclier tranchant (épée et bouclier) | Coup porté avec le bouclier, tranchant. |
-| 2 | Lacération (double épée) | Enchaînement des deux épées, aux dégâts immédiats faibles, avec une chance de faire saigner. |
+| 2 | Lacération (double épée) | Enchaînement des deux épées, aux dégâts immédiats faibles, avec une chance de faire saigner. Les deux coups touchent ensemble ou ratent ensemble, avec les mêmes dégâts : jamais une lacération d'un seul coup. |
 | 3 | Guillotine | Coup peu précis aux dégâts élevés. Le premier coup sur une cible ne fait que de lourds dégâts (avec la chance de tranchage habituelle) ; à partir du deuxième, s'il touche une partie du corps qui peut être tranchée (tête, bras, jambe), il la tranche ; sur le torse, seulement des dégâts. |
 
 ## Maître du terrain
@@ -75,7 +75,7 @@ L'élément ramassé dépend de l'arène. La quantité portée au plus sera fix�
 
 ### Mines
 
-Une mine est lancée au sol ; elle s'active après un délai et reste 30 secondes. Tout le monde la voit. Elle explose sous quiconque marche dessus, allié, adversaire ou le poseur lui-même, et blesse tous ceux qui sont dans la zone de l'explosion ; l'explosion peut étourdir et trancher. Le nombre de mines au sol en même temps sera fixé à l'équilibrage.
+Une mine est lancée au sol ; elle s'active après un délai et reste 30 secondes. Tout le monde la voit. Elle explose sous quiconque marche dessus, allié, adversaire ou le poseur lui-même, et blesse tous ceux qui sont dans la zone de l'explosion ; l'explosion peut étourdir et trancher. Le nombre de mines au sol en même temps sera fixé à l'équilibrage. La deuxième mine de la double dague tombe plus loin de la première que le rayon de son explosion.
 
 ## Plan de mise en œuvre
 
@@ -119,7 +119,13 @@ Chaque étape laisse le jeu jouable avec mirmillon et augure, qui servent de ter
    - l'IA utilitaire les contourne comme les piliers (`Arena::obstacles`), s'écarte d'une mine pas encore armée qui l'atteindrait, et ne pose pas une mine qui l'atteindrait elle-même ;
    - l'écran de combat les dessine en cercles, au cœur rouge une fois armées (format dans `docs/Formats_graphiques.md`).
    Les deux mines de la double dague viendront avec la classe (étape 10).
-10. **Les deux classes** (`data/classes.ron`, `fr.ftl`, `assets/fighters/`) : gladiateur et maître du terrain, avec des valeurs provisoires ; leurs sprites (bouclier, deux armes) en substituts.
+10. **Les deux classes** (`data/classes.ron`, `fr.ftl`) — fait :
+   - gladiateur (`gladiateur`) et maître du terrain (`maitre-terrain`), avec des valeurs provisoires et deux armes, l'épée et la dague runique (`weapons` de `data/combat.ron`) ; ils sont dans le jeu, recrues et clubs rivaux compris ;
+   - un sort peut porter plusieurs coups sur un seul jet de touche (`SpellData::blows`, 2 pour Lacération) ;
+   - la double dague pose deux mines par lancer (`LoadoutData::mines_per_cast`), la deuxième à côté de la cible, hors de l'explosion de la première ;
+   - le modèle statistique tire le saignement (`StatModel::bled`) ; `calibrate` et `compare` relancés ;
+   - les substituts de l'IA apprise sont réexportés pour les quatre classes (version 2) ;
+   - les sprites (bouclier, deuxième arme) viendront plus tard, fournis à part.
 11. **Retrait de mirmillon et augure, IA apprise et modèle statistique** :
     - retirer les deux anciennes classes, leurs clés de `fr.ftl`, leurs modèles de `assets/ai/` ; mettre à jour le test qui compte les classes (`design_data.rs`) et les snapshots `insta` ;
     - l'IA apprise (`learning.rs`, `learned.rs`, `lanista_py`, `python/`) : l'observation gagne la configuration, l'aisance, les saignements, la réserve d'éléments et les mines proches ; les actions gagnent l'attaque automatique ; réexporter les substituts (`export.py`) ;

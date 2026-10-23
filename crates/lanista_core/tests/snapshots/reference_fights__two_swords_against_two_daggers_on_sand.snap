@@ -1,0 +1,44 @@
+---
+source: crates/lanista_core/tests/reference_fights.rs
+expression: "loadout_duel(ArenaKind::Sand, [(2, 1), (3, 1)], 42)"
+---
+[   48] fighter 1 casts Récolte: 2 elements gathered
+[   54] fighter 1 casts Mine: a mine is laid
+[   60] fighter 1 casts Jette on fighter 0: 10 damage to the left leg
+[   60] fighter 0 loses 15 % accuracy
+[  114] fighter 1 casts Récolte: 2 elements gathered
+[  120] fighter 1 casts Jette on fighter 0: 10 damage to the left arm
+[  120] fighter 0 loses 15 % accuracy
+[  126] fighter 0 casts Guillotine on fighter 1: missed
+[  132] fighter 0 casts Lacération on fighter 1: 9 damage to the body
+[  132] fighter 1's body bleeds
+[  132] fighter 0 casts Lacération on fighter 1: 9 damage to the right arm
+[  138] fighter 0 casts Slash sanguin on fighter 1: 14 damage to the body
+[  162] fighter 1 bleeds 1 from the body
+[  174] fighter 0 casts Slash sanguin on fighter 1: missed
+[  180] fighter 1 casts Récolte: 2 elements gathered
+[  186] fighter 1 casts Jette on fighter 0: 10 damage to the body
+[  186] fighter 0 loses 15 % accuracy
+[  192] fighter 1 bleeds 1 from the body
+[  210] fighter 0 casts Slash sanguin on fighter 1: 14 damage to the head
+[  222] fighter 1 bleeds 1 from the body
+[  246] fighter 1 casts Récolte: 2 elements gathered
+[  246] fighter 0 casts Slash sanguin on fighter 1: 14 damage to the left arm
+[  252] fighter 1 bleeds 1 from the body
+[  252] fighter 1 casts Jette on fighter 0: 10 damage to the head
+[  252] fighter 0 loses 15 % accuracy
+[  258] fighter 0 casts Lacération on fighter 1: 9 damage to the left leg
+[  258] fighter 0 casts Lacération on fighter 1: 9 damage to the right arm
+[  282] fighter 1 bleeds 1 from the body
+[  282] fighter 0 casts Slash sanguin on fighter 1: 14 damage to the left leg
+[  300] fighter 1 casts Mine: a mine is laid
+[  312] fighter 1 bleeds 1 from the body
+[  312] fighter 1 casts Récolte: 2 elements gathered
+[  318] fighter 1 casts Jette on fighter 0: 10 damage to the body
+[  318] fighter 0 loses 15 % accuracy
+[  330] fighter 0 casts Slash sanguin on fighter 1: 2 damage to the left leg
+[  330] fighter 1 dies
+
+over after 331 ticks, winner: fighter 0
+fighter 0: 50/100 HP, dealt 100, taken 50, 9 spells cast, 2 missed
+fighter 1: 0/100 HP, dealt 50, taken 100, 12 spells cast, 0 missed

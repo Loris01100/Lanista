@@ -223,7 +223,11 @@ fn share(part: u32, whole: u32) -> f64 {
 /// above 1 for overkill, times the chance to hit.
 fn cast_value(me: &Fighter, target: &Fighter, spell: &SpellData, rules: &AccuracyRules) -> f64 {
     let hit = f64::from(spell_hit_percent(me, &target.stats, spell, rules)) / 100.0;
-    share(spell_damage(&me.stats, &target.stats, spell), target.hp) * hit
+    let blows = if spell.mine { 1 } else { spell.blows };
+    share(
+        spell_damage(&me.stats, &target.stats, spell) * blows,
+        target.hp,
+    ) * hit
 }
 
 /// What gathering elements is worth: `GATHER_VALUE` of the best spell that spends some,

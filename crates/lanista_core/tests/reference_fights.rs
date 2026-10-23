@@ -47,38 +47,45 @@ fn standard_duel(seed: u64) -> String {
     )
 }
 
-/// The standard duel of seed 24: the second fighter is stunned twice, gets up once, then
-/// is knocked out.
+/// The standard duel of seed 7: the first fighter is stunned, then knocked out.
 #[test]
 fn a_standard_duel_with_a_knock_out() {
-    insta::assert_snapshot!(standard_duel(24));
+    insta::assert_snapshot!(standard_duel(7));
 }
 
-/// The standard duel of seed 2: a cutting hit takes off the second fighter's leg.
+/// The standard duel of seed 65: a cutting hit takes off the second fighter's arm.
 #[test]
 fn a_standard_duel_with_a_lost_limb() {
-    insta::assert_snapshot!(standard_duel(2));
+    insta::assert_snapshot!(standard_duel(65));
 }
 
-/// The standard duel of seed 6: the killing blow, a cutting one, takes the head off.
+/// The standard duel of seed 22: a gladiator makes its opponent's head bleed, then
+/// takes it off.
 #[test]
 fn a_standard_duel_with_a_beheading() {
-    insta::assert_snapshot!(standard_duel(6));
+    insta::assert_snapshot!(standard_duel(22));
 }
 
-/// A murmillo against an augur on the floor of `kind`, starting at 15 % and 85 % of
-/// its width, mid-height, as career duels do.
+/// A murmillo against an augur, both in their first loadout, on the floor of `kind`:
+/// see [`loadout_duel`].
 fn arena_duel(kind: ArenaKind, seed: u64) -> String {
+    loadout_duel(kind, [(0, 0), (1, 0)], seed)
+}
+
+/// Two fighters of the given (class, loadout) on the floor of `kind`, starting at 15 %
+/// and 85 % of its width, mid-height, as career duels do.
+fn loadout_duel(kind: ArenaKind, fighters: [(u32, usize); 2], seed: u64) -> String {
     let data = DesignData::load().unwrap();
     let layout = data.combat.arenas.get(kind);
     let middle = layout.height / 2.0;
     let fighter = |id: u32, x: f64| {
-        let class = ClassId(id);
+        let (class, loadout) = fighters[usize::try_from(id).unwrap()];
+        let class = ClassId(class);
         let class_data = data.class(class).unwrap();
-        Fighter::new(
+        Fighter::in_loadout(
             FighterId(id),
             class,
-            class_data,
+            (class_data, loadout),
             STATS,
             Vec2::new(x, middle),
         )
@@ -107,6 +114,13 @@ fn a_duel_among_pillars() {
 #[test]
 fn a_duel_in_a_narrow_arena() {
     insta::assert_snapshot!(arena_duel(ArenaKind::Narrow, 42));
+}
+
+/// A gladiator with two swords (Lacération's two blows) against a field master with
+/// two daggers (two mines a cast), gathering and throwing sand.
+#[test]
+fn two_swords_against_two_daggers_on_sand() {
+    insta::assert_snapshot!(loadout_duel(ArenaKind::Sand, [(2, 1), (3, 1)], 42));
 }
 
 /// A melee of 8, murmillos and augurs in turn with the standard duel's stats, cautious

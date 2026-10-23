@@ -547,11 +547,17 @@ elimination-standing = { $fighter } : { $damage } dégâts, { $danger ->
 
 class-mirmillon = Mirmillon
 class-augure = Augure
+class-gladiateur = Gladiateur
+class-maitre-terrain = Maître du terrain
 
 loadout-glaive-shield = Glaive et bouclier
 loadout-two-glaives = Double glaive
 loadout-staff = Bâton
 loadout-staff-shield = Bâton et bouclier
+loadout-sword-shield = Épée et bouclier
+loadout-two-swords = Double épée
+loadout-dagger-shield = Dague et bouclier
+loadout-two-daggers = Double dague
 
 colosseum-capoue = Capoue
 colosseum-rome = Rome

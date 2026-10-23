@@ -93,12 +93,16 @@ impl ClassData {
     }
 
     /// A fighter's spell slots in loadout `i` (see [`ClassData::loadout`]): the class's
-    /// spells, the loadout's in the second slot.
+    /// spells, the loadout's in the second slot, its mine spells laying its
+    /// `mines_per_cast`.
     #[must_use]
     pub fn spells_in(&self, i: usize) -> Vec<SpellData> {
         let mut spells = self.spells.clone();
         if let Some(loadout) = self.loadout(i) {
             spells.insert(spells.len().min(1), loadout.spell.clone());
+            for spell in spells.iter_mut().filter(|s| s.mine) {
+                spell.blows = loadout.mines_per_cast;
+            }
         }
         spells
     }
@@ -115,6 +119,10 @@ pub struct LoadoutData {
     pub off_hand: OffHand,
     /// The spell of the second slot.
     pub spell: SpellData,
+    /// Mines each of the fighter's mine spells lays per cast (`SpellData::blows`); 1 if
+    /// left out.
+    #[serde(default = "one")]
+    pub mines_per_cast: u32,
     /// Its weapon's auto attack, set at loading from [`CombatRules::weapons`]; none for a
     /// loadout built by hand.
     #[serde(skip)]
@@ -166,6 +174,11 @@ pub struct SpellData {
     /// spell's power, range and damage kind (`combat::MineRules`); false if left out.
     #[serde(default)]
     pub mine: bool,
+    /// Blows of one cast, all landing or none on a single hit roll, each with its own
+    /// part, effects and the same damage; for a mine spell, the mines it lays, set by
+    /// its loadout (`LoadoutData::mines_per_cast`). 1 if left out.
+    #[serde(default = "one")]
+    pub blows: u32,
 }
 
 /// How a spell hits with an element of the floor (`SpellData::thrown`).
@@ -189,6 +202,10 @@ pub struct AccuracyDrop {
 
 const fn full_accuracy() -> u32 {
     100
+}
+
+const fn one() -> u32 {
+    1
 }
 
 /// What casting a spell spends, all of it needed; what is left out costs nothing.
@@ -769,7 +786,7 @@ mod tests {
             CLASSES, COMBAT, FIGHTER, CALENDAR, ECONOMY, WORLD, NAMES, STAT_MODEL,
         )
         .unwrap();
-        assert_eq!(data.classes.len(), 2);
+        assert_eq!(data.classes.len(), 4);
         for class in &data.classes {
             assert_eq!(class.loadouts.len(), 2, "{}", class.key);
             for (i, loadout) in class.loadouts.iter().enumerate() {
@@ -784,6 +801,9 @@ mod tests {
             }
             assert_eq!(class.loadout(9), class.loadouts.first());
         }
+        // The double dague lays two mines a cast, the dague and bouclier one.
+        let mines = |loadout| data.classes[3].spells_in(loadout)[2].blows;
+        assert_eq!((mines(0), mines(1)), (1, 2));
         assert_eq!(data.calendar.season_weeks(), 30);
         // Five continents, each with its major colosseum and one or two minor ones, one
         // of them free to enter: the safety net; Capoue first, where one starts.
@@ -804,8 +824,8 @@ mod tests {
             CLASSES, COMBAT, FIGHTER, CALENDAR, ECONOMY, WORLD, NAMES, STAT_MODEL,
         )
         .unwrap();
-        assert_eq!(data.class(ClassId(1)), data.classes.get(1));
-        assert_eq!(data.class(ClassId(2)), None);
+        assert_eq!(data.class(ClassId(3)), data.classes.get(3));
+        assert_eq!(data.class(ClassId(4)), None);
     }
 
     #[test]

@@ -11,7 +11,10 @@
 // reserve, without target nor damage; its thrown gives, for each element, the power,
 // damage_kind and accuracy_drop it hits with in an arena of that element.
 // mine: true lays a mine at the target's feet instead of hitting it; it blasts with the
-// spell's power and damage_kind (mines in data/combat.ron). False if left out.
+// spell's power and damage_kind (mines in data/combat.ron). False if left out; a
+// loadout's mines_per_cast (1 if left out) sets how many mines its mine spells lay.
+// blows: a cast's blows, landing all or none on one hit roll, each with the spell's
+// damage on its own part; 1 if left out.
 // damage_kind: Blunt stuns three times as often as Cutting, which may sever a limb or
 // the head instead (data/combat.ron); Neutral (spells without an element yet) does neither.
 // spells: the first and third slots. Each of the class's two loadouts brings the second
@@ -132,6 +135,145 @@
                 cooldown: 180,
                 cost: (mana: 30),
                 damage_kind: Neutral,
+            ),
+        ],
+    ),
+    (
+        key: "gladiateur",
+        max_mana: 0,
+        max_endurance: 100,
+        mana_per_second: 0,
+        endurance_per_second: 3,
+        loadouts: [
+            (
+                key: "sword-shield",
+                weapon: "sword",
+                off_hand: Shield,
+                spell: (
+                    name: "Bouclier tranchant",
+                    range: Melee,
+                    reach: 1.0,
+                    power: 130,
+                    cooldown: 150,
+                    cost: (endurance: 20),
+                    damage_kind: Cutting,
+                ),
+            ),
+            (
+                key: "two-swords",
+                weapon: "sword",
+                off_hand: Weapon,
+                spell: (
+                    name: "Lacération",
+                    range: Melee,
+                    reach: 1.0,
+                    power: 45,
+                    cooldown: 120,
+                    cost: (endurance: 20),
+                    damage_kind: Cutting,
+                    bleed_percent: 40,
+                    blows: 2,
+                ),
+            ),
+        ],
+        spells: [
+            (
+                name: "Slash sanguin",
+                range: Melee,
+                reach: 1.0,
+                power: 70,
+                cooldown: 30,
+                cost: (endurance: 5),
+                damage_kind: Cutting,
+                bleed_percent: 25,
+            ),
+            (
+                name: "Guillotine",
+                range: Melee,
+                reach: 1.0,
+                power: 250,
+                cooldown: 300,
+                cost: (endurance: 40),
+                damage_kind: Cutting,
+                accuracy_percent: 60,
+                sure_cut_hits: Some(2),
+            ),
+        ],
+    ),
+    (
+        key: "maitre-terrain",
+        max_mana: 100,
+        max_endurance: 80,
+        mana_per_second: 3,
+        endurance_per_second: 2,
+        max_elements: 6,
+        loadouts: [
+            (
+                key: "dagger-shield",
+                weapon: "rune-dagger",
+                off_hand: Shield,
+                spell: (
+                    name: "Jette",
+                    range: Ranged,
+                    reach: 7.0,
+                    power: 50,
+                    cooldown: 45,
+                    cost: (endurance: 5, elements: 2),
+                    damage_kind: Neutral,
+                    thrown: {
+                        Sand: (
+                            power: 50,
+                            damage_kind: Neutral,
+                            accuracy_drop: Some((percent: 15, ticks: 90)),
+                        ),
+                        Stone: (power: 110, damage_kind: Blunt),
+                    },
+                ),
+            ),
+            (
+                key: "two-daggers",
+                weapon: "rune-dagger",
+                off_hand: Weapon,
+                mines_per_cast: 2,
+                spell: (
+                    name: "Jette",
+                    range: Ranged,
+                    reach: 7.0,
+                    power: 50,
+                    cooldown: 45,
+                    cost: (endurance: 5, elements: 2),
+                    damage_kind: Neutral,
+                    thrown: {
+                        Sand: (
+                            power: 50,
+                            damage_kind: Neutral,
+                            accuracy_drop: Some((percent: 15, ticks: 90)),
+                        ),
+                        Stone: (power: 110, damage_kind: Blunt),
+                    },
+                ),
+            ),
+        ],
+        spells: [
+            (
+                name: "Récolte",
+                range: Melee,
+                reach: 0.0,
+                power: 0,
+                cooldown: 60,
+                cost: (endurance: 10),
+                damage_kind: Neutral,
+                gathers: 2,
+            ),
+            (
+                name: "Mine",
+                range: Ranged,
+                reach: 6.0,
+                power: 150,
+                cooldown: 240,
+                cost: (mana: 30),
+                damage_kind: Cutting,
+                mine: true,
             ),
         ],
     ),

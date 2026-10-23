@@ -458,11 +458,11 @@ mod tests {
         assert!(rects.iter().all(|r| (r.x - MARGIN).abs() < 1e-6));
     }
 
-    /// The loser of seed 42 dies: its stain starts at the death and keeps
+    /// The loser of seed 13 dies: its stain starts at the death and keeps
     /// spreading after the fight, the winner never bleeds.
     #[test]
     fn only_the_dead_bleed_from_their_death_on() {
-        let mut screen = screen(42);
+        let mut screen = screen(13);
         // The fight lasts 133 ticks, under 5 s.
         for _ in 0..60 * 5 {
             if screen
@@ -490,11 +490,11 @@ mod tests {
         assert!(screen.fight().looks[1 - dead].dead_for.is_none());
     }
 
-    /// In the standard duel of seed 23, fighter 0 is knocked out: it lies down, alive,
+    /// In the standard duel of seed 7, fighter 0 is knocked out: it lies down, alive,
     /// without blood.
     #[test]
     fn a_fighter_knocked_out_lies_down_without_bleeding() {
-        let mut screen = screen(23);
+        let mut screen = screen(7);
         while screen.running() {
             screen.advance(1.0 / 60.0);
         }
@@ -553,10 +553,10 @@ mod tests {
         );
     }
 
-    /// In the standard duel of seed 2, fighter 1 loses a leg: it lies down, alive.
+    /// In the standard duel of seed 65, fighter 1 loses an arm: it lies down, alive.
     #[test]
     fn a_fighter_that_lost_a_limb_lies_down_alive() {
-        let mut screen = screen(2);
+        let mut screen = screen(65);
         while screen.running() {
             screen.advance(1.0 / 60.0);
         }

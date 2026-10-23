@@ -160,18 +160,23 @@ impl Report {
             })
             .collect();
         let index = |id: FighterId| usize::try_from(id.0).ok();
+        let mut previous = None;
         for event in &arena.log {
             match event.kind {
                 EventKind::Cast {
                     caster,
                     target,
+                    spell,
                     damage,
                     missed,
                     ..
                 } => {
+                    // The next blows of a cast: its caster, spell and tick again.
+                    let blow = previous == Some((event.tick, caster, spell));
+                    previous = Some((event.tick, caster, spell));
                     if let Some(c) = index(caster).and_then(|i| fighters.get_mut(i)) {
                         c.damage_dealt = c.damage_dealt.saturating_add(damage);
-                        c.spells_cast += 1;
+                        c.spells_cast += u32::from(!blow);
                         c.misses += u32::from(missed);
                     }
                     if let Some(t) = index(target).and_then(|i| fighters.get_mut(i)) {

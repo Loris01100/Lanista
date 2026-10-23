@@ -1518,7 +1518,9 @@ mod tests {
         };
         assert_eq!(reasons(&state, held.club).contains(&taken), won);
         // Only a title changing hands is news.
-        let told = state.news.iter().map(|n| (n.week, n.what));
+        let told = (state.news.iter())
+            .filter(|n| matches!(n.what, WorldNews::Title(..)))
+            .map(|n| (n.week, n.what));
         let changed = won.then_some((1, WorldNews::Title(1, news)));
         assert_eq!(told.collect::<Vec<_>>(), Vec::from_iter(changed));
     }
@@ -1545,7 +1547,9 @@ mod tests {
             i64::from(data.world.colosseums[1].purses.champion_bonus),
         );
         assert_eq!(flows(&summary).contains(&bonus), title_kept(result));
-        // No title fight for whoever may not have one: a week of rest.
+        // No title fight for whoever may not have one: a week of rest (on a fresh world:
+        // the defense may have left the fighter dead).
+        let mut state = top_of_rome(&data);
         let summary = next_week(
             &mut state,
             &plan(Activity::TitleFight(ColosseumId(0)), false),

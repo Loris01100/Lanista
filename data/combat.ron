@@ -59,7 +59,7 @@
         life_ticks: 900,
         radius: 0.3,
         blast_radius: 1.5,
-        max_per_fighter: 3,
+        max_per_fighter: 4,
     ),
     // Each weapon type's auto attack, a spell outside the class's three, cheap: a fighter
     // strikes with it only once it can pay for none of its spells, so it always has a
@@ -71,6 +71,24 @@
             reach: 1.0,
             power: 40,
             cooldown: 45,
+            cost: (endurance: 1),
+            damage_kind: Cutting,
+        ),
+        "sword": (
+            name: "Taille d'épée",
+            range: Melee,
+            reach: 1.0,
+            power: 40,
+            cooldown: 45,
+            cost: (endurance: 1),
+            damage_kind: Cutting,
+        ),
+        "rune-dagger": (
+            name: "Coup de dague",
+            range: Melee,
+            reach: 1.0,
+            power: 30,
+            cooldown: 30,
             cost: (endurance: 1),
             damage_kind: Cutting,
         ),
