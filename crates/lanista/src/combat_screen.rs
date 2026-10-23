@@ -11,6 +11,7 @@ use macroquad::prelude::*;
 use reesch::{Assets, Audio, Bindings, SceneTarget, Screen, Transition, egui, pixel_camera};
 
 use crate::Action;
+use crate::club_screen::gauge;
 use crate::fight_view::{Cast, FightView, STANDS};
 use crate::fighter_sprite::PIXELS_PER_METRE;
 use crate::lang::tr;
@@ -259,6 +260,36 @@ impl CombatScreen {
                 }
             });
     }
+
+    /// Hit points, mana and endurance of the fight shown big, bottom left: both
+    /// fighters of a duel, the club's in a melee.
+    fn gauges(&self, ui: &egui::Context) {
+        let fight = self.fight();
+        let fighters = &fight.arena.fighters;
+        let shown: Vec<_> = fighters
+            .iter()
+            .filter(|f| fighters.len() <= 2 || fight.cast.club.contains(&f.id))
+            .collect();
+        if shown.is_empty() {
+            return;
+        }
+        egui::Window::new(tr!("gauges"))
+            .title_bar(false)
+            .resizable(false)
+            .anchor(egui::Align2::LEFT_BOTTOM, [12.0, -12.0])
+            .show(ui, |ui| {
+                ui.set_width(220.0);
+                for f in shown {
+                    ui.strong(fight.name(f.id));
+                    gauge(ui, &tr!("stat-hp"), f.hp, f.stats.hp);
+                    for (name, g) in [(tr!("mana"), &f.mana), (tr!("endurance"), &f.endurance)] {
+                        if g.max > 0 {
+                            gauge(ui, &name, g.current, g.max);
+                        }
+                    }
+                }
+            });
+    }
 }
 
 /// Where the `count` thumbnails go on a screen `width` pixels wide: down the left side,
@@ -312,6 +343,7 @@ impl Screen for CombatScreen {
                 });
         }
         self.elimination(ui);
+        self.gauges(ui);
         // ponytail: no screen to tell a failure on; the options then last until the
         // game closes.
         let _ = options::window(ui, audio, self.settings.as_deref());

@@ -1381,7 +1381,7 @@ fn sheet(ui: &mut egui::Ui, index: usize, f: &CareerFighter, data: &DesignData) 
     ui.label(f.illness.map_or_else(|| tr!("sheet-none"), illness_text));
 }
 
-fn gauge(ui: &mut egui::Ui, name: &str, value: u32, max: u32) {
+pub(crate) fn gauge(ui: &mut egui::Ui, name: &str, value: u32, max: u32) {
     let fraction = f32::from(u16::try_from(value).unwrap_or(u16::MAX))
         / f32::from(u16::try_from(max.max(1)).unwrap_or(u16::MAX));
     ui.add(egui::ProgressBar::new(fraction).text(format!("{name} {value}")));
