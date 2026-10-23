@@ -529,7 +529,9 @@ start-fight = Lancer
 back-escape = Retour (Échap)
 continue = Continuer
 elimination = Élimination
-sound = Son
+options = Options
+fullscreen = Plein écran
+interface-size = Taille de l'interface :
 music = Musique
 effects = Effets
 

@@ -15,8 +15,8 @@ pub const AUTO: &str = "autosave.json";
 pub const SLOTS: [&str; 3] = ["save.json", "save-2.json", "save-3.json"];
 /// The code of the language the player chose.
 const LANGUAGE: &str = "language.txt";
-/// The player's settings, one `key = value` per line: for now the music and effects
-/// volumes.
+/// The player's settings, one `key = value` per line: the music and effects volumes,
+/// full screen and the interface's size.
 const SETTINGS: &str = "settings.txt";
 
 /// The folder of save files, if the platform has one.
@@ -54,34 +54,78 @@ pub fn write_language(folder: &Path, code: &str) -> std::io::Result<()> {
     std::fs::write(folder.join(LANGUAGE), code)
 }
 
-/// Sets `audio` to the volumes kept in `folder`; a missing file, line or value leaves
-/// that volume as it was.
-pub fn read_volumes(folder: &Path, audio: &mut Audio) {
+/// The window and interface settings, kept with the volumes.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct Display {
+    pub fullscreen: bool,
+    /// The interface's size, in percent of the theme's.
+    pub interface: u16,
+}
+
+impl Default for Display {
+    fn default() -> Self {
+        Self {
+            fullscreen: false,
+            interface: 100,
+        }
+    }
+}
+
+/// Sets `audio` to the volumes kept in `folder` and returns the display kept there; a
+/// missing file, line or value leaves that setting as it was.
+pub fn read_settings(folder: &Path, audio: &mut Audio) -> Display {
+    let mut display = Display::default();
     let Ok(text) = std::fs::read_to_string(folder.join(SETTINGS)) else {
-        return;
+        return display;
     };
     for line in text.lines() {
         let Some((key, value)) = line.split_once('=') else {
             continue;
         };
-        let Ok(volume) = value.trim().parse::<f32>() else {
-            continue;
-        };
+        let value = value.trim();
         match key.trim() {
-            "music" => audio.set_music_volume(volume),
-            "effects" => audio.set_effects_volume(volume),
+            "music" => {
+                if let Ok(volume) = value.parse() {
+                    audio.set_music_volume(volume);
+                }
+            }
+            "effects" => {
+                if let Ok(volume) = value.parse() {
+                    audio.set_effects_volume(volume);
+                }
+            }
+            "fullscreen" => {
+                if let Ok(fullscreen) = value.parse() {
+                    display.fullscreen = fullscreen;
+                }
+            }
+            // Out of bounds, the interface would be unreadable or would not fit.
+            "interface" => {
+                if let Ok(size) = value.parse()
+                    && (50..=300).contains(&size)
+                {
+                    display.interface = size;
+                }
+            }
             _ => {}
         }
     }
+    display
 }
 
-/// Keeps the volumes of `audio` in `folder`.
-pub fn write_volumes(folder: &Path, audio: &Audio) -> std::io::Result<()> {
+/// Keeps the volumes of `audio` and `display` in `folder`.
+pub fn write_settings(folder: &Path, audio: &Audio, display: Display) -> std::io::Result<()> {
     std::fs::create_dir_all(folder)?;
     let text = format!(
-        "music = {}\neffects = {}\n",
+        "music = {}
+effects = {}
+fullscreen = {}
+interface = {}
+",
         audio.music_volume(),
-        audio.effects_volume()
+        audio.effects_volume(),
+        display.fullscreen,
+        display.interface
     );
     std::fs::write(folder.join(SETTINGS), text)
 }
@@ -111,27 +155,31 @@ mod tests {
     }
 
     #[test]
-    fn the_volumes_read_back_and_a_missing_one_keeps_its_default() {
+    fn the_settings_read_back_and_a_missing_one_keeps_its_default() {
         let folder = std::env::temp_dir().join(format!("lanista-settings-{}", std::process::id()));
         let volumes = |audio: &Audio| (audio.music_volume(), audio.effects_volume());
         let default = volumes(&Audio::default());
         let mut audio = Audio::default();
-        read_volumes(&folder, &mut audio);
+        assert_eq!(read_settings(&folder, &mut audio), Display::default());
         assert_eq!(volumes(&audio), default);
         audio.set_music_volume(0.25);
         audio.set_effects_volume(0.0);
-        write_volumes(&folder, &audio).unwrap();
+        let display = Display {
+            fullscreen: true,
+            interface: 150,
+        };
+        write_settings(&folder, &audio, display).unwrap();
         let mut read = Audio::default();
-        read_volumes(&folder, &mut read);
+        assert_eq!(read_settings(&folder, &mut read), display);
         assert_eq!(volumes(&read), (0.25, 0.0));
-        // A file written by hand: an unknown key, a bad value and a missing line.
+        // A file written by hand: an unknown key, bad values and missing lines.
         std::fs::write(
             folder.join(SETTINGS),
             "colour = red\nmusic = loud\neffects=0.3\n",
         )
         .unwrap();
         let mut read = Audio::default();
-        read_volumes(&folder, &mut read);
+        read_settings(&folder, &mut read);
         assert_eq!(volumes(&read), (default.0, 0.3));
         std::fs::remove_dir_all(folder).unwrap();
     }

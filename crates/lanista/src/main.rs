@@ -6,6 +6,7 @@ mod combat_screen;
 mod fight_view;
 mod fighter_sprite;
 mod lang;
+mod options;
 mod saves;
 mod texts;
 mod theme;
@@ -74,13 +75,17 @@ async fn main() {
     ]);
     let folder = saves::folder();
     let mut audio = Audio::default();
-    if let Some(folder) = &folder {
-        saves::read_volumes(folder, &mut audio);
-    }
+    let display = folder
+        .as_deref()
+        .map(|folder| saves::read_settings(folder, &mut audio))
+        .unwrap_or_default();
     reesch::run(
         assets,
         audio,
-        theme::apply,
+        |ui| {
+            theme::apply(ui);
+            options::apply(ui, display);
+        },
         Box::new(ClubScreen::open(data, CAREER_SEED, folder, bindings)),
     )
     .await;

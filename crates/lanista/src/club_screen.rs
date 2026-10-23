@@ -42,6 +42,7 @@ use crate::Action;
 use crate::combat_screen::{CombatScreen, Watched};
 use crate::fight_view::Cast;
 use crate::lang::{self, tr};
+use crate::options;
 use crate::saves;
 use crate::texts::{
     activity_name, challenger_text, change, class_name, club_name, colosseum_name,
@@ -447,7 +448,7 @@ impl ClubScreen {
             if ui.button(tr!("standard-duel")).clicked() {
                 let duel =
                     CombatScreen::new(Rc::clone(&self.data), FREE_DUEL_SEED, self.bindings.clone())
-                        .keeping_volumes_in(self.saves.clone());
+                        .keeping_settings_in(self.saves.clone());
                 transition = Some(Transition::Push(Box::new(duel)));
             }
         });
@@ -485,7 +486,6 @@ impl ClubScreen {
         if self.saves.is_some() {
             self.files(ui);
         }
-        ui.horizontal(|ui| self.language(ui));
         ui.separator();
         egui::ScrollArea::vertical().show(ui, |ui| {
             if let Some((week, lines)) = &self.last_week {
@@ -501,33 +501,6 @@ impl ClubScreen {
             }
         });
         play
-    }
-
-    /// The language menu; the choice is kept for the next launches.
-    fn language(&mut self, ui: &mut egui::Ui) {
-        ui.label(tr!("menu-language"));
-        let current = lang::language();
-        let mut chosen = current;
-        egui::ComboBox::from_id_salt("language")
-            .selected_text(
-                lang::LANGUAGES
-                    .iter()
-                    .find(|l| l.code == current)
-                    .map_or(current, |l| l.name),
-            )
-            .show_ui(ui, |ui| {
-                for language in lang::LANGUAGES {
-                    ui.selectable_value(&mut chosen, language.code, language.name);
-                }
-            });
-        if chosen != current {
-            lang::set_language(chosen);
-            if let Some(folder) = &self.saves
-                && let Err(e) = saves::write_language(folder, chosen)
-            {
-                self.message = Some(tr!("save-failed", error = e.to_string()));
-            }
-        }
     }
 
     /// The save slots, saved and loaded, and starting a new game; a choice that loses
@@ -1050,13 +1023,13 @@ impl ClubScreen {
     fn watch(&self, fights: Vec<Watched>) -> Transition {
         let data = Rc::clone(&self.data);
         let screen = CombatScreen::watch(data, fights, self.bindings.clone())
-            .keeping_volumes_in(self.saves.clone());
+            .keeping_settings_in(self.saves.clone());
         Transition::Push(Box::new(screen))
     }
 }
 
 impl Screen for ClubScreen {
-    fn update(&mut self, ui: &egui::Context, _assets: &Assets, _audio: &mut Audio) -> Transition {
+    fn update(&mut self, ui: &egui::Context, _assets: &Assets, audio: &mut Audio) -> Transition {
         if !self.to_watch.is_empty() {
             let fights = std::mem::take(&mut self.to_watch);
             return self.watch(fights);
@@ -1082,6 +1055,9 @@ impl Screen for ClubScreen {
             View::Outside(target) => self.outside(ui, target),
             View::Rival(club) => self.rival_club(ui, club),
         });
+        if let Some(failed) = options::window(ui, audio, self.saves.as_deref()) {
+            self.message = Some(failed);
+        }
         if let Some(transition) = transition {
             return transition;
         }
