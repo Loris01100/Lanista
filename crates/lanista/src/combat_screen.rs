@@ -399,8 +399,9 @@ mod tests {
             .unwrap()
             .fight
             .unwrap();
+        let mut expected = fight.start(&data);
         let watched = Watched {
-            arena: fight.start.clone(),
+            arena: expected.clone(),
             cast: named(),
         };
         let mut screen =
@@ -409,7 +410,6 @@ mod tests {
         for _ in 0..60 * 70 {
             screen.advance(1.0 / 60.0);
         }
-        let mut expected = fight.start;
         play(&mut expected);
         assert_eq!(log_text(&screen.fight().arena), log_text(&expected));
         assert_eq!(screen.fight().arena.tick, fight.ticks);

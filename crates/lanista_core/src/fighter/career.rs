@@ -18,6 +18,7 @@ use crate::fighter::injury::{
     Injury, Location, Severity, Side, bleeding_wound, fatal_blow_wound, has_lost, heal_week,
     injured_stats, roll_injury, severed_limb_wound, spare_after_effect, stun_wound,
 };
+use crate::fighter::melee::{Entrant, melee_start};
 use crate::fighter::morale::{Morale, MoraleEvent};
 use crate::fighter::personality::Personality;
 use crate::fighter::progression::{
@@ -691,10 +692,21 @@ impl CareerFighter {
         data: &DesignData,
     ) -> (FightSummary, Option<Injury>, bool) {
         let rules = &data.fighter;
-        let (seed, start, arena) = self.duel(opponent, (kind, refused), rng, data);
+        let (seed, _, arena) = self.duel(opponent, (kind, refused), rng, data);
         let stronger = opponent.stronger_than(self, rules);
         let weaker = self.stronger_than(opponent, rules);
-        let summary_opponent = opponent.clone();
+        let setup = FightSetup {
+            kind,
+            fighters: vec![self.clone(), opponent.clone()],
+            entrants: vec![
+                Entrant {
+                    refused,
+                    ..Entrant::default()
+                },
+                Entrant::default(),
+            ],
+            melee: false,
+        };
         let equipped = (FighterId(1), Refused::NONE);
         let theirs = opponent.take_fame_and_death(&arena, equipped, weaker, rng, rules);
         let mine = self.take_fame_and_death(&arena, (FighterId(0), refused), stronger, rng, rules);
@@ -705,10 +717,9 @@ impl CareerFighter {
         };
         let summary = FightSummary {
             seed,
-            start,
+            setup,
             report: Report::new(&arena),
             me: FighterId(0),
-            opponents: vec![summary_opponent],
             place: places(&arena).first().copied().unwrap_or(1),
             against_stronger: stronger,
             refused,
@@ -852,7 +863,7 @@ impl CareerFighter {
 }
 
 /// What a fighter does in a week.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum Activity {
     Rest,
     Train,
@@ -918,7 +929,7 @@ pub fn badly_hurt_or_ill(fighter: &CareerFighter) -> bool {
 /// The player's decisions for one fighter and one week.
 // ponytail: care is all or nothing here; choosing injury by injury comes with
 // the fighter screen in phase 4.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub struct WeekPlan {
     pub activity: Activity,
     /// Care for every injury and illness where it helps, before the activity.
@@ -930,7 +941,7 @@ pub struct WeekPlan {
 }
 
 /// What happened in a week.
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct WeekReport {
     pub plan: WeekPlan,
     /// Price of the care given; `state::next_week` takes it from the club's money.
@@ -968,19 +979,17 @@ impl WeekReport {
 
 /// A fight as one of its fighters, the career fighter, lived it: a duel, or a melee
 /// that several of the club's fighters may share, each with its own summary.
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct FightSummary {
     /// Replaying the fight with this seed gives the same fight.
     pub seed: u64,
-    /// The fight before its first tick: playing it with utility AIs gives this very
-    /// fight, to watch it.
-    pub start: Arena,
+    /// What the fight was played from: with the seed, its arena before the first tick
+    /// (`FightSummary::start`).
+    pub setup: FightSetup,
     /// Damage dealt and taken and spells cast by each fighter, in the arena's order.
     pub report: Report,
     /// The career fighter in the arena: `FighterId(0)` in a duel.
     pub me: FighterId,
-    /// The others before the fight, in the arena's order: one in a duel.
-    pub opponents: Vec<CareerFighter>,
     /// The career fighter's place, 1 the best (see `log::places`).
     pub place: u32,
     /// Stronger than this fighter, or than its average in a melee.
@@ -998,22 +1007,65 @@ pub struct FightSummary {
 }
 
 impl FightSummary {
+    /// The fight before its first tick: playing it with utility AIs gives this very
+    /// fight, to watch it.
+    #[must_use]
+    pub fn start(&self, data: &DesignData) -> Arena {
+        self.setup.arena(self.seed, data)
+    }
+
+    /// The others before the fight, in the arena's order: one in a duel.
+    pub fn opponents(&self) -> impl Iterator<Item = &CareerFighter> {
+        let me = usize::try_from(self.me.0).unwrap_or(usize::MAX);
+        let fighters = self.setup.fighters.iter().enumerate();
+        fighters.filter(move |&(i, _)| i != me).map(|(_, f)| f)
+    }
+
     /// The opponent of a duel, the first other fighter of a melee.
     #[must_use]
     pub fn opponent(&self) -> Option<&CareerFighter> {
-        self.opponents.first()
+        self.opponents().next()
     }
 
     /// Whether more than two fought.
     #[must_use]
     pub fn is_melee(&self) -> bool {
-        self.opponents.len() > 1
+        self.setup.fighters.len() > 2
     }
 
     /// The career fighter's line of the report.
     #[must_use]
     pub fn mine(&self) -> Option<&crate::log::FighterReport> {
         self.report.fighters.get(usize::try_from(self.me.0).ok()?)
+    }
+}
+
+/// What a fight is played from, so that its seed plays it again without keeping the
+/// fight itself: its floor, and its fighters before it, in the arena's order, each
+/// as it went in.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct FightSetup {
+    pub kind: ArenaKind,
+    pub fighters: Vec<CareerFighter>,
+    /// How each fighter went in, in the same order; only the refused equipment counts
+    /// in a duel.
+    pub entrants: Vec<Entrant>,
+    /// A melee (`melee::melee_start`); else a duel between the first two fighters
+    /// (`CareerFighter::duel_arena`).
+    pub melee: bool,
+}
+
+impl FightSetup {
+    /// The arena of the fight before its first tick, seeded with `seed`.
+    #[must_use]
+    pub fn arena(&self, seed: u64, data: &DesignData) -> Arena {
+        match self.fighters.as_slice() {
+            [me, opponent] if !self.melee => {
+                let refused = self.entrants.first().map_or(Refused::NONE, |e| e.refused);
+                me.duel_arena(opponent, (self.kind, refused), seed, data)
+            }
+            fighters => melee_start(fighters, &self.entrants, self.kind, seed, data),
+        }
     }
 }
 
@@ -1554,7 +1606,7 @@ mod tests {
             .unwrap();
         let fight = report.fight.unwrap();
         assert_eq!(fight.refused, armour);
-        assert_eq!(fight.start.fighters[0].stats, expected.stats);
+        assert_eq!(fight.start(&data).fighters[0].stats, expected.stats);
     }
 
     #[test]
@@ -1598,7 +1650,10 @@ mod tests {
             )
             .unwrap();
         let fight = report.fight.unwrap();
-        assert_eq!(fight.start.pillars, data.combat.arenas.pillars.pillars);
+        assert_eq!(
+            fight.start(&data).pillars,
+            data.combat.arenas.pillars.pillars
+        );
     }
 
     #[test]
@@ -1620,7 +1675,7 @@ mod tests {
                     &mut rng,
                     &data,
                 );
-                let mut arena = summary.start.clone();
+                let mut arena = summary.start(&data);
                 crate::duel::play(&mut arena);
                 let i = arena.fighters.iter().position(|f| !f.is_alive())?;
                 let beheaded = arena.fighters[i].severed == Some(Location::Head);
@@ -1752,7 +1807,7 @@ mod tests {
             )
             .unwrap();
         let fight = report.fight.unwrap();
-        let mut replay = fight.start.clone();
+        let mut replay = fight.start(&data);
         assert_eq!(replay.tick, 0);
         play(&mut replay);
         assert_eq!(replay.tick, fight.ticks);
@@ -1779,7 +1834,7 @@ mod tests {
                 .unwrap();
             let summary = report.fight.unwrap();
             assert_eq!(summary.opponent(), Some(&fighter(seed + 100)));
-            let mut replay = summary.start.clone();
+            let mut replay = summary.start(&data);
             play(&mut replay);
             let died = !replay.fighters[1].is_alive();
             assert_eq!(opponent.status == Status::Dead, died, "seed {seed}");

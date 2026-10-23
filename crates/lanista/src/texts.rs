@@ -10,14 +10,12 @@ use lanista_core::design_data::DesignData;
 use lanista_core::economy::{Flow, Transaction, Wealth};
 use lanista_core::fighter::STAT_COUNT;
 use lanista_core::fighter::care::CareRules;
-use lanista_core::fighter::career::{
-    Activity, CareerFighter, FightSummary, Record, Status, WeekReport,
-};
+use lanista_core::fighter::career::{Activity, CareerFighter, Record, Status};
 use lanista_core::fighter::fame::FightResult;
 use lanista_core::fighter::illness::{Illness, IllnessLevel};
 use lanista_core::fighter::injury::{Injury, Location, Severity, Side};
 use lanista_core::fighter::personality::Personality;
-use lanista_core::fighter::retirement::too_maimed;
+use lanista_core::journal::{FightLine, FighterWeek, Retired};
 use lanista_core::market::{
     MarketNews, Move, Target, ease_seen, personality_seen, potential_range, stat_ranges,
 };
@@ -835,8 +833,8 @@ fn limb_cut(location: Location) -> String {
     }
 }
 
-pub fn fight_text(fight: &FightSummary, data: &DesignData) -> String {
-    let mine = fight.mine();
+pub fn fight_text(fight: &FightLine, data: &DesignData) -> String {
+    let mine = fight.mine.as_ref();
     // Brought to 0 HP, it may still have survived the fatal blow.
     let fell = mine.is_some_and(|f| f.hp == 0);
     let knocked_out = mine.is_some_and(|f| f.knocked_out);
@@ -852,7 +850,7 @@ pub fn fight_text(fight: &FightSummary, data: &DesignData) -> String {
         (FightResult::GaveUp, ..) => tr!("result-gave-up"),
         (FightResult::Unfinished, ..) => tr!(
             "result-unfinished",
-            minutes = fight.start.max_ticks / (lanista_core::combat::TICKS_PER_SECOND * 60)
+            minutes = fight.max_ticks / (lanista_core::combat::TICKS_PER_SECOND * 60)
         ),
     };
     let stronger = if fight.against_stronger {
@@ -868,14 +866,15 @@ pub fn fight_text(fight: &FightSummary, data: &DesignData) -> String {
     let against = if fight.is_melee() {
         tr!(
             "against-melee",
-            size = fight.opponents.len() + 1,
+            size = fight.size,
             place = place_name(fight.place),
             stronger = stronger
         )
     } else {
         let class = fight
-            .opponent()
-            .map_or_else(|| "?".into(), |o| class_name(o, data));
+            .opponent
+            .and_then(|class| data.class(class))
+            .map_or_else(|| "?".into(), |c| data_name("class", &c.key));
         tr!("against-duel", class = class, stronger = stronger)
     };
     tr!(
@@ -938,69 +937,57 @@ pub fn money_line(before: i64, after: i64, ledger: &[Transaction]) -> String {
     }
 }
 
-/// What a week changed, in the player's language.
-pub fn week_lines(
-    before: &CareerFighter,
-    after: &CareerFighter,
-    report: &WeekReport,
-    data: &DesignData,
-) -> Vec<String> {
-    let dominant = after.dominant_hand;
-    let mut lines = vec![activity_name(report.plan.activity, data)];
-    if let Some(fight) = &report.fight {
+/// What a week changed for a fighter whose dominant hand is `dominant`, in the
+/// player's language.
+pub fn week_lines(week: &FighterWeek, dominant: Side, data: &DesignData) -> Vec<String> {
+    let mut lines = vec![activity_name(week.activity, data)];
+    if let Some(fight) = &week.fight {
         lines.push(fight_text(fight, data));
     }
-    if let Some(injury) = &report.new_injury {
+    if let Some(injury) = &week.new_injury {
         lines.push(tr!("week-injury", injury = injury_text(*injury, dominant)));
     }
-    if report.after_effect_spared {
+    if week.after_effect_spared {
         lines.push(tr!("week-after-effect-spared"));
     }
-    for injury in &report.healed_injuries {
+    for injury in &week.healed_injuries {
         lines.push(tr!(
             "week-healed",
             location = location_name(injury.location, dominant)
         ));
     }
-    if let Some(illness) = &report.new_illness {
+    if let Some(illness) = &week.new_illness {
         lines.push(tr!("week-ill", illness = illness_text(*illness)));
     }
-    if report.illness_healed {
+    if week.illness_healed {
         lines.push(tr!("week-illness-healed"));
     }
-    if report.birthday {
-        lines.push(tr!("week-birthday", age = after.age));
-        if report.season_gains > 0 {
-            lines.push(tr!("week-season-gains", gains = report.season_gains));
+    if week.birthday {
+        lines.push(tr!("week-birthday", age = week.age));
+        if week.season_gains > 0 {
+            lines.push(tr!("week-season-gains", gains = week.season_gains));
         }
     }
     lines.push(format!(
         "{}, {}, {}",
-        change(&tr!("form"), before.form.value(), after.form.value()),
-        change(&tr!("morale"), before.morale.value(), after.morale.value()),
-        change(&tr!("fame"), before.fame.value(), after.fame.value())
+        change(&tr!("form"), week.form.0, week.form.1),
+        change(&tr!("morale"), week.morale.0, week.morale.1),
+        change(&tr!("fame"), week.fame.0, week.fame.1)
     ));
+    let (before, after) = week.stats;
     let stats: Vec<String> = stat_names()
         .iter()
-        .zip(
-            before
-                .stats
-                .to_array()
-                .into_iter()
-                .zip(after.stats.to_array()),
-        )
+        .zip(before.to_array().into_iter().zip(after.to_array()))
         .filter(|(_, (b, a))| a != b)
         .map(|(name, (b, a))| format!("{name} {:+}", i64::from(a) - i64::from(b)))
         .collect();
     if !stats.is_empty() {
         lines.push(tr!("week-stats", stats = stats.join(", ")));
     }
-    match after.status {
-        Status::Active | Status::Dead | Status::Sold | Status::Released => {}
-        Status::Retired if too_maimed(&after.injuries, &data.fighter.retirement) => {
-            lines.push(tr!("week-retires-maimed"));
-        }
-        Status::Retired => lines.push(tr!("week-retires", age = after.age)),
+    match week.retired {
+        None => {}
+        Some(Retired::Maimed) => lines.push(tr!("week-retires-maimed")),
+        Some(Retired::OfAge) => lines.push(tr!("week-retires", age = week.age)),
     }
     lines
 }
@@ -1023,7 +1010,7 @@ mod tests {
             .collect();
         let melee = play_melee(&mut fighters, &[], ArenaKind::Sand, &mut rng, &data);
         let summary = melee.summary(2).unwrap();
-        let text = fight_text(&summary, &data);
+        let text = fight_text(&FightLine::new(&summary, &data), &data);
         let place = place_name(melee.places[2]);
         assert!(text.starts_with(&format!("Mêlée à 5, {place}")), "{text}");
         assert_eq!(place_name(1), "1er");

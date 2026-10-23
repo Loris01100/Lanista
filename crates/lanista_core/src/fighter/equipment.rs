@@ -4,13 +4,13 @@
 // everything, as the statistical model has no such input.
 
 use rand::{Rng, RngExt};
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 
 use crate::fighter::fame::FameRules;
 use crate::fighter::{Stats, percent_of};
 
 /// The equipment a fighter refuses for a fight: its armour or nothing, by default.
-#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Refused {
     /// Fights without armour: melee and ranged defense fall.
     pub armour: bool,

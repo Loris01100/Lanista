@@ -83,6 +83,7 @@ pub fn from_json(text: &str, data: &DesignData) -> Result<GameState, SaveError> 
         .iter()
         .chain(rivals)
         .chain(&state.free_agents)
+        .chain(state.journal.fought())
         .find(|f| data.class(f.class).is_none())
     {
         return Err(SaveError::UnknownClass(f.class.0));

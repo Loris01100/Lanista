@@ -6,6 +6,7 @@ pub mod design_data;
 pub mod duel;
 pub mod economy;
 pub mod fighter;
+pub mod journal;
 pub mod learned;
 pub mod learning;
 pub mod log;

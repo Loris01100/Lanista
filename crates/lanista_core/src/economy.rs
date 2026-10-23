@@ -132,7 +132,7 @@ impl Purses {
 }
 
 /// Why money moved.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum Flow {
     Upkeep,
     Care,
@@ -150,7 +150,7 @@ pub enum Flow {
 }
 
 /// Money in (positive) or out (negative) for one of the club's fighters, or for the club.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Transaction {
     /// Index of the fighter in the club; `None` for the club's own: its staff.
     pub fighter: Option<usize>,

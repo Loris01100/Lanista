@@ -19,6 +19,7 @@ use crate::fighter::career::{Activity, CareerFighter, Status, WeekPlan, suggeste
 use crate::fighter::equipment::Refused;
 use crate::fighter::fame::{Fame, FightResult};
 use crate::fighter::percent_of;
+use crate::journal::Journal;
 use crate::market::{self, Move, SaleOffer, Target, value};
 use crate::names::{self, FighterName};
 use crate::relations::{Reason, Relation, Standing, StandingRules};
@@ -91,6 +92,10 @@ pub struct GameState {
     /// Each rival club's relation with the player's club, by its index; a club
     /// missing has a relation of 0.
     pub relations: BTreeMap<usize, Relation>,
+    /// The club's weeks, as its screen tells them again; empty in a save from before
+    /// it was kept.
+    #[serde(default)]
+    pub journal: Journal,
     /// The only source of chance after the start: same seed and decisions, same game.
     pub rng: ChaCha8Rng,
 }
@@ -128,6 +133,7 @@ impl GameState {
             staff_market: Vec::new(),
             news: Vec::new(),
             relations: BTreeMap::new(),
+            journal: Journal::default(),
             rng,
         };
         state.open_world(data);
@@ -1042,7 +1048,18 @@ mod tests {
         assert_eq!(fights[0].seed, fights[1].seed);
         assert_ne!(fights[0].me, fights[1].me);
         assert!(fights[0].is_melee());
-        let size = fights[0].opponents.len() + 1;
+        // The journal keeps the week, and its melee plays again from a reloaded save.
+        let reloaded = crate::save::from_json(&crate::save::to_json(&state), &data).unwrap();
+        let last = reloaded.journal.last.as_ref().unwrap();
+        assert_eq!((last.week, &last.summary), (1, &summary));
+        let mut replay = fights[0].start(&data);
+        let mut ais = crate::duel::ais(&replay);
+        let ticks = replay.max_ticks;
+        crate::combat::run(&mut replay, &mut ais, ticks);
+        assert_eq!(crate::log::Report::new(&replay), fights[0].report);
+        let entries: Vec<usize> = reloaded.journal.fighters.iter().map(Vec::len).collect();
+        assert_eq!(entries, [1, 1]);
+        let size = fights[0].setup.fighters.len();
         assert!((3..=20).contains(&size));
         let purses = &data.world.colosseums[0].purses;
         for (i, fight) in fights.iter().enumerate() {

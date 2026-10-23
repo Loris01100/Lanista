@@ -3,7 +3,7 @@ use std::collections::BTreeMap;
 use rand::RngExt;
 use rand_chacha::ChaCha8Rng;
 use rand_chacha::rand_core::SeedableRng;
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 
 use crate::ai::{Action, CombatAi};
 use crate::design_data::{AccuracyDrop, SpellData};
@@ -118,7 +118,7 @@ pub struct CombatRules {
 }
 
 /// What a colosseum's arena does to the fight (see [`ArenaLayout`]).
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
 pub enum ArenaKind {
     /// Slows everyone.
     Sand,

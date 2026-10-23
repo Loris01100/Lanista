@@ -222,7 +222,7 @@ pub struct StaffEffects {
 }
 
 /// A post of the staff.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
 pub enum Role {
     Trainer,
     Doctor,
@@ -519,7 +519,7 @@ impl StaffMove {
 }
 
 /// A change of staff, once made.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum StaffNews {
     /// Someone of this level hired for the post.
     Hired(Role, u32),

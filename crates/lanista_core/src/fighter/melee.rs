@@ -3,12 +3,13 @@
 //! one standing wins; the others lose, and fame follows each one's place.
 
 use rand::{Rng, RngExt};
+use serde::{Deserialize, Serialize};
 
 use crate::combat::{Arena, ArenaKind, Vec2, run};
 use crate::design_data::DesignData;
 use crate::duel::ais;
 use crate::fighter::FighterId;
-use crate::fighter::career::{CareerFighter, FightSummary, Status};
+use crate::fighter::career::{CareerFighter, FightSetup, FightSummary, Status};
 use crate::fighter::equipment::Refused;
 use crate::fighter::fame::{FameRules, FightResult};
 use crate::fighter::form::FormEvent;
@@ -22,7 +23,7 @@ use crate::stat_model::Ending;
 /// whether it is one of the player's fighters, whether its club is the player's
 /// declared rival, so that it goes for them first, and the points its club's standing
 /// adds to its chance of a pact with them.
-#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Entrant {
     pub refused: Refused,
     pub medicine: Medicine,
@@ -93,8 +94,8 @@ pub struct MeleeFight {
     /// The arena before its first tick: playing it with utility AIs gives this melee.
     pub start: Arena,
     pub report: Report,
-    /// The fighters before the melee.
-    pub before: Vec<CareerFighter>,
+    /// What the melee was played from: the fighters before it, as they went in.
+    pub setup: FightSetup,
     /// Each one's place, 1 the best (see `log::places`), for the Elo.
     pub places: Vec<u32>,
     /// Whether each one fell at 0 HP yet survived the fatal blow.
@@ -109,16 +110,11 @@ impl MeleeFight {
     #[must_use]
     pub fn summary(&self, i: usize) -> Option<FightSummary> {
         let side = self.sides.get(i)?;
-        let opponents = (0..self.before.len())
-            .filter(|&j| j != i)
-            .map(|j| self.before[j].clone())
-            .collect();
         Some(FightSummary {
             seed: self.seed,
-            start: self.start.clone(),
+            setup: self.setup.clone(),
             report: self.report.clone(),
             me: FighterId(u32::try_from(i).ok()?),
-            opponents,
             place: self.places.get(i).copied().unwrap_or(1),
             against_stronger: side.against_stronger,
             refused: side.refused,
@@ -129,6 +125,41 @@ impl MeleeFight {
             ticks: self.ticks,
         })
     }
+}
+
+/// The melee between `fighters` (as `entrants` go in, one each, missing ones fully
+/// equipped without doctor) on the floor of `kind`, before its first tick, seeded with
+/// `seed`: a declared rival club's fighters go for the player's first, and each club's
+/// standing adds its points to their chance of a pact with them.
+pub(crate) fn melee_start(
+    fighters: &[CareerFighter],
+    entrants: &[Entrant],
+    kind: ArenaKind,
+    seed: u64,
+    data: &DesignData,
+) -> Arena {
+    let origin = Vec2::new(0.0, 0.0);
+    let combat = fighters
+        .iter()
+        .enumerate()
+        .map(|(i, f)| {
+            let id = FighterId(u32::try_from(i).unwrap_or(u32::MAX));
+            let refused = entrants.get(i).map_or(Refused::NONE, |e| e.refused);
+            f.combat_fighter(id, refused, data, origin)
+        })
+        .collect();
+    let mut start = melee_arena(combat, kind, seed, &data.combat);
+    for (hunter, h) in (0..).map(FighterId).zip(entrants) {
+        for (prey, p) in (0..).map(FighterId).zip(entrants) {
+            if h.hunts_club && p.of_club {
+                start.hunts.push((hunter, prey));
+            }
+            if h.pact_points != 0 && p.of_club {
+                start.pact_points.push((hunter, prey, h.pact_points));
+            }
+        }
+    }
+    start
 }
 
 /// Place `place`'s share of `full` in a melee of `count` where the first `paid` places
@@ -170,32 +201,18 @@ pub fn play_melee<R: Rng + ?Sized>(
     let rules = &data.fighter;
     let entrant = |i: usize| entrants.get(i).copied().unwrap_or_default();
     let seed = rng.random::<u64>();
-    let origin = Vec2::new(0.0, 0.0);
-    let combat = fighters
-        .iter()
-        .enumerate()
-        .map(|(i, f)| {
-            let id = FighterId(u32::try_from(i).unwrap_or(u32::MAX));
-            f.combat_fighter(id, entrant(i).refused, data, origin)
-        })
-        .collect();
-    let mut start = melee_arena(combat, kind, seed, &data.combat);
-    for (hunter, h) in (0..).map(FighterId).zip(entrants) {
-        for (prey, p) in (0..).map(FighterId).zip(entrants) {
-            if h.hunts_club && p.of_club {
-                start.hunts.push((hunter, prey));
-            }
-            if h.pact_points != 0 && p.of_club {
-                start.pact_points.push((hunter, prey, h.pact_points));
-            }
-        }
-    }
+    let setup = FightSetup {
+        kind,
+        fighters: fighters.to_vec(),
+        entrants: (0..fighters.len()).map(entrant).collect(),
+        melee: true,
+    };
+    let start = setup.arena(seed, data);
     let mut arena = start.clone();
     let mut ais = ais(&arena);
     let ticks = arena.max_ticks;
     run(&mut arena, &mut ais, ticks);
     let places = places(&arena);
-    let before = fighters.to_vec();
     let strengths: Vec<u64> = fighters.iter().map(|f| f.strength(rules)).collect();
     let total: u64 = strengths.iter().sum();
     let others = u64::try_from(fighters.len().saturating_sub(1)).unwrap_or(u64::MAX);
@@ -248,7 +265,7 @@ pub fn play_melee<R: Rng + ?Sized>(
         seed,
         start,
         report: Report::new(&arena),
-        before,
+        setup,
         places,
         survived_fatal_blow,
         sides,
@@ -412,15 +429,17 @@ mod tests {
         let summary = melee.summary(1).unwrap();
         assert_eq!(summary.me, FighterId(1));
         assert!(summary.is_melee());
-        assert_eq!(summary.opponents.len(), 19);
-        assert_eq!(summary.opponent(), Some(&melee.before[0]));
+        assert_eq!(summary.opponents().count(), 19);
+        assert_eq!(summary.opponent(), Some(&melee.setup.fighters[0]));
         assert_eq!(summary.place, melee.places[1]);
         assert_eq!(summary.refused, refused);
         assert_eq!(summary.mine().map(|r| r.id), Some(FighterId(1)));
         let armour = data.fighter.equipment.armourless_defense_percent;
-        let defense = melee.before[1].fighting_stats(&data.fighter).melee_defense;
+        let defense = melee.setup.fighters[1]
+            .fighting_stats(&data.fighter)
+            .melee_defense;
         assert_eq!(
-            summary.start.fighters[1].stats.melee_defense,
+            summary.start(&data).fighters[1].stats.melee_defense,
             defense * armour / 100
         );
         assert!(melee.summary(20).is_none());

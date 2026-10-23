@@ -30,7 +30,7 @@ use crate::fighter::personality::Personality;
 use crate::learned::Model;
 
 /// Index of a fighter in its arena; fighters refer to each other by ID, never by reference.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
 pub struct FighterId(pub u32);
 
 /// Index of a class in the design data (`data/`).

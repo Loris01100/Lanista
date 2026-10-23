@@ -105,7 +105,7 @@ pub struct SaleOffer {
 }
 
 /// What happened on the market for the club in a week.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum MarketNews {
     /// The free agent became the club's fighter at this index.
     Signed(usize),

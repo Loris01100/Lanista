@@ -10,6 +10,7 @@ use crate::fighter::percent_of;
 use crate::market::{MarketNews, Move};
 use crate::relations::Reason;
 use crate::staff::{StaffMove, StaffNews};
+use serde::{Deserialize, Serialize};
 
 use super::clubs::{club_lives, rival_staff, staff_week, wealth_changes};
 use super::colosseums::{end_colosseum_weeks, receive_challenges, refusals, title_fight};
@@ -36,7 +37,7 @@ pub struct Decisions {
 }
 
 /// What a week did to the club.
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct WeekSummary {
     /// Each fighter's report, in club order; `None` for those not in activity.
     pub reports: Vec<Option<WeekReport>>,
@@ -70,6 +71,7 @@ pub struct WeekSummary {
 /// (`GameState::title_opponent`) is rest too, and so is a challenge it may not have
 /// (`GameState::may_challenge`). Upkeep and salaries are always paid, even into debt.
 pub fn next_week(state: &mut GameState, decisions: &Decisions, data: &DesignData) -> WeekSummary {
+    let (week, money, before) = (state.week, state.money, state.fighters.clone());
     let mut ledger = Vec::new();
     let mut market = market_moves(state, &decisions.moves, data, &mut ledger);
     let staff = staff_week(state, &decisions.staff, data, &mut ledger);
@@ -147,7 +149,7 @@ pub fn next_week(state: &mut GameState, decisions: &Decisions, data: &DesignData
     outsider_weeks(state, plans, &fought, data);
     market.extend(answer_offer(state, &decisions.moves, data, &mut ledger));
     let wealth = end_week(state, &mut titles, data);
-    WeekSummary {
+    let summary = WeekSummary {
         reports,
         ledger,
         titles,
@@ -155,7 +157,11 @@ pub fn next_week(state: &mut GameState, decisions: &Decisions, data: &DesignData
         market,
         staff,
         wealth,
-    }
+    };
+    let played = (before.as_slice(), state.fighters.as_slice());
+    let money = (money, state.money);
+    state.journal.record(week, played, money, &summary, data);
+    summary
 }
 
 /// What the week `report` of the club's fighter `i`, of `fame` before it, costs and

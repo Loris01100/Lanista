@@ -1,5 +1,6 @@
 //! Fight log (who hits whom, with which spell, for how much) and the report built from it.
 
+use serde::{Deserialize, Serialize};
 use std::fmt::{self, Write};
 
 use crate::combat::Arena;
@@ -106,7 +107,7 @@ pub enum EventKind {
 }
 
 /// Summary of a fight, built from its log.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Report {
     /// Ticks played.
     pub ticks: u32,
@@ -118,7 +119,7 @@ pub struct Report {
     pub fighters: Vec<FighterReport>,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct FighterReport {
     pub id: FighterId,
     pub hp: u32,

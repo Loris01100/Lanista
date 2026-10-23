@@ -28,6 +28,7 @@ use lanista_core::fighter::illness::IllnessLevel;
 use lanista_core::fighter::injury::{Injury, Severity, Side};
 use lanista_core::fighter::morale::Morale;
 use lanista_core::fighter::retirement::too_maimed;
+use lanista_core::journal::FightLine;
 use lanista_core::market::Target;
 use lanista_core::rivals::RivalId;
 use lanista_core::state::{Decisions, GameState, next_week};
@@ -103,6 +104,8 @@ struct FightReport {
     fighter: usize,
     colosseum: ColosseumId,
     fight: FightSummary,
+    /// The fight as the journal tells it.
+    line: FightLine,
     /// Entry fee, receipts and prize.
     money: i64,
     /// Form before and after the week.
@@ -180,7 +183,7 @@ impl ClubScreen {
         saves: Option<PathBuf>,
         bindings: Bindings<Action>,
     ) -> Self {
-        Self {
+        let mut screen = Self {
             decisions: state.suggested_decisions(&data),
             histories: vec![Vec::new(); state.fighters.len()],
             shown_continent: state.continent,
@@ -199,13 +202,117 @@ impl ClubScreen {
             confirm: None,
             offer_draft: None,
             bindings,
+        };
+        screen.read_journal();
+        screen
+    }
+
+    /// Each fighter's weeks, the last week and its fights, as the game's journal
+    /// keeps them: after a week, and when a game is loaded.
+    fn read_journal(&mut self) {
+        let data = &self.data;
+        let journal = &self.state.journal;
+        let fighters = &self.state.fighters;
+        let dominant = |i: usize| fighters.get(i).map_or(Side::Right, |f| f.dominant_hand);
+        self.histories = (0..fighters.len().max(journal.fighters.len()))
+            .map(|i| {
+                let weeks = journal.fighters.get(i).into_iter().flatten();
+                weeks
+                    .map(|w| (w.week, week_lines(w, dominant(i), data)))
+                    .collect()
+            })
+            .collect();
+        self.fights.clear();
+        let Some(played) = &journal.last else {
+            self.last_week = None;
+            return;
+        };
+        let summary = &played.summary;
+        let mut overview = vec![money_line(played.money.0, played.money.1, &summary.ledger)];
+        if let Some(wealth) = summary.wealth {
+            overview.push(tr!("club-becomes", wealth = wealth_name(wealth)));
         }
+        overview.extend(summary.staff.iter().map(|&m| staff_news_text(m)));
+        overview.extend(
+            summary
+                .market
+                .iter()
+                .map(|&news| market_news_text(news, &self.state, data)),
+        );
+        for (i, report) in summary.reports.iter().enumerate() {
+            let (Some(report), Some(fighter)) = (report, fighters.get(i)) else {
+                continue;
+            };
+            let entry = journal.fighters.get(i).and_then(|weeks| weeks.first());
+            let Some(entry) = entry.filter(|e| e.week == played.week) else {
+                continue;
+            };
+            let mut line = tr!(
+                "labelled",
+                label = fighter_name(i, fighter, data),
+                text = activity_name(entry.activity, data)
+            );
+            if let Some(fight) = &entry.fight {
+                line = format!("{line}, {}", fight_text(fight, data));
+            }
+            overview.push(line);
+            if let (
+                Some(fight),
+                Some(line),
+                Activity::Fight(colosseum)
+                | Activity::TitleFight(colosseum)
+                | Activity::Challenge(colosseum, _)
+                | Activity::Melee(colosseum),
+            ) = (&report.fight, &entry.fight, report.plan.activity)
+            {
+                let money = summary
+                    .ledger
+                    .iter()
+                    .filter(|t| t.fighter == Some(i))
+                    .filter(|t| {
+                        matches!(
+                            t.flow,
+                            Flow::EntryFee | Flow::Receipts | Flow::WinPrize | Flow::ChampionBonus
+                        )
+                    })
+                    .map(|t| t.amount)
+                    .sum();
+                self.fights.push(FightReport {
+                    fighter: i,
+                    colosseum,
+                    fight: fight.clone(),
+                    line: line.clone(),
+                    money,
+                    form: entry.form,
+                    injury: report.new_injury,
+                });
+            }
+        }
+        overview.extend(
+            summary
+                .titles
+                .iter()
+                .map(|&(c, news)| title_news_text(c, news, &self.state, data)),
+        );
+        let refusal = &data.world.challenges;
+        overview.extend(summary.refusals.iter().map(|&ch| {
+            let challenger = challenger_text(ch, &self.state, data);
+            tr!(
+                "challenge-refused",
+                fighter = fighters
+                    .get(ch.fighter)
+                    .map_or_else(|| "?".into(), |f| fighter_name(ch.fighter, f, data)),
+                vowel = vowel(&challenger),
+                challenger = challenger,
+                fame = refusal.refusal_fame,
+                elo = refusal.refusal_elo
+            )
+        }));
+        self.last_week = Some((played.week, overview));
     }
 
     /// Plays on from `state`, a loaded or new game, which the autosave now holds:
     /// the next launch resumes it, not the game it replaced.
-    // ponytail: the week log and fight summaries are not saved, so they start
-    // empty; save them once the game keeps a history in `GameState`.
     fn replace(&mut self, state: GameState) {
         let saves = self.saves.take();
         *self = Self::new(Rc::clone(&self.data), state, saves, self.bindings.clone());
@@ -268,96 +375,12 @@ impl ClubScreen {
         }
     }
 
-    /// Plays the week with the current decisions and logs it; its fights are
-    /// queued to be watched, then summed up.
+    /// Plays the week with the current decisions; its fights are queued to be
+    /// watched, then summed up.
     fn next_week(&mut self) {
-        let before = self.state.fighters.clone();
-        let (week, money) = (self.state.week, self.state.money);
-        let summary = next_week(&mut self.state, &self.decisions, &self.data);
-        let data = &self.data;
-        self.histories
-            .resize_with(self.state.fighters.len(), Vec::new);
-        let mut overview = vec![money_line(money, self.state.money, &summary.ledger)];
-        if let Some(wealth) = summary.wealth {
-            overview.push(tr!("club-becomes", wealth = wealth_name(wealth)));
-        }
-        overview.extend(summary.staff.iter().map(|&m| staff_news_text(m)));
-        overview.extend(
-            summary
-                .market
-                .iter()
-                .map(|&news| market_news_text(news, &self.state, data)),
-        );
-        self.fights.clear();
-        for (i, report) in summary.reports.into_iter().enumerate() {
-            let Some(report) = report else { continue };
-            let after = &self.state.fighters[i];
-            // A free agent signed this week was not there before it.
-            let before = before.get(i).unwrap_or(after);
-            let lines = week_lines(before, after, &report, data);
-            let mut line = tr!(
-                "labelled",
-                label = fighter_name(i, after, data),
-                text = lines[0].as_str()
-            );
-            if let Some(fight) = &report.fight {
-                line = format!("{line}, {}", fight_text(fight, data));
-            }
-            overview.push(line);
-            self.histories[i].insert(0, (week, lines));
-            if let (
-                Some(fight),
-                Activity::Fight(colosseum)
-                | Activity::TitleFight(colosseum)
-                | Activity::Challenge(colosseum, _)
-                | Activity::Melee(colosseum),
-            ) = (report.fight, report.plan.activity)
-            {
-                let money = summary
-                    .ledger
-                    .iter()
-                    .filter(|t| t.fighter == Some(i))
-                    .filter(|t| {
-                        matches!(
-                            t.flow,
-                            Flow::EntryFee | Flow::Receipts | Flow::WinPrize | Flow::ChampionBonus
-                        )
-                    })
-                    .map(|t| t.amount)
-                    .sum();
-                self.fights.push(FightReport {
-                    fighter: i,
-                    colosseum,
-                    fight,
-                    money,
-                    form: (before.form.value(), after.form.value()),
-                    injury: report.new_injury,
-                });
-            }
-        }
-        overview.extend(
-            summary
-                .titles
-                .iter()
-                .map(|&(c, news)| title_news_text(c, news, &self.state, data)),
-        );
-        let refusal = &data.world.challenges;
-        overview.extend(summary.refusals.iter().map(|&ch| {
-            let club = &self.state.fighters;
-            let challenger = challenger_text(ch, &self.state, data);
-            tr!(
-                "challenge-refused",
-                fighter = club
-                    .get(ch.fighter)
-                    .map_or_else(|| "?".into(), |f| fighter_name(ch.fighter, f, data)),
-                vowel = vowel(&challenger),
-                challenger = challenger,
-                fame = refusal.refusal_fame,
-                elo = refusal.refusal_elo
-            )
-        }));
-        self.last_week = Some((week, overview));
-        self.to_watch = to_watch(&self.fights, &self.state, data);
+        next_week(&mut self.state, &self.decisions, &self.data);
+        self.read_journal();
+        self.to_watch = to_watch(&self.fights, &self.state, &self.data);
         // Free agents are new each week: the one on screen may be gone or replaced. A
         // rival club's fighter sold or let go is followed.
         if matches!(self.view, View::Outside(Target::FreeAgent(_))) {
@@ -851,7 +874,7 @@ impl ClubScreen {
                     fighter = fighter_name(report.fighter, fighter, data),
                     place = colosseum_name(report.colosseum, data)
                 ));
-                ui.label(fight_text(fight, data));
+                ui.label(fight_text(&report.line, data));
                 ui.label(tr!(
                     "summary-duration",
                     seconds = fight.ticks / lanista_core::combat::TICKS_PER_SECOND,
@@ -1017,7 +1040,7 @@ fn to_watch(fights: &[FightReport], state: &GameState, data: &DesignData) -> Vec
             .iter()
             .filter(|f| f.fight.seed == fight.seed)
             .collect();
-        let names = (0..fight.start.fighters.len())
+        let names = (0..fight.setup.fighters.len())
             .map(|k| {
                 let id = FighterId(u32::try_from(k).unwrap_or(u32::MAX));
                 if let Some(club) = mine.iter().find(|f| f.fight.me == id) {
@@ -1027,12 +1050,10 @@ fn to_watch(fights: &[FightReport], state: &GameState, data: &DesignData) -> Vec
                         .get(i)
                         .map_or_else(|| "?".into(), |f| fighter_name(i, f, data));
                 }
-                // The opponents skip the fighter whose summary this is.
-                let me = usize::try_from(fight.me.0).unwrap_or(0);
-                let other = if k < me { k } else { k - 1 };
                 fight
-                    .opponents
-                    .get(other)
+                    .setup
+                    .fighters
+                    .get(k)
                     .map_or_else(|| "?".into(), |o| class_name(o, data))
             })
             .collect();
@@ -1042,7 +1063,7 @@ fn to_watch(fights: &[FightReport], state: &GameState, data: &DesignData) -> Vec
             .map(|(id, _)| FighterId(id))
             .collect();
         watched.push(Watched {
-            arena: fight.start.clone(),
+            arena: fight.start(data),
             cast: Cast {
                 names,
                 club: mine.iter().map(|f| f.fight.me).collect(),
@@ -1381,7 +1402,7 @@ mod tests {
         let melee = &report.fight;
         assert!(melee.is_melee());
         assert_eq!(fight.tick, 0);
-        assert_eq!(fight.fighters.len(), melee.opponents.len() + 1);
+        assert_eq!(fight.fighters.len(), melee.setup.fighters.len());
         let survived = melee.survived_fatal_blow.iter().filter(|&&s| s).count();
         assert_eq!(survivors.len(), survived);
         let me = usize::try_from(melee.me.0).unwrap();
@@ -1764,6 +1785,15 @@ mod tests {
             screen.next_week();
         }
         let mut reloaded = open();
+        // The journal comes back with the game: each fighter's weeks, the last week, and
+        // its fights to watch again.
+        assert_ne!(reloaded.histories[0], []);
+        assert_eq!(reloaded.histories, screen.histories);
+        assert_eq!(reloaded.last_week, screen.last_week);
+        assert_eq!(reloaded.fights, screen.fights);
+        let again = to_watch(&reloaded.fights, &reloaded.state, &data);
+        assert_ne!(again, []);
+        assert_eq!(again, to_watch(&screen.fights, &screen.state, &data));
         for _ in half..u64::from(data.calendar.season_weeks()) {
             screen.next_week();
             reloaded.next_week();
