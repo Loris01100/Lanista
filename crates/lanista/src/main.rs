@@ -46,6 +46,10 @@ fn window() -> Conf {
 
 #[macroquad::main(window)]
 async fn main() {
+    let folder = saves::folder();
+    if let Some(folder) = folder.clone() {
+        saves::log_panics(folder);
+    }
     // `assets/` and `data/` are read from the working directory: the workspace root
     // with `cargo run`, else the executable's folder, wherever it was launched from.
     if !std::path::Path::new("assets").is_dir()
@@ -81,7 +85,6 @@ async fn main() {
         (Action::Skip, Button::Key(KeyCode::Enter)),
         (Action::NextWeek, Button::Key(KeyCode::Space)),
     ]);
-    let folder = saves::folder();
     let mut audio = Audio::default();
     let display = folder
         .as_deref()

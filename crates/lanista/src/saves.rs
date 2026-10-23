@@ -18,10 +18,36 @@ const LANGUAGE: &str = "language.txt";
 /// The player's settings, one `key = value` per line: the music and effects volumes,
 /// full screen and the interface's size.
 const SETTINGS: &str = "settings.txt";
+/// Every panic, with its backtrace, for a player to send when the game crashes.
+const CRASH: &str = "crash.txt";
 
 /// The folder of save files, if the platform has one.
 pub fn folder() -> Option<PathBuf> {
     directories::ProjectDirs::from("", "", "Lanista").map(|d| d.data_dir().to_path_buf())
+}
+
+/// Also appends each panic to `crash.txt` in `folder`, after the usual message on stderr.
+pub fn log_panics(folder: PathBuf) {
+    let default = std::panic::take_hook();
+    std::panic::set_hook(Box::new(move |info| {
+        default(info);
+        let seconds = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map_or(0, |d| d.as_secs());
+        let text = format!(
+            "Lanista {}, {seconds} s after 1970: {info}
+{}
+",
+            env!("CARGO_PKG_VERSION"),
+            std::backtrace::Backtrace::force_capture()
+        );
+        let _ = std::fs::create_dir_all(&folder);
+        let _ = std::fs::OpenOptions::new()
+            .create(true)
+            .append(true)
+            .open(folder.join(CRASH))
+            .and_then(|mut file| std::io::Write::write_all(&mut file, text.as_bytes()));
+    }));
 }
 
 /// Writes `state` to `file` in `folder`, whole or not at all: a crash while
