@@ -46,8 +46,16 @@ fn window() -> Conf {
 
 #[macroquad::main(window)]
 async fn main() {
-    // ponytail: relative to the working directory (the workspace root with
-    // `cargo run`); resolve next to the executable when packaging for Steam.
+    // `assets/` and `data/` are read from the working directory: the workspace root
+    // with `cargo run`, else the executable's folder, wherever it was launched from.
+    if !std::path::Path::new("assets").is_dir()
+        && let Some(folder) = std::env::current_exe()
+            .ok()
+            .as_deref()
+            .and_then(std::path::Path::parent)
+    {
+        let _ = std::env::set_current_dir(folder);
+    }
     set_pc_assets_folder("assets");
     let data = Rc::new(DesignData::load().expect("load the design data"));
     let mut assets = Assets::default();

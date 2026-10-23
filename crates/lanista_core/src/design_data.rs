@@ -353,8 +353,6 @@ impl DesignData {
     ///
     /// # Errors
     /// If a file cannot be read, or [`DesignData::from_ron`] rejects it.
-    // ponytail: path of the source tree; resolve next to the executable when
-    // packaging for Steam.
     pub fn load() -> Result<Self, LoadError> {
         let read = |file: &'static str| {
             std::fs::read_to_string(Self::path(file))
@@ -374,9 +372,14 @@ impl DesignData {
         Ok(data)
     }
 
-    /// Where [`DesignData::load`] reads `file`, one of the `data/` files.
+    /// Where [`DesignData::load`] reads `file`, one of the `data/` files: in the
+    /// working directory (the game's folder, or the workspace root), else in the
+    /// source tree, for the tests run from their crate's folder.
     #[must_use]
     pub fn path(file: &str) -> String {
+        if std::path::Path::new(file).exists() {
+            return file.to_owned();
+        }
         format!("{}/../../{file}", env!("CARGO_MANIFEST_DIR"))
     }
 
