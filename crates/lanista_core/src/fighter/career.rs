@@ -92,10 +92,6 @@ pub struct CareerFighter {
     pub ease: Vec<u32>,
     /// In years.
     pub age: u32,
-    /// Weeks played since the last birthday; a year is a season of `data/calendar.ron`.
-    // ponytail: own count, in step with the calendar for fighters there from week 1;
-    // age everyone in the off-season once the market brings fighters mid-season.
-    pub weeks_this_year: u32,
     pub personality: Personality,
     pub morale: Morale,
     pub fame: Fame,
@@ -105,7 +101,8 @@ pub struct CareerFighter {
     pub status: Status,
     #[serde(default)]
     pub record: Record,
-    /// The record since the last birthday, worth stats at the next one.
+    /// The record since the last birthday, the start of the last off-season: worth
+    /// stats at the next one.
     #[serde(default)]
     pub season_record: Record,
     /// Weeks the player's club observed it: the more, the more of its stats are seen,
@@ -167,7 +164,6 @@ impl CareerFighter {
             loadout: 0,
             ease,
             age,
-            weeks_this_year: 0,
             personality,
             morale: Morale::neutral(),
             fame: Fame::default(),
@@ -223,7 +219,6 @@ impl CareerFighter {
             loadout: 0,
             ease: Vec::new(),
             age: 0,
-            weeks_this_year: 0,
             personality: Personality::neutral(),
             morale: Morale::neutral(),
             fame: Fame::default(),
@@ -312,8 +307,8 @@ impl CareerFighter {
     }
 
     /// Plays one week following `plan`; `None`, and nothing changes, if the fighter
-    /// is retired or dead. In order: care, the week's activity, then healing,
-    /// the illness draw and, once a year, ageing and the retirement decision.
+    /// is retired or dead. In order: care, the week's activity, then healing and
+    /// the illness draw; ageing is the off-season's ([`CareerFighter::birthday`]).
     /// A fight is against `opponent`, or a new random fighter without one, in the
     /// colosseum's arena (see [`WorldRules::arena`](crate::colosseum::WorldRules::arena)). The club's
     /// `staff` helps: training gains more and costs less form with the trainer's
@@ -396,7 +391,7 @@ impl CareerFighter {
     /// The end of a week of melee begun with [`CareerFighter::begin_melee_week`]: the
     /// melee as this fighter lived it (`fight`, with its new injury and whether its
     /// doctor spared it an after-effect) told in `report`, then, unless it died,
-    /// healing, the illness draw and the yearly birthday.
+    /// healing and the illness draw.
     pub fn end_melee_week<R: Rng + ?Sized>(
         &mut self,
         report: &mut WeekReport,
@@ -793,8 +788,8 @@ impl CareerFighter {
         (injury, spared)
     }
 
-    /// The end of a week whose fight was played as someone's opponent: healing, the
-    /// illness draw and the yearly birthday.
+    /// The end of a week whose fight was played as someone's opponent: healing and the
+    /// illness draw.
     pub fn end_fought_week<R: Rng + ?Sized>(&mut self, rng: &mut R, data: &DesignData) {
         if self.status == Status::Active {
             let plan = WeekPlan {
@@ -807,7 +802,7 @@ impl CareerFighter {
         }
     }
 
-    /// Healing, the illness draw for a healthy fighter, and the yearly birthday.
+    /// Healing and the illness draw for a healthy fighter.
     fn end_week<R: Rng + ?Sized>(
         &mut self,
         report: &mut WeekReport,
@@ -832,33 +827,30 @@ impl CareerFighter {
                 self.morale = self.morale.after(MoraleEvent::Illness, &rules.morale);
             }
         }
-        self.weeks_this_year += 1;
-        if self.weeks_this_year >= data.calendar.season_weeks() {
-            self.weeks_this_year = 0;
-            self.age += 1;
-            report.birthday = true;
-            let progression = &rules.progression;
-            report.season_gains = season_gains(self.season_record, &progression.season);
-            self.stats = season_progress(
-                rng,
-                self.stats,
-                self.potential,
-                report.season_gains,
-                progression,
-            );
-            self.season_record = Record::default();
-            self.stats = age_decline(self.stats, self.age, &rules.progression);
-            let permanent = self.permanent_injuries();
-            if decides_to_retire(
-                rng,
-                self.age,
-                &self.personality,
-                permanent,
-                &rules.retirement,
-            ) {
-                self.status = Status::Retired;
-            }
+    }
+
+    /// A year older, at the start of the off-season for everyone (`state::next_week`):
+    /// the year's record brings stats (returned), then the age's decline and the
+    /// decision to retire.
+    pub fn birthday<R: Rng + ?Sized>(&mut self, rng: &mut R, data: &DesignData) -> u32 {
+        let rules = &data.fighter;
+        self.age += 1;
+        let progression = &rules.progression;
+        let gains = season_gains(self.season_record, &progression.season);
+        self.stats = season_progress(rng, self.stats, self.potential, gains, progression);
+        self.season_record = Record::default();
+        self.stats = age_decline(self.stats, self.age, progression);
+        let permanent = self.permanent_injuries();
+        if decides_to_retire(
+            rng,
+            self.age,
+            &self.personality,
+            permanent,
+            &rules.retirement,
+        ) {
+            self.status = Status::Retired;
         }
+        gains
     }
 }
 
@@ -1232,7 +1224,6 @@ mod tests {
         )
         .unwrap();
         assert_eq!(f.form.value(), 60);
-        assert_eq!(f.weeks_this_year, 2);
     }
 
     #[test]
@@ -1440,54 +1431,24 @@ mod tests {
     }
 
     #[test]
-    fn a_year_ages_the_fighter() {
-        let data = data();
-        let mut rng = ChaCha8Rng::seed_from_u64(3);
-        let mut f = fighter(7);
-        let age = f.age;
-        let mut birthdays = 0;
-        for _ in 0..data.calendar.season_weeks() {
-            let report = f
-                .play_week(
-                    plan(Activity::Rest),
-                    None,
-                    StaffEffects::default(),
-                    &mut rng,
-                    &data,
-                )
-                .unwrap();
-            birthdays += u32::from(report.birthday);
-        }
-        assert_eq!((birthdays, f.age, f.weeks_this_year), (1, age + 1, 0));
-    }
-
-    #[test]
     fn a_good_season_brings_stats_at_the_birthday() {
         let data = data();
         let mut rng = ChaCha8Rng::seed_from_u64(3);
         let mut f = fighter(7);
         f.age = 25;
         f.potential = f.stats.map(|v| v * 2);
-        f.weeks_this_year = data.calendar.season_weeks() - 1;
+        let age = f.age;
         f.season_record = Record {
             wins: 8,
             losses: 2,
             draws: 0,
         };
         let before = f.stats;
-        let report = f
-            .play_week(
-                plan(Activity::Rest),
-                None,
-                StaffEffects::default(),
-                &mut rng,
-                &data,
-            )
-            .unwrap();
-        assert!(report.birthday);
-        assert!(report.season_gains > 0);
+        let gains = f.birthday(&mut rng, &data);
+        assert_eq!(f.age, age + 1);
+        assert!(gains > 0);
         let total = |s: Stats| s.to_array().iter().sum::<u32>();
-        assert!(total(f.stats) >= total(before) + report.season_gains);
+        assert!(total(f.stats) >= total(before) + gains);
         assert_eq!(f.season_record, Record::default());
     }
 

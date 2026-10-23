@@ -2277,7 +2277,6 @@ mod tests {
         // Too tired to fight that week, so that neither dies before the off-season.
         for j in [best, worst] {
             roster[j].age = market.release_age;
-            roster[j].weeks_this_year = 0;
             roster[j].form = crate::fighter::form::Form::new(10);
         }
         next_week(&mut state, &Decisions::default(), &data);
@@ -2292,6 +2291,44 @@ mod tests {
             .count();
         assert!(rookies >= 8, "{rookies} rookies");
         assert!(state.available_free_agents() <= usize::try_from(market.max_free_agents).unwrap());
+    }
+
+    #[test]
+    fn everyone_ages_at_the_start_of_the_off_season_whenever_they_arrived() {
+        let data = data();
+        let mut state = game(3, &data);
+        let calendar = &data.calendar;
+        let off_season = u64::from(calendar.competition_weeks + calendar.great_event_weeks + 1);
+        while state.week < off_season / 2 {
+            next_week(&mut state, &Decisions::default(), &data);
+        }
+        // A free agent arrived mid-season, a year away from its birthday by its own count.
+        let newcomer = state.free_agents.len();
+        let agent = crate::market::free_agent(&mut state.rng, &data);
+        state.free_agents.push(agent);
+        while state.week < off_season {
+            let summary = next_week(&mut state, &Decisions::default(), &data);
+            assert!(summary.reports.iter().flatten().all(|r| !r.birthday));
+        }
+        let before = state.clone();
+        let summary = next_week(&mut state, &Decisions::default(), &data);
+        let fighters = before.fighters.iter().zip(&state.fighters);
+        for ((was, is), report) in fighters.zip(&summary.reports) {
+            if was.status == Status::Active && is.status != Status::Dead {
+                assert_eq!(is.age, was.age + 1);
+                assert!(report.as_ref().is_some_and(|r| r.birthday));
+            }
+        }
+        let agent = &before.free_agents[newcomer];
+        let now = state
+            .free_agents
+            .iter()
+            .chain(state.rivals.iter().flat_map(|r| &r.fighters));
+        let same: Vec<_> = now
+            .filter(|f| f.potential == agent.potential && f.appearance == agent.appearance)
+            .collect();
+        assert_eq!(same.len(), 1);
+        assert_eq!(same[0].age, agent.age + 1);
     }
 
     /// The week of `state` that starts the off-season, played next.
@@ -2525,7 +2562,6 @@ mod tests {
             roster[j].stats = roster[j].stats.map(|_| 1);
             roster[j].form = crate::fighter::form::Form::new(10);
             roster[j].age = 22;
-            roster[j].weeks_this_year = 0;
             weak.push(j);
         }
         next_week(&mut state, &Decisions::default(), &data);

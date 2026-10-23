@@ -12,7 +12,7 @@ use crate::relations::Reason;
 use crate::staff::{StaffMove, StaffNews};
 use serde::{Deserialize, Serialize};
 
-use super::clubs::{club_lives, rival_staff, staff_week, wealth_changes};
+use super::clubs::{club_lives, off_season_starts, rival_staff, staff_week, wealth_changes};
 use super::colosseums::{end_colosseum_weeks, receive_challenges, refusals, title_fight};
 use super::melee::melees;
 use super::outsiders::{met, opponent, outsider_weeks, pay_rival};
@@ -58,7 +58,8 @@ pub struct WeekSummary {
 /// Plays one week for the whole club: the market moves and the change of staff before
 /// the week, the staff's salaries, then each fighter's week in
 /// club order, paid for, then the week of the rival clubs and the free agents, the
-/// answer to the player's offer, each club's new wealth at the start of the off-season
+/// answer to the player's offer, everyone a year older at the start of the off-season,
+/// each club's new wealth at the start of the off-season
 /// and the rival clubs' market, then the colosseums' titles, and moves to the next
 /// week. A fight is against an outsider, a rival fighter or a free agent, and
 /// moves both Elo; a title fight is the only way a title changes hands, and the
@@ -148,6 +149,7 @@ pub fn next_week(state: &mut GameState, decisions: &Decisions, data: &DesignData
     let refusals = refusals(state, &reports, data);
     outsider_weeks(state, plans, &fought, data);
     market.extend(answer_offer(state, &decisions.moves, data, &mut ledger));
+    birthdays(state, &mut reports, data);
     let wealth = end_week(state, &mut titles, data);
     let summary = WeekSummary {
         reports,
@@ -275,6 +277,31 @@ fn settle_week(
         };
         if let Some(why) = why {
             relate(state, id.club, why, data);
+        }
+    }
+}
+
+/// At the start of the off-season, every fighter in activity, the club's, the rival
+/// clubs' and the free agents, is a year older (`CareerFighter::birthday`), whenever
+/// it arrived: the club's fighters' `reports` tell it.
+fn birthdays(state: &mut GameState, reports: &mut [Option<WeekReport>], data: &DesignData) {
+    if !off_season_starts(state, data) {
+        return;
+    }
+    let rng = &mut state.rng;
+    for (i, fighter) in state.fighters.iter_mut().enumerate() {
+        if fighter.status == Status::Active {
+            let gains = fighter.birthday(rng, data);
+            if let Some(Some(report)) = reports.get_mut(i) {
+                report.birthday = true;
+                report.season_gains = gains;
+            }
+        }
+    }
+    let others = state.rivals.iter_mut().flat_map(|r| &mut r.fighters);
+    for fighter in others.chain(&mut state.free_agents) {
+        if fighter.status == Status::Active {
+            fighter.birthday(rng, data);
         }
     }
 }
