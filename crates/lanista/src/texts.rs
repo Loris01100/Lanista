@@ -762,7 +762,11 @@ pub fn arena_effect(arena: ArenaKind) -> String {
 /// How a colosseum's ranking names `contender`; the club's fighters are marked.
 pub fn contender_name(contender: Contender, state: &GameState, data: &DesignData) -> String {
     match contender {
-        Contender::Club(i) => tr!("contender-yours", fighter = club_fighter(i, state, data)),
+        Contender::Club(i) => tr!(
+            "contender-yours",
+            fighter = club_fighter(i, state, data),
+            club = named_club(&state.name)
+        ),
         Contender::Rival(id) => rival_fighter_name(id, state, data),
         Contender::FreeAgent(a) => target_name(Target::FreeAgent(a), state, data),
     }

@@ -55,7 +55,7 @@ pub(super) fn club_lives(state: &mut GameState, data: &DesignData) {
     let room = usize::try_from(rules.max).map_or(0, |max| max.saturating_sub(open));
     let founded = closed.max(usize::try_from(rules.founded).unwrap_or(0));
     for _ in 0..founded.min(room) {
-        let club = rivals::random_club(&mut state.rng, &state.rivals, data);
+        let club = rivals::random_club(&mut state.rng, (&state.rivals, &state.name), data);
         state.rivals.push(club);
         let club = state.rivals.len() - 1;
         state.fill_roster(club, data);

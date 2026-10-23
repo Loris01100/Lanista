@@ -19,7 +19,7 @@ free-agent-name = { $name } ({ $class }, free agent)
 free-agent-unnamed = Free agent n° { $number } ({ $class })
 rival-fighter-name = { $name } ({ $class }, { $club })
 rival-fighter-unnamed = { $class } n° { $number } ({ $club })
-contender-yours = { $fighter } (votre club)
+contender-yours = { $fighter } ({ $club })
 
 condition-dead = mort
 condition-retired = retraité
@@ -319,7 +319,7 @@ save-unreadable = Sauvegarde illisible : { $error }
 save-slot = Emplacement { $slot } : { $game }
 save-slot-empty = vide
 save-slot-unreadable = illisible
-save-slot-game = { $date }, club { $wealth } en { $continent }
+save-slot-game = { $club }, { $date }, club { $wealth } en { $continent }
 
 club-becomes = Le club devient { $wealth }
 challenge-refused = { $fighter } refuse le défi { club-de }{ $challenger } sans combattre : renommée -{ $fame }, Elo -{ $elo }
@@ -340,7 +340,7 @@ view-staff = Personnel
 standard-duel = Duel standard
 
 menu-title = Menu général
-menu-club = { $wealth }, en { $continent }
+menu-club = { $club } : { $wealth }, en { $continent }
 menu-alerts = Alertes
 menu-active = { $active } / { $max } combattants en activité
 menu-next-week = Semaine suivante (Espace)
@@ -350,8 +350,9 @@ menu-save = Sauvegarder
 menu-load = Charger
 menu-new-game = Nouvelle partie :
 menu-new-club = club { $wealth }
-menu-new-game-started = Nouvelle partie, club { $wealth } en { $continent }, graine { $seed }
-confirm-new-game = Commencer une nouvelle partie avec un club { $wealth } en { $continent } ? La partie en cours sera perdue si elle n'est pas sauvegardée.
+menu-draw-name = Tirer un nom
+menu-new-game-started = Nouvelle partie, { $club }, club { $wealth } en { $continent }, graine { $seed }
+confirm-new-game = Commencer une nouvelle partie avec { $club }, club { $wealth } en { $continent } ? La partie en cours sera perdue si elle n'est pas sauvegardée.
 confirm-load = Charger l'emplacement { $slot } ({ $game }) ? La partie en cours sera perdue si elle n'est pas sauvegardée.
 confirm-overwrite = Écraser l'emplacement { $slot } ({ $game }) ?
 menu-language = Langue :
@@ -444,7 +445,7 @@ prestige-t2 = T2
 
 rival-closed = Fermé, ruiné : { $date }
 rival-description = Club { $profile } et { $wealth }, { $culture }, en { $continent }, { $fighters } combattants en activité (au plus { $max })
-rival-relation = Relation avec votre club : { $relation }
+rival-relation = Relation avec { $club } : { $relation }
 rival-history = Ce qui s'est passé entre vous
 rival-gone = { $gone } anciens combattants : retraités, morts, vendus ou libérés
 
@@ -477,7 +478,6 @@ reign = { $club }, de { $from } à { $until }, { $defenses ->
        *[current] {""}
     }
 reign-for = pour { $club }
-reign-yours = pour votre club
 reign-no-club = sans club
 reign-now = aujourd'hui
 

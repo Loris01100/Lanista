@@ -200,6 +200,7 @@ impl ClubScreen {
         }
         ui.strong(tr!(
             "rival-relation",
+            club = named_club(&state.name),
             relation = relation_text(club, state, data)
         ));
         let lines = self.relation_lines(club);
@@ -361,7 +362,7 @@ fn colosseum_column(
 /// "pour Ludus Magnus, de saison 1, semaine 3 à saison 2, semaine 7, 2 défenses, battu".
 pub(super) fn reign_text(reign: &Reign, state: &GameState, data: &DesignData) -> String {
     let club = match reign.won_as {
-        Contender::Club(_) => tr!("reign-yours"),
+        Contender::Club(_) => tr!("reign-for", club = named_club(&state.name)),
         Contender::Rival(id) => tr!("reign-for", club = club_name(id.club, state)),
         Contender::FreeAgent(_) => tr!("reign-no-club"),
     };

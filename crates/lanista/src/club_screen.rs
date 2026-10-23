@@ -30,9 +30,12 @@ use lanista_core::fighter::morale::Morale;
 use lanista_core::fighter::retirement::too_maimed;
 use lanista_core::journal::FightLine;
 use lanista_core::market::Target;
-use lanista_core::rivals::RivalId;
+use lanista_core::names::{self, ClubName};
+use lanista_core::rivals::{self, RivalId};
 use lanista_core::state::{Decisions, GameState, next_week};
 use macroquad::prelude::*;
+use rand_chacha::ChaCha8Rng;
+use rand_chacha::rand_core::SeedableRng;
 use reesch::{Assets, Audio, Bindings, Screen, Transition, egui};
 
 use crate::Action;
@@ -42,11 +45,11 @@ use crate::lang::{self, tr};
 use crate::saves;
 use crate::texts::{
     activity_name, challenger_text, change, class_name, club_name, colosseum_name,
-    colosseum_rules_name, condition_text, contender_name, continent_name, date_in_sentence,
-    date_text, ease_text, fight_text, fighter_name, illness_text, injury_text, loadout_name,
-    market_news_text, money_line, move_text, origin_text, personality_text, priced,
-    rival_fighter_name, staff_move_text, staff_news_text, stat_names, title_news_text, vowel,
-    wealth_name, wealth_text, week_lines, world_news_text,
+    colosseum_rules_name, condition_text, contender_name, continent_name, culture_name,
+    date_in_sentence, date_text, ease_text, fight_text, fighter_name, illness_text, injury_text,
+    loadout_name, market_news_text, money_line, move_text, named_club, origin_text,
+    personality_text, priced, rival_fighter_name, staff_move_text, staff_news_text, stat_names,
+    title_news_text, vowel, wealth_name, wealth_text, week_lines, world_news_text,
 };
 
 /// Seed of the standard duel offered from the club.
@@ -78,11 +81,11 @@ enum View {
 }
 
 /// What a save slot holds, as the menu shows it.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 enum Slot {
     Empty,
-    /// A game at this week, of a club of this wealth on this continent.
-    Game(u64, Wealth, Continent),
+    /// A game at this week, of a club of this name and wealth on this continent.
+    Game(u64, ClubName, Wealth, Continent),
     Unreadable,
 }
 
@@ -146,6 +149,9 @@ pub struct ClubScreen {
     shown_prestige: Option<u32>,
     /// Where a new game starts.
     new_continent: Continent,
+    /// The new game's club: the key of its culture, one of `new_continent`'s, and its
+    /// name, as the player chose or drew them.
+    new_club: (String, ClubName),
     bindings: Bindings<Action>,
 }
 
@@ -189,6 +195,7 @@ impl ClubScreen {
             shown_continent: state.continent,
             shown_prestige: None,
             new_continent: state.continent,
+            new_club: (state.culture.clone(), state.name.clone()),
             slots: read_slots(saves.as_deref(), &data),
             data,
             state,
@@ -364,9 +371,13 @@ impl ClubScreen {
             Confirm::Load(slot) => self.load(slot),
             Confirm::NewGame(wealth, continent) => {
                 let seed = new_seed();
-                self.replace(GameState::start(seed, (wealth, continent), &self.data));
+                let club = self.new_club.clone();
+                let state = GameState::start(seed, (wealth, continent), Some(club), &self.data);
+                let club = named_club(&state.name);
+                self.replace(state);
                 self.message = Some(tr!(
                     "menu-new-game-started",
+                    club = club,
                     wealth = wealth_name(wealth),
                     continent = continent_name(continent),
                     seed = seed.to_string()
@@ -409,6 +420,8 @@ impl ClubScreen {
         };
         let mut transition = None;
         ui.horizontal(|ui| {
+            ui.strong(named_club(&self.state.name));
+            ui.separator();
             ui.strong(tr!(
                 "top-date",
                 season = date.season,
@@ -445,6 +458,7 @@ impl ClubScreen {
         ui.heading(tr!("menu-title"));
         ui.label(tr!(
             "menu-club",
+            club = named_club(&self.state.name),
             wealth = wealth_text(self.state.wealth),
             continent = continent_name(self.state.continent)
         ));
@@ -531,7 +545,7 @@ impl ClubScreen {
             return;
         }
         let mut chosen = None;
-        for (i, &slot) in self.slots.iter().enumerate() {
+        for (i, slot) in self.slots.iter().enumerate() {
             ui.horizontal(|ui| {
                 ui.label(tr!("save-slot", slot = i + 1, game = self.slot_text(slot)));
                 if ui.button(tr!("menu-save")).clicked() {
@@ -548,6 +562,7 @@ impl ClubScreen {
         }
         ui.horizontal(|ui| {
             ui.label(tr!("menu-new-game"));
+            let continent = self.new_continent;
             egui::ComboBox::from_id_salt("new continent")
                 .selected_text(continent_name(self.new_continent))
                 .show_ui(ui, |ui| {
@@ -559,11 +574,17 @@ impl ClubScreen {
                         );
                     }
                 });
+            if self.new_continent != continent {
+                self.draw_new_club(None);
+            }
+            self.new_club_name(ui);
+        });
+        ui.horizontal(|ui| {
+            // A club needs a name.
+            let named = !self.new_club.1.name.trim().is_empty();
             for wealth in Wealth::ALL {
-                if ui
-                    .button(tr!("menu-new-club", wealth = wealth_name(wealth)))
-                    .clicked()
-                {
+                let button = egui::Button::new(tr!("menu-new-club", wealth = wealth_name(wealth)));
+                if ui.add_enabled(named, button).clicked() {
                     chosen = Some(Confirm::NewGame(wealth, self.new_continent));
                 }
             }
@@ -573,14 +594,68 @@ impl ClubScreen {
         }
     }
 
-    fn slot_text(&self, slot: Slot) -> String {
+    /// The culture, pattern and name of the new game's club, and « Tirer » to draw
+    /// another name in its culture.
+    fn new_club_name(&mut self, ui: &mut egui::Ui) {
+        let data = Rc::clone(&self.data);
+        let continent = self.new_continent;
+        let (culture, name) = &mut self.new_club;
+        let before = culture.clone();
+        egui::ComboBox::from_id_salt("new culture")
+            .selected_text(culture_name(culture))
+            .show_ui(ui, |ui| {
+                for c in data.cultures.iter().filter(|c| c.continent == continent) {
+                    ui.selectable_value(culture, c.key.clone(), culture_name(&c.key));
+                }
+            });
+        if *culture != before {
+            let culture = culture.clone();
+            self.draw_new_club(Some(&culture));
+            return;
+        }
+        let patterns = data.culture(culture).map_or(&[][..], |c| &c.clubs[..]);
+        egui::ComboBox::from_id_salt("new pattern")
+            .selected_text(named_club(name))
+            .show_ui(ui, |ui| {
+                for pattern in patterns {
+                    let shown = ClubName {
+                        pattern: pattern.clone(),
+                        ..name.clone()
+                    };
+                    ui.selectable_value(&mut name.pattern, pattern.clone(), named_club(&shown));
+                }
+            });
+        ui.add(egui::TextEdit::singleline(&mut name.name).desired_width(120.0));
+        if ui.button(tr!("menu-draw-name")).clicked() {
+            let culture = culture.clone();
+            self.draw_new_club(Some(&culture));
+        }
+    }
+
+    /// Draws the new game's club a name in `culture`, or in a culture drawn on its
+    /// continent.
+    fn draw_new_club(&mut self, culture: Option<&str>) {
+        let mut rng = ChaCha8Rng::seed_from_u64(new_seed());
+        let key = match culture {
+            Some(key) => Some(key.to_owned()),
+            None => rivals::culture_on(&mut rng, Some(self.new_continent), &self.data),
+        };
+        let Some(culture) = key.as_deref().and_then(|key| self.data.culture(key)) else {
+            return;
+        };
+        let name = names::club_name(&mut rng, culture, &[]);
+        self.new_club = (culture.key.clone(), name);
+    }
+
+    fn slot_text(&self, slot: &Slot) -> String {
         match slot {
             Slot::Empty => tr!("save-slot-empty"),
-            Slot::Game(week, wealth, continent) => tr!(
+            Slot::Game(week, club, wealth, continent) => tr!(
                 "save-slot-game",
-                date = date_text(week, &self.data),
-                wealth = wealth_name(wealth),
-                continent = continent_name(continent)
+                club = named_club(club),
+                date = date_text(*week, &self.data),
+                wealth = wealth_name(*wealth),
+                continent = continent_name(*continent)
             ),
             Slot::Unreadable => tr!("save-slot-unreadable"),
         }
@@ -592,15 +667,16 @@ impl ClubScreen {
             Confirm::Save(slot) => tr!(
                 "confirm-overwrite",
                 slot = slot + 1,
-                game = self.slot_text(self.slots[slot])
+                game = self.slot_text(&self.slots[slot])
             ),
             Confirm::Load(slot) => tr!(
                 "confirm-load",
                 slot = slot + 1,
-                game = self.slot_text(self.slots[slot])
+                game = self.slot_text(&self.slots[slot])
             ),
             Confirm::NewGame(wealth, continent) => tr!(
                 "confirm-new-game",
+                club = named_club(&self.new_club.1),
                 wealth = wealth_name(wealth),
                 continent = continent_name(continent)
             ),
@@ -1078,16 +1154,17 @@ fn to_watch(fights: &[FightReport], state: &GameState, data: &DesignData) -> Vec
 fn read_slots(folder: Option<&std::path::Path>, data: &DesignData) -> [Slot; saves::SLOTS.len()] {
     saves::SLOTS.map(|file| match folder.map(|f| saves::read(f, file, data)) {
         None | Some(Ok(None)) => Slot::Empty,
-        Some(Ok(Some(state))) => Slot::Game(state.week, state.wealth, state.continent),
+        Some(Ok(Some(state))) => Slot::Game(state.week, state.name, state.wealth, state.continent),
         Some(Err(_)) => Slot::Unreadable,
     })
 }
 
-/// A seed for a new game: the game, unlike `lanista_core`, may read the clock.
+/// A seed for a new game or a drawn name: the game, unlike `lanista_core`, may read
+/// the clock.
 fn new_seed() -> u64 {
     std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
-        .map_or(0, |d| d.as_secs())
+        .map_or(0, |d| d.as_secs() ^ u64::from(d.subsec_nanos()))
 }
 
 /// A fighter's week, in one line: rest, training, a fight at home or, in a list, abroad,
@@ -1367,6 +1444,38 @@ mod tests {
             next_week(&mut state, &Decisions::default(), &data);
         }
         state
+    }
+
+    #[test]
+    fn a_new_club_bears_the_name_chosen_or_drawn_in_a_culture_of_its_continent() {
+        let mut screen = screen(7);
+        // The game's club, named as it opened, offered again for the next one.
+        assert_eq!(screen.new_club.1, screen.state.name);
+        assert!(
+            screen
+                .state
+                .rivals
+                .iter()
+                .all(|r| r.name != screen.state.name)
+        );
+        // Another continent draws a culture of it and a name of that culture.
+        screen.new_continent = Continent::Africa;
+        screen.draw_new_club(None);
+        let culture = screen.data.culture(&screen.new_club.0).unwrap();
+        assert_eq!(culture.continent, Continent::Africa);
+        assert!(culture.names.contains(&screen.new_club.1.name));
+        // The player writes its own name.
+        screen.new_club.1.name = "Spartacus".into();
+        let chosen = screen.new_club.clone();
+        screen.carry_out(Confirm::NewGame(Wealth::Rich, Continent::Africa));
+        assert_eq!(
+            (screen.state.culture.clone(), screen.state.name.clone()),
+            chosen
+        );
+        assert_eq!(screen.state.continent, Continent::Africa);
+        let club = named_club(&chosen.1);
+        assert!(club.contains("Spartacus"), "{club}");
+        assert!(screen.message.as_ref().unwrap().contains(&club));
     }
 
     #[test]
@@ -1745,7 +1854,12 @@ mod tests {
             screen.slots,
             [
                 Slot::Empty,
-                Slot::Game(saved.week, saved.wealth, saved.continent),
+                Slot::Game(
+                    saved.week,
+                    saved.name.clone(),
+                    saved.wealth,
+                    saved.continent
+                ),
                 Slot::Empty
             ]
         );

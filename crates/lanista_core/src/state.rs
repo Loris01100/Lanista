@@ -21,7 +21,7 @@ use crate::fighter::fame::{Fame, FightResult};
 use crate::fighter::percent_of;
 use crate::journal::Journal;
 use crate::market::{self, Move, SaleOffer, Target, value};
-use crate::names::{self, FighterName};
+use crate::names::{self, ClubName, FighterName};
 use crate::relations::{Reason, Relation, Standing, StandingRules};
 use crate::rivals::{self, Rival, RivalId, Venue};
 use crate::staff::{
@@ -49,6 +49,14 @@ const REST: WeekPlan = WeekPlan {
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct GameState {
+    /// The player's club's name, chosen or drawn at the start; no rival club takes it.
+    /// Empty in a save from before the club had one, until it is loaded
+    /// (`GameState::open_world`).
+    #[serde(default)]
+    pub name: ClubName,
+    /// The key of the culture its name is of, in `data/names.ron`.
+    #[serde(default)]
+    pub culture: String,
     /// Number of the next week to play, from 1.
     pub week: u64,
     /// The club's money; below 0 when upkeep ran it into debt.
@@ -104,18 +112,28 @@ impl GameState {
     /// A new game from `seed` with a modest club in Europe (see `start`).
     #[must_use]
     pub fn new(seed: u64, data: &DesignData) -> Self {
-        Self::start(seed, (Wealth::Modest, Continent::Europe), data)
+        Self::start(seed, (Wealth::Modest, Continent::Europe), None, data)
     }
 
     /// A new game from `seed`: a club of `wealth` at home on `continent` with one
     /// generated fighter, the same one `CareerFighter::random` draws first from that
     /// seed, its wealth's starting money, the rival clubs with their fighters, the
-    /// colosseums and the free agents.
+    /// colosseums and the free agents. The club bears `name`, its culture's key and
+    /// its name as the player chose them, or else one drawn in a culture of its
+    /// continent once the rival clubs have theirs.
     #[must_use]
-    pub fn start(seed: u64, (wealth, continent): (Wealth, Continent), data: &DesignData) -> Self {
+    pub fn start(
+        seed: u64,
+        (wealth, continent): (Wealth, Continent),
+        name: Option<(String, ClubName)>,
+        data: &DesignData,
+    ) -> Self {
         let mut rng = ChaCha8Rng::seed_from_u64(seed);
         let fighters = vec![CareerFighter::random(&mut rng, data)];
+        let (culture, name) = name.unwrap_or_default();
         let mut state = Self {
+            name,
+            culture,
             week: 1,
             money: i64::from(data.economy.wealth.get(wealth).starting_money),
             wealth,
@@ -148,12 +166,13 @@ impl GameState {
     /// ranked there; then each new club gets
     /// generated fighters up to `roster.wanted`, ranked nowhere yet. Then brings the free agents up
     /// to their fewest, and the staff candidates up to `StaffMarketRules::candidates`
-    /// for each post. Last, names the fighters in activity who have none.
+    /// for each post. Last, names the fighters in activity who have none, and the
+    /// player's club if it has none (`name_the_club`).
     pub fn open_world(&mut self, data: &DesignData) {
         let drawn = self.rivals.len();
         let count = usize::try_from(data.world.clubs.count).unwrap_or(0);
         while self.rivals.len() < count {
-            let club = rivals::random_club(&mut self.rng, &self.rivals, data);
+            let club = rivals::random_club(&mut self.rng, (&self.rivals, &self.name), data);
             self.rivals.push(club);
         }
         let clubs = self.rivals.len();
@@ -205,6 +224,27 @@ impl GameState {
         }
         staff::fill_market(&mut self.staff_market, &data.economy.staff, &mut self.rng);
         self.name_the_nameless(data);
+        self.name_the_club(data);
+    }
+
+    /// Names the player's club if it has no name: a culture of its continent, then a
+    /// name of it that no open rival club bears.
+    fn name_the_club(&mut self, data: &DesignData) {
+        if !self.name.name.is_empty() {
+            return;
+        }
+        let key = rivals::culture_on(&mut self.rng, Some(self.continent), data);
+        let Some(culture) = key.and_then(|key| data.culture(&key)) else {
+            return;
+        };
+        let taken: Vec<&ClubName> = self
+            .rivals
+            .iter()
+            .filter(|r| r.is_open())
+            .map(|r| &r.name)
+            .collect();
+        self.name = names::club_name(&mut self.rng, culture, &taken);
+        self.culture.clone_from(&culture.key);
     }
 
     /// Rival club `club` gets generated fighters up to `roster.wanted`, ranked nowhere.
@@ -939,7 +979,7 @@ mod tests {
     /// cautious and rich one, an aggressive and poor one, then a modest merchant, each
     /// with its wealth's starting money.
     fn game_of(seed: u64, wealth: Wealth, data: &DesignData) -> GameState {
-        let mut state = GameState::start(seed, (wealth, Continent::Europe), data);
+        let mut state = GameState::start(seed, (wealth, Continent::Europe), None, data);
         let clubs = [
             (Profile::Cautious, Wealth::Rich),
             (Profile::Aggressive, Wealth::Poor),
@@ -1079,11 +1119,11 @@ mod tests {
             );
             assert!(!money.iter().any(|&(flow, _)| flow == Flow::WinPrize));
             assert!(money.contains(&(Flow::Upkeep, -i64::from(data.economy.upkeep))));
-            // Ranked in Capua from its place.
-            assert_ne!(
-                state.colosseums[0].elo(Contender::Club(i), &data.world),
-                data.world.elo_start
-            );
+            // Ranked in Capua from its place, which may leave its Elo where it started,
+            // unless it died there.
+            let ranking = &state.colosseums[0].ranking;
+            let ranked = ranking.iter().any(|r| r.contender == Contender::Club(i));
+            assert_eq!(ranked, !fight.died);
         }
     }
 
@@ -1140,6 +1180,38 @@ mod tests {
             state.free_agents.len(),
             usize::try_from(data.economy.market.min_free_agents).unwrap()
         );
+    }
+
+    #[test]
+    fn the_club_bears_a_name_of_its_culture_or_the_one_chosen_and_no_rival_takes_it() {
+        let data = DesignData::load().unwrap();
+        let start = |name| GameState::start(7, (Wealth::Modest, Continent::Asia), name, &data);
+        let drawn = start(None);
+        let culture = data.culture(&drawn.culture).unwrap();
+        assert_eq!(culture.continent, Continent::Asia);
+        assert!(culture.names.contains(&drawn.name.name), "{:?}", drawn.name);
+        assert!(
+            culture.clubs.contains(&drawn.name.pattern),
+            "{:?}",
+            drawn.name
+        );
+        assert!(drawn.rivals.iter().all(|r| r.name != drawn.name));
+        // The name a rival club would have drawn, chosen by the player, is the club's.
+        let wanted = (
+            drawn.rivals[0].culture.clone(),
+            drawn.rivals[0].name.clone(),
+        );
+        let chosen = start(Some(wanted.clone()));
+        assert_eq!((chosen.culture.clone(), chosen.name.clone()), wanted);
+        assert!(chosen.rivals.iter().all(|r| r.name != chosen.name));
+        // A game saved before the club had a name gets one when loaded.
+        let mut old = drawn.clone();
+        old.name = ClubName::default();
+        old.culture.clear();
+        old.open_world(&data);
+        let culture = data.culture(&old.culture).unwrap();
+        assert_eq!(culture.continent, Continent::Asia);
+        assert!(culture.names.contains(&old.name.name), "{:?}", old.name);
     }
 
     #[test]
@@ -1211,7 +1283,7 @@ mod tests {
     fn a_club_fights_at_home_and_pays_the_journey_abroad() {
         let data = DesignData::load().unwrap();
         let world = &data.world;
-        let state = GameState::start(7, (Wealth::Modest, Continent::Asia), &data);
+        let state = GameState::start(7, (Wealth::Modest, Continent::Asia), None, &data);
         // The suggestion sends it to the free colosseum of its continent.
         let samarkand = world.first_colosseum(Continent::Asia);
         let home = world.colosseum(samarkand).unwrap();
@@ -2383,9 +2455,12 @@ mod tests {
         let closed = &state.rivals[poor];
         assert_eq!(closed.closed, Some(week));
         assert_eq!(closed.active(), 0);
-        let released = closed.fighters.iter();
-        let released = released.filter(|f| f.status == Status::Released).count();
-        assert!(released >= leaving);
+        // Released, unless it retired at its birthday the same week.
+        let released = closed
+            .fighters
+            .iter()
+            .filter(|f| matches!(f.status, Status::Released | Status::Retired));
+        assert!(released.count() >= leaving);
         assert_eq!(closed.staff, Staff::default());
         assert!(state.rivals[0].is_open());
         let founded = &state.rivals[3];

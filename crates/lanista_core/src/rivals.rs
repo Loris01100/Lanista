@@ -243,9 +243,13 @@ pub fn culture_on<R: Rng + ?Sized>(
 /// A new rival club: profile and wealth drawn by `data/world.ron`'s `clubs` weights,
 /// the continent furthest below its share of the clubs (`home`), then a culture of
 /// that continent drawn by its weight, named by its culture unlike any open club of
-/// `others` (a closed club's name may come back), with its wealth's starting money,
-/// neither fighters nor staff.
-pub fn random_club<R: Rng + ?Sized>(rng: &mut R, others: &[Rival], data: &DesignData) -> Rival {
+/// `others` (a closed club's name may come back) and the player's club, `player`,
+/// with its wealth's starting money, neither fighters nor staff.
+pub fn random_club<R: Rng + ?Sized>(
+    rng: &mut R,
+    (others, player): (&[Rival], &names::ClubName),
+    data: &DesignData,
+) -> Rival {
     let rules = &data.world.clubs;
     let profile = pick(rng, &rules.profiles);
     let wealth = pick(rng, &rules.wealth);
@@ -256,6 +260,7 @@ pub fn random_club<R: Rng + ?Sized>(rng: &mut R, others: &[Rival], data: &Design
         .iter()
         .filter(|r| r.is_open())
         .map(|r| &r.name)
+        .chain([player])
         .collect();
     let name = data
         .culture(&key)
