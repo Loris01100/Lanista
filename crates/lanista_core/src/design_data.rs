@@ -132,7 +132,7 @@ pub struct LoadoutData {
 #[derive(Debug, Clone, PartialEq, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct SpellData {
-    /// Names it in the fight logs; not shown to the player.
+    /// Names it in the fight logs and in the spells the combat screen lists.
     pub name: String,
     /// Melee uses melee attack against melee defense, ranged the ranged ones.
     pub range: Range,

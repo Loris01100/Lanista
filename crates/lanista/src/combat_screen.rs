@@ -4,7 +4,8 @@
 use std::path::PathBuf;
 use std::rc::Rc;
 
-use lanista_core::design_data::DesignData;
+use lanista_core::combat::TICKS_PER_SECOND;
+use lanista_core::design_data::{Cost, DesignData};
 use lanista_core::fighter::injury::{Location, Side};
 use lanista_core::fighter::{Fighter, FighterId};
 use lanista_core::log::{Event, EventKind};
@@ -251,8 +252,8 @@ impl CombatScreen {
             });
     }
 
-    /// Hit points, mana and endurance of the fight shown big, bottom left, and where
-    /// each fighter was hit: both fighters of a duel, the club's in a melee.
+    /// Hit points, mana, endurance and elements of the fight shown big, bottom left, the
+    /// spells each fighter has and where it was hit: both fighters of a duel, the club's in a melee.
     fn gauges(&self, ui: &egui::Context) {
         let fight = self.fight();
         let fighters = &fight.arena.fighters;
@@ -276,18 +277,85 @@ impl CombatScreen {
                         for f in shown {
                             ui.strong(fight.name(f.id));
                             gauge(ui, &tr!("stat-hp"), f.hp, f.stats.hp);
-                            for (name, g) in
-                                [(tr!("mana"), &f.mana), (tr!("endurance"), &f.endurance)]
-                            {
+                            for (name, g) in [
+                                (tr!("mana"), &f.mana),
+                                (tr!("endurance"), &f.endurance),
+                                (tr!("elements"), &f.elements),
+                            ] {
                                 if g.max > 0 {
                                     gauge(ui, &name, g.current, g.max);
                                 }
                             }
+                            spells(ui, f);
                             anatomy(ui, &fight.arena.log, f);
                         }
                     });
             });
     }
+}
+
+/// `f`'s spells, one line each with what it costs: ready, recharging (seconds left) or
+/// too dear for what `f` has left, greyed out; the one it is set on casting in bronze.
+/// Its weapon's auto attack, cast only once nothing else is affordable, says so on hover.
+fn spells(ui: &mut egui::Ui, f: &Fighter) {
+    let chosen = match f.action {
+        lanista_core::ai::Action::Cast { spell, .. } => Some(spell),
+        _ => None,
+    };
+    let text = ui.visuals().text_color();
+    let weak = ui.visuals().weak_text_color();
+    let bronze = ui.visuals().warn_fg_color;
+    for (k, spell) in f.spells.iter().enumerate() {
+        let cooldown = f.cooldowns.get(k).copied().unwrap_or(0);
+        let status = if cooldown > 0 {
+            tr!("spell-recharging", seconds = tenths(cooldown))
+        } else if f.can_afford(k) {
+            tr!("spell-ready")
+        } else {
+            tr!("spell-too-dear")
+        };
+        let ready = cooldown == 0 && f.can_afford(k);
+        let mut name = egui::RichText::new(&spell.name).small();
+        name = if chosen == Some(k) {
+            name.strong().color(bronze)
+        } else {
+            name.color(if ready { text } else { weak })
+        };
+        ui.horizontal(|ui| {
+            let label = ui.label(name);
+            if f.auto_attack == Some(k) {
+                label.on_hover_text(tr!("spell-auto-attack"));
+            }
+            ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                let color = if ready { text } else { weak };
+                ui.label(egui::RichText::new(status).small().color(color));
+                let cost = cost_text(&spell.cost);
+                if !cost.is_empty() {
+                    ui.label(egui::RichText::new(cost).small().color(weak));
+                }
+            });
+        });
+    }
+}
+
+/// What a spell costs, its mana, endurance and elements, the free ones left out.
+fn cost_text(cost: &Cost) -> String {
+    [
+        (cost.mana, "cost-mana"),
+        (cost.endurance, "cost-endurance"),
+        (cost.elements, "cost-elements"),
+    ]
+    .into_iter()
+    .filter(|&(amount, _)| amount > 0)
+    .map(|(amount, key)| tr!(key, amount = amount))
+    .collect::<Vec<_>>()
+    .join(" ")
+}
+
+/// `ticks` in seconds with one decimal, rounded up, a comma before it: « 1,4 ».
+fn tenths(ticks: u32) -> String {
+    let tenths = (u64::from(ticks) * 10).div_ceil(u64::from(TICKS_PER_SECOND));
+    format!("{},{}", tenths / 10, tenths % 10)
 }
 
 /// Where `f` was hit this fight, laid out like a body: the hit points lost on each
@@ -557,6 +625,20 @@ mod tests {
         let main = screen.main_view();
         let world = screen.fight().world();
         assert!(main.x < world.x && (main.right() - world.right()).abs() < 1e-4);
+    }
+
+    #[test]
+    fn spell_costs_and_cooldowns_read_in_french() {
+        assert_eq!(tenths(45), "1,5");
+        assert_eq!(tenths(1), "0,1");
+        assert_eq!(tenths(30), "1,0");
+        let cost = Cost {
+            mana: 12,
+            endurance: 0,
+            elements: 1,
+        };
+        assert_eq!(cost_text(&cost), "12 mana 1 élém.");
+        assert_eq!(cost_text(&Cost::default()), "");
     }
 
     #[test]
