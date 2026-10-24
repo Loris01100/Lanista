@@ -95,7 +95,7 @@ async fn main() {
         audio,
         |ui| {
             theme::apply(ui);
-            options::apply(ui, display);
+            options::apply(display);
         },
         Box::new(ClubScreen::open(data, CAREER_SEED, folder, bindings)),
     )

@@ -28,11 +28,12 @@ thread_local! {
     /// The tab shown, the same when the options open again.
     static TAB: Cell<Tab> = Cell::new(Tab::default());
 }
+
 /// Puts the window in full screen or not and sizes the interface as `display` says.
-pub fn apply(ui: &egui::Context, display: Display) {
+pub fn apply(display: Display) {
     DISPLAY.set(display);
     macroquad::window::set_fullscreen(display.fullscreen);
-    ui.set_zoom_factor(f32::from(display.interface) / 100.0);
+    reesch::set_ui_scale(f32::from(display.interface) / 100.0);
 }
 
 /// Shows the options over the screen while `open`, which a click outside, Échap or
@@ -126,7 +127,7 @@ pub fn window(
     }
     TAB.set(tab);
     if display != DISPLAY.get() {
-        apply(ui, display);
+        apply(display);
         set = true;
     }
     if let Some(code) = language {

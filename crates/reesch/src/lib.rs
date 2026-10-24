@@ -25,6 +25,17 @@ pub use screen::{Screen, ScreenStack, Transition};
 /// scaled to keep the same layout at any window height.
 const UI_DESIGN_HEIGHT: f32 = 800.0;
 
+thread_local! {
+    /// The player's interface size, a factor over the fit to the window height.
+    static UI_SCALE: std::cell::Cell<f32> = const { std::cell::Cell::new(1.0) };
+}
+
+/// Makes the UI `scale` times as big as the fit to the window height, from the
+/// next frame on.
+pub fn set_ui_scale(scale: f32) {
+    UI_SCALE.set(scale);
+}
+
 /// Runs the game from its first screen until the last one is popped.
 /// Load every asset before, then call it from the `#[macroquad::main]` function.
 /// `audio` starts at the volumes the game kept; `setup_ui` runs once to set the egui
@@ -40,7 +51,7 @@ pub async fn run(
     while !stack.is_empty() {
         // One egui pass per frame: the top screen builds its UI there.
         egui_macroquad::ui(|ui| {
-            let zoom = macroquad::window::screen_height() / UI_DESIGN_HEIGHT;
+            let zoom = macroquad::window::screen_height() / UI_DESIGN_HEIGHT * UI_SCALE.get();
             if zoom > 0.0 && (ui.zoom_factor() - zoom).abs() > f32::EPSILON {
                 ui.set_zoom_factor(zoom);
             }
