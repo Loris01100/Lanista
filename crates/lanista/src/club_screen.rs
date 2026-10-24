@@ -839,8 +839,9 @@ impl ClubScreen {
                 tr!("roster-condition"),
                 tr!("roster-week"),
             ];
-            // The column count tells the grid its last column, which then gets the
-            // width left for the week's choices to wrap in.
+            // The week's choices wrap in the width left of the screen: a grid cell
+            // would otherwise take its width from the last frame and grow out of it.
+            let right = ui.max_rect().right();
             let grid = egui::Grid::new("roster").num_columns(titles.len());
             grid.striped(true).show(ui, |ui| {
                 for title in titles {
@@ -863,9 +864,14 @@ impl ClubScreen {
                     ui.label(f.fame.value().to_string());
                     ui.label(condition_text(f));
                     if f.status == Status::Active {
-                        ui.horizontal_wrapped(|ui| {
-                            let club = (&self.state, &care);
-                            plan_editor(ui, plan, f, &special[i], club, data);
+                        let width = (right - ui.cursor().left()).max(200.0);
+                        ui.allocate_ui(egui::vec2(width, 0.0), |ui| {
+                            ui.horizontal_wrapped(|ui| {
+                                // A choice that does not fit goes whole to the next line.
+                                ui.style_mut().wrap_mode = Some(egui::TextWrapMode::Extend);
+                                let club = (&self.state, &care);
+                                plan_editor(ui, plan, f, &special[i], club, data);
+                            });
                         });
                     } else {
                         ui.label("");
