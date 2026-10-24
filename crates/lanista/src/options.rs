@@ -82,7 +82,7 @@ pub fn window(
             Tab::Audio => {
                 // Set when changed or let go: a slider dragged changes at every frame.
                 let mut slide = |ui: &mut egui::Ui, volume: &mut f32, text: String| {
-                    let slider = ui.add(egui::Slider::new(volume, 0.0..=1.0).text(text));
+                    let slider = volume_slider(ui, volume, text);
                     set |= slider.drag_stopped() || (slider.changed() && !slider.dragged());
                     slider.changed()
                 };
@@ -138,4 +138,18 @@ pub fn window(
         failed = Some(e);
     }
     failed.map(|e| tr!("save-failed", error = e.to_string()))
+}
+
+/// A volume between 0 and 1, shown and typed in whole percents.
+fn volume_slider(ui: &mut egui::Ui, volume: &mut f32, text: String) -> egui::Response {
+    ui.add(
+        egui::Slider::new(volume, 0.0..=1.0)
+            .text(text)
+            .step_by(0.01)
+            .custom_formatter(|v, _| format!("{:.0} %", v * 100.0))
+            .custom_parser(|s| {
+                let percent = s.trim().trim_end_matches('%').trim();
+                percent.parse::<f64>().ok().map(|p| p / 100.0)
+            }),
+    )
 }
