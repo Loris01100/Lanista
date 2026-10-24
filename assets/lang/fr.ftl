@@ -377,6 +377,9 @@ roster-morale = Moral
 roster-fame = Renommée
 roster-condition = État
 roster-week = Semaine
+roster-intro = Le nom d'un combattant ouvre sa fiche, où se prépare sa semaine.
+roster-care = avec soins
+roster-no-armour = sans armure
 
 sheet-this-week = Cette semaine
 sheet-career-over = Carrière terminée

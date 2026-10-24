@@ -824,6 +824,7 @@ impl ClubScreen {
 
     fn roster(&mut self, ui: &mut egui::Ui) {
         ui.heading(tr!("view-roster"));
+        ui.label(tr!("roster-intro"));
         let data = &self.data;
         let care = self.state.care_rules(data);
         let special: Vec<_> = (0..self.state.fighters.len())
@@ -839,9 +840,6 @@ impl ClubScreen {
                 tr!("roster-condition"),
                 tr!("roster-week"),
             ];
-            // The week's choices wrap in the width left of the screen: a grid cell
-            // would otherwise take its width from the last frame and grow out of it.
-            let right = ui.max_rect().right();
             let grid = egui::Grid::new("roster").num_columns(titles.len());
             grid.striped(true).show(ui, |ui| {
                 for title in titles {
@@ -864,15 +862,9 @@ impl ClubScreen {
                     ui.label(f.fame.value().to_string());
                     ui.label(condition_text(f));
                     if f.status == Status::Active {
-                        let width = (right - ui.cursor().left()).max(200.0);
-                        ui.allocate_ui(egui::vec2(width, 0.0), |ui| {
-                            ui.horizontal_wrapped(|ui| {
-                                // A choice that does not fit goes whole to the next line.
-                                ui.style_mut().wrap_mode = Some(egui::TextWrapMode::Extend);
-                                let club = (&self.state, &care);
-                                plan_editor(ui, plan, f, &special[i], club, data);
-                            });
-                        });
+                        let club = (&self.state, &care);
+                        settle_plan(plan, f, &special[i], club, data);
+                        ui.label(plan_summary(plan, f, data));
                     } else {
                         ui.label("");
                     }
@@ -1158,17 +1150,63 @@ fn new_seed() -> u64 {
         .map_or(0, |d| d.as_secs() ^ u64::from(d.subsec_nanos()))
 }
 
-/// A fighter's week, in one line: rest, training, a fight at home or, in a list, abroad,
-/// a title fight or a received challenge (in `special`, with their names), and care at
-/// the price of the club's `care`, all within the money of the club's `state`.
-fn plan_editor(
-    ui: &mut egui::Ui,
+/// Turns to rest a week the club cannot pay (`next_week` would drop it) or a special
+/// fight no longer offered (not in `special`), and drops care and refused armour that
+/// no longer apply: run every frame, the sheet open or not.
+fn settle_plan(
     plan: &mut WeekPlan,
     fighter: &CareerFighter,
     special: &[(Activity, String)],
     (state, care): (&GameState, &CareRules),
     data: &DesignData,
 ) {
+    if let Activity::Fight(id) = plan.activity
+        && i64::from(state.entry_fee(id, data).unwrap_or(0)) > state.money
+    {
+        plan.activity = Activity::Rest;
+    }
+    if matches!(plan.activity, Activity::TitleFight(_) | Activity::Melee(_))
+        && !special.iter().any(|(a, _)| *a == plan.activity)
+    {
+        plan.activity = Activity::Rest;
+    }
+    let cost = fighter.care_cost(care);
+    if cost == 0 || i64::from(cost) > state.money {
+        plan.care = false;
+    }
+    if !plan.activity.fights() {
+        plan.refused = Refused::NONE;
+    }
+}
+
+/// A fighter's week in a few words, for the roster: "Repos, Double glaive, avec soins".
+fn plan_summary(plan: &WeekPlan, fighter: &CareerFighter, data: &DesignData) -> String {
+    let mut parts = vec![
+        activity_name(plan.activity, data),
+        loadout_name(fighter, plan.loadout, data),
+    ];
+    if plan.care {
+        parts.push(tr!("roster-care"));
+    }
+    if plan.refused.armour {
+        parts.push(tr!("roster-no-armour"));
+    }
+    parts.join(", ")
+}
+
+/// A fighter's week: rest, training, a fight at home or, in a list, abroad, a title
+/// fight or a received challenge (in `special`, with their names), and care at the
+/// price of the club's `care`, all within the money of the club's `state`.
+fn plan_editor(
+    ui: &mut egui::Ui,
+    plan: &mut WeekPlan,
+    fighter: &CareerFighter,
+    special: &[(Activity, String)],
+    club: (&GameState, &CareRules),
+    data: &DesignData,
+) {
+    settle_plan(plan, fighter, special, club, data);
+    let (state, care) = club;
     // The loadout, changed freely from one week to the next.
     let loadouts = data.class(fighter.class).map_or(0, |c| c.loadouts.len());
     ui.horizontal(|ui| {
@@ -1187,11 +1225,7 @@ fn plan_editor(
         let activity = Activity::Fight(id);
         let fee = state.entry_fee(id, data).unwrap_or(0);
         let name = priced(activity, fee, data);
-        // The week would turn into rest: `next_week` drops what the club cannot pay.
         let affordable = i64::from(fee) <= money;
-        if !affordable && plan.activity == activity {
-            plan.activity = Activity::Rest;
-        }
         if rules.continent == state.continent {
             ui.add_enabled_ui(affordable, |ui| {
                 ui.selectable_value(&mut plan.activity, activity, name);
@@ -1215,19 +1249,13 @@ fn plan_editor(
             }
         });
     // A challenge the fighter sent is chosen in its sheet.
-    if matches!(plan.activity, Activity::TitleFight(_) | Activity::Melee(_))
-        && !special.iter().any(|(a, _)| *a == plan.activity)
-    {
-        plan.activity = Activity::Rest;
-    }
     for (activity, name) in special {
         ui.selectable_value(&mut plan.activity, *activity, name);
     }
     let cost = fighter.care_cost(care);
     if cost == 0 {
-        plan.care = false;
+        // Nothing to heal.
     } else if i64::from(cost) > money {
-        plan.care = false;
         let text = tr!("plan-care-unaffordable", cost = cost);
         ui.add_enabled(false, egui::Checkbox::new(&mut plan.care, text));
     } else {
@@ -1239,8 +1267,6 @@ fn plan_editor(
         let fame = data.fighter.fame.refused_armour;
         ui.checkbox(&mut plan.refused.armour, tr!("plan-no-armour"))
             .on_hover_text(tr!("plan-no-armour-effect", fame = fame));
-    } else {
-        plan.refused = Refused::NONE;
     }
     let ill = fighter.illness.is_some_and(|i| !i.fight_advised());
     if ill && fights {
