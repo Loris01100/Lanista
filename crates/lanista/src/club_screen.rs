@@ -32,7 +32,7 @@ use lanista_core::fighter::retirement::too_maimed;
 use lanista_core::journal::FightLine;
 use lanista_core::market::Target;
 use lanista_core::rivals::RivalId;
-use lanista_core::state::{Decisions, GameState, next_week};
+use lanista_core::state::{Decisions, GameState, WorldNews, next_week};
 use macroquad::prelude::*;
 use reesch::{Assets, Audio, Bindings, Screen, Transition, egui};
 
@@ -43,13 +43,14 @@ use crate::lang::tr;
 use crate::options;
 use crate::saves;
 use crate::texts::{
-    activity_name, challenger_text, change, class_name, club_name, colosseum_name,
+    Article, activity_name, challenger_text, change, class_name, club_name, colosseum_name,
     colosseum_rules_name, condition_text, contender_name, continent_name, date_in_sentence,
-    ease_text, fight_text, fighter_name, illness_text, injury_text, loadout_name, market_news_text,
-    money_line, move_text, named_club, origin_text, personality_text, priced, record_text,
-    rival_fighter_name, staff_move_text, staff_news_text, stat_names, title_news_text, wealth_name,
-    wealth_text, week_lines, world_news_text,
+    date_text, ease_text, fight_text, fighter_name, illness_text, injury_text, loadout_name,
+    market_news_text, money_line, move_text, named_club, origin_text, personality_text, priced,
+    record_text, rival_fighter_name, staff_move_text, staff_news_text, stat_names, title_article,
+    title_changed, wealth_name, wealth_text, week_lines, world_article,
 };
+use crate::theme;
 use crate::title_screen::{Slot, read_slots, slot_text};
 
 const BACKGROUND: Color = Color::new(0.16, 0.13, 0.11, 1.0);
@@ -108,6 +109,9 @@ pub struct ClubScreen {
     histories: Vec<Vec<(u64, Vec<String>)>>,
     /// The last week played: its number, the money line, then one line per fighter.
     last_week: Option<(u64, Vec<String>)>,
+    /// The last week's title fights and titles changing hands, each told whether the
+    /// title changed hands.
+    week_titles: Vec<(bool, Article)>,
     /// The last week's fights.
     fights: Vec<FightReport>,
     /// Fights still to watch, the next one last, each with those who survive a fatal
@@ -155,6 +159,7 @@ impl ClubScreen {
             view: View::Menu,
             back: View::Menu,
             last_week: None,
+            week_titles: Vec::new(),
             fights: Vec::new(),
             to_watch: Vec::new(),
             saves,
@@ -186,6 +191,7 @@ impl ClubScreen {
             })
             .collect();
         self.fights.clear();
+        self.week_titles.clear();
         let Some(played) = &journal.last else {
             self.last_week = None;
             return;
@@ -251,12 +257,14 @@ impl ClubScreen {
                 });
             }
         }
-        overview.extend(
-            summary
-                .titles
-                .iter()
-                .map(|&(c, news)| title_news_text(c, news, &self.state, data)),
-        );
+        let titles = summary.titles.iter().map(|&(c, news)| {
+            let article = title_article(played.week, c, news, &self.state, data);
+            (title_changed(news), article)
+        });
+        self.week_titles = titles.collect();
+        // Titles changing hands first, the player's club first among each.
+        self.week_titles
+            .sort_by_key(|(changed, article)| (!changed, !article.ours));
         self.last_week = Some((played.week, overview));
     }
 
@@ -396,20 +404,60 @@ impl ClubScreen {
         }
         let play = ui.button(tr!("menu-next-week")).clicked();
         ui.separator();
-        egui::ScrollArea::vertical().show(ui, |ui| {
-            if let Some((week, lines)) = &self.last_week {
-                ui.strong(tr!("week-title", week = *week));
-                for line in lines {
-                    ui.label(line);
-                }
-                ui.add_space(6.0);
-            }
-            ui.strong(tr!("menu-news"));
-            for line in self.news_lines() {
+        egui::ScrollArea::vertical().show(ui, |ui| self.paper(ui));
+        play
+    }
+
+    /// The club's newspaper, the Acta Diurna: the club's week, the week's title fights,
+    /// the world's other news of the week, then the past weeks' news.
+    fn paper(&self, ui: &mut egui::Ui) {
+        let played = self.last_week.as_ref().map(|(week, _)| *week);
+        ui.vertical_centered(|ui| {
+            ui.heading(egui::RichText::new(tr!("paper-name").to_uppercase()).strong());
+            let issue = played.map_or_else(
+                || tr!("paper-first-issue"),
+                |week| tr!("paper-issue", date = date_text(week, &self.data)),
+            );
+            ui.label(egui::RichText::new(issue).italics().weak());
+        });
+        if let Some((_, lines)) = &self.last_week {
+            section(ui, &tr!("paper-club"));
+            for line in lines {
                 ui.label(line);
             }
-        });
-        play
+        }
+        let (changed, defended): (Vec<_>, Vec<_>) =
+            self.week_titles.iter().partition(|(changed, _)| *changed);
+        if !self.week_titles.is_empty() {
+            section(ui, &tr!("paper-titles"));
+            for (_, article) in changed {
+                article_view(ui, article, true);
+            }
+            if !defended.is_empty() {
+                ui.add_space(4.0);
+                ui.label(egui::RichText::new(tr!("paper-defended")).italics());
+                for (_, article) in defended {
+                    article_view(ui, article, false);
+                }
+            }
+        }
+        let mut pages = self.news_pages().into_iter().peekable();
+        if let Some((_, articles)) = pages.next_if(|&(week, _)| Some(week) == played) {
+            section(ui, &tr!("paper-world"));
+            for article in &articles {
+                article_view(ui, article, true);
+            }
+        }
+        if pages.peek().is_some() {
+            section(ui, &tr!("paper-past"));
+            for (week, articles) in pages {
+                ui.add_space(4.0);
+                ui.label(egui::RichText::new(date_text(week, &self.data)).italics());
+                for article in &articles {
+                    article_view(ui, article, false);
+                }
+            }
+        }
     }
 
     /// The game's window over the screen while `game_open`: each save slot with
@@ -504,11 +552,22 @@ impl ClubScreen {
         moves.chain(staff).chain(counter).collect()
     }
 
-    /// The world's news, newest first.
-    fn news_lines(&self) -> Vec<String> {
-        let news = self.state.news.iter().rev();
-        news.map(|&n| world_news_text(n, &self.state, &self.data))
-            .collect()
+    /// The world's news grouped by week, newest first; the last week played leaves out
+    /// its titles, which the week's title fights tell.
+    fn news_pages(&self) -> Vec<(u64, Vec<Article>)> {
+        let played = self.last_week.as_ref().map(|(week, _)| *week);
+        let mut pages: Vec<(u64, Vec<Article>)> = Vec::new();
+        for &news in self.state.news.iter().rev() {
+            if Some(news.week) == played && matches!(news.what, WorldNews::Title(..)) {
+                continue;
+            }
+            let article = world_article(news, &self.state, &self.data);
+            match pages.last_mut() {
+                Some((week, articles)) if *week == news.week => articles.push(article),
+                _ => pages.push((news.week, vec![article])),
+            }
+        }
+        pages
     }
 
     /// What needs the player's attention before the week.
@@ -880,6 +939,29 @@ impl Screen for ClubScreen {
     }
 }
 
+/// A section of the newspaper: its name in bronze over a rule.
+fn section(ui: &mut egui::Ui, name: &str) {
+    ui.add_space(8.0);
+    ui.label(egui::RichText::new(name).strong().color(theme::BRONZE));
+    ui.separator();
+}
+
+/// An article of the newspaper: its headline, in bold if `major`, and then who it is
+/// about in small print; one about the player's club in bronze.
+fn article_view(ui: &mut egui::Ui, article: &Article, major: bool) {
+    let mut headline = egui::RichText::new(&article.headline);
+    if major {
+        headline = headline.strong();
+    }
+    if article.ours {
+        headline = headline.color(theme::BRONZE);
+    }
+    ui.label(headline);
+    if let (true, Some(byline)) = (major, &article.byline) {
+        ui.label(egui::RichText::new(byline).small().weak());
+    }
+}
+
 /// The week's fights to watch, in club order, each once, though several of the club's
 /// fighters shared a melee: the fight before its first tick, the club's fighters named
 /// and ringed, the others by their class, and those who fall at 0 HP but survive the
@@ -1214,7 +1296,7 @@ mod tests {
     use lanista_core::market::Move;
     use lanista_core::relations::{Change, Reason};
     use lanista_core::staff::{Candidate, Person, Role, Scouting, Staff, StaffMove};
-    use lanista_core::state::{News, WorldNews};
+    use lanista_core::state::News;
     use rand_chacha::ChaCha8Rng;
     use rand_chacha::rand_core::SeedableRng;
 
@@ -1226,7 +1308,7 @@ mod tests {
     };
     use crate::title_screen::TitleScreen;
     use colosseums::reign_text;
-    use lanista_core::colosseum::{Reign, ReignEnd, TitleLoss};
+    use lanista_core::colosseum::{Reign, ReignEnd, TitleLoss, TitleNews};
 
     fn screen(seed: u64) -> ClubScreen {
         let data = Rc::new(DesignData::load().unwrap());
@@ -1442,10 +1524,7 @@ mod tests {
         screen.decisions.moves = vec![Move::Observe(Target::Rival(id))];
         screen.next_week();
         let (_, menu) = screen.last_week.as_ref().unwrap();
-        assert!(
-            menu[0].contains("salaires -20, salaires -10, salaires -65"),
-            "{menu:?}"
-        );
+        assert!(menu[0].contains("salaires -95, "), "{menu:?}");
         assert_eq!(
             menu[1..4],
             [
@@ -1748,14 +1827,18 @@ mod tests {
         for _ in 0..5 {
             screen.next_week();
         }
-        let (_, menu) = screen.last_week.as_ref().unwrap();
+        let titles = &screen.week_titles;
         let clubs = &screen.state.rivals;
         assert!(
-            menu.iter().any(|line| line.starts_with("Titre de ")
-                && clubs
-                    .iter()
-                    .any(|c| line.contains(&format!(", {})", named_club(&c.name))))),
-            "{menu:?}"
+            titles
+                .iter()
+                .any(|(_, article)| article.byline.as_ref().is_some_and(|b| {
+                    b.contains(" contre ")
+                        && clubs
+                            .iter()
+                            .any(|c| b.contains(&format!(", {})", named_club(&c.name))))
+                })),
+            "{titles:?}"
         );
     }
 
@@ -1809,7 +1892,7 @@ mod tests {
     }
 
     #[test]
-    fn the_world_s_news_are_told_newest_first() {
+    fn the_world_s_news_are_told_by_week_newest_first() {
         let mut screen = screen(7);
         screen.state.news = vec![
             News {
@@ -1820,14 +1903,33 @@ mod tests {
                 week: 31,
                 what: WorldNews::Founded(0),
             },
+            News {
+                week: 31,
+                what: WorldNews::Title(1, TitleNews::Vacated { to: None }),
+            },
         ];
+        let founded =
+            "Un nouveau ludus ouvre ses portes : Palestre d'Arrhichion (Grèce), en Europe";
+        let vacated = "Le champion de Rome n'est plus, son trône reste vide";
+        let closed = "Faillite : Dar Zénobie ferme ses portes, ses combattants partent au marché";
         assert_eq!(
-            screen.news_lines(),
+            headlines(&screen),
             [
-                "Saison 2, semaine 1 : Fondation de Palestre d'Arrhichion (Grèce), en Europe",
-                "Saison 1, semaine 30 : Dar Zénobie ferme, ruiné : ses combattants partent au marché",
+                (31, vec![vacated.to_owned(), founded.to_owned()]),
+                (30, vec![closed.to_owned()]),
             ]
         );
+        // The week just played leaves its titles to the week's title fights.
+        screen.last_week = Some((31, Vec::new()));
+        assert_eq!(headlines(&screen)[0], (31, vec![founded.to_owned()]));
+    }
+
+    /// Each week of the world's news with its headlines.
+    fn headlines(screen: &ClubScreen) -> Vec<(u64, Vec<String>)> {
+        let pages = screen.news_pages().into_iter();
+        pages
+            .map(|(week, articles)| (week, articles.into_iter().map(|a| a.headline).collect()))
+            .collect()
     }
 
     #[test]
@@ -1839,10 +1941,11 @@ mod tests {
             what: WorldNews::Rivalry(1, true),
         }];
         assert_eq!(
-            screen.news_lines(),
-            [
-                "Saison 1, semaine 4 : Dar Zénobie se déclare votre rival : vos combats contre lui attirent les foules"
-            ]
+            headlines(&screen),
+            [(
+                4,
+                vec!["Dar Zénobie se déclare votre rival : vos combats contre lui attireront les foules".to_owned()]
+            )]
         );
         assert!(screen.alerts().contains(
             &"Dar Zénobie est votre rival depuis saison 1, semaine 4 : recettes à 150 %, renommée +3 par combat"

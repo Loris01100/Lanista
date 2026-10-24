@@ -109,7 +109,6 @@ week-retires = Prend sa retraite à { $age } ans
 
 date = Saison { $season }, semaine { $week }
 date-in-sentence = saison { $season }, semaine { $week }
-dated = { $date } : { $what }
 detailed = { $what } : { $details }
 
 ## Combats
@@ -258,19 +257,41 @@ arena-narrow-effect = le corps à corps s'engage vite
 
 challenger = { $fighter } à { $place }
 
-title-nobody = personne
-title-fight = Titre de { $place } : { $champion } { $kept ->
-        [true] le garde
-       *[false] le perd
-    } face à { $challenger }
-title-stripped = Titre de { $place } : { $former } le perd faute de défense, il revient à { $holder }
-title-vacated = Titre de { $place } vacant : il revient à { $holder }
+headline-title-taken = { $variant ->
+        [0] { $challenger } détrône { $champion } à { $place } !
+        [1] Coup de tonnerre à { $place } : { $champion } tombe devant { $challenger }
+       *[other] { $place } acclame son nouveau champion, { $challenger }, vainqueur de { $champion }
+    }
+headline-title-kept = { $variant ->
+        [0] { $champion } garde son titre à { $place } face à { $challenger }
+        [1] À { $place }, { $challenger } se brise sur { $champion }
+       *[other] { $champion } règne toujours sur { $place } : { $challenger } repart battu
+    }
+headline-title-draw = À { $place }, ni vainqueur ni vaincu : { $champion } garde son titre face à { $challenger }
+headline-title-stripped = { $former } déchu à { $place } faute d'avoir défendu son titre : { $heir }
+headline-heir = la couronne revient à { $holder }
+headline-heir-empty = le trône reste vide
+headline-title-vacated = Le champion de { $place } n'est plus : la couronne revient à { $holder }
+headline-title-vacated-empty = Le champion de { $place } n'est plus, son trône reste vide
+byline-versus = { $champion } contre { $challenger }
+byline-heir = Nouveau champion : { $holder }
 
-news-champion-bought = { $club } achète { $fighter }, champion de { $place }, pour { $price }
-news-closed = { $club } ferme, ruiné : ses combattants partent au marché
-news-rivalry = { $club } se déclare votre rival : vos combats contre lui attirent les foules
-news-rivalry-ended = { $club } met fin à sa rivalité avec vous
-news-founded = Fondation de { $club } ({ $culture }), en { $continent }
+headline-champion-bought = { $club } s'offre { $fighter }, champion de { $place }, pour { $price }
+headline-closed = Faillite : { $club } ferme ses portes, ses combattants partent au marché
+headline-rivalry = { $club } se déclare votre rival : vos combats contre lui attireront les foules
+headline-rivalry-ended = { $club } enterre la hache de guerre et met fin à sa rivalité avec vous
+headline-founded = Un nouveau ludus ouvre ses portes : { $club } ({ $culture }), en { $continent }
+
+## Journal
+
+paper-name = Acta Diurna
+paper-issue = { $date } · les nouvelles des arènes du monde
+paper-first-issue = Les nouvelles des arènes du monde
+paper-club = Dans nos murs
+paper-titles = Les combats pour le titre
+paper-defended = Titres défendus
+paper-world = Échos du monde
+paper-past = Les semaines passées
 
 ## Relations
 
@@ -341,7 +362,6 @@ menu-alerts = Alertes
 menu-active = { $active } / { $max } combattants en activité
 menu-next-week = Semaine suivante (Espace)
 week-title = Semaine { $week }
-menu-news = Nouvelles du monde
 menu-save = Sauvegarder
 menu-load = Charger
 menu-new-club = club { $wealth }

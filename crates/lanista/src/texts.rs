@@ -459,74 +459,171 @@ pub fn challenger_text(
     )
 }
 
-/// What happened to the title of the colosseum at index `c`, in one line.
-pub fn title_news_text(c: usize, news: TitleNews, state: &GameState, data: &DesignData) -> String {
-    let Some(rules) = data.world.colosseums.get(c) else {
-        return String::new();
+/// A piece of the club's newspaper: a headline, who it is about in small print, and
+/// whether it is about the player's club.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Article {
+    pub headline: String,
+    pub byline: Option<String>,
+    pub ours: bool,
+}
+
+/// How many ways a headline may be told; which one is picked by the week and the
+/// colosseum, so that a page does not repeat itself and stays the same when reloaded.
+const HEADLINE_VARIANTS: u64 = 3;
+
+/// "Flamma", "Augure n° 3": `contender` by its name alone, for a headline.
+fn contender_short_name(contender: Contender, state: &GameState, data: &DesignData) -> String {
+    let (fighter, number) = match contender {
+        Contender::Club(i) => (state.fighters.get(i), i),
+        Contender::Rival(id) => (state.rival_fighter(id), id.fighter),
+        Contender::FreeAgent(a) => (state.free_agents.get(a), a),
     };
-    let name = |contender| contender_name(contender, state, data);
-    let to = |to: Option<Contender>| to.map_or_else(|| tr!("title-nobody"), name);
+    match fighter {
+        Some(f) if !f.name.is_empty() => stage_name(&f.name),
+        Some(f) => tr!(
+            "fighter-unnamed",
+            class = class_name(f, data),
+            number = number + 1
+        ),
+        None => "?".into(),
+    }
+}
+
+/// What happened in week `week` to the title of the colosseum at index `c`, as the
+/// newspaper tells it.
+pub fn title_article(
+    week: u64,
+    c: usize,
+    news: TitleNews,
+    state: &GameState,
+    data: &DesignData,
+) -> Article {
+    let Some(rules) = data.world.colosseums.get(c) else {
+        return Article {
+            headline: String::new(),
+            byline: None,
+            ours: false,
+        };
+    };
+    let short = |contender| contender_short_name(contender, state, data);
+    let full = |contender| contender_name(contender, state, data);
+    let ours = |contender: Option<Contender>| matches!(contender, Some(Contender::Club(_)));
     let place = colosseum_rules_name(rules);
+    let variant = (week + u64::try_from(c).unwrap_or(0)) % HEADLINE_VARIANTS;
+    let heir = |key: &str, holder: Option<Contender>| {
+        holder.map_or_else(
+            || tr!(&format!("{key}-empty"), place = place.as_str()),
+            |holder| tr!(key, place = place.as_str(), holder = short(holder)),
+        )
+    };
+    let heir_byline =
+        |holder: Option<Contender>| holder.map(|holder| tr!("byline-heir", holder = full(holder)));
     match news {
         TitleNews::Fight {
             champion,
             challenger,
             result,
-        } => tr!(
-            "title-fight",
-            place = place.as_str(),
-            champion = name(champion),
-            kept = if title_kept(result) { "true" } else { "false" },
-            challenger = name(challenger)
-        ),
-        TitleNews::Stripped { former, to: holder } => tr!(
-            "title-stripped",
-            place = place.as_str(),
-            former = name(former),
-            holder = to(holder)
-        ),
-        TitleNews::Vacated { to: holder } => {
-            tr!("title-vacated", place = place.as_str(), holder = to(holder))
+        } => {
+            let key = match result {
+                FightResult::Unfinished => "headline-title-draw",
+                _ if title_kept(result) => "headline-title-kept",
+                _ => "headline-title-taken",
+            };
+            Article {
+                headline: tr!(
+                    key,
+                    variant = variant,
+                    place = place.as_str(),
+                    champion = short(champion),
+                    challenger = short(challenger)
+                ),
+                byline: Some(tr!(
+                    "byline-versus",
+                    champion = full(champion),
+                    challenger = full(challenger)
+                )),
+                ours: ours(Some(champion)) || ours(Some(challenger)),
+            }
         }
+        TitleNews::Stripped { former, to } => Article {
+            headline: tr!(
+                "headline-title-stripped",
+                place = place.as_str(),
+                former = short(former),
+                heir = heir("headline-heir", to)
+            ),
+            byline: heir_byline(to),
+            ours: ours(Some(former)) || ours(to),
+        },
+        TitleNews::Vacated { to } => Article {
+            headline: heir("headline-title-vacated", to),
+            byline: heir_byline(to),
+            ours: ours(to),
+        },
     }
 }
 
-/// A world news item in one line, dated: "Saison 2, semaine 7 : Ludus Magnus ferme,
-/// ruiné : ses combattants partent au marché".
-pub fn world_news_text(news: News, state: &GameState, data: &DesignData) -> String {
-    let what = match news.what {
-        WorldNews::Title(c, title) => title_news_text(c, title, state, data),
+/// Whether a week's title news is a title changing hands rather than one defended.
+pub fn title_changed(news: TitleNews) -> bool {
+    match news {
+        TitleNews::Fight { result, .. } => !title_kept(result),
+        TitleNews::Stripped { .. } | TitleNews::Vacated { .. } => true,
+    }
+}
+
+/// A world news item, as the newspaper tells it: "Faillite : Ludus Magnus ferme ses
+/// portes, ses combattants partent au marché".
+pub fn world_article(news: News, state: &GameState, data: &DesignData) -> Article {
+    let article = |headline| Article {
+        headline,
+        byline: None,
+        ours: false,
+    };
+    match news.what {
+        WorldNews::Title(c, title) => title_article(news.week, c, title, state, data),
         WorldNews::ChampionBought {
             colosseum,
             fighter,
             buyer,
             price,
-        } => tr!(
-            "news-champion-bought",
-            club = club_name(buyer, state),
-            fighter = rival_fighter_name(fighter, state, data),
-            place = data
-                .world
-                .colosseums
-                .get(colosseum)
-                .map_or_else(|| "?".into(), colosseum_rules_name),
-            price = price
-        ),
-        WorldNews::Closed(club) => tr!("news-closed", club = club_name(club, state)),
-        WorldNews::Rivalry(club, true) => tr!("news-rivalry", club = club_name(club, state)),
-        WorldNews::Rivalry(club, false) => {
-            tr!("news-rivalry-ended", club = club_name(club, state))
-        }
-        WorldNews::Founded(club) => state.rivals.get(club).map_or_else(String::new, |r| {
+        } => Article {
+            headline: tr!(
+                "headline-champion-bought",
+                club = club_name(buyer, state),
+                fighter = contender_short_name(Contender::Rival(fighter), state, data),
+                place = data
+                    .world
+                    .colosseums
+                    .get(colosseum)
+                    .map_or_else(|| "?".into(), colosseum_rules_name),
+                price = price
+            ),
+            byline: Some(rival_fighter_name(fighter, state, data)),
+            ours: false,
+        },
+        WorldNews::Closed(club) => article(tr!("headline-closed", club = club_name(club, state))),
+        WorldNews::Rivalry(club, declared) => Article {
+            headline: tr!(
+                if declared {
+                    "headline-rivalry"
+                } else {
+                    "headline-rivalry-ended"
+                },
+                club = club_name(club, state)
+            ),
+            byline: None,
+            ours: true,
+        },
+        WorldNews::Founded(club) => article(state.rivals.get(club).map_or_else(String::new, |r| {
             tr!(
-                "news-founded",
+                "headline-founded",
                 club = named_club(&r.name),
                 culture = culture_name(&r.culture),
                 continent = continent_name(r.continent)
             )
-        }),
-    };
-    tr!("dated", date = date_text(news.week, data), what = what)
+        })),
+    }
 }
 
 /// "Arrivé récemment : vendable à partir de la saison 1, semaine 16" for a fighter who
@@ -927,10 +1024,19 @@ pub fn money_line(before: i64, after: i64, ledger: &[Transaction]) -> String {
     } else {
         format!("{money} {after} ({:+})", after - before)
     };
-    let moves: Vec<String> = ledger
-        .iter()
-        .map(|t| {
-            let name = match t.flow {
+    // One sum per flow, in the order they first came: three fighters' upkeep is one
+    // « entretien -30 ».
+    let mut sums: Vec<(Flow, i64)> = Vec::new();
+    for t in ledger {
+        match sums.iter_mut().find(|(flow, _)| *flow == t.flow) {
+            Some((_, sum)) => *sum += t.amount,
+            None => sums.push((t.flow, t.amount)),
+        }
+    }
+    let moves: Vec<String> = sums
+        .into_iter()
+        .map(|(flow, amount)| {
+            let name = match flow {
                 Flow::Upkeep => tr!("flow-upkeep"),
                 Flow::Care => tr!("flow-care"),
                 Flow::Training => tr!("flow-training"),
@@ -942,7 +1048,7 @@ pub fn money_line(before: i64, after: i64, ledger: &[Transaction]) -> String {
                 Flow::Sale => tr!("flow-sale"),
                 Flow::Salary => tr!("flow-salary"),
             };
-            format!("{name} {:+}", t.amount)
+            format!("{name} {amount:+}")
         })
         .collect();
     if moves.is_empty() {
