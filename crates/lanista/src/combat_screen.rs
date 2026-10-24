@@ -33,6 +33,8 @@ const MARGIN: f32 = 12.0;
 const THUMBNAIL_FRAME: Color = Color::new(0.9, 0.85, 0.7, 1.0);
 /// Over a thumbnail whose fight is over.
 const FINISHED: Color = Color::new(0.55, 0.55, 0.55, 1.0);
+/// Width of the pause menu.
+const PAUSE_WIDTH: f32 = 220.0;
 
 /// A fight to watch: before its first tick, with who is who.
 #[derive(Debug, Clone, PartialEq)]
@@ -55,7 +57,10 @@ pub struct CombatScreen {
     speed: f32,
     /// Folder where the options chosen are kept; `None` keeps nothing.
     settings: Option<PathBuf>,
-    /// Whether the options are laid over the screen; the fights wait meanwhile.
+    /// Whether the pause menu, opened by Échap, is laid over the screen; the fights
+    /// wait meanwhile.
+    paused: bool,
+    /// Whether the options, opened from the pause menu, are laid over it.
     options_open: bool,
 }
 
@@ -76,6 +81,7 @@ impl CombatScreen {
             bindings,
             speed: 1.0,
             settings: None,
+            paused: false,
             options_open: false,
         }
     }
@@ -170,11 +176,38 @@ impl CombatScreen {
                     if !self.running() {
                         done = ui.button(tr!("continue")).clicked();
                     }
-                    ui.separator();
-                    ui.toggle_value(&mut self.options_open, tr!("options"));
                 });
             });
         done
+    }
+
+    /// The pause menu in the middle of the screen while `paused` and the options are
+    /// closed: « Reprendre », « Options », « Quitter le combat »; returns whether to
+    /// leave the fights.
+    fn pause_menu(&mut self, ui: &egui::Context) -> bool {
+        if !self.paused || self.options_open {
+            return false;
+        }
+        let mut leave = false;
+        let modal = egui::Modal::new(egui::Id::new("pause")).show(ui, |ui| {
+            ui.set_width(PAUSE_WIDTH);
+            ui.vertical_centered_justified(|ui| {
+                ui.heading(tr!("pause"));
+                ui.add_space(6.0);
+                if ui.button(tr!("resume")).clicked() {
+                    self.paused = false;
+                }
+                if ui.button(tr!("options")).clicked() {
+                    self.options_open = true;
+                }
+                leave = ui.button(tr!("leave-fight")).clicked();
+            });
+        });
+        // Not `should_close`: the Échap that opened the menu would close it at once.
+        if modal.backdrop_response.clicked() {
+            self.paused = false;
+        }
+        leave
     }
 
     /// A click on a thumbnail shows its fight big; the name of the fighter under the
@@ -348,11 +381,11 @@ fn thumbnail_rects(count: usize, width: f32) -> Vec<Rect> {
 
 impl Screen for CombatScreen {
     fn update(&mut self, ui: &egui::Context, assets: &Assets, audio: &mut Audio) -> Transition {
-        // The keys belong to the options while they are open.
-        let keys = !self.options_open;
-        if keys && self.bindings.pressed(ui, &Action::Quit) {
-            return Transition::Pop;
+        // Échap opens or closes the pause menu; the options take it while open.
+        if !self.options_open && self.bindings.pressed(ui, &Action::Quit) {
+            self.paused = !self.paused;
         }
+        let keys = !self.paused;
         for (action, speed) in [
             (Action::SlowSpeed, SPEEDS[0]),
             (Action::NormalSpeed, SPEEDS[1]),
@@ -365,7 +398,7 @@ impl Screen for CombatScreen {
         if keys && self.running() && self.bindings.pressed(ui, &Action::Skip) {
             self.skip();
         }
-        if self.controls(ui) {
+        if self.controls(ui) || self.pause_menu(ui) {
             return Transition::Pop;
         }
         while self.targets.len() + 1 < self.views.len() {
@@ -389,7 +422,7 @@ impl Screen for CombatScreen {
         // game closes.
         let _ = options::window(ui, audio, self.settings.as_deref(), &mut self.options_open);
         audio.play_music(assets, MUSIC);
-        if self.options_open {
+        if self.paused {
             return Transition::None;
         }
         // Speed scales time: more or fewer ticks per frame, animations alike.
