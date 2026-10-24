@@ -1,6 +1,6 @@
 use crate::combat::{
-    AccuracyRules, Arena, RADIUS, Range, Vec2, edge_distance, path_direction, shot_blocked,
-    spell_damage, spell_hit_percent,
+    AccuracyRules, Arena, Range, Vec2, can_cast_on, edge_distance, of_use, path_direction,
+    shot_blocked, spell_damage, spell_hit_percent,
 };
 use crate::design_data::SpellData;
 use crate::fighter::form::Form;
@@ -94,7 +94,9 @@ pub fn fear(condition: &Condition) -> f64 {
 /// to hit; waiting scores 0, or the
 /// value a showman sees in its strongest spell about to be ready; closing in scores
 /// `MOVE_SCORE`; gathering elements scores `GATHER_VALUE` of the best spell they pay for,
-/// while the reserve is not full; a fearful, hurt fighter scores backing away from a threatening enemy.
+/// while the reserve is not full; a fearful, hurt fighter scores backing away from a
+/// threatening enemy while it has room to get out of its reach (`can_back_off`), and
+/// otherwise fights as if unafraid.
 /// A pillar between the two makes ranged spells useless: the fighter walks around it,
 /// as it closes in around any pillar or mine in its way (`Arena::obstacles`). A mine
 /// not yet armed whose blast would reach it scores stepping away (`escape_mine`); a mine
@@ -114,28 +116,15 @@ pub fn score_actions(arena: &Arena, me: FighterId) -> Vec<(Action, f64)> {
     let blocked = shot_blocked(&arena.pillars, me.position, target.position);
     let usable = |data: &SpellData| !(blocked && data.range == Range::Ranged);
     for (spell, data) in me.spells.iter().enumerate() {
-        if data.gathers > 0 {
-            if me.can_cast(spell)
-                && arena.element.is_some()
-                && me.elements.current < me.elements.max
-            {
-                let gather = Action::Cast {
-                    spell,
-                    target: me.id,
-                };
-                scored.push((gather, gather_value(me, target, &arena.accuracy)));
-            }
-        } else if me.can_cast(spell)
-            && distance <= data.reach
-            && usable(data)
-            && !(data.mine && distance + 2.0 * RADIUS <= arena.mine_rules.blast_radius)
-        {
-            let cast = Action::Cast {
-                spell,
-                target: target.id,
-            };
-            scored.push((cast, cast_value(me, target, data, &arena.accuracy)));
+        if !(can_cast_on(arena, me, spell, target) && of_use(arena, me, spell, target)) {
+            continue;
         }
+        let (on, value) = if data.gathers > 0 {
+            (me.id, gather_value(me, target, &arena.accuracy))
+        } else {
+            (target.id, cast_value(me, target, data, &arena.accuracy))
+        };
+        scored.push((Action::Cast { spell, target: on }, value));
     }
     let can_cast = scored.len() > 1;
     let endangered = in_danger(arena, me) || in_final(arena);
@@ -156,15 +145,15 @@ pub fn score_actions(arena: &Arena, me: FighterId) -> Vec<(Action, f64)> {
         .filter(|s| usable(s))
         .map(|s| s.reach)
         .fold(0.0, f64::max);
-    if retreat > RETREAT_MIN {
-        let away = Vec2::new(
-            me.position.x - target.position.x,
-            me.position.y - target.position.y,
-        );
-        let threatened = distance <= longest_reach(target) + THREAT_MARGIN;
-        if threatened && can_back_off(arena, me, away) {
-            scored.push((Action::Move(away), retreat));
-        }
+    let away = Vec2::new(
+        me.position.x - target.position.x,
+        me.position.y - target.position.y,
+    );
+    // Out of the target's reach once backed away by this much, in meters; 0 or less
+    // when not threatened.
+    let escape = longest_reach(target) + THREAT_MARGIN - distance;
+    if retreat > RETREAT_MIN && escape >= 0.0 && can_back_off(arena, me, away, escape) {
+        scored.push((Action::Move(away), retreat));
     } else if distance > usable_reach {
         scored.push((Action::Move(toward), MOVE_SCORE));
     } else if !can_cast && distance > PRESS_MIN_DISTANCE {
@@ -268,17 +257,27 @@ fn show_wait_value(me: &Fighter, target: &Fighter, distance: f64, rules: &Accura
     }
 }
 
-/// Whether moving 1 m along `direction` would take `me` at least half a meter
-/// away, walls included: a cornered fighter fights instead of backing off.
-fn can_back_off(arena: &Arena, me: &Fighter, direction: Vec2) -> bool {
+/// Whether `me` has room to back away along `direction` far enough to get `escape`
+/// meters away, and at least half a meter, before a wall: a fighter that cannot get out
+/// of reach fights instead, rather than wait against a wall to be hit.
+fn can_back_off(arena: &Arena, me: &Fighter, direction: Vec2, escape: f64) -> bool {
     let length = direction.length();
     if length <= 0.0 {
         return false;
     }
     let (low, high) = arena.reachable();
-    let x = (me.position.x + direction.x / length).clamp(low.x, high.x);
-    let y = (me.position.y + direction.y / length).clamp(low.y, high.y);
-    Vec2::new(x - me.position.x, y - me.position.y).length() >= 0.5
+    let room = |position: f64, step: f64, low: f64, high: f64| {
+        if step > 0.0 {
+            (high - position) / step
+        } else if step < 0.0 {
+            (low - position) / step
+        } else {
+            f64::INFINITY
+        }
+    };
+    let (dx, dy) = (direction.x / length, direction.y / length);
+    let room = room(me.position.x, dx, low.x, high.x).min(room(me.position.y, dy, low.y, high.y));
+    room >= escape.max(0.5)
 }
 
 /// The highest-scored action; on a tie, the first one.
@@ -532,6 +531,41 @@ mod tests {
         assert_eq!(UtilityAi.decide(&arena, FighterId(0)), strike);
     }
 
+    #[test]
+    fn strikes_with_its_weapon_when_no_affordable_spell_is_of_use() {
+        let data = shipped_classes();
+        let floor = data.combat.arenas.get(crate::combat::ArenaKind::Narrow);
+        let class = &data.classes[3];
+        let fighters = [2.0, 3.5]
+            .into_iter()
+            .zip(0..)
+            .map(|(x, id)| Fighter::new(FighterId(id), ClassId(3), class, STATS, Vec2::new(x, 3.0)))
+            .collect();
+        let mut arena = Arena::new(8.0, 6.0, fighters, 0)
+            .with_rules(&data.combat)
+            .with_layout(floor);
+        let me = &mut arena.fighters[0];
+        let auto = me.auto_attack.unwrap();
+        // Too tired to gather or throw, its mine affordable but the target in its blast:
+        // nothing else to do but strike with its dagger.
+        me.endurance.current = 4;
+        assert!(me.can_afford(2));
+        let strike = Action::Cast {
+            spell: auto,
+            target: FighterId(1),
+        };
+        assert_eq!(UtilityAi.decide(&arena, FighterId(0)), strike);
+        // Farther, the mine is of use again: it lays it rather than strike.
+        arena.fighters[1].position = Vec2::new(6.0, 3.0);
+        assert_eq!(
+            UtilityAi.decide(&arena, FighterId(0)),
+            Action::Cast {
+                spell: 2,
+                target: FighterId(1)
+            }
+        );
+    }
+
     /// Fighter 0 at (`x`, 5) with `hp` left, against fighter 1 touching it on its right.
     fn face_to_face(x: f64, hp: u32, condition: Condition) -> Arena {
         let mut me = test_fighter(0, x, 5.0);
@@ -645,6 +679,33 @@ mod tests {
     fn a_cornered_fighter_fights() {
         let arena = face_to_face(RADIUS, 30, fearful());
         assert_eq!(UtilityAi.decide(&arena, FighterId(0)), hit());
+    }
+
+    #[test]
+    fn a_fearful_fighter_that_cannot_get_out_of_reach_closes_in() {
+        // Against a wall, a shooter 3.5 m away reaching 8 m: it closes in rather than
+        // wait there to be shot.
+        let mut arena = face_to_face(RADIUS, 30, fearful());
+        arena.fighters[1].position = Vec2::new(5.0, 5.0);
+        arena.fighters[1].spells[0].reach = 8.0;
+        assert_eq!(
+            UtilityAi.decide(&arena, FighterId(0)),
+            Action::Move(Vec2::new(4.5, 0.0))
+        );
+        // Too little room behind to get 9 m away: the same.
+        arena.fighters[0].position = Vec2::new(4.0, 5.0);
+        arena.fighters[1].position = Vec2::new(8.0, 5.0);
+        assert_eq!(
+            UtilityAi.decide(&arena, FighterId(0)),
+            Action::Move(Vec2::new(4.0, 0.0))
+        );
+        // Room enough: it backs away.
+        arena.fighters[0].position = Vec2::new(16.0, 5.0);
+        arena.fighters[1].position = Vec2::new(19.0, 5.0);
+        assert_eq!(
+            UtilityAi.decide(&arena, FighterId(0)),
+            Action::Move(Vec2::new(-3.0, 0.0))
+        );
     }
 
     #[test]

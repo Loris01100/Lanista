@@ -7,7 +7,9 @@ use rand::{RngExt, SeedableRng};
 use rand_chacha::ChaCha8Rng;
 
 use crate::ai::{Action, CombatAi, UtilityAi};
-use crate::combat::{Arena, ArenaKind, Pillar, TICKS_PER_DECISION, Vec2, edge_distance, tick};
+use crate::combat::{
+    Arena, ArenaKind, Pillar, TICKS_PER_DECISION, Vec2, can_cast_on, edge_distance, tick,
+};
 use crate::design_data::DesignData;
 use crate::duel::{STATS, random_duel};
 use crate::fighter::career::CareerFighter;
@@ -309,11 +311,14 @@ impl Senses {
         let me = &arena.fighters[i];
         let mut values = self.own_values(arena, me);
         let (opponents, allies) = Self::others(arena, i);
-        let distance = opponents.first().map(|o| edge_distance(me, o));
+        let nearest = opponents.first();
+        let distance = nearest.map(|o| edge_distance(me, o));
         for slot in 0..self.max_spells {
             let spell = me.spells.get(slot);
             values.extend([
-                flag(me.can_cast(slot)),
+                flag(
+                    nearest.map_or_else(|| me.can_cast(slot), |o| can_cast_on(arena, me, slot, o)),
+                ),
                 flag(spell.zip(distance).is_some_and(|(s, d)| d <= s.reach)),
                 spell.map_or(0.0, |s| ratio(me.cooldowns[slot], s.cooldown).min(1.0)),
             ]);

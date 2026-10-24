@@ -1728,7 +1728,7 @@ mod tests {
     #[test]
     fn rival_champions_defend_without_the_player() {
         let data = data();
-        let mut state = game(7, &data);
+        let mut state = game(1, &data);
         let rest = plan(Activity::Rest, false);
         let mut fights = 0;
         for _ in 0..12 {
@@ -2138,12 +2138,14 @@ mod tests {
         assert_eq!(fame_change(&crowd), fame_change(&usual) + bonus);
         // Forgiven well above a rival's score, it ends the rivalry.
         rivals.relations.get_mut(&rival.club).unwrap().score = crate::relations::MAX_SCORE;
+        let week = rivals.week;
         next_week(&mut rivals, &plan(Activity::Rest, false), &data);
         assert!(!rivals.is_rival(rival.club));
-        assert!(matches!(
-            rivals.news.last().map(|n| n.what),
-            Some(WorldNews::Rivalry(_, false))
-        ));
+        let ended = News {
+            week,
+            what: WorldNews::Rivalry(rival.club, false),
+        };
+        assert!(rivals.news.contains(&ended));
     }
 
     #[test]

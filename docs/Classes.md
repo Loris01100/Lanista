@@ -24,7 +24,7 @@ Le combattant peut refuser son armure, jamais ses armes.
 
 ### Attaque automatique
 
-Chaque type d'arme a une attaque automatique, hors des 3 sorts, au coût faible (selon l'arme). Le combattant la porte en dernier recours, quand il n'a plus assez de mana ou d'endurance pour ses sorts : il peut ainsi toujours attaquer un peu. Les types d'armes et leurs attaques seront fixés à l'équilibrage.
+Chaque type d'arme a une attaque automatique, hors des 3 sorts, au coût faible (selon l'arme). Le combattant la porte en dernier recours, quand aucun de ses sorts n'est à la fois payable et utile sur le moment (plus assez de mana ou d'endurance, mine sur une cible trop proche, rien à ramasser, tir bloqué par un pilier) : il peut ainsi toujours attaquer un peu. Les types d'armes et leurs attaques seront fixés à l'équilibrage.
 
 ### Saignement
 
@@ -50,7 +50,7 @@ Combattant de corps à corps uniquement, armes tranchantes uniquement.
 
 ## Maître du terrain
 
-Combattant qui tire parti du sol de l'arène. Les dagues runiques frappent au corps à corps (faible tranchant) et servent à lancer des sorts. Il ne frappe avec ses dagues que par l'attaque automatique, quand il n'a plus de mana ni d'endurance.
+Combattant qui tire parti du sol de l'arène. Les dagues runiques frappent au corps à corps (faible tranchant) et servent à lancer des sorts. Il ne frappe avec ses dagues que par l'attaque automatique, quand aucun de ses sorts n'est payable et utile.
 
 | Configuration | Équipement |
 | --- | --- |
@@ -87,7 +87,7 @@ Chaque étape laisse le jeu jouable avec mirmillon et augure, qui servent de ter
    - le saignement, un par partie du corps : sa chance par sort (`bleed_percent` dans `data/classes.ron`), la part des PV max perdue chaque seconde et la durée par partie dans `bleed` de `data/combat.ron`. Ses dégâts comptent pour celui qui l'a causé (aussi pour les contrôles de la mêlée). Il peut tuer (en passant par la survie au coup fatal) ou pousser à l'abandon ; sinon, il laisse une blessure légère ou moyenne là où le combattant a saigné en premier, à la place du tirage habituel (`injury::bleeding_wound`) ;
    - la baisse de précision (`accuracy_drop` d'un sort : un pourcentage et une durée), qui s'additionne, pour le sable de Jette.
    Le combat montre une petite flaque sous un combattant qui saigne (`fight_view.rs`). Le modèle statistique ne tire pas encore de saignement, et l'IA utilitaire ne compte pas encore le saignement dans la valeur d'un sort.
-4. **Attaque automatique** (`design_data.rs`, `fighter.rs`) — fait : une attaque par type d'arme (`weapons` de `data/combat.ron`), hors des emplacements de sort, au coût faible. La classe nomme son arme (`ClassData::weapon`). L'attaque s'ajoute en dernier aux sorts du combattant (`Fighter::auto_attack`). Elle n'est lançable que si aucun autre sort n'est payable (`Fighter::can_cast`) ; l'IA utilitaire la joue alors comme un sort. L'arme vient maintenant de la configuration (étape 5).
+4. **Attaque automatique** (`design_data.rs`, `fighter.rs`) — fait : une attaque par type d'arme (`weapons` de `data/combat.ron`), hors des emplacements de sort, au coût faible. La classe nomme son arme (`ClassData::weapon`). L'attaque s'ajoute en dernier aux sorts du combattant (`Fighter::auto_attack`). Elle n'est lançable que si aucun autre sort n'est à la fois payable et utile contre la cible (`combat::can_cast_on`, `combat::of_use`) ; l'IA utilitaire la joue alors comme un sort. L'arme vient maintenant de la configuration (étape 5).
 5. **Configurations et équipement** (`data/classes.ron`, `design_data::LoadoutData`, `fighter/equipment.rs`, `fighter/career.rs`) — fait :
    - les `spells` d'une classe sont ceux des emplacements 1 et 3 ; chacune de ses deux configurations (`loadouts`) apporte le sort du deuxième emplacement, son arme (donc son attaque automatique) et sa main secondaire (`OffHand` : libre, bouclier ou deuxième arme). Configurations d'essai : glaive et bouclier (Charge au bouclier) ou double glaive (Double taille, tranchante) pour le mirmillon, bâton (Trait de feu) ou bâton et bouclier (Coup de bouclier) pour l'augure ;
    - le bouclier relève les deux défenses (`shield_defense_percent`, 115 %), la deuxième arme baisse l'attaque au corps à corps d'un combattant qui n'est pas ambidextre (`off_hand_attack_percent`, 85 %), dans `equipment` de `data/fighter.ron` (`OffHand::stats`) ;

@@ -62,8 +62,9 @@
         max_per_fighter: 4,
     ),
     // Each weapon type's auto attack, a spell outside the class's three, cheap: a fighter
-    // strikes with it only once it can pay for none of its spells, so it always has a
-    // little attack left. The weapon types wait for balancing.
+    // strikes with it only once none of its spells is both affordable and of use there
+    // (a mine with the target too close, nothing to gather, a shot blocked), so it always
+    // has a little attack left. The weapon types wait for balancing.
     weapons: {
         "glaive": (
             name: "Estoc",

@@ -19,7 +19,8 @@
 // the head instead (data/combat.ron); Neutral (spells without an element yet) does neither.
 // spells: the first and third slots. Each of the class's two loadouts brings the second
 // (spell), its weapon (a key of weapons in data/combat.ron, whose auto attack the fighter
-// strikes with once it can pay for none of its spells) and what its off hand holds: Free,
+// strikes with once none of its spells is both affordable and of use) and what its off
+// hand holds: Free,
 // Shield (a defense bonus) or Weapon (a second one, weaker for who is not ambidextrous;
 // equipment in data/fighter.ron). A loadout's key names it in the language files
 // (loadout-<key>).

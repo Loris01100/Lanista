@@ -110,8 +110,8 @@ pub struct CombatRules {
     pub hits: LocationWeights,
     pub bleed: BleedRules,
     pub mines: MineRules,
-    /// Each weapon type's auto attack, by key: what a fighter strikes with once it can
-    /// pay for none of its spells (`ClassData::weapon`).
+    /// Each weapon type's auto attack, by key: what a fighter strikes with once none of
+    /// its spells is both affordable and of use (`can_cast_on`, `ClassData::weapon`).
     pub weapons: BTreeMap<String, SpellData>,
     pub arenas: ArenaLayouts,
     pub melee: MeleeRules,
@@ -694,6 +694,43 @@ pub fn shot_blocked(pillars: &[Pillar], from: Vec2, to: Vec2) -> bool {
         .any(|p| segment_distance(Vec2::new(p.x, p.y), from, to) < p.radius)
 }
 
+/// Whether `caster`'s spell `spell` would do anything now against `target`, cooldown
+/// and cost aside: a gathering spell on a floor with an element, its reserve not full;
+/// any other in reach, a ranged one with a clear shot, a mine with the target out of
+/// its own blast.
+#[must_use]
+pub fn of_use(arena: &Arena, caster: &Fighter, spell: usize, target: &Fighter) -> bool {
+    let Some(data) = caster.spells.get(spell) else {
+        return false;
+    };
+    if data.gathers > 0 {
+        return arena.element.is_some() && caster.elements.current < caster.elements.max;
+    }
+    let distance = edge_distance(caster, target);
+    distance <= data.reach
+        && !(data.range == Range::Ranged
+            && shot_blocked(&arena.pillars, caster.position, target.position))
+        && !(data.mine && distance + 2.0 * RADIUS <= arena.mine_rules.blast_radius)
+}
+
+/// `Fighter::can_cast` against `target`: the auto attack as soon as none of the other
+/// spells is both affordable and of use (`of_use`), so that a fighter with only a mine
+/// too close to lay or nothing to gather still strikes with its weapon.
+#[must_use]
+pub fn can_cast_on(arena: &Arena, caster: &Fighter, spell: usize, target: &Fighter) -> bool {
+    caster.can_cast_when(spell, |s| of_use(arena, caster, s, target))
+}
+
+/// Whether `f` chose a cast it can make on its chosen target (`can_cast_on`).
+fn chose_castable(arena: &Arena, f: &Fighter) -> bool {
+    let Action::Cast { spell, target } = f.action else {
+        return false;
+    };
+    arena
+        .fighter(target)
+        .map_or_else(|| f.can_cast(spell), |t| can_cast_on(arena, f, spell, t))
+}
+
 /// Distance from `point` to the segment from `a` to `b`.
 fn segment_distance(point: Vec2, a: Vec2, b: Vec2) -> f64 {
     let along = Vec2::new(b.x - a.x, b.y - a.y);
@@ -815,10 +852,7 @@ fn cool_down(arena: &mut Arena) {
 fn cast_order(arena: &mut Arena) -> Vec<usize> {
     let fighters = &arena.fighters;
     let mut order: Vec<usize> = (0..fighters.len())
-        .filter(|&i| {
-            let f = &fighters[i];
-            f.is_standing() && matches!(f.action, Action::Cast { spell, .. } if f.can_cast(spell))
-        })
+        .filter(|&i| fighters[i].is_standing() && chose_castable(arena, &fighters[i]))
         .collect();
     order.sort_by_key(|&i| std::cmp::Reverse(fighters[i].stats.speed));
     for tie in order.chunk_by_mut(|&a, &b| fighters[a].stats.speed == fighters[b].stats.speed) {
@@ -865,7 +899,7 @@ fn ready_gather(arena: &Arena, i: usize) -> Option<usize> {
         && arena.element.is_some()
         && caster.spells.get(spell).is_some_and(|s| s.gathers > 0)
         && caster.is_standing()
-        && caster.can_cast(spell);
+        && chose_castable(arena, caster);
     ready.then_some(spell)
 }
 
@@ -1029,7 +1063,7 @@ fn ready_cast(arena: &Arena, i: usize) -> Option<(usize, FighterId, usize)> {
         && defender.is_standing()
         && caster.id != target
         && !arena.allied(caster.id, target)
-        && caster.can_cast(spell)
+        && can_cast_on(arena, caster, spell, defender)
         && caster.spells[spell].gathers == 0
         && edge_distance(caster, defender) <= caster.spells[spell].reach
         && (caster.spells[spell].range != Range::Ranged

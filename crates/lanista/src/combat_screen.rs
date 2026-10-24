@@ -296,7 +296,8 @@ impl CombatScreen {
 
 /// `f`'s spells, one line each with what it costs: ready, recharging (seconds left) or
 /// too dear for what `f` has left, greyed out; the one it is set on casting in bronze.
-/// Its weapon's auto attack, cast only once nothing else is affordable, says so on hover.
+/// Its weapon's auto attack, cast only once nothing else is affordable and of use, says so
+/// on hover.
 fn spells(ui: &mut egui::Ui, f: &Fighter) {
     let chosen = match f.action {
         lanista_core::ai::Action::Cast { spell, .. } => Some(spell),

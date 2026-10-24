@@ -182,8 +182,9 @@ pub struct Fighter {
     pub elements: Gauge,
     /// Its class's spells, copied from the design data.
     pub spells: Vec<SpellData>,
-    /// Index in `spells` of its weapon's auto attack, the last one, cast only once it can
-    /// pay for none of the others (`can_cast`); none for a class without one.
+    /// Index in `spells` of its weapon's auto attack, the last one, cast only once none
+    /// of the others is both affordable and of use (`combat::can_cast_on`); none for a
+    /// class without one.
     pub auto_attack: Option<usize>,
     /// Ticks left before each spell of `spells` can be cast again; 0 when ready.
     pub cooldowns: Vec<u32>,
@@ -395,16 +396,24 @@ impl Fighter {
     }
 
     /// Whether spell `spell` exists, is off cooldown and is affordable; the auto attack
-    /// only once none of the other spells is affordable, a last resort.
+    /// only once none of the other spells is affordable, a last resort. Out of a fight's
+    /// context: `combat::can_cast_on` also lets it strike when no other is of use.
     #[must_use]
     pub fn can_cast(&self, spell: usize) -> bool {
+        self.can_cast_when(spell, |_| true)
+    }
+
+    /// `can_cast`, where a spell that is not `of_use` leaves the auto attack free as if
+    /// it were too dear.
+    #[must_use]
+    pub fn can_cast_when(&self, spell: usize, of_use: impl Fn(usize) -> bool) -> bool {
         let Some(data) = self.spells.get(spell) else {
             return false;
         };
         let last_resort = || {
             (0..self.spells.len())
                 .filter(|&s| Some(s) != self.auto_attack)
-                .all(|s| !self.can_afford(s))
+                .all(|s| !self.can_afford(s) || !of_use(s))
         };
         self.cooldowns[spell] == 0
             && self.can_afford_spell(data)
