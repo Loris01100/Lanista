@@ -4,7 +4,10 @@
 //! body. Formats: `docs/Formats_graphiques.md`.
 
 use lanista_core::fighter::Fighter;
-use lanista_core::fighter::appearance::{Appearance, AppearanceRules, Tint};
+use lanista_core::fighter::appearance::{
+    Appearance, AppearanceRules, LayerRule, Paint, Part, Tint,
+};
+use lanista_core::fighter::equipment::OffHand;
 use lanista_core::fighter::injury::{Location, Side};
 use macroquad::prelude::*;
 use reesch::{Assets, SpriteSheet};
@@ -22,24 +25,6 @@ pub const SPRITE_SIZE: f32 = 1.6;
 /// Pixels on a side of a fighter's image.
 const PIXELS: f32 = 32.0;
 
-/// What a layer is tinted with, in the order of `colors`.
-#[derive(Clone, Copy)]
-enum Paint {
-    Skin,
-    Hair,
-    Tunic,
-}
-
-/// The layers drawn from the spritesheet, in drawing order, before the head.
-const BEHIND_HEAD: [(&str, Paint); 4] = [
-    ("leg_back", Paint::Skin),
-    ("arm_back", Paint::Skin),
-    ("body", Paint::Tunic),
-    ("leg_front", Paint::Skin),
-];
-/// The layer drawn last, over the head.
-const OVER_HEAD: (&str, Paint) = ("arm_front", Paint::Skin);
-
 /// A layer's drawing: `fighters/<layer>/<variant>.png`.
 fn layer_path(layer: &str, variant: &str) -> String {
     format!("fighters/{layer}/{variant}.png")
@@ -55,21 +40,60 @@ fn unique_path(name: &str) -> String {
     format!("uniques/{name}.png")
 }
 
-/// Every layer's drawing `rules` name, which must be loaded, then their details, which
-/// may be missing.
+/// Each layer of a look as (name, variant): a Hair layer once for each hair shape.
+fn files<'a>(
+    rules: &'a AppearanceRules,
+    (variant, layers): (&'a str, &'a [LayerRule]),
+) -> Vec<(&'a str, &'a str)> {
+    let mut files = Vec::new();
+    for layer in layers {
+        if layer.paint == Paint::Hair {
+            files.extend(rules.hair.iter().map(|s| (layer.name.as_str(), s.as_str())));
+        } else {
+            files.push((layer.name.as_str(), variant));
+        }
+    }
+    files
+}
+
+/// The drawings of the common look, which must be loaded, then those which may be
+/// missing: the classes' own looks (a class is drawn with the common look until all of
+/// its are there) and every layer's details.
 #[must_use]
 pub fn texture_paths(rules: &AppearanceRules) -> (Vec<String>, Vec<String>) {
-    let build = rules.build.as_str();
-    let mut layers: Vec<(&str, &str)> = BEHIND_HEAD
-        .iter()
-        .chain([&OVER_HEAD])
-        .map(|&(layer, _)| (layer, build))
+    let common = files(rules, rules.default_look());
+    let own: Vec<(&str, &str)> = rules
+        .classes
+        .keys()
+        .flat_map(|class| files(rules, rules.look(class)))
         .collect();
-    layers.push(("head", build));
-    layers.extend(rules.hair.iter().map(|shape| ("hair", shape.as_str())));
-    let required = layers.iter().map(|&(l, v)| layer_path(l, v)).collect();
-    let details = layers.iter().map(|&(l, v)| detail_path(l, v)).collect();
-    (required, details)
+    let required = common.iter().map(|&(l, v)| layer_path(l, v)).collect();
+    let optional = own
+        .iter()
+        .map(|&(l, v)| layer_path(l, v))
+        .chain(common.iter().chain(&own).map(|&(l, v)| detail_path(l, v)))
+        .collect();
+    (required, optional)
+}
+
+/// The variant and the layers a fighter of `class` with `off_hand` is drawn with: its
+/// class's look if all of its drawings are loaded, otherwise the common one.
+fn look_of<'a>(
+    assets: &Assets,
+    rules: &'a AppearanceRules,
+    class: &str,
+    off_hand: OffHand,
+) -> (&'a str, &'a [LayerRule]) {
+    let (variant, layers) = rules.look(class);
+    let loaded = layers
+        .iter()
+        .filter(|l| l.drawn_with(off_hand) && l.paint != Paint::Hair)
+        .all(|l| assets.try_texture(&layer_path(&l.name, variant)).is_some());
+    if loaded {
+        (variant, layers)
+    } else {
+        rules.default_look()
+    }
 }
 
 /// `tint` darkened by `shade`, from 0 (black) to 1.
@@ -127,22 +151,41 @@ impl Missing {
         }
     }
 
-    /// Whether the layer `name` is gone.
-    fn hides(self, name: &str) -> bool {
-        match name {
-            "head" | "hair" => self.head,
-            "arm_front" => self.arm_front,
-            "arm_back" => self.arm_back,
-            "leg_front" => self.leg_front,
-            "leg_back" => self.leg_back,
-            _ => false,
+    /// Whether the layers of `part` are gone.
+    fn hides(self, part: Part) -> bool {
+        match part {
+            Part::Head => self.head,
+            Part::ArmFront => self.arm_front,
+            Part::ArmBack => self.arm_back,
+            Part::LegFront => self.leg_front,
+            Part::LegBack => self.leg_back,
+            Part::Body => false,
         }
     }
 }
 
-/// The hair shape of a layered `look` and its tints, in `Paint` order; the first of
-/// each for a unique one, or an index out of `rules`.
-fn colors<'a>(rules: &'a AppearanceRules, look: &Appearance) -> (&'a str, [Tint; 3]) {
+/// The tints of a look: skin, hair and tunic.
+struct Tints {
+    skin: Tint,
+    hair: Tint,
+    tunic: Tint,
+}
+
+impl Tints {
+    /// What a layer of `paint` is multiplied by.
+    fn of(&self, paint: Paint) -> Tint {
+        match paint {
+            Paint::Skin => self.skin,
+            Paint::Hair => self.hair,
+            Paint::Tunic => self.tunic,
+            Paint::Plain => (255, 255, 255),
+        }
+    }
+}
+
+/// The hair shape of a layered `look` and its tints; the first of each for a unique
+/// one, or an index out of `rules`.
+fn colors<'a>(rules: &'a AppearanceRules, look: &Appearance) -> (&'a str, Tints) {
     let (hair, skin, hair_tint, tunic) = match *look {
         Appearance::Layered {
             hair,
@@ -165,17 +208,26 @@ fn colors<'a>(rules: &'a AppearanceRules, look: &Appearance) -> (&'a str, [Tint;
         .and_then(|h| rules.hair.get(h))
         .or(rules.hair.first())
         .map_or("", String::as_str);
-    let tints = [
-        pick(&rules.skins, skin),
-        pick(&rules.hair_tints, hair_tint),
-        pick(&rules.tunics, tunic),
-    ];
+    let tints = Tints {
+        skin: pick(&rules.skins, skin),
+        hair: pick(&rules.hair_tints, hair_tint),
+        tunic: pick(&rules.tunics, tunic),
+    };
     (shape, tints)
 }
 
-/// Draws a fighter of `look` as `at` says, without the parts it lost. A unique
-/// character missing from the assets is drawn as the default layered look, and whole.
-pub fn draw_fighter(assets: &Assets, rules: &AppearanceRules, look: &Appearance, at: &Placement) {
+/// Who is drawn: its look, the key of its class and what its off hand holds.
+pub struct Dress<'a> {
+    pub look: &'a Appearance,
+    pub class: &'a str,
+    pub off_hand: OffHand,
+}
+
+/// Draws a fighter as `at` says, with its class's layers and those of its off hand,
+/// without the parts it lost. A unique character missing from the assets is drawn as
+/// the default layered look, and whole.
+pub fn draw_fighter(assets: &Assets, rules: &AppearanceRules, who: &Dress, at: &Placement) {
+    let look = who.look;
     let dest = vec2(SPRITE_SIZE, SPRITE_SIZE);
     let (left, top) = (at.x - SPRITE_SIZE / 2.0, at.y - SPRITE_SIZE / 2.0);
     let sheet = |texture: &Texture2D, color: Color| {
@@ -199,23 +251,7 @@ pub fn draw_fighter(assets: &Assets, rules: &AppearanceRules, look: &Appearance,
         return;
     }
     let (shape, tints) = colors(rules, look);
-    let paint = |paint: Paint| tints[paint as usize];
     let untinted = color((255, 255, 255), at.shade);
-    let build = rules.build.as_str();
-    let layer = |(name, tint): (&str, Paint)| {
-        if at.missing.hides(name) {
-            return;
-        }
-        if let Some(texture) = assets.try_texture(&layer_path(name, build)) {
-            sheet(texture, color(paint(tint), at.shade));
-        }
-        if let Some(texture) = assets.try_texture(&detail_path(name, build)) {
-            sheet(texture, untinted);
-        }
-    };
-    for part in BEHIND_HEAD {
-        layer(part);
-    }
     // The head and hair follow the neck: moved and turned for this image, mirrored
     // with the fighter.
     let scale = SPRITE_SIZE / PIXELS;
@@ -249,18 +285,30 @@ pub fn draw_fighter(assets: &Assets, rules: &AppearanceRules, look: &Appearance,
             },
         );
     };
-    for (name, variant, tint) in [("head", build, Paint::Skin), ("hair", shape, Paint::Hair)] {
-        if at.missing.hides(name) {
+    let (variant, layers) = look_of(assets, rules, who.class, who.off_hand);
+    for layer in layers {
+        if !layer.drawn_with(who.off_hand) || at.missing.hides(layer.part) {
             continue;
         }
-        if let Some(texture) = assets.try_texture(&layer_path(name, variant)) {
-            head(texture, color(paint(tint), at.shade));
+        let variant = if layer.paint == Paint::Hair {
+            shape
+        } else {
+            variant
+        };
+        let draw = |texture: &Texture2D, color: Color| {
+            if layer.part == Part::Head {
+                head(texture, color);
+            } else {
+                sheet(texture, color);
+            }
+        };
+        if let Some(texture) = assets.try_texture(&layer_path(&layer.name, variant)) {
+            draw(texture, color(tints.of(layer.paint), at.shade));
         }
-        if let Some(texture) = assets.try_texture(&detail_path(name, variant)) {
-            head(texture, untinted);
+        if let Some(texture) = assets.try_texture(&detail_path(&layer.name, variant)) {
+            draw(texture, untinted);
         }
     }
-    layer(OVER_HEAD);
 }
 
 #[cfg(test)]
@@ -269,18 +317,42 @@ mod tests {
     use lanista_core::design_data::DesignData;
 
     #[test]
-    fn every_drawing_the_looks_name_is_in_the_assets() {
+    fn every_drawing_the_common_look_names_is_in_the_assets() {
         let rules = DesignData::load().unwrap().fighter.appearance;
-        let (required, details) = texture_paths(&rules);
+        let (required, optional) = texture_paths(&rules);
         // Six layers of the build and each hair shape.
         assert_eq!(required.len(), 6 + rules.hair.len());
-        assert_eq!(details.len(), required.len());
         let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../assets");
         for path in &required {
             assert!(root.join(path).is_file(), "missing {path}");
         }
         assert!(required.contains(&"fighters/hair/long.png".to_owned()));
-        assert!(details.contains(&"fighters/head/average_detail.png".to_owned()));
+        assert!(optional.contains(&"fighters/head/average_detail.png".to_owned()));
+        // A class's own look may wait for its drawings.
+        assert!(optional.contains(&"fighters/shield/gladiateur.png".to_owned()));
+        assert!(optional.contains(&"fighters/crest/gladiateur_detail.png".to_owned()));
+    }
+
+    #[test]
+    fn a_class_waits_for_all_its_drawings_and_its_off_hand_picks_layers() {
+        let rules = DesignData::load().unwrap().fighter.appearance;
+        // Nothing loaded: the common look, whatever the class.
+        let empty = Assets::default();
+        assert_eq!(
+            look_of(&empty, &rules, "gladiateur", OffHand::Shield),
+            rules.default_look()
+        );
+        let (_, layers) = rules.look("gladiateur");
+        let drawn = |off_hand| {
+            layers
+                .iter()
+                .filter(|l| l.drawn_with(off_hand))
+                .map(|l| l.name.as_str())
+                .collect::<Vec<_>>()
+        };
+        assert!(drawn(OffHand::Shield).contains(&"shield"));
+        assert!(!drawn(OffHand::Weapon).contains(&"shield"));
+        assert!(drawn(OffHand::Weapon).contains(&"weapon_back"));
     }
 
     #[test]
@@ -296,13 +368,14 @@ mod tests {
         fighter.severed = Some(Location::Leg(Side::Left));
         let right = Missing::of(&fighter, false);
         assert!(right.arm_front && right.leg_back && !right.arm_back && !right.leg_front);
-        assert!(right.hides("arm_front") && !right.hides("body") && !right.hides("hair"));
+        assert!(right.hides(Part::ArmFront) && !right.hides(Part::Body));
+        assert!(!right.hides(Part::Head));
         let left = Missing::of(&fighter, true);
         assert!(left.arm_back && left.leg_front && !left.arm_front && !left.leg_back);
-        // Beheaded: no head, no hair.
+        // Beheaded: no head, nor what goes with it.
         fighter.severed = Some(Location::Head);
         let beheaded = Missing::of(&fighter, false);
-        assert!(beheaded.head && beheaded.hides("head") && beheaded.hides("hair"));
+        assert!(beheaded.head && beheaded.hides(Part::Head));
     }
 
     #[test]
@@ -316,9 +389,10 @@ mod tests {
         };
         let (shape, tints) = colors(&rules, &look);
         assert_eq!(shape, rules.hair[1]);
-        assert_eq!(tints[Paint::Skin as usize], rules.skins[2]);
-        assert_eq!(tints[Paint::Hair as usize], rules.hair_tints[0]);
-        assert_eq!(tints[Paint::Tunic as usize], rules.tunics[1]);
+        assert_eq!(tints.of(Paint::Skin), rules.skins[2]);
+        assert_eq!(tints.of(Paint::Hair), rules.hair_tints[0]);
+        assert_eq!(tints.of(Paint::Tunic), rules.tunics[1]);
+        assert_eq!(tints.of(Paint::Plain), (255, 255, 255));
         // Out of the data or unique: the first shape and tints.
         let unknown = Appearance::Layered {
             hair: 9,
@@ -326,12 +400,11 @@ mod tests {
             hair_tint: 9,
             tunic: 9,
         };
+        let (shape, tints) = colors(&rules, &unknown);
+        assert_eq!(shape, rules.hair[0]);
         assert_eq!(
-            colors(&rules, &unknown),
-            (
-                rules.hair[0].as_str(),
-                [rules.skins[0], rules.hair_tints[0], rules.tunics[0]]
-            )
+            (tints.skin, tints.hair, tints.tunic),
+            (rules.skins[0], rules.hair_tints[0], rules.tunics[0])
         );
         assert_eq!(
             colors(&rules, &Appearance::Unique("x".into())).0,

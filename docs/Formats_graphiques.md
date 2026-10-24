@@ -33,7 +33,9 @@ Les durées sont celles du jeu ; les mettre aussi dans Aseprite pour que l'aper�
 
 ### Calques
 
-Le personnage est découpé en calques superposés, un fichier par calque :
+Le personnage est découpé en calques superposés, un fichier par calque. Chaque classe peut avoir son propre jeu de calques, son **apparence** (`classes` dans `appearance`, `data/fighter.ron`, par clé de classe) ; une classe sans la sienne prend l'apparence commune (`layers`, variante `build`). Chaque calque y a un nom, une teinte (`paint` : `Skin` pour la peau, `Hair` pour les cheveux, `Tunic` pour la tunique, plus tard la couleur du club, ou `Plain`, dessiné dans ses propres couleurs), la partie du corps qu'il suit (`part` : il disparaît avec elle) et, pour l'armement, la main secondaire avec laquelle il est dessiné (`with` : `Shield` ou `Weapon`, selon l'équipement du combattant dans `data/classes.ron`).
+
+Apparence commune :
 
 | Calque | Ordre de dessin | Teinté |
 | --- | --- | --- |
@@ -45,10 +47,28 @@ Le personnage est découpé en calques superposés, un fichier par calque :
 | `hair` (cheveux) | 6 | cheveux |
 | `arm_front` (bras avant) | 7 | peau |
 
+Gladiateur (`gladiateur`) : casque de bronze à crête et visière percée, torse nu marqué de cicatrices, large ceinture de cuir et pagne court, manica sur le bras armé, glaive court, bouclier ou second glaive, jambières de métal et sandales de cuir.
+
+| Calque | Ordre de dessin | Teinté | Détail non teinté |
+| --- | --- | --- | --- |
+| `leg_back` | 1 | peau | jambière, sandale |
+| `arm_back` | 2 | peau | |
+| `weapon_back` (second glaive, avec `Weapon`) | 3 | non | |
+| `body` (torse nu) | 4 | peau | cicatrices, ceinture |
+| `loincloth` (pagne) | 5 | tunique | |
+| `leg_front` | 6 | peau | jambière, sandale |
+| `shield` (bouclier, avec `Shield`) | 7 | non | |
+| `head` (visage et cou) | 8 | peau | casque |
+| `crest` (crête) | 9 | tunique | |
+| `weapon` (glaive) | 10 | non | |
+| `arm_front` | 11 | peau | manica |
+
 - Une seule teinte par fichier : la tête et les cheveux sont donc deux calques, et ce qui, sur un calque, n'a pas sa teinte (une jambe nue sous la tunique, un col…) va dans un autre calque ou dans le fichier de détail.
-- Chaque calque de corps et de membre est une feuille complète de 128 × 128 px sur la même grille, transparente hors de sa partie.
-- La tête et les cheveux sont chacun **une seule image de 32 × 32 px** par variante, placée comme dans l'image de repos. Le jeu les décale et les tourne image par image autour du cou pour suivre le corps : le point de rotation (`head_pivot`) et, pour chacune des 16 images, le décalage en pixels et l'angle en degrés dans le sens horaire (`head_frames`) sont dans `appearance`, dans `data/fighter.ron`. Une nouvelle carrure dont le cou bouge autrement demande d'y reporter ses valeurs.
-- « Avant » et « arrière » sont vus du combattant tourné vers la droite. Le côté anatomique (gauche ou droit, main dominante) est géré par le jeu.
+- Chaque calque de corps, de membre et d'arme est une feuille complète de 128 × 128 px sur la même grille, transparente hors de sa partie.
+- Les calques de tête (`part: Head` : tête, cheveux, crête) sont chacun **une seule image de 32 × 32 px** par variante, placée comme dans l'image de repos. Le jeu les décale et les tourne image par image autour du cou pour suivre le corps : le point de rotation (`head_pivot`) et, pour chacune des 16 images, le décalage en pixels et l'angle en degrés dans le sens horaire (`head_frames`) sont dans `appearance`, dans `data/fighter.ron`. Une nouvelle carrure dont le cou bouge autrement demande d'y reporter ses valeurs.
+- « Avant » et « arrière » sont vus du combattant tourné vers la droite. Le côté anatomique (gauche ou droit, main dominante) est géré par le jeu. L'arme principale est dans la main avant, le bouclier ou la seconde arme dans la main arrière.
+- Le jeu dessine une classe avec l'apparence commune tant que tous les calques de la sienne ne sont pas dans `assets/fighters/`.
+- Les scripts Aseprite lisent les calques de chaque apparence dans `art/scripts/fighter_looks.lua`, à tenir identique à `data/fighter.ron`.
 
 ### Variantes et teintes
 
@@ -60,14 +80,14 @@ Le personnage est découpé en calques superposés, un fichier par calque :
 ### Fichiers
 
 ```text
-art/fighters/<variante>.aseprite          source (un fichier par carrure ou par tête)
+art/fighters/<apparence>.aseprite         source (une par apparence)
 assets/fighters/<calque>/<variante>.png   teinté
 assets/fighters/<calque>/<variante>_detail.png   non teinté, facultatif
 ```
 
-Les variantes de chaque calque sont la carrure (`build` dans `data/fighter.ron`, `average` pour l'instant), sauf pour les cheveux, une variante par forme (`hair`). Exemples : `assets/fighters/head/average.png`, `assets/fighters/head/average_detail.png` (les yeux), `assets/fighters/hair/long.png`, `assets/fighters/body/average.png`.
+La variante d'un calque est la clé de la classe pour une apparence de classe (`gladiateur`), la carrure pour l'apparence commune (`build` dans `data/fighter.ron`, `average` pour l'instant), et la forme pour les cheveux (`hair`). Exemples : `assets/fighters/head/average.png`, `assets/fighters/head/average_detail.png` (les yeux), `assets/fighters/hair/long.png`, `assets/fighters/shield/gladiateur.png`.
 
-Les calques actuels sont **provisoires** : des formes simples en gris clair (carrure `average`, cheveux `short` et `long`), générées par un script en attendant les vrais dessins, qui les remplacent sous les mêmes noms.
+Les calques de l'apparence commune sont **provisoires** : des formes simples en gris clair (carrure `average`, cheveux `short` et `long`), générées par un script en attendant les vrais dessins, qui les remplacent sous les mêmes noms. Ceux du gladiateur sont dessinés par `art/scripts/draw_gladiator.lua` (voir « Aseprite »), une base à reprendre à la main.
 
 ### Personnages uniques
 
@@ -103,7 +123,9 @@ Un personnage unique est dessiné à la main, sans calques générés ni teintes
 
 ### Créer le fichier
 
-Le script `art/scripts/fighter_template.lua` crée ce fichier pour une carrure (`art/fighters/<carrure>.aseprite`) : images, tags, durées et calques comme ci-dessous, remplis avec les dessins déjà présents dans `assets/fighters/` (la tête et les cheveux sur la première image seulement), la palette `art/palette.gpl` si elle existe, et un calque verrouillé `_guide` (centre de la case et cercle de 1 m) que l'exportation ignore, comme tout calque dont le nom commence par `_`. À faire à la main sinon :
+Les scripts sont dans `art/scripts/` ; les copier avec `fighter_looks.lua` dans le dossier des scripts d'Aseprite (File > Scripts > Open Scripts Folder). Ils retiennent le dossier du dépôt dans `lanista_root.txt`, à côté d'eux.
+
+Le script `fighter_template.lua` crée ce fichier pour une apparence (`art/fighters/<apparence>.aseprite`, `average` ou une clé de classe) : images, tags, durées et calques de l'apparence comme ci-dessous, remplis avec les dessins déjà présents dans `assets/fighters/` (la tête et les cheveux sur la première image seulement), la palette `art/palette.gpl` si elle existe, et un calque verrouillé `_guide` (centre de la case et cercle de 1 m) que l'exportation ignore, comme tout calque dont le nom commence par `_`. À faire à la main sinon :
 
 - Nouveau sprite de 32 × 32 px, mode de couleur RGBA, fond transparent.
 - Charger la palette du jeu (Palette > Load Palette).
@@ -113,9 +135,11 @@ Le script `art/scripts/fighter_template.lua` crée ce fichier pour une carrure (
 
 Dessiner d'abord un personnage complet, puis le répartir en calques à la place des calques provisoires de `assets/fighters/` (même grille, mêmes noms) et créer les variantes.
 
+Pour le gladiateur, `draw_gladiator.lua` dessine une première version sur le `gladiateur.aseprite` ouvert (créé par le gabarit avec l'apparence `gladiateur`) : les 16 images, le corps suivant les mouvements de la tête de `head_frames` (en mort, tout le corps tourne autour du cou comme la tête), les calques de tête sur la première image. Il remplace ce que ses calques contiennent (Ctrl+Z annule).
+
 ### Exporter
 
-Le script `art/scripts/export_fighter.lua` exporte d'un coup le fichier ouvert : chaque calque vers `assets/fighters/<calque>/<carrure>.png`, chaque calque `_detail` non vide vers `<carrure>_detail.png` (un calque de détail vidé supprime l'ancien fichier), la tête et les cheveux depuis la première image, les cheveux sous leur forme (retenue sur le calque `hair` par `fighter_template.lua`). Il ignore les calques dont le nom commence par `_` et signale ceux qu'il ne connaît pas ou qui sont vides. À la main sinon, File > Export Sprite Sheet, une exportation par calque :
+Le script `art/scripts/export_fighter.lua` exporte d'un coup le fichier ouvert, apparence tirée du nom du fichier : chaque calque vers `assets/fighters/<calque>/<apparence>.png`, chaque calque `_detail` non vide vers `<apparence>_detail.png` (un calque de détail vidé supprime l'ancien fichier), les calques de tête depuis la première image, les cheveux sous leur forme (retenue sur le calque `hair` par `fighter_template.lua`). Il ignore les calques dont le nom commence par `_` et signale ceux qu'il ne connaît pas ou qui sont vides. À la main sinon, File > Export Sprite Sheet, une exportation par calque :
 
 - Layout : Sheet Type « By Rows », Constraints « Fixed # of Columns » = 4.
 - Sprite : Layers = le calque à exporter ; Frames = toutes.

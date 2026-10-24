@@ -21,7 +21,7 @@ use crate::ai::Action;
 use crate::combat::Vec2;
 use crate::design_data::{ClassData, Cost, SpellData};
 use crate::fighter::appearance::Appearance;
-use crate::fighter::equipment::Refused;
+use crate::fighter::equipment::{OffHand, Refused};
 use crate::fighter::form::Form;
 use crate::fighter::illness::Illness;
 use crate::fighter::injury::{Injury, Location};
@@ -218,6 +218,8 @@ pub struct Fighter {
     pub condition: Condition,
     /// Equipment it fights without; `stats` and its spells already include the effects.
     pub refused: Refused,
+    /// What its loadout's off hand holds; only drawn, its effects are in `stats`.
+    pub off_hand: OffHand,
     /// How it is drawn; no effect on the fight.
     pub appearance: Appearance,
     /// The learned AI that plays it; the utility AI without one (see `duel::ais`).
@@ -325,6 +327,9 @@ impl Fighter {
             round_damage: 0,
             condition: Condition::default(),
             refused: Refused::NONE,
+            off_hand: class_data
+                .loadout(loadout)
+                .map_or(OffHand::Free, |l| l.off_hand),
             appearance: Appearance::default(),
             model: None,
         }

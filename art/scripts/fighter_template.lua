@@ -1,15 +1,16 @@
--- Creates the Aseprite source of a fighter build, art/fighters/<build>.aseprite, laid
--- out as docs/Formats_graphiques.md says: 32 x 32 px images, 16 frames, one tag per
--- animation with the game's durations, one layer per part in drawing order, each with
--- its `_detail` layer above it. The layers start from the drawings already in
--- assets/fighters/ when there are some, the placeholders to begin with.
+-- Creates the Aseprite source of a look, art/fighters/<look>.aseprite, laid out as
+-- docs/Formats_graphiques.md says: 32 x 32 px images, 16 frames, one tag per
+-- animation with the game's durations, the look's layers in drawing order
+-- (fighter_looks.lua), each with its `_detail` layer above it. The layers start from
+-- the drawings already in assets/fighters/ when there are some.
 --
--- In Aseprite: File > Scripts > Open Scripts Folder, put this script there, then
--- File > Scripts > Rescan Scripts Folder and run it from File > Scripts.
+-- In Aseprite: File > Scripts > Open Scripts Folder, put this script and
+-- fighter_looks.lua there, then File > Scripts > Rescan Scripts Folder and run it from
+-- File > Scripts.
 -- Without the interface:
---   Aseprite.exe -b --script-param build=average --script-param hair=short
+--   Aseprite.exe -b --script-param look=gladiateur
 --     --script art/scripts/fighter_template.lua
--- (other params: root=<repository folder>, overwrite=yes).
+-- (other params: hair=<shape>, root=<repository folder>, overwrite=yes).
 
 local FRAME = 32
 local COLUMNS = 4
@@ -22,18 +23,6 @@ local TAGS = {
   { name = "move", duration = 0.1, loops = true },
   { name = "attack", duration = 0.06, loops = false },
   { name = "death", duration = 0.15, loops = false },
-}
-
--- Drawing order, bottom to top. The head and the hair are one 32 x 32 image each,
--- on the first frame only: the game moves and turns them to follow the body.
-local PARTS = {
-  { name = "leg_back" },
-  { name = "arm_back" },
-  { name = "body" },
-  { name = "leg_front" },
-  { name = "head", single = true },
-  { name = "hair", single = true },
-  { name = "arm_front" },
 }
 
 local function fail(message)
@@ -91,10 +80,27 @@ local function default_root()
   return ""
 end
 
-local function ask()
+local function load_looks()
+  local path = app.fs.joinPath(script_folder(), "fighter_looks.lua")
+  if not app.fs.isFile(path) then
+    return nil
+  end
+  return dofile(path)
+end
+
+local function sorted_keys(map)
+  local keys = {}
+  for key in pairs(map) do
+    table.insert(keys, key)
+  end
+  table.sort(keys)
+  return keys
+end
+
+local function ask(looks)
   local params = {
     root = app.params.root or default_root(),
-    build = app.params.build or "average",
+    look = app.params.look or "average",
     hair = app.params.hair or "short",
     overwrite = app.params.overwrite == "yes",
   }
@@ -105,7 +111,8 @@ local function ask()
   while true do
     local dialog = Dialog("Fighter template")
     dialog:entry { id = "root", label = "Repository", text = params.root }
-    dialog:entry { id = "build", label = "Build", text = params.build }
+    dialog:combobox { id = "look", label = "Look", option = params.look,
+      options = sorted_keys(looks) }
     dialog:entry { id = "hair", label = "Hair shape", text = params.hair }
     dialog:button { id = "ok", text = "Create", focus = true }
     dialog:button { id = "cancel", text = "Cancel" }
@@ -114,7 +121,7 @@ local function ask()
     if not data.ok then
       return nil
     end
-    params.root, params.build, params.hair = data.root, data.build, data.hair
+    params.root, params.look, params.hair = data.root, data.look, data.hair
     if is_repository(params.root) then
       remember(params.root)
       return params
@@ -124,10 +131,10 @@ local function ask()
   end
 end
 
--- assets/fighters/<part>/<variant><suffix>.png, or nil if there is none.
-local function load_sheet(params, part, suffix)
-  local variant = part.name == "hair" and params.hair or params.build
-  local path = app.fs.joinPath(params.root, "assets", "fighters", part.name,
+-- assets/fighters/<layer>/<variant><suffix>.png, or nil if there is none.
+local function load_sheet(params, layer, suffix)
+  local variant = layer.name == "hair" and params.hair or params.look
+  local path = app.fs.joinPath(params.root, "assets", "fighters", layer.name,
     variant .. suffix .. ".png")
   if not app.fs.isFile(path) then
     return nil
@@ -144,13 +151,13 @@ local function cut(sheet, index)
   return image
 end
 
-local function fill(sprite, layer, sheet, single)
+local function fill(sprite, layer, sheet, head)
   if sheet == nil then
     return
   end
-  local count = single and 1 or #sprite.frames
+  local count = head and 1 or #sprite.frames
   for index = 0, count - 1 do
-    local image = single and cut(sheet, 0) or cut(sheet, index)
+    local image = cut(sheet, index)
     if not image:isEmpty() then
       sprite:newCel(layer, sprite.frames[index + 1], image, Point(0, 0))
     end
@@ -178,7 +185,7 @@ local function guide_image()
   return image
 end
 
-local function build_sprite(params)
+local function build_sprite(params, layers)
   local sprite = Sprite(FRAME, FRAME, ColorMode.RGB)
   local palette = app.fs.joinPath(params.root, "art", "palette.gpl")
   if app.fs.isFile(palette) then
@@ -199,17 +206,17 @@ local function build_sprite(params)
     end
   end
 
-  for index, part in ipairs(PARTS) do
+  for index, rule in ipairs(layers) do
     local layer = index == 1 and sprite.layers[1] or sprite:newLayer()
-    layer.name = part.name
+    layer.name = rule.name
     -- export_fighter.lua exports the hair under this shape.
-    if part.name == "hair" then
+    if rule.name == "hair" then
       layer.data = params.hair
     end
-    fill(sprite, layer, load_sheet(params, part, ""), part.single)
+    fill(sprite, layer, load_sheet(params, rule, ""), rule.head)
     local detail = sprite:newLayer()
-    detail.name = part.name .. "_detail"
-    fill(sprite, detail, load_sheet(params, part, "_detail"), part.single)
+    detail.name = rule.name .. "_detail"
+    fill(sprite, detail, load_sheet(params, rule, "_detail"), rule.head)
   end
 
   -- Not exported: the export skips layers whose name starts with `_`.
@@ -225,7 +232,11 @@ local function build_sprite(params)
 end
 
 local function main()
-  local params = ask()
+  local looks = load_looks()
+  if looks == nil then
+    return fail("fighter_looks.lua must be next to this script.")
+  end
+  local params = ask(looks)
   if params == nil then
     return
   end
@@ -233,8 +244,12 @@ local function main()
     return fail("No assets/fighters folder in \"" .. params.root ..
       "\": give the repository folder.")
   end
+  local layers = looks[params.look]
+  if layers == nil then
+    return fail("No look \"" .. params.look .. "\" in fighter_looks.lua.")
+  end
   local folder = app.fs.joinPath(params.root, "art", "fighters")
-  local path = app.fs.joinPath(folder, params.build .. ".aseprite")
+  local path = app.fs.joinPath(folder, params.look .. ".aseprite")
   if app.fs.isFile(path) and not params.overwrite then
     if not app.isUIAvailable then
       return fail(path .. " exists; pass overwrite=yes to replace it.")
@@ -249,7 +264,7 @@ local function main()
     end
   end
   app.fs.makeAllDirectories(folder)
-  local sprite = build_sprite(params)
+  local sprite = build_sprite(params, layers)
   sprite:saveAs(path)
   if not app.isUIAvailable then
     print("fighter_template: wrote " .. path)

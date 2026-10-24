@@ -110,12 +110,45 @@
         melee_survival: 10,
     ),
     // How fighters look, to tell 20 of them apart in a melee: drawn at random when a
-    // fighter is generated (docs/Formats_graphiques.md). Every layer is the `build`
-    // variant (assets/fighters/<layer>/<build>.png) but the hair, one of `hair`
-    // (assets/fighters/hair/<shape>.png); the grey drawings are multiplied by a skin
-    // tint (head, arms, legs), a hair tint and a tunic tint (body), RGB from 0 to 255.
+    // fighter is generated (docs/Formats_graphiques.md). A look is its layers in drawing
+    // order, each assets/fighters/<name>/<variant>.png and its optional
+    // <variant>_detail.png, untinted. The grey drawings are multiplied by the layer's
+    // paint: the fighter's Skin, Hair or Tunic tint (RGB from 0 to 255), or Plain,
+    // nothing. A Hair layer's variant is the fighter's hair shape, one of `hair`. A layer
+    // goes with a part of the body (Body, Head, ArmFront, ArmBack, LegFront, LegBack, the
+    // fighter facing right), left undrawn once it is lost; a Head layer is one image that
+    // follows the head. `with` draws a layer only with that off hand (Free, Shield, Weapon).
     appearance: (
+        // A class without its own look: the `build` variant of `layers`.
         build: "average",
+        layers: [
+            (name: "leg_back", paint: Skin, part: LegBack),
+            (name: "arm_back", paint: Skin, part: ArmBack),
+            (name: "body", paint: Tunic, part: Body),
+            (name: "leg_front", paint: Skin, part: LegFront),
+            (name: "head", paint: Skin, part: Head),
+            (name: "hair", paint: Hair, part: Head),
+            (name: "arm_front", paint: Skin, part: ArmFront),
+        ],
+        // A class's own look, by class key; its variant is the class key. Drawn with
+        // the common look until all its drawings are in the assets.
+        classes: {
+            // Crested bronze helmet, bare scarred torso, belt and loincloth, a manica on
+            // the sword arm, a shield or a second sword, greaves and sandals.
+            "gladiateur": [
+                (name: "leg_back", paint: Skin, part: LegBack),
+                (name: "arm_back", paint: Skin, part: ArmBack),
+                (name: "weapon_back", paint: Plain, part: ArmBack, with: Some(Weapon)),
+                (name: "body", paint: Skin, part: Body),
+                (name: "loincloth", paint: Tunic, part: Body),
+                (name: "leg_front", paint: Skin, part: LegFront),
+                (name: "shield", paint: Plain, part: ArmBack, with: Some(Shield)),
+                (name: "head", paint: Skin, part: Head),
+                (name: "crest", paint: Tunic, part: Head),
+                (name: "weapon", paint: Plain, part: ArmFront),
+                (name: "arm_front", paint: Skin, part: ArmFront),
+            ],
+        },
         hair: ["short", "long"],
         skins: [(241, 194, 150), (198, 134, 66), (120, 74, 42)],
         hair_tints: [(45, 32, 22), (150, 90, 40), (220, 196, 130)],

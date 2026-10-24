@@ -63,16 +63,16 @@ async fn main() {
     set_pc_assets_folder("assets");
     let data = Rc::new(DesignData::load().expect("load the design data"));
     let mut assets = Assets::default();
-    let (layers, details) = fighter_sprite::texture_paths(&data.fighter.appearance);
+    let (layers, optional) = fighter_sprite::texture_paths(&data.fighter.appearance);
     for layer in &layers {
         assets
             .load_texture(layer)
             .await
             .unwrap_or_else(|e| panic!("load the fighter layer {layer}: {e}"));
     }
-    // A layer's details are optional.
-    for detail in &details {
-        let _ = assets.load_texture(detail).await;
+    // Details and the classes' own looks may be missing.
+    for path in &optional {
+        let _ = assets.load_texture(path).await;
     }
     for sound in [HIT_SOUND, DEATH_SOUND, MUSIC] {
         assets.load_sound(sound).await.expect("load a sound");

@@ -555,9 +555,8 @@ impl DesignData {
         Ok(())
     }
 
-    fn validate_fighter(&self) -> Result<(), LoadError> {
-        let rules = &self.fighter;
-        let looks = &rules.appearance;
+    fn validate_appearance(&self) -> Result<(), LoadError> {
+        let looks = &self.fighter.appearance;
         let empty = [
             ("appearance.hair", looks.hair.is_empty()),
             ("appearance.skins", looks.skins.is_empty()),
@@ -571,6 +570,21 @@ impl DesignData {
                 problem: "empty",
             });
         }
+        if looks.layers.is_empty() || looks.classes.values().any(Vec::is_empty) {
+            return Err(LoadError::Invalid {
+                file: FIGHTER_FILE,
+                field: "appearance.layers",
+                problem: "a look without layers",
+            });
+        }
+        let is_class = |key: &String| self.classes.iter().any(|c| &c.key == key);
+        if !looks.classes.keys().all(is_class) {
+            return Err(LoadError::Invalid {
+                file: FIGHTER_FILE,
+                field: "appearance.classes",
+                problem: "not the key of a class",
+            });
+        }
         if looks.head_frames.len() != APPEARANCE_FRAMES {
             return Err(LoadError::Invalid {
                 file: FIGHTER_FILE,
@@ -578,6 +592,12 @@ impl DesignData {
                 problem: "not one for each of the spritesheet's 16 images",
             });
         }
+        Ok(())
+    }
+
+    fn validate_fighter(&self) -> Result<(), LoadError> {
+        self.validate_appearance()?;
+        let rules = &self.fighter;
         let equipment = &rules.equipment;
         // A refused armour, a second weapon or a loadout one is not at ease with must not
         // make the fighter stronger.
@@ -872,6 +892,8 @@ mod tests {
         assert_eq!(field(CLASSES, &bald), "appearance.hair");
         let still = FIGHTER.replacen("(-1.0, 0.0, 0.0), ", "", 1);
         assert_eq!(field(CLASSES, &still), "appearance.head_frames");
+        let foreign_look = FIGHTER.replacen(r#""gladiateur": ["#, r#""spartiate": ["#, 1);
+        assert_eq!(field(CLASSES, &foreign_look), "appearance.classes");
         let not_a_chance = FIGHTER.replacen("worsening_chance: 0.5", "worsening_chance: 1.5", 1);
         assert_eq!(field(CLASSES, &not_a_chance), "illness.worsening_chance");
         let no_week = "(competition_weeks: 0, great_event_weeks: 0, off_season_weeks: 0)";

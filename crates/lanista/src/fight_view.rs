@@ -13,7 +13,7 @@ use lanista_core::melee::{in_danger, in_final, next_cut};
 use macroquad::prelude::*;
 use reesch::{Animation, AnimationEvent, AnimationPlayer, Assets, FixedStep};
 
-use crate::fighter_sprite::{Missing, Placement, SHEET, SPRITE_SIZE, draw_fighter};
+use crate::fighter_sprite::{Dress, Missing, Placement, SHEET, SPRITE_SIZE, draw_fighter};
 use crate::lang::tr;
 
 // ponytail: placeholder sounds; per-spell and per-class sounds in `data/` later.
@@ -462,7 +462,12 @@ impl FightView {
                 },
                 missing: Missing::of(fighter, flip_x),
             };
-            draw_fighter(assets, rules, &fighter.appearance, &placement);
+            let dress = Dress {
+                look: &fighter.appearance,
+                class: data.class(fighter.class).map_or("", |c| c.key.as_str()),
+                off_hand: fighter.off_hand,
+            };
+            draw_fighter(assets, rules, &dress, &placement);
         }
     }
 
