@@ -349,7 +349,8 @@ fn anatomy(ui: &mut egui::Ui, log: &[Event], f: &Fighter) {
     });
 }
 
-/// Hit points `id` lost to hits landing on `part` in `log`.
+/// Hit points `id` lost on `part` in `log`: hits and mine blasts landing on it, and its
+/// bleeding.
 fn part_damage(log: &[Event], id: FighterId, part: Location) -> u32 {
     log.iter()
         .filter_map(|e| match e.kind {
@@ -357,6 +358,18 @@ fn part_damage(log: &[Event], id: FighterId, part: Location) -> u32 {
                 target,
                 damage,
                 part: Some(p),
+                ..
+            }
+            | EventKind::Blast {
+                target,
+                damage,
+                part: Some(p),
+                ..
+            }
+            | EventKind::Bled {
+                fighter: target,
+                damage,
+                part: p,
                 ..
             } if target == id && p == part => Some(damage),
             _ => None,
@@ -743,28 +756,37 @@ mod tests {
         assert!((casts(true)..=casts(false)).contains(&count(HIT_SOUND)));
     }
 
-    /// Every hit point lost lands on one of the six parts the anatomy shows.
+    /// Every hit point lost lands on one of the six parts the anatomy shows, bleeding
+    /// included.
     #[test]
     fn the_anatomy_counts_every_hit_point_lost() {
         use Location::{Arm, Body, Head, Leg};
-        let mut screen = screen(42);
-        screen.skip();
-        let arena = &screen.fight().arena;
-        for f in &arena.fighters {
-            let parts = [
-                Head,
-                Body,
-                Arm(Side::Left),
-                Arm(Side::Right),
-                Leg(Side::Left),
-                Leg(Side::Right),
-            ];
-            let total: u32 = parts
+        let parts = [
+            Head,
+            Body,
+            Arm(Side::Left),
+            Arm(Side::Right),
+            Leg(Side::Left),
+            Leg(Side::Right),
+        ];
+        let mut bled = false;
+        for seed in 0..20 {
+            let mut screen = screen(seed);
+            screen.skip();
+            let arena = &screen.fight().arena;
+            bled |= arena
+                .log
                 .iter()
-                .map(|&p| part_damage(&arena.log, f.id, p))
-                .sum();
-            assert_eq!(total, f.stats.hp - f.hp);
+                .any(|e| matches!(e.kind, EventKind::Bled { damage, .. } if damage > 0));
+            for f in &arena.fighters {
+                let total: u32 = parts
+                    .iter()
+                    .map(|&p| part_damage(&arena.log, f.id, p))
+                    .sum();
+                assert_eq!(total, f.stats.hp - f.hp, "seed {seed}");
+            }
         }
+        assert!(bled, "no fight bled");
     }
 
     #[test]
