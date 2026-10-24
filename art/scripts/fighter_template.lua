@@ -202,6 +202,10 @@ local function build_sprite(params)
   for index, part in ipairs(PARTS) do
     local layer = index == 1 and sprite.layers[1] or sprite:newLayer()
     layer.name = part.name
+    -- export_fighter.lua exports the hair under this shape.
+    if part.name == "hair" then
+      layer.data = params.hair
+    end
     fill(sprite, layer, load_sheet(params, part, ""), part.single)
     local detail = sprite:newLayer()
     detail.name = part.name .. "_detail"

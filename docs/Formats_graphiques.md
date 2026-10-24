@@ -115,7 +115,7 @@ Dessiner d'abord un personnage complet, puis le répartir en calques à la place
 
 ### Exporter
 
-File > Export Sprite Sheet, une exportation par calque :
+Le script `art/scripts/export_fighter.lua` exporte d'un coup le fichier ouvert : chaque calque vers `assets/fighters/<calque>/<carrure>.png`, chaque calque `_detail` non vide vers `<carrure>_detail.png` (un calque de détail vidé supprime l'ancien fichier), la tête et les cheveux depuis la première image, les cheveux sous leur forme (retenue sur le calque `hair` par `fighter_template.lua`). Il ignore les calques dont le nom commence par `_` et signale ceux qu'il ne connaît pas ou qui sont vides. À la main sinon, File > Export Sprite Sheet, une exportation par calque :
 
 - Layout : Sheet Type « By Rows », Constraints « Fixed # of Columns » = 4.
 - Sprite : Layers = le calque à exporter ; Frames = toutes.
