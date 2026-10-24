@@ -830,16 +830,20 @@ impl ClubScreen {
             .map(|i| self.special_fights(i))
             .collect();
         egui::ScrollArea::vertical().show(ui, |ui| {
-            egui::Grid::new("roster").striped(true).show(ui, |ui| {
-                for title in [
-                    tr!("roster-fighter"),
-                    tr!("roster-age"),
-                    tr!("roster-form"),
-                    tr!("roster-morale"),
-                    tr!("roster-fame"),
-                    tr!("roster-condition"),
-                    tr!("roster-week"),
-                ] {
+            let titles = [
+                tr!("roster-fighter"),
+                tr!("roster-age"),
+                tr!("roster-form"),
+                tr!("roster-morale"),
+                tr!("roster-fame"),
+                tr!("roster-condition"),
+                tr!("roster-week"),
+            ];
+            // The column count tells the grid its last column, which then gets the
+            // width left for the week's choices to wrap in.
+            let grid = egui::Grid::new("roster").num_columns(titles.len());
+            grid.striped(true).show(ui, |ui| {
+                for title in titles {
                     ui.strong(title);
                 }
                 ui.end_row();
@@ -859,7 +863,7 @@ impl ClubScreen {
                     ui.label(f.fame.value().to_string());
                     ui.label(condition_text(f));
                     if f.status == Status::Active {
-                        ui.horizontal(|ui| {
+                        ui.horizontal_wrapped(|ui| {
                             let club = (&self.state, &care);
                             plan_editor(ui, plan, f, &special[i], club, data);
                         });
