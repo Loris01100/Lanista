@@ -5,7 +5,6 @@ use lanista_core::design_data::DesignData;
 use lanista_core::fighter::career::{CareerFighter, Status};
 use lanista_core::market::{Move, Target, value};
 use lanista_core::rivals::RivalId;
-use lanista_core::staff::Scouting;
 use lanista_core::state::GameState;
 use reesch::egui;
 
@@ -13,9 +12,9 @@ use super::colosseums::not_ranked;
 use super::{ClubScreen, View};
 use crate::lang::tr;
 use crate::texts::{
-    club_name, colosseum_name, colosseum_rules_name, condition_text, fighter_name, free_agent_name,
-    move_text, origin_text, outside_ease_text, outside_personality_text, potential_text,
-    range_texts, record_text, rival_fighter_name, stat_names, unsellable_text, weeks,
+    club_name, colosseum_name, condition_text, fighter_name, free_agent_name, move_text,
+    origin_text, outside_ease_text, outside_personality_text, potential_text, range_texts,
+    record_text, rival_fighter_name, stat_names, unsellable_text, weeks,
 };
 
 /// What a click on the market asks for.
@@ -29,24 +28,9 @@ enum Pick {
 impl ClubScreen {
     /// The market: this week's moves, the answer to the last offer and the offer being
     /// written, the free agents, the rival fighters to observe or negotiate for, and the
-    /// club's fighters to sell or release. Stats out of the club are hidden or seen as
-    /// ranges until observed; a name opens what the club sees of the fighter.
+    /// club's fighters to sell or release. A fighter out of the club shows only its age,
+    /// fame and record; its name opens what the club sees of it.
     pub(super) fn market(&mut self, ui: &mut egui::Ui) {
-        // In the colosseums of the club's continent.
-        let home: Vec<usize> = (0..self.data.world.colosseums.len())
-            .filter(|&c| self.data.world.colosseums[c].continent == self.state.continent)
-            .collect();
-        // Only those on the market: the others stay listed, and are many.
-        let free_standings: Vec<Vec<String>> = (0..)
-            .zip(&self.state.free_agents)
-            .map(|(a, f)| {
-                if f.status != Status::Active {
-                    return Vec::new();
-                }
-                let all = self.standings(Contender::FreeAgent(a));
-                home.iter().map(|&c| all[c].clone()).collect()
-            })
-            .collect();
         let data = &self.data;
         let state = &self.state;
         let moves = &mut self.decisions.moves;
@@ -117,7 +101,7 @@ impl ClubScreen {
             moves.remove(n);
         }
         let pick = egui::ScrollArea::vertical().show(ui, |ui| {
-            let free = free_agent_grid(ui, state, &free_standings, moves, data);
+            let free = free_agent_grid(ui, state, moves, data);
             let rival = rival_grid(ui, state, moves, data);
             sale_grid(ui, state, moves, data);
             rival.or(free)
@@ -304,53 +288,34 @@ fn observe_label(fighter: &CareerFighter) -> String {
     }
 }
 
-/// A grid's titles: `first`, the stats, then `last`.
-fn market_header(ui: &mut egui::Ui, first: &[String], last: &[String]) {
-    for title in first.iter().chain(&stat_names()).chain(last) {
+/// A fighter out of the club as the market lists it: `name`, age, fame and record; the
+/// rest is on its sheet. Returns whether the name was clicked.
+fn outside_cells(ui: &mut egui::Ui, name: String, fighter: &CareerFighter) -> bool {
+    let clicked = ui.link(name).clicked();
+    ui.label(fighter.age.to_string());
+    ui.label(fighter.fame.value().to_string());
+    ui.label(record_text(fighter.record));
+    clicked
+}
+
+/// A grid's titles: those of a fighter out of the club, then `last`.
+fn outside_header(ui: &mut egui::Ui, last: &[String]) {
+    let first = [
+        tr!("roster-fighter"),
+        tr!("roster-age"),
+        tr!("roster-fame"),
+        tr!("record-title"),
+    ];
+    for title in first.iter().chain(last) {
         ui.strong(title);
     }
     ui.end_row();
 }
 
-/// What the club sees of a fighter out of it, with the recruiter's `scouting`: `name`,
-/// age, fame, record, the stats seen, the potential estimated and the personality.
-/// Returns whether the name was clicked.
-fn outside_cells(
-    ui: &mut egui::Ui,
-    name: String,
-    fighter: &CareerFighter,
-    scouting: &Scouting,
-    data: &DesignData,
-) -> bool {
-    let clicked = ui.link(name).clicked();
-    ui.label(fighter.age.to_string());
-    ui.label(fighter.fame.value().to_string());
-    ui.label(record_text(fighter.record));
-    for range in range_texts(fighter, scouting, data) {
-        ui.label(range);
-    }
-    ui.label(potential_text(fighter, scouting));
-    ui.label(outside_personality_text(fighter, scouting));
-    clicked
-}
-
-/// The titles of a fighter out of the club, before its stats.
-fn outside_titles() -> [String; 4] {
-    [
-        tr!("roster-fighter"),
-        tr!("roster-age"),
-        tr!("roster-fame"),
-        tr!("record-title"),
-    ]
-}
-
-/// The free agents on the market, with their standing in each colosseum of the club's
-/// continent (`standings`, by index in `GameState::free_agents`); returns the one to
-/// open.
+/// The free agents on the market; returns the one to open.
 fn free_agent_grid(
     ui: &mut egui::Ui,
     state: &GameState,
-    standings: &[Vec<String>],
     moves: &mut Vec<Move>,
     data: &DesignData,
 ) -> Option<Pick> {
@@ -358,26 +323,13 @@ fn free_agent_grid(
     ui.add_space(6.0);
     ui.strong(tr!("market-free-agents"));
     egui::Grid::new("free agents").striped(true).show(ui, |ui| {
-        let mut last = vec![tr!("potential"), tr!("personality-title")];
-        last.extend(
-            data.world
-                .colosseums
-                .iter()
-                .filter(|c| c.continent == state.continent)
-                .map(colosseum_rules_name),
-        );
-        last.extend([String::new(), String::new()]);
-        market_header(ui, &outside_titles(), &last);
-        let scouting = state.scouting();
+        outside_header(ui, &[String::new(), String::new()]);
         for (a, f) in state.free_agents.iter().enumerate() {
             if f.status != Status::Active {
                 continue;
             }
-            if outside_cells(ui, free_agent_name(a, f, data), f, &scouting, data) {
+            if outside_cells(ui, free_agent_name(a, f, data), f) {
                 pick = Some(Pick::Open(Target::FreeAgent(a)));
-            }
-            for standing in standings.get(a).into_iter().flatten() {
-                ui.label(standing);
             }
             let observe = Move::Observe(Target::FreeAgent(a));
             toggle(ui, moves, observe, &observe_label(f), true);
@@ -403,18 +355,7 @@ fn rival_grid(
     egui::Grid::new("rival fighters")
         .striped(true)
         .show(ui, |ui| {
-            market_header(
-                ui,
-                &outside_titles(),
-                &[
-                    tr!("potential"),
-                    tr!("personality-title"),
-                    tr!("estimated-value"),
-                    String::new(),
-                    String::new(),
-                ],
-            );
-            let scouting = state.scouting();
+            outside_header(ui, &[tr!("estimated-value"), String::new(), String::new()]);
             for (club, rival) in state.rivals.iter().enumerate() {
                 for (fighter, f) in rival.fighters.iter().enumerate() {
                     if f.status != Status::Active {
@@ -422,7 +363,7 @@ fn rival_grid(
                     }
                     let id = RivalId { club, fighter };
                     let name = rival_fighter_name(id, state, data);
-                    if outside_cells(ui, name, f, &scouting, data) {
+                    if outside_cells(ui, name, f) {
                         pick = Some(Pick::Open(Target::Rival(id)));
                     }
                     let estimate = estimate(f, data);

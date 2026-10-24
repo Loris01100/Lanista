@@ -483,7 +483,7 @@ reign-now = aujourd'hui
 
 ## Marché (vue)
 
-market-intro = { $active } / { $max } combattants en activité. Une observation et une offre par semaine ; le club rival répond à une offre en fin de semaine, puis le combattant.
+market-intro = { $active } / { $max } combattants en activité. Une observation et une offre par semaine ; le club rival répond à une offre en fin de semaine, puis le combattant. Un nom ouvre la fiche du combattant.
 market-counter-offer = { $club } demande { $price } pour { $fighter }
 market-offer-this-price = Offrir ce prix
 market-offer-for = Offre pour { $fighter } :
