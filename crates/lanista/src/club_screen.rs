@@ -145,6 +145,8 @@ pub struct ClubScreen {
     offer_draft: Option<(RivalId, u32)>,
     /// Which fighters out of the club the market lists.
     market_filter: MarketFilter,
+    /// Whether the options are laid over the screen.
+    options_open: bool,
     /// The continent the colosseums view shows, the club's at first.
     shown_continent: Continent,
     /// The prestige of the colosseums the colosseums view shows; `None` shows them all.
@@ -211,6 +213,7 @@ impl ClubScreen {
             confirm: None,
             offer_draft: None,
             market_filter: MarketFilter::default(),
+            options_open: false,
             bindings,
         };
         screen.read_journal();
@@ -443,6 +446,8 @@ impl ClubScreen {
             ui.selectable_value(&mut self.view, View::Colosseums, tr!("view-colosseums"));
             ui.selectable_value(&mut self.view, View::Market, tr!("view-market"));
             ui.selectable_value(&mut self.view, View::Staff, tr!("view-staff"));
+            ui.separator();
+            ui.toggle_value(&mut self.options_open, tr!("options"));
         });
         // On its own line: a long message would push the views out of the bar.
         if let Some(message) = &self.message {
@@ -1033,15 +1038,17 @@ impl Screen for ClubScreen {
             let fights = std::mem::take(&mut self.to_watch);
             return self.watch(fights);
         }
-        if self.bindings.pressed(ui, &Action::Quit) {
+        // Échap and Espace belong to the options while they are open.
+        let keys = !self.options_open;
+        if keys && self.bindings.pressed(ui, &Action::Quit) {
             if self.view == View::Menu {
                 return Transition::Pop;
             }
             self.view = View::Menu;
         }
-        let mut play = self.bindings.pressed(ui, &Action::NextWeek);
+        let mut play = keys && self.bindings.pressed(ui, &Action::NextWeek);
         let mut again = None;
-        let bar = egui::TopBottomPanel::top("club").show(ui, |ui| self.top_bar(ui));
+        egui::TopBottomPanel::top("club").show(ui, |ui| self.top_bar(ui));
         egui::CentralPanel::default().show(ui, |ui| match self.view {
             View::Menu => play |= self.menu(ui),
             View::Roster => self.roster(ui),
@@ -1053,8 +1060,9 @@ impl Screen for ClubScreen {
             View::Outside(target) => self.outside(ui, target),
             View::Rival(club) => self.rival_club(ui, club),
         });
-        let top = bar.response.rect.bottom();
-        if let Some(failed) = options::window(ui, audio, self.saves.as_deref(), top) {
+        if let Some(failed) =
+            options::window(ui, audio, self.saves.as_deref(), &mut self.options_open)
+        {
             self.message = Some(failed);
         }
         if let Some(seed) = again {

@@ -55,6 +55,8 @@ pub struct CombatScreen {
     speed: f32,
     /// Folder where the options chosen are kept; `None` keeps nothing.
     settings: Option<PathBuf>,
+    /// Whether the options are laid over the screen; the fights wait meanwhile.
+    options_open: bool,
 }
 
 impl CombatScreen {
@@ -74,6 +76,7 @@ impl CombatScreen {
             bindings,
             speed: 1.0,
             settings: None,
+            options_open: false,
         }
     }
 
@@ -167,6 +170,8 @@ impl CombatScreen {
                     if !self.running() {
                         done = ui.button(tr!("continue")).clicked();
                     }
+                    ui.separator();
+                    ui.toggle_value(&mut self.options_open, tr!("options"));
                 });
             });
         done
@@ -343,7 +348,9 @@ fn thumbnail_rects(count: usize, width: f32) -> Vec<Rect> {
 
 impl Screen for CombatScreen {
     fn update(&mut self, ui: &egui::Context, assets: &Assets, audio: &mut Audio) -> Transition {
-        if self.bindings.pressed(ui, &Action::Quit) {
+        // The keys belong to the options while they are open.
+        let keys = !self.options_open;
+        if keys && self.bindings.pressed(ui, &Action::Quit) {
             return Transition::Pop;
         }
         for (action, speed) in [
@@ -351,11 +358,11 @@ impl Screen for CombatScreen {
             (Action::NormalSpeed, SPEEDS[1]),
             (Action::FastSpeed, SPEEDS[2]),
         ] {
-            if self.bindings.pressed(ui, &action) {
+            if keys && self.bindings.pressed(ui, &action) {
                 self.speed = speed;
             }
         }
-        if self.running() && self.bindings.pressed(ui, &Action::Skip) {
+        if keys && self.running() && self.bindings.pressed(ui, &Action::Skip) {
             self.skip();
         }
         if self.controls(ui) {
@@ -380,8 +387,11 @@ impl Screen for CombatScreen {
         self.gauges(ui);
         // ponytail: no screen to tell a failure on; the options then last until the
         // game closes.
-        let _ = options::window(ui, audio, self.settings.as_deref(), 0.0);
+        let _ = options::window(ui, audio, self.settings.as_deref(), &mut self.options_open);
         audio.play_music(assets, MUSIC);
+        if self.options_open {
+            return Transition::None;
+        }
         // Speed scales time: more or fewer ticks per frame, animations alike.
         for sound in self.advance(get_frame_time() * self.speed) {
             audio.play_effect(assets, sound);
