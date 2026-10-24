@@ -3,7 +3,7 @@
 
 use lanista_core::calendar::Date;
 use lanista_core::colosseum::{
-    Challenge, ColosseumData, ColosseumId, Contender, Continent, TitleNews, title_kept,
+    ColosseumData, ColosseumId, Contender, Continent, TitleNews, title_kept,
 };
 use lanista_core::combat::ArenaKind;
 use lanista_core::design_data::DesignData;
@@ -445,13 +445,17 @@ pub fn market_news_text(news: MarketNews, state: &GameState, data: &DesignData) 
     }
 }
 
-/// "Augure n° 3 (Ludus Magnus) à Capoue": who sent or would receive the challenge, and
-/// where.
-pub fn challenger_text(challenge: Challenge, state: &GameState, data: &DesignData) -> String {
+/// "Augure n° 3 (Ludus Magnus) à Capoue": who would receive the challenge, and where.
+pub fn challenger_text(
+    colosseum: ColosseumId,
+    rival: RivalId,
+    state: &GameState,
+    data: &DesignData,
+) -> String {
     tr!(
         "challenger",
-        fighter = rival_fighter_name(challenge.rival, state, data),
-        place = colosseum_name(challenge.colosseum, data)
+        fighter = rival_fighter_name(rival, state, data),
+        place = colosseum_name(colosseum, data)
     )
 }
 
@@ -582,15 +586,6 @@ pub fn relation_change_text(change: Change, state: &GameState, data: &DesignData
                 .get(colosseum)
                 .map_or_else(|| "?".into(), colosseum_rules_name)
         ),
-        Reason::ChallengeRefused { fighter, rival: r } => {
-            let rival = rival(r);
-            tr!(
-                "reason-challenge-refused",
-                fighter = club(fighter),
-                vowel = vowel(&rival),
-                rival = rival
-            )
-        }
         Reason::Sold { fighter } => tr!("reason-sold", fighter = club(fighter)),
         Reason::Bought { fighter } => tr!("reason-bought", fighter = club(fighter)),
         Reason::PactKept { fighter, rival: r } => {

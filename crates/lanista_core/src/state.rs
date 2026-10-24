@@ -9,9 +9,7 @@ use rand_chacha::ChaCha8Rng;
 use serde::{Deserialize, Serialize};
 
 use crate::calendar::Date;
-use crate::colosseum::{
-    Challenge, Colosseum, ColosseumId, Contender, Continent, Odds, Rosters, TitleNews,
-};
+use crate::colosseum::{Colosseum, ColosseumId, Contender, Continent, Odds, Rosters, TitleNews};
 use crate::design_data::DesignData;
 use crate::economy::Wealth;
 use crate::fighter::care::CareRules;
@@ -73,8 +71,6 @@ pub struct GameState {
     pub colosseums: Vec<Colosseum>,
     /// The rival clubs and their fighters, drawn when the world opens.
     pub rivals: Vec<Rival>,
-    /// The rival fighters' challenges to the club's fighters, to accept or refuse this week.
-    pub challenges: Vec<Challenge>,
     /// Everyone who came to the market, signed for nothing. The free agents are those
     /// still active, never fewer than `MarketRules::min_free_agents` at the start of a
     /// week; like the clubs' fighters, one who leaves keeps its place, with its status:
@@ -141,7 +137,6 @@ impl GameState {
             fighters,
             colosseums: Vec::new(),
             rivals: Vec::new(),
-            challenges: Vec::new(),
             free_agents: Vec::new(),
             transfer_list: Vec::new(),
             kept: Vec::new(),
@@ -540,8 +535,7 @@ impl GameState {
     /// `career::suggested_plan` for the club's fighter `i`, its fights in the first
     /// colosseum of the club's continent (`WorldRules::first_colosseum`), who defends a
     /// title instead
-    /// of fighting or training in the last two weeks before its deadline, or else
-    /// accepts a challenge it received and the club can pay for.
+    /// of fighting or training in the last two weeks before its deadline.
     #[must_use]
     pub fn suggested_plan(&self, i: usize, data: &DesignData) -> WeekPlan {
         let Some(fighter) = self.fighters.get(i) else {
@@ -564,22 +558,11 @@ impl GameState {
         {
             plan.activity = Activity::TitleFight(ColosseumId(c));
         }
-        if matches!(plan.activity, Activity::Fight(_) | Activity::Train)
-            && let Some(challenge) = self.challenges.iter().find(|ch| {
-                ch.fighter == i
-                    && self
-                        .entry_fee(ch.colosseum, data)
-                        .is_some_and(|fee| i64::from(fee) <= self.money)
-            })
-        {
-            plan.activity = Activity::Challenge(challenge.colosseum, challenge.rival);
-        }
         plan
     }
 
     /// Whether the club's fighter `i` may fight `rival` in colosseum `id` in a
-    /// challenge: the rival fighter challenged it this week, or its club accepts the
-    /// challenge.
+    /// challenge: the rival fighter still fights and its club accepts the challenge.
     #[must_use]
     pub fn may_challenge(
         &self,
@@ -588,11 +571,6 @@ impl GameState {
         rival: RivalId,
         data: &DesignData,
     ) -> bool {
-        let received = Challenge {
-            fighter: i,
-            colosseum: id,
-            rival,
-        };
         let active = self
             .rival_fighter(rival)
             .is_some_and(|f| f.status == Status::Active);
@@ -608,7 +586,7 @@ impl GameState {
                     colosseum.accepts_challenge(rival, i, needed, &data.world)
                 })
         };
-        active && (self.challenges.contains(&received) || accepts())
+        active && accepts()
     }
 
     /// The colosseum and the outsider the club's fighter `i` meets if it fights for the
@@ -1804,7 +1782,6 @@ mod tests {
         // Far ahead in Elo, no rival fighter accepts: a week of rest.
         let other = ranked(&state, 3);
         state.colosseums[1].ranking[0].elo = 2000;
-        state.challenges.clear();
         if state.colosseums[1].ranking[0].contender == Contender::Club(0) {
             assert!(!state.may_challenge(0, rome, other, &data));
             let summary = next_week(
@@ -1817,83 +1794,6 @@ mod tests {
                 Activity::Rest
             );
         }
-    }
-
-    #[test]
-    fn a_received_challenge_is_accepted_or_paid_for_when_not_fighting() {
-        let data = data();
-        let rules = &data.world;
-        let mut state = top_of_rome(&data);
-        state.colosseums[1].ranking[0].elo = 2000;
-        let received = Challenge {
-            fighter: 0,
-            colosseum: ColosseumId(1),
-            rival: ranked(&state, 2),
-        };
-        // Received, so it may be fought however far ahead the fighter is; past the
-        // season's opening melee, which the suggestion would rather enter.
-        state.week = 2;
-        state.challenges = vec![received];
-        assert!(state.may_challenge(0, ColosseumId(1), received.rival, &data));
-        state.fighters[0].form = crate::fighter::form::Form::full();
-        assert_eq!(
-            state.suggested_plan(0, &data).activity,
-            Activity::Challenge(ColosseumId(1), received.rival)
-        );
-        // Fighting elsewhere refuses it for nothing.
-        let mut elsewhere = state.clone();
-        let summary = next_week(
-            &mut elsewhere,
-            &plan(Activity::Fight(ColosseumId(0)), false),
-            &data,
-        );
-        assert_eq!(summary.refusals, []);
-        assert_eq!(elsewhere.colosseums[1].elo(Contender::Club(0), rules), 2000);
-        // Training refuses it at a price.
-        let fame = state.fighters[0].fame;
-        let summary = next_week(&mut state, &plan(Activity::Train, false), &data);
-        assert_eq!(summary.refusals, [received]);
-        let refusal = &rules.challenges;
-        assert_eq!(
-            state.colosseums[1].elo(Contender::Club(0), rules),
-            2000 - i32::try_from(refusal.refusal_elo).unwrap()
-        );
-        assert_eq!(
-            state.fighters[0].fame,
-            fame.changed_by(-i32::try_from(refusal.refusal_fame).unwrap())
-        );
-        let refused = Reason::ChallengeRefused {
-            fighter: 0,
-            rival: received.rival,
-        };
-        assert_eq!(reasons(&state, received.rival.club), [refused]);
-    }
-
-    #[test]
-    fn rival_fighters_challenge_the_ranked_fighters_fit_to_fight() {
-        let data = data();
-        let mut state = top_of_rome(&data);
-        // The challenger's club, the first one, challenges 40 % of the weeks.
-        state.rivals[0].profile = Profile::Aggressive;
-        let mut received = 0;
-        for _ in 0..20 {
-            state.fighters[0].form = crate::fighter::form::Form::full();
-            state.fighters[0].injuries.clear();
-            state.fighters[0].illness = None;
-            next_week(&mut state, &plan(Activity::Rest, false), &data);
-            assert!(state.challenges.iter().all(|ch| ch.fighter == 0
-                && ch.colosseum == ColosseumId(1)
-                && Some(ch.rival) == state.colosseums[1].challenger(0, state.rosters())));
-            received += state.challenges.len();
-        }
-        assert!(
-            (1..=14).contains(&received),
-            "{received} challenges in 20 weeks"
-        );
-        // A tired fighter gets none.
-        state.fighters[0].form = crate::fighter::form::Form::new(10);
-        next_week(&mut state, &plan(Activity::Rest, false), &data);
-        assert_eq!(state.challenges, []);
     }
 
     #[test]

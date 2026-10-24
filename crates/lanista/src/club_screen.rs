@@ -16,7 +16,7 @@ use market::MarketFilter;
 use std::rc::Rc;
 
 use lanista_core::calendar::SeasonPhase;
-use lanista_core::colosseum::{Challenge, ColosseumId, Contender, Continent};
+use lanista_core::colosseum::{ColosseumId, Contender, Continent};
 use lanista_core::design_data::DesignData;
 use lanista_core::economy::Flow;
 use lanista_core::fighter::FighterId;
@@ -47,8 +47,8 @@ use crate::texts::{
     colosseum_rules_name, condition_text, contender_name, continent_name, date_in_sentence,
     ease_text, fight_text, fighter_name, illness_text, injury_text, loadout_name, market_news_text,
     money_line, move_text, named_club, origin_text, personality_text, priced, record_text,
-    rival_fighter_name, staff_move_text, staff_news_text, stat_names, title_news_text, vowel,
-    wealth_name, wealth_text, week_lines, world_news_text,
+    rival_fighter_name, staff_move_text, staff_news_text, stat_names, title_news_text, wealth_name,
+    wealth_text, week_lines, world_news_text,
 };
 use crate::title_screen::{Slot, read_slots, slot_text};
 
@@ -257,20 +257,6 @@ impl ClubScreen {
                 .iter()
                 .map(|&(c, news)| title_news_text(c, news, &self.state, data)),
         );
-        let refusal = &data.world.challenges;
-        overview.extend(summary.refusals.iter().map(|&ch| {
-            let challenger = challenger_text(ch, &self.state, data);
-            tr!(
-                "challenge-refused",
-                fighter = fighters
-                    .get(ch.fighter)
-                    .map_or_else(|| "?".into(), |f| fighter_name(ch.fighter, f, data)),
-                vowel = vowel(&challenger),
-                challenger = challenger,
-                fame = refusal.refusal_fame,
-                elo = refusal.refusal_elo
-            )
-        }));
         self.last_week = Some((played.week, overview));
     }
 
@@ -578,20 +564,6 @@ impl ClubScreen {
                 ));
             }
         }
-        let refusal = &self.data.world.challenges;
-        for &ch in &self.state.challenges {
-            if let Some(f) = self.state.fighters.get(ch.fighter) {
-                let challenger = challenger_text(ch, &self.state, &self.data);
-                alerts.push(tr!(
-                    "alert-challenge",
-                    fighter = fighter_name(ch.fighter, f, &self.data),
-                    vowel = vowel(&challenger),
-                    challenger = challenger,
-                    fame = refusal.refusal_fame,
-                    elo = refusal.refusal_elo
-                ));
-            }
-        }
         for offer in &self.state.sale_offers {
             if let Some(f) = self.state.fighters.get(offer.fighter) {
                 alerts.push(tr!(
@@ -620,8 +592,8 @@ impl ClubScreen {
         alerts
     }
 
-    /// The title fights the club's fighter `i` may have this week, the challenges it
-    /// received and, in the season's opening week, the melee of each colosseum of the
+    /// The title fights the club's fighter `i` may have this week and, in the season's
+    /// opening week, the melee of each colosseum of the
     /// club's continent, with their names.
     fn special_fights(&self, i: usize) -> Vec<(Activity, String)> {
         let data = &self.data;
@@ -641,19 +613,7 @@ impl ClubScreen {
                 let activity = Activity::TitleFight(id);
                 (activity, activity_name(activity, data))
             });
-        let challenges = self
-            .state
-            .challenges
-            .iter()
-            .filter(|ch| ch.fighter == i)
-            .map(|&ch| {
-                let name = challenger_text(ch, &self.state, data);
-                (
-                    Activity::Challenge(ch.colosseum, ch.rival),
-                    tr!("challenge-from", vowel = vowel(&name), challenger = name),
-                )
-            });
-        melees.chain(titles).chain(challenges).collect()
+        melees.chain(titles).collect()
     }
 
     fn roster(&mut self, ui: &mut egui::Ui) {
@@ -1016,7 +976,7 @@ fn plan_summary(plan: &WeekPlan, fighter: &CareerFighter, data: &DesignData) -> 
 }
 
 /// A fighter's week: rest, training, a fight at home or, in a list, abroad, a title
-/// fight or a received challenge (in `special`, with their names), and care at the
+/// fight or a melee (in `special`, with their names), and care at the
 /// price of the club's `care`, all within the money of the club's `state`.
 fn plan_editor(
     ui: &mut egui::Ui,
@@ -1122,15 +1082,9 @@ fn challenge_picker(
             }
             let fee = state.entry_fee(id, data).unwrap_or(0);
             let chosen = match plan.activity {
-                Activity::Challenge(at, rival) if at == id => challenger_text(
-                    Challenge {
-                        fighter: i,
-                        colosseum: id,
-                        rival,
-                    },
-                    state,
-                    data,
-                ),
+                Activity::Challenge(at, rival) if at == id => {
+                    challenger_text(id, rival, state, data)
+                }
                 _ => colosseum_name(id, data),
             };
             ui.add_enabled_ui(i64::from(fee) <= state.money, |ui| {
@@ -1363,28 +1317,19 @@ mod tests {
         assert!(!report.fight.is_melee() && report.fight.opponent().is_some());
         play(&mut duel);
         assert_eq!(report.fight.report, Report::new(&duel));
-        // A rival fighter challenges it and the suggestion accepts: a fight against
-        // that fighter.
-        while screen.state.challenges.is_empty() {
-            assert!(screen.state.week < 60, "no challenge");
-            screen.next_week();
-        }
-        let challenge = screen.state.challenges[0];
-        let resident = screen.state.rival_fighter(challenge.rival).unwrap().clone();
-        assert_eq!(
-            screen.decisions.plans[0].activity,
-            Activity::Challenge(challenge.colosseum, challenge.rival)
-        );
-        let name = rival_fighter_name(challenge.rival, &screen.state, &screen.data);
-        let mine = fighter_name(0, &screen.state.fighters[0], &screen.data);
-        assert!(
-            screen
-                .alerts()
-                .iter()
-                .any(|a| a.starts_with(&format!("{mine} : défi ")) && a.contains(&name)),
-            "{:?}",
-            screen.alerts()
-        );
+        // It challenges a rival fighter whose club accepts: a fight against that
+        // fighter.
+        let state = &screen.state;
+        let home = ColosseumId(0);
+        let rival = state.colosseums[0]
+            .active_ranking(state.rosters())
+            .find_map(|r| match r.contender {
+                Contender::Rival(r) if state.may_challenge(0, home, r, &screen.data) => Some(r),
+                _ => None,
+            })
+            .expect("a rival fighter accepts");
+        let resident = state.rival_fighter(rival).unwrap().clone();
+        screen.decisions.plans[0].activity = Activity::Challenge(home, rival);
         screen.next_week();
         assert_eq!(screen.fights[0].fight.opponent(), Some(&resident));
         // A week of rest: nothing to watch, nothing to sum up.
@@ -1913,7 +1858,7 @@ mod tests {
     #[test]
     fn three_seasons_where_a_club_becomes_a_rival_one_closes_and_one_is_founded() {
         let data = Rc::new(DesignData::load().unwrap());
-        let mut screen = screen(3);
+        let mut screen = screen(1);
         let mut rivalry = None;
         let (mut closed, mut founded) = (false, false);
         for _ in 0..3 * u64::from(data.calendar.season_weeks()) {
@@ -1963,7 +1908,6 @@ mod tests {
         assert!(changes.iter().all(|c| match c.why {
             Reason::Killed { victim: r, .. }
             | Reason::Beaten { rival: r, .. }
-            | Reason::ChallengeRefused { rival: r, .. }
             | Reason::PactKept { rival: r, .. }
             | Reason::Betrayed { rival: r, .. } => r.club == club,
             _ => true,

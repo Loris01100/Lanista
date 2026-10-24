@@ -1,17 +1,13 @@
 //! The colosseums' weeks: their end ([`end_colosseum_weeks`]: titles vacated, stripped
-//! and defended), title fights and the rival fighters' challenges.
+//! and defended) and title fights.
 
-use rand::RngExt;
-
-use crate::colosseum::{Challenge, Colosseum, ColosseumId, Contender, Rosters, TitleNews};
+use crate::colosseum::{Colosseum, Contender, Rosters, TitleNews};
 use crate::combat::ArenaKind;
 use crate::design_data::DesignData;
-use crate::fighter::career::{Activity, Status, WeekReport, suggested_plan};
 use crate::fighter::fame::FightResult;
-use crate::relations::Reason;
 
 use super::outsiders::{outsider, put_outsider};
-use super::{GameState, opposite, relate};
+use super::{GameState, opposite};
 
 /// The colosseums' end of `week`: a title whose holder no longer fights goes to the
 /// best ranked still fighting; an outsider champion at its deadline defends the title
@@ -124,71 +120,5 @@ pub(super) fn title_fight(
         champion,
         challenger,
         result,
-    }
-}
-
-/// Clears the week's challenges; returns those refused by a fighter who did not fight,
-/// after taking their price in fame and Elo.
-pub(super) fn refusals(
-    state: &mut GameState,
-    reports: &[Option<WeekReport>],
-    data: &DesignData,
-) -> Vec<Challenge> {
-    let rules = &data.world.challenges;
-    let mut refused = std::mem::take(&mut state.challenges);
-    refused.retain(|ch| {
-        reports
-            .get(ch.fighter)
-            .and_then(Option::as_ref)
-            .is_some_and(|r| matches!(r.plan.activity, Activity::Rest | Activity::Train))
-    });
-    for ch in &refused {
-        let fighter = &mut state.fighters[ch.fighter];
-        fighter.fame = fighter
-            .fame
-            .changed_by(-i32::try_from(rules.refusal_fame).unwrap_or(i32::MAX));
-        if let Some(colosseum) = usize::try_from(ch.colosseum.0)
-            .ok()
-            .and_then(|c| state.colosseums.get_mut(c))
-        {
-            colosseum.lose_elo(Contender::Club(ch.fighter), rules.refusal_elo, &data.world);
-        }
-        let why = Reason::ChallengeRefused {
-            fighter: ch.fighter,
-            rival: ch.rival,
-        };
-        relate(state, ch.rival.club, why, data);
-    }
-    refused
-}
-
-/// The rival fighters' challenges for the week to play: in each colosseum where it is
-/// ranked, a club's fighter fit to fight is challenged by the rival fighter closest in
-/// Elo, with the `challenge_percent` chance of that fighter's club.
-pub(super) fn receive_challenges(state: &mut GameState, data: &DesignData) {
-    let rosters = Rosters {
-        club: &state.fighters,
-        rivals: &state.rivals,
-        free_agents: &state.free_agents,
-    };
-    for (i, fighter) in state.fighters.iter().enumerate() {
-        let fit = suggested_plan(fighter, state.week).activity != Activity::Rest;
-        if fighter.status != Status::Active || !fit {
-            continue;
-        }
-        for (id, colosseum) in (0..).zip(&state.colosseums) {
-            if let Some(rival) = colosseum.challenger(i, rosters)
-                && let Some(profile) = state.rivals.get(rival.club).map(|r| r.rules(data))
-                && state.rng.random_range(0..100)
-                    < profile.challenge_percent
-                        + state.standing_rules(rival.club, data).challenge_points
-            {
-                state.challenges.push(Challenge {
-                    fighter: i,
-                    colosseum: ColosseumId(id),
-                    rival,
-                });
-            }
-        }
     }
 }

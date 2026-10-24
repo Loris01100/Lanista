@@ -32,7 +32,7 @@ Le jeu avance semaine par semaine, et chaque combattant fait au maximum un comba
 ```mermaid
 flowchart LR
   A[Rapport de la semaine] --> B[Décisions par combattant<br/>repos, entraînement, soins]
-  B --> C[Inscriptions<br/>colisée, défis envoyés ou reçus]
+  B --> C[Inscriptions<br/>colisée, défis envoyés]
   C --> D[Simulation des combats<br/>de tout le monde]
   D --> E[Visionnage<br/>combats du joueur]
   E --> F[Comptes rendus<br/>+ sauvegarde auto]
@@ -131,7 +131,7 @@ Le moral monte avec les victoires et la renommée, baisse avec les défaites, le
 
 ### Renommée
 
-Chaque combattant a une jauge de renommée qui dépend de son style et de son audace. Elle monte avec les actions spectaculaires, les victoires contre plus fort, les King of the hill et les combats sans l'équipement du colisée. Elle baisse avec les abandons, les fuites, les combats sans relief et les défis refusés. Elle augmente les recettes rapportées par le combattant.
+Chaque combattant a une jauge de renommée qui dépend de son style et de son audace. Elle monte avec les actions spectaculaires, les victoires contre plus fort, les King of the hill et les combats sans l'équipement du colisée. Elle baisse avec les abandons, les fuites, et les combats sans relief. Elle augmente les recettes rapportées par le combattant.
 
 ### Progression, âge et retraite
 
@@ -264,7 +264,7 @@ Le titre est distinct du rang 1. Le champion doit le défendre en duel contre un
 
 ### Défis
 
-Les clubs peuvent proposer et recevoir des défis. Refuser un défi n'est pas sanctionné en soi, mais un combattant qui refuse trop et ne combat pas assez perd de la renommée et de l'Elo.
+Le joueur peut défier un combattant d'un club rival ; le club accepte si l'Elo donne à son combattant assez de chances de gagner. Les clubs rivaux ne défient pas les combattants du joueur : les défis reçus ont été retirés, faute d'apporter assez au jeu.
 
 ### Les trois compétitions
 
@@ -290,7 +290,7 @@ Chaque club rival a un profil (prudent, agressif, marchand) qui règle ses seuil
 
 - Forme sous le seuil ou blessure : repos, et soins si le budget le permet et si la blessure le justifie.
 - Forme correcte : inscription au colisée de son continent où ses chances sont les meilleures, à l'étranger seulement si aucun ne convient chez lui, sinon entraînement. Un club qui ne peut plus payer l'entraînement inscrit ses combattants au colisée gratuit de chez lui : les recettes sont son seul revenu.
-- Défis : en proposer à des adversaires d'Elo proche, accepter ceux du joueur si la chance de victoire estimée dépasse son seuil.
+- Défis : accepter ceux du joueur si la chance de victoire estimée dépasse son seuil.
 - Marché : acheter si l'effectif est trop petit et le budget suffisant, libérer ou vendre les combattants âgés ou en déclin, selon son niveau de richesse (voir « Niveaux de richesse »).
 - Personnel : engager parmi les candidats du marché le meilleur entraîneur puis le meilleur médecin (le moins cher à niveau égal) dont il peut payer les salaires assez longtemps (plus ou moins selon son profil), et les garder tant qu'il peut encore les payer moitié moins longtemps, sauf si un candidat d'un meilleur niveau se présente. Leurs effets valent pour ses combattants comme pour ceux du joueur. Un club pauvre engage d'abord un recruteur, pour voir le potentiel des rookies et des free agents ; les autres n'en engagent pas, jugeant un combattant sur ce qu'il montre.
 
@@ -313,7 +313,7 @@ L'interface compte huit écrans ; dans un jeu de management, elle représente so
 
 | Écran | Contenu principal |
 | --- | --- |
-| Menu général | Semaine en cours, argent, alertes (blessures, défis reçus), bouton « semaine suivante » |
+| Menu général | Semaine en cours, argent, alertes (blessures, offres reçues), bouton « semaine suivante » |
 | Colisées | Liste des colisées, type d'arène, champion, top 50, inscriptions |
 | Liste des combattants | Effectif avec forme, état, rang ; choix repos, entraînement ou soins en un clic |
 | Fiche combattant | Stats, historique, blessures, maladie, personnalité, moral, renommée, âge ; bouton « libérer » |
@@ -350,7 +350,6 @@ Le plan Godot (C#, Godot RL Agents) est abandonné pour un moteur maison en Rust
 | Durée de la compétition | 22 semaines par saison, puis 4 de grand événement et 4 d'intersaison |
 | Titre de champion | Défense au minimum toutes les 4 semaines, plus souvent si le champion le souhaite |
 | Combat sans armure | Défenses réduites, bonus de renommée ; les armes ne se refusent pas |
-| Refus de défi | Perte de renommée et d'Elo si le combattant ne combat pas assez |
 | Mêlée | Une par colisée et par saison, plusieurs combattants d'un même club autorisés, sans lien d'office, pactes spontanés en combat |
 | Mort à l'écran | Tâche de sang et petite animation, selon ce qui est faisable |
 

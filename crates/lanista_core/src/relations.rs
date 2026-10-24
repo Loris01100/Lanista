@@ -38,8 +38,6 @@ pub enum Reason {
     Beaten { fighter: usize, rival: RivalId },
     /// The club's `fighter` took this club's title in the colosseum at this index.
     TitleTaken { fighter: usize, colosseum: usize },
-    /// The club's `fighter` refused the challenge of `rival`, of this club.
-    ChallengeRefused { fighter: usize, rival: RivalId },
     /// The player sold its `fighter` to this club.
     Sold { fighter: usize },
     /// The player bought from this club the fighter now its `fighter`.
@@ -143,8 +141,8 @@ pub struct StandingRules {
     /// The club asks the player this percentage of its price, and offers its price
     /// divided by it for the player's fighters.
     pub price_percent: u32,
-    /// Added to the club's chance to challenge the player's fighters, and taken from
-    /// the chance its fighter needs to accept the player's challenges, in points.
+    /// Taken from the chance its fighter needs to accept the player's challenges, in
+    /// points.
     pub challenge_points: u32,
     /// Added to the chance, in percent at each decision of a melee, that its fighters
     /// make a pact with the player's.
@@ -191,7 +189,6 @@ pub struct RelationRules {
     pub killed: i32,
     pub beaten: i32,
     pub title_taken: i32,
-    pub challenge_refused: i32,
     /// A sale or a purchase concluded, whichever way.
     pub deal: i32,
     pub pact_kept: i32,
@@ -211,7 +208,6 @@ impl RelationRules {
             Reason::Killed { .. } => self.killed,
             Reason::Beaten { .. } => self.beaten,
             Reason::TitleTaken { .. } => self.title_taken,
-            Reason::ChallengeRefused { .. } => self.challenge_refused,
             Reason::Sold { .. } | Reason::Bought { .. } => self.deal,
             Reason::PactKept { .. } => self.pact_kept,
             Reason::Betrayed { .. } => self.betrayed,

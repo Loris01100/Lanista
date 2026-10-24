@@ -284,7 +284,6 @@ relation-change = { $points } : { $why } ({ $date })
 reason-killed = { $fighter } a tué { $rival }
 reason-beaten = { $fighter } a battu { $rival }
 reason-title-taken = { $fighter } lui a pris le titre de { $place }
-reason-challenge-refused = { $fighter } a refusé le défi { club-de }{ $rival }
 reason-sold = vous lui avez vendu { $fighter }
 reason-bought = vous lui avez acheté { $fighter }
 reason-pact-kept = { $fighter } a tenu son pacte avec { $rival } en mêlée
@@ -322,8 +321,6 @@ save-slot-unreadable = illisible
 save-slot-game = { $club }, { $date }, club { $wealth } en { $continent }
 
 club-becomes = Le club devient { $wealth }
-challenge-refused = { $fighter } refuse le défi { club-de }{ $challenger } sans combattre : renommée -{ $fame }, Elo -{ $elo }
-challenge-from = Défi { club-de }{ $challenger }
 
 top-date = Saison { $season }, semaine { $week } : { $phase ->
         [competition] compétition
@@ -363,7 +360,6 @@ alert-debts = Dettes : { $money }
 alert-injury = { $fighter } : blessure, { $injury }
 alert-tired = { $fighter } : fatigué (forme { $form })
 alert-title-defense = { $fighter } : titre de { $place } à défendre au plus tard en semaine { $week }
-alert-challenge = { $fighter } : défi { club-de }{ $challenger } (refus sans combattre : renommée -{ $fame }, Elo -{ $elo })
 alert-sale-offer = { $club } veut acheter { $fighter } pour { $price } (à accepter au marché cette semaine)
 alert-rival = { $club } est votre rival depuis { $since } : recettes à { $receipts } %, renommée +{ $fame } par combat
 alert-no-fighter = Plus aucun combattant : recrutez un free agent au marché

@@ -9,19 +9,11 @@
     // challenger from the first `challengers` of the ranking.
     title_defense_weeks: 4,
     challengers: 5,
-    challenges: (
-        // Lost by a fighter who refuses a challenge and does not fight that week; the
-        // Elo in the challenger's colosseum.
-        refusal_fame: 2,
-        refusal_elo: 8,
-    ),
     // The rival managers' weekly thresholds, by profile. A fighter rests below
     // `rest_form` or when badly hurt or ill, cared for if the club keeps `care_reserve`
     // after paying; fit, it fights in the colosseum where Elo gives it the best chances
-    // against the others, if at least `fight_percent`, else trains. Each week, a club's
-    // fighter ranked somewhere is challenged by the rival fighter closest in Elo with
-    // `challenge_percent` chances; the
-    // club accepts the player's challenges when Elo gives it `accept_percent` chances.
+    // against the others, if at least `fight_percent`, else trains. The club accepts the
+    // player's challenges when Elo gives it `accept_percent` chances.
     // On the market, it asks `sell_percent` of a fighter's value and offers `buy_percent`
     // for the player's listed fighters, if it keeps `care_reserve` and has a place, and
     // `unsolicited_percent` of that price for one not for sale, the more it gambles. Its
@@ -33,17 +25,17 @@
     // `Youth` its value times `percent` up to `until` years old, `Grown` from `from`
     // years old, `Crowd` its fame alone, whatever its stats.
     profiles: (
-        cautious: (rest_form: 70, care_reserve: 0, fight_percent: 45, accept_percent: 50, challenge_percent: 10, sell_percent: 150, buy_percent: 60, unsolicited_percent: 130, staff_weeks: 20, anger_percent: 100, deal_percent: 100),
+        cautious: (rest_form: 70, care_reserve: 0, fight_percent: 45, accept_percent: 50, sell_percent: 150, buy_percent: 60, unsolicited_percent: 130, staff_weeks: 20, anger_percent: 100, deal_percent: 100),
         // Quick to take offence.
-        aggressive: (rest_form: 35, care_reserve: 100, fight_percent: 20, accept_percent: 20, challenge_percent: 40, sell_percent: 130, buy_percent: 80, unsolicited_percent: 160, staff_weeks: 10, anger_percent: 150, deal_percent: 100),
+        aggressive: (rest_form: 35, care_reserve: 100, fight_percent: 20, accept_percent: 20, sell_percent: 130, buy_percent: 80, unsolicited_percent: 160, staff_weeks: 10, anger_percent: 150, deal_percent: 100),
         // Keeps its money, sells cheap and buys dear; forgives when the price is right.
-        merchant: (rest_form: 50, care_reserve: 300, fight_percent: 35, accept_percent: 35, challenge_percent: 20, sell_percent: 100, buy_percent: 90, unsolicited_percent: 120, staff_weeks: 40, anger_percent: 100, deal_percent: 300),
+        merchant: (rest_form: 50, care_reserve: 300, fight_percent: 35, accept_percent: 35, sell_percent: 100, buy_percent: 90, unsolicited_percent: 120, staff_weeks: 40, anger_percent: 100, deal_percent: 300),
         // Raises young fighters, while they still progress fast (data/fighter.ron).
-        mentor: (rest_form: 60, care_reserve: 50, fight_percent: 40, accept_percent: 45, challenge_percent: 15, sell_percent: 140, buy_percent: 70, unsolicited_percent: 140, staff_weeks: 30, anger_percent: 100, deal_percent: 100, recruits: Youth(until: 25, percent: 150)),
+        mentor: (rest_form: 60, care_reserve: 50, fight_percent: 40, accept_percent: 45, sell_percent: 140, buy_percent: 70, unsolicited_percent: 140, staff_weeks: 30, anger_percent: 100, deal_percent: 100, recruits: Youth(until: 25, percent: 150)),
         // Wants fighters already grown, past their fast progression.
-        veteran: (rest_form: 50, care_reserve: 100, fight_percent: 30, accept_percent: 30, challenge_percent: 25, sell_percent: 120, buy_percent: 85, unsolicited_percent: 140, staff_weeks: 20, anger_percent: 100, deal_percent: 100, recruits: Grown(from: 28, percent: 150)),
+        veteran: (rest_form: 50, care_reserve: 100, fight_percent: 30, accept_percent: 30, sell_percent: 120, buy_percent: 85, unsolicited_percent: 140, staff_weeks: 20, anger_percent: 100, deal_percent: 100, recruits: Grown(from: 28, percent: 150)),
         // Wants who draws the crowd, whatever their stats.
-        showman: (rest_form: 40, care_reserve: 50, fight_percent: 25, accept_percent: 25, challenge_percent: 30, sell_percent: 130, buy_percent: 75, unsolicited_percent: 150, staff_weeks: 15, anger_percent: 120, deal_percent: 100, recruits: Crowd),
+        showman: (rest_form: 40, care_reserve: 50, fight_percent: 25, accept_percent: 25, sell_percent: 130, buy_percent: 75, unsolicited_percent: 150, staff_weeks: 15, anger_percent: 120, deal_percent: 100, recruits: Crowd),
     ),
     // Free agents choose their fights by this profile's thresholds, to show their worth,
     // as managers without money: only in colosseums free to enter, never trained nor
@@ -93,15 +85,14 @@
     // Each rival club's relation with the player's club, from -100 to +100, starting
     // at 0: the points of each event, weighed by the club's profile (`anger_percent`,
     // `deal_percent`), then coming back `decay` points towards 0 each week. A kill or
-    // a win against one of its fighters, its title taken by the player's fighter, its
-    // challenge refused, a sale or a purchase between the two, a pact kept or
+    // a win against one of its fighters, its title taken by the player's fighter,
+    // a sale or a purchase between the two, a pact kept or
     // betrayed by the player's fighter in a melee. The last `history` changes are
     // kept for each club, with their reason.
     relations: (
         killed: -30,
         beaten: -5,
         title_taken: -10,
-        challenge_refused: -5,
         deal: 5,
         pact_kept: 5,
         betrayed: -25,
@@ -110,8 +101,7 @@
         // From the ally down, the standing of a score is the first whose `from` it
         // reaches. The club asks the player `price_percent` of its price and offers
         // its price divided by it; `deals: false` trades nothing; `challenge_points`
-        // add to its chance to challenge the player's fighters and take from what its
-        // fighter needs to accept theirs; `pact_points` add to the chance, in percent
+        // take from what its fighter needs to accept the player's challenges; `pact_points` add to the chance, in percent
         // at each decision of a melee, that its fighters ally with the player's (by
         // caution alone between fighters of other clubs or without a club).
         standings: (

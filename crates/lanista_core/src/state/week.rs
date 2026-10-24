@@ -1,7 +1,7 @@
 //! The week loop: the player's [`Decisions`], [`next_week`] playing them and the
 //! [`WeekSummary`] it returns.
 
-use crate::colosseum::{Challenge, Contender, TitleNews, title_kept};
+use crate::colosseum::{Contender, TitleNews, title_kept};
 use crate::design_data::DesignData;
 use crate::economy::{Flow, Transaction, Wealth};
 use crate::fighter::career::{Activity, Status, WeekPlan, WeekReport};
@@ -13,7 +13,7 @@ use crate::staff::{StaffMove, StaffNews};
 use serde::{Deserialize, Serialize};
 
 use super::clubs::{club_lives, off_season_starts, rival_staff, staff_week, wealth_changes};
-use super::colosseums::{end_colosseum_weeks, receive_challenges, refusals, title_fight};
+use super::colosseums::{end_colosseum_weeks, title_fight};
 use super::melee::melees;
 use super::outsiders::{met, opponent, outsider_weeks, pay_rival};
 use super::transfers::{answer_offer, market_moves, rival_market, trim_market};
@@ -45,8 +45,6 @@ pub struct WeekSummary {
     pub ledger: Vec<Transaction>,
     /// What happened to the titles, with the colosseum's index, in the order it happened.
     pub titles: Vec<(usize, TitleNews)>,
-    /// The challenges refused by a fighter who did not fight, and so paid for.
-    pub refusals: Vec<Challenge>,
     /// What the club did and heard on the market, in the order it happened.
     pub market: Vec<MarketNews>,
     /// The changes of staff made.
@@ -64,8 +62,7 @@ pub struct WeekSummary {
 /// week. A fight is against an outsider, a rival fighter or a free agent, and
 /// moves both Elo; a title fight is the only way a title changes hands, and the
 /// club's champion earns the champion bonus for each defense it survives. A challenge
-/// is a fight against a chosen rival fighter; a fighter who refuses one and does not
-/// fight loses fame and Elo. The rival fighters' challenges for the next week come last.
+/// is a fight against a chosen rival fighter whose club accepts it.
 ///
 /// A choice the club cannot pay for at its turn is dropped: no care, and rest instead
 /// of training or of a fight with an entry fee. A title fight the fighter may not have
@@ -146,7 +143,6 @@ pub fn next_week(state: &mut GameState, decisions: &Decisions, data: &DesignData
         }
         reports.push(report);
     }
-    let refusals = refusals(state, &reports, data);
     outsider_weeks(state, plans, &fought, data);
     market.extend(answer_offer(state, &decisions.moves, data, &mut ledger));
     birthdays(state, &mut reports, data);
@@ -155,7 +151,6 @@ pub fn next_week(state: &mut GameState, decisions: &Decisions, data: &DesignData
         reports,
         ledger,
         titles,
-        refusals,
         market,
         staff,
         wealth,
@@ -322,8 +317,8 @@ fn reserved(wanted: &[WeekPlan], title_meetings: &[Option<(usize, Contender)>]) 
 
 /// The world's end of the week, once everyone fought: each club's new wealth at the
 /// start of the off-season, the rival clubs' market, the colosseums' titles, told in
-/// `titles`, the market topped up and trimmed; then the next week opens with the rival
-/// fighters' challenges. Returns the club's new wealth if it changed.
+/// `titles`, the market topped up and trimmed, and the next week opens. Returns the
+/// club's new wealth if it changed.
 fn end_week(
     state: &mut GameState,
     titles: &mut Vec<(usize, TitleNews)>,
@@ -355,6 +350,5 @@ fn end_week(
     state.open_world(data);
     trim_market(state, data);
     state.week += 1;
-    receive_challenges(state, data);
     wealth
 }

@@ -75,9 +75,6 @@ pub struct ProfileRules {
     /// The club accepts the player's challenge if Elo gives its fighter at least this
     /// chance of winning.
     pub accept_percent: u32,
-    /// Each week, the chance a club's fighter ranked in a colosseum is challenged by
-    /// the rival fighter closest in Elo.
-    pub challenge_percent: u32,
     /// Price asked for one of its fighters, and offered for one of the player's, in
     /// percent of its value (`market::value`).
     pub sell_percent: u32,

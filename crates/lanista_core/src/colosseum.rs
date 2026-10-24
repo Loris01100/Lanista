@@ -30,7 +30,6 @@ pub struct WorldRules {
     pub title_defense_weeks: u32,
     /// How many of the first in a ranking may fight for the title.
     pub challengers: u32,
-    pub challenges: ChallengeRules,
     /// The rival managers' thresholds.
     pub profiles: Profiles,
     /// The thresholds free agents choose their fights by, as managers without money:
@@ -115,17 +114,6 @@ impl Continent {
     ];
 }
 
-/// Challenges between the club's fighters and the rival fighters; how often they are
-/// sent and accepted depends on the rival clubs (`ProfileRules`).
-#[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
-#[serde(deny_unknown_fields)]
-pub struct ChallengeRules {
-    /// What a fighter who refuses a challenge and does not fight that week loses: fame,
-    /// and Elo in the challenger's colosseum.
-    pub refusal_fame: u32,
-    pub refusal_elo: u32,
-}
-
 #[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct ColosseumData {
@@ -143,15 +131,6 @@ pub struct ColosseumData {
 /// Index of a colosseum in `WorldRules::colosseums` and `GameState::colosseums`.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
 pub struct ColosseumId(pub u32);
-
-/// A rival fighter's challenge to a club's fighter, to accept or refuse this week.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
-pub struct Challenge {
-    /// The club's fighter at this index.
-    pub fighter: usize,
-    pub colosseum: ColosseumId,
-    pub rival: RivalId,
-}
 
 /// A fighter with an Elo in a colosseum. Its Elo and title follow it to another club
 /// or to the market (`Colosseum::transfer`).
@@ -410,23 +389,6 @@ impl Colosseum {
         odds
     }
 
-    /// The rival fighter still fighting closest in Elo to the club's fighter `i`, who
-    /// challenges it; `None` if it has never fought here.
-    #[must_use]
-    pub fn challenger(&self, i: usize, rosters: Rosters) -> Option<RivalId> {
-        let mine = self
-            .ranking
-            .iter()
-            .find(|r| r.contender == Contender::Club(i))?;
-        self.active_ranking(rosters)
-            .filter_map(|r| match r.contender {
-                Contender::Rival(id) => Some((id, r.elo.abs_diff(mine.elo))),
-                Contender::Club(_) | Contender::FreeAgent(_) => None,
-            })
-            .min_by_key(|&(_, gap)| gap)
-            .map(|(id, _)| id)
-    }
-
     /// The best-ranked outsider still fighting, other than `except`.
     #[must_use]
     pub fn best_outsider(&self, rosters: Rosters, except: Option<Contender>) -> Option<Contender> {
@@ -482,12 +444,6 @@ impl Colosseum {
             .find(|&c| c != former);
         self.crown(to, week, TitleLoss::Stripped);
         Some(TitleNews::Stripped { former, to })
-    }
-
-    /// Takes `points` of Elo from `contender`, a fighter who refused a challenge.
-    pub fn lose_elo(&mut self, contender: Contender, points: u32, rules: &WorldRules) {
-        self.add_elo(contender, -i32::try_from(points).unwrap_or(i32::MAX), rules);
-        self.ranking.sort_by_key(|r| Reverse(r.elo));
     }
 
     /// Records a title fight in `week`, `result` being the champion's: both Elo move,
@@ -914,7 +870,7 @@ mod tests {
     }
 
     #[test]
-    fn the_closest_rival_challenges_and_only_those_with_a_chance_accept() {
+    fn only_the_rivals_with_a_chance_accept_a_challenge() {
         let data = data();
         let rules = &data.world;
         let mut world = world(&data);
@@ -934,13 +890,11 @@ mod tests {
             free_agents: &[],
         };
         let rome = &mut world.rome;
-        // Never fought here: no challenge, and everyone accepts the newcomer's.
-        assert_eq!(rome.challenger(0, rosters), None);
+        // Never fought here: everyone accepts the newcomer's challenge.
         assert!(rome.accepts_challenge(zero, 0, 30, rules));
         rome.add_elo(Contender::Club(0), 100, rules);
         rome.add_elo(rival(3), 90, rules);
         rome.ranking.sort_by_key(|r| Reverse(r.elo));
-        assert_eq!(rome.challenger(0, rosters), Some(three));
         // 100 points behind still leaves a rival fighter 36 % of chances.
         assert!(rome.accepts_challenge(zero, 0, 30, rules));
         assert!(!rome.accepts_challenge(zero, 0, 40, rules));
@@ -951,9 +905,6 @@ mod tests {
         // Rival 3, 90 points above the others, has 63 % of chances against them.
         assert!((rome.chance(rival(3), rosters, rules) - 0.627).abs() < 0.001);
         assert!((rome.chance(rival(4), rosters, rules) - 0.491).abs() < 0.001);
-        rome.lose_elo(Contender::Club(0), 8, rules);
-        assert_eq!(rome.elo(Contender::Club(0), rules), 1292);
-        assert_eq!(rome.ranking[0].contender, Contender::Club(0));
     }
 
     #[test]
