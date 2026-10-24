@@ -390,6 +390,7 @@ sheet-left-handed = gaucher
 sheet-ambidextrous = ambidextre
 sheet-loadout = Configuration : { $loadout }
 sheet-ease = Aisance : { $ease }
+sheet-record = Bilan : { $career } en carrière, { $season } cette saison
 sheet-origin = Origine : { $culture } ({ $continent })
 ease-loadout = { $loadout } { $ease }
 ease-title = Aisance

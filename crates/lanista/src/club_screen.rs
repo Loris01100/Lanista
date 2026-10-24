@@ -49,8 +49,8 @@ use crate::texts::{
     colosseum_rules_name, condition_text, contender_name, continent_name, culture_name,
     date_in_sentence, date_text, ease_text, fight_text, fighter_name, illness_text, injury_text,
     loadout_name, market_news_text, money_line, move_text, named_club, origin_text,
-    personality_text, priced, rival_fighter_name, staff_move_text, staff_news_text, stat_names,
-    title_news_text, vowel, wealth_name, wealth_text, week_lines, world_news_text,
+    personality_text, priced, record_text, rival_fighter_name, staff_move_text, staff_news_text,
+    stat_names, title_news_text, vowel, wealth_name, wealth_text, week_lines, world_news_text,
 };
 
 /// Seed of the standard duel offered from the club.
@@ -837,6 +837,7 @@ impl ClubScreen {
                 tr!("roster-form"),
                 tr!("roster-morale"),
                 tr!("roster-fame"),
+                tr!("record-title"),
                 tr!("roster-condition"),
                 tr!("roster-week"),
             ];
@@ -860,6 +861,7 @@ impl ClubScreen {
                     ui.label(f.form.value().to_string());
                     ui.label(f.morale.value().to_string());
                     ui.label(f.fame.value().to_string());
+                    ui.label(record_text(f.record));
                     ui.label(condition_text(f));
                     if f.status == Status::Active {
                         let club = (&self.state, &care);
@@ -1386,6 +1388,11 @@ fn sheet(ui: &mut egui::Ui, index: usize, f: &CareerFighter, data: &DesignData) 
     gauge(ui, &tr!("roster-form"), f.form.value(), Form::MAX);
     gauge(ui, &tr!("roster-morale"), f.morale.value(), Morale::MAX);
     gauge(ui, &tr!("roster-fame"), f.fame.value(), Fame::MAX);
+    ui.label(tr!(
+        "sheet-record",
+        career = record_text(f.record),
+        season = record_text(f.season_record)
+    ));
 
     ui.add_space(8.0);
     egui::Grid::new("stats").striped(true).show(ui, |ui| {
