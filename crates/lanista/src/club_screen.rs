@@ -54,8 +54,6 @@ use crate::texts::{
     stat_names, title_news_text, vowel, wealth_name, wealth_text, week_lines, world_news_text,
 };
 
-/// Seed of the standard duel offered from the club.
-const FREE_DUEL_SEED: u64 = 42;
 const BACKGROUND: Color = Color::new(0.16, 0.13, 0.11, 1.0);
 /// Ranks shown in a colosseum's ranking; the others are unranked.
 const RANKS_SHOWN: usize = 50;
@@ -416,14 +414,13 @@ impl ClubScreen {
         self.save(saves::AUTO, false);
     }
 
-    fn top_bar(&mut self, ui: &mut egui::Ui) -> Option<Transition> {
+    fn top_bar(&mut self, ui: &mut egui::Ui) {
         let date = self.state.date(&self.data);
         let phase = match date.phase(&self.data.calendar) {
             SeasonPhase::Competition => "competition",
             SeasonPhase::GreatEvent => "great-event",
             SeasonPhase::OffSeason => "off-season",
         };
-        let mut transition = None;
         // Wrapped: a narrow window or a large interface puts the end on a second row
         // rather than out of the screen.
         ui.horizontal_wrapped(|ui| {
@@ -446,19 +443,11 @@ impl ClubScreen {
             ui.selectable_value(&mut self.view, View::Colosseums, tr!("view-colosseums"));
             ui.selectable_value(&mut self.view, View::Market, tr!("view-market"));
             ui.selectable_value(&mut self.view, View::Staff, tr!("view-staff"));
-            ui.separator();
-            if ui.button(tr!("standard-duel")).clicked() {
-                let duel =
-                    CombatScreen::new(Rc::clone(&self.data), FREE_DUEL_SEED, self.bindings.clone())
-                        .keeping_settings_in(self.saves.clone());
-                transition = Some(Transition::Push(Box::new(duel)));
-            }
         });
         // On its own line: a long message would push the views out of the bar.
         if let Some(message) = &self.message {
             ui.label(message);
         }
-        transition
     }
 
     /// The general menu; returns whether to play the week.
@@ -1051,9 +1040,8 @@ impl Screen for ClubScreen {
             self.view = View::Menu;
         }
         let mut play = self.bindings.pressed(ui, &Action::NextWeek);
-        let mut transition = None;
         let mut again = None;
-        let bar = egui::TopBottomPanel::top("club").show(ui, |ui| transition = self.top_bar(ui));
+        let bar = egui::TopBottomPanel::top("club").show(ui, |ui| self.top_bar(ui));
         egui::CentralPanel::default().show(ui, |ui| match self.view {
             View::Menu => play |= self.menu(ui),
             View::Roster => self.roster(ui),
@@ -1068,9 +1056,6 @@ impl Screen for ClubScreen {
         let top = bar.response.rect.bottom();
         if let Some(failed) = options::window(ui, audio, self.saves.as_deref(), top) {
             self.message = Some(failed);
-        }
-        if let Some(transition) = transition {
-            return transition;
         }
         if let Some(seed) = again {
             let all = to_watch(&self.fights, &self.state, &self.data);

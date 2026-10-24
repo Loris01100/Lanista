@@ -1,12 +1,10 @@
-//! Watching fights: the standard duel, or the club's fights of the week, one shown big
-//! and the others in clickable thumbnails drawn into render targets. Speed and « Passer
+//! Watching the club's fights of the week, one shown big and the others in clickable thumbnails drawn into render targets. Speed and « Passer
 //! au résultat » are shared; each fight goes at its own pace and stops on its own.
 
 use std::path::PathBuf;
 use std::rc::Rc;
 
 use lanista_core::design_data::DesignData;
-use lanista_core::duel::random_duel;
 use lanista_core::fighter::injury::{Location, Side};
 use lanista_core::fighter::{Fighter, FighterId};
 use lanista_core::log::{Event, EventKind};
@@ -36,18 +34,6 @@ const THUMBNAIL_FRAME: Color = Color::new(0.9, 0.85, 0.7, 1.0);
 /// Over a thumbnail whose fight is over.
 const FINISHED: Color = Color::new(0.55, 0.55, 0.55, 1.0);
 
-/// What the fights on screen are.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-enum Mode {
-    /// A standard duel; another seed can be picked.
-    Free {
-        /// Seed of the next fight, edited in the controls.
-        next_seed: u64,
-    },
-    /// The club's fights, watched once.
-    Watch,
-}
-
 /// A fight to watch: before its first tick, with who is who.
 #[derive(Debug, Clone, PartialEq)]
 pub struct Watched {
@@ -57,7 +43,6 @@ pub struct Watched {
 
 pub struct CombatScreen {
     data: Rc<DesignData>,
-    mode: Mode,
     views: Vec<FightView>,
     /// The fight shown big.
     focus: usize,
@@ -73,13 +58,6 @@ pub struct CombatScreen {
 }
 
 impl CombatScreen {
-    /// The standard duel of `seed`, the same as `simulate --seed <seed>`; another
-    /// seed can be picked on screen.
-    pub fn new(data: Rc<DesignData>, seed: u64, bindings: Bindings<Action>) -> Self {
-        let duel = FightView::new(random_duel(&data, seed), Cast::default());
-        Self::with(data, vec![duel], Mode::Free { next_seed: seed }, bindings)
-    }
-
     /// Watches `fights` from their first tick, the first one big. Once all are over,
     /// « Continuer » goes back.
     pub fn watch(data: Rc<DesignData>, fights: Vec<Watched>, bindings: Bindings<Action>) -> Self {
@@ -87,18 +65,8 @@ impl CombatScreen {
             .into_iter()
             .map(|f| FightView::new(f.arena, f.cast))
             .collect();
-        Self::with(data, views, Mode::Watch, bindings)
-    }
-
-    fn with(
-        data: Rc<DesignData>,
-        views: Vec<FightView>,
-        mode: Mode,
-        bindings: Bindings<Action>,
-    ) -> Self {
         Self {
             data,
-            mode,
             views,
             focus: 0,
             targets: Vec::new(),
@@ -175,10 +143,8 @@ impl CombatScreen {
     }
 
     /// Speed buttons, then the result of the fight shown big once it is over; the
-    /// seed of the next fight and « Retour » in the standard duel, or « Continuer »
-    /// once every watched fight is over. Returns whether to go back.
+    /// « Continuer » once every fight is over. Returns whether to go back.
     fn controls(&mut self, ui: &egui::Context) -> bool {
-        let mut start = None;
         let mut done = false;
         egui::Window::new(tr!("controls"))
             .title_bar(false)
@@ -198,29 +164,11 @@ impl CombatScreen {
                     if !self.fight().running() {
                         ui.label(self.fight().result());
                     }
-                    match &mut self.mode {
-                        Mode::Free { next_seed } => {
-                            ui.separator();
-                            ui.label(tr!("seed", seed = self.views[0].arena.seed.to_string()));
-                            ui.add(egui::DragValue::new(next_seed));
-                            if ui.button(tr!("start-fight")).clicked() {
-                                start = Some(*next_seed);
-                            }
-                            ui.separator();
-                            done = ui.button(tr!("back-escape")).clicked();
-                        }
-                        Mode::Watch => {
-                            let finished = !self.running();
-                            done = finished && ui.button(tr!("continue")).clicked();
-                        }
+                    if !self.running() {
+                        done = ui.button(tr!("continue")).clicked();
                     }
                 });
             });
-        if let Some(seed) = start {
-            let duel = FightView::new(random_duel(&self.data, seed), Cast::default());
-            self.views = vec![duel];
-            self.focus = 0;
-        }
         done
     }
 
@@ -464,7 +412,7 @@ impl Screen for CombatScreen {
 #[cfg(test)]
 mod tests {
     use lanista_core::combat::Arena;
-    use lanista_core::duel::play;
+    use lanista_core::duel::{play, random_duel};
     use lanista_core::fighter::equipment::Refused;
     use lanista_core::log::{Report, log_text};
 
@@ -681,12 +629,14 @@ mod tests {
         );
     }
 
+    /// The standard duel of `seed`, watched.
     fn screen(seed: u64) -> CombatScreen {
-        CombatScreen::new(
-            Rc::new(DesignData::load().unwrap()),
-            seed,
-            Bindings::new(Vec::new()),
-        )
+        let data = Rc::new(DesignData::load().unwrap());
+        let duel = Watched {
+            arena: random_duel(&data, seed),
+            cast: Cast::default(),
+        };
+        CombatScreen::watch(data, vec![duel], Bindings::new(Vec::new()))
     }
 
     /// What `simulate --seed <seed>` plays and prints.

@@ -337,7 +337,6 @@ view-fights = Résumé des combats
 view-colosseums = Colisées
 view-market = Marché
 view-staff = Personnel
-standard-duel = Duel standard
 
 menu-title = Menu général
 menu-club = { $club } : { $wealth }, en { $continent }
@@ -534,9 +533,6 @@ speed-slow = x0,5
 speed-normal = x1
 speed-fast = x1,5
 skip-to-result = Passer au résultat
-seed = Graine { $seed }
-start-fight = Lancer
-back-escape = Retour (Échap)
 continue = Continuer
 elimination = Élimination
 gauges = Jauges

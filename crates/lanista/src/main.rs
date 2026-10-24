@@ -1,5 +1,5 @@
 //! The game: for now, one club managed week after week, its fights watched on
-//! screen, and the standard duel.
+//! screen.
 
 mod club_screen;
 mod combat_screen;
