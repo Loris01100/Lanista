@@ -17,6 +17,83 @@ use crate::texts::{
     record_text, rival_fighter_name, stat_names, unsellable_text, weeks,
 };
 
+/// Which fighters out of the club the market lists, kept while the game runs.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(super) struct MarketFilter {
+    /// The youngest and oldest ages shown.
+    age: (u32, u32),
+    /// The least fame shown.
+    fame: u32,
+    /// The fewest wins shown.
+    wins: u32,
+    /// The least share of fights won shown, in percent.
+    win_rate: u32,
+}
+
+impl Default for MarketFilter {
+    fn default() -> Self {
+        Self {
+            age: (0, 99),
+            fame: 0,
+            wins: 0,
+            win_rate: 0,
+        }
+    }
+}
+
+impl MarketFilter {
+    #[cfg(test)]
+    pub(super) fn new(age: (u32, u32), fame: u32, wins: u32, win_rate: u32) -> Self {
+        Self {
+            age,
+            fame,
+            wins,
+            win_rate,
+        }
+    }
+
+    /// Whether the market lists `fighter`.
+    pub(super) fn shows(&self, fighter: &CareerFighter) -> bool {
+        let r = fighter.record;
+        let fights = r.wins + r.losses + r.draws;
+        let rate = (r.wins * 100).checked_div(fights).unwrap_or(0);
+        (self.age.0..=self.age.1).contains(&fighter.age)
+            && fighter.fame.value() >= self.fame
+            && r.wins >= self.wins
+            && rate >= self.win_rate
+    }
+
+    /// The filters' row: age, fame, wins, share of wins, and a button clearing them.
+    fn row(&mut self, ui: &mut egui::Ui) {
+        ui.horizontal_wrapped(|ui| {
+            ui.label(tr!("filter-age"));
+            ui.add(egui::DragValue::new(&mut self.age.0).range(0..=self.age.1));
+            ui.label(tr!("filter-to"));
+            ui.add(egui::DragValue::new(&mut self.age.1).range(self.age.0..=99));
+            ui.separator();
+            ui.label(tr!("filter-fame"));
+            ui.add(egui::DragValue::new(&mut self.fame).range(0..=100));
+            ui.separator();
+            ui.label(tr!("filter-wins"));
+            ui.add(egui::DragValue::new(&mut self.wins).range(0..=999));
+            ui.separator();
+            ui.label(tr!("filter-win-rate"));
+            ui.add(
+                egui::DragValue::new(&mut self.win_rate)
+                    .range(0..=100)
+                    .suffix(" %"),
+            );
+            let default = Self::default();
+            if ui
+                .add_enabled(*self != default, egui::Button::new(tr!("filter-clear")))
+                .clicked()
+            {
+                *self = default;
+            }
+        });
+    }
+}
+
 /// What a click on the market asks for.
 enum Pick {
     /// Open the sheet of this fighter.
@@ -29,8 +106,10 @@ impl ClubScreen {
     /// The market: this week's moves, the answer to the last offer and the offer being
     /// written, the free agents, the rival fighters to observe or negotiate for, and the
     /// club's fighters to sell or release. A fighter out of the club shows only its age,
-    /// fame and record; its name opens what the club sees of it.
+    /// fame and record, if it passes the filters; its name opens what the club sees of it.
     pub(super) fn market(&mut self, ui: &mut egui::Ui) {
+        self.market_filter.row(ui);
+        let filter = self.market_filter;
         let data = &self.data;
         let state = &self.state;
         let moves = &mut self.decisions.moves;
@@ -101,8 +180,8 @@ impl ClubScreen {
             moves.remove(n);
         }
         let pick = egui::ScrollArea::vertical().show(ui, |ui| {
-            let free = free_agent_grid(ui, state, moves, data);
-            let rival = rival_grid(ui, state, moves, data);
+            let free = free_agent_grid(ui, state, moves, filter, data);
+            let rival = rival_grid(ui, state, moves, filter, data);
             sale_grid(ui, state, moves, data);
             rival.or(free)
         });
@@ -312,11 +391,12 @@ fn outside_header(ui: &mut egui::Ui, last: &[String]) {
     ui.end_row();
 }
 
-/// The free agents on the market; returns the one to open.
+/// The free agents on the market `filter` shows; returns the one to open.
 fn free_agent_grid(
     ui: &mut egui::Ui,
     state: &GameState,
     moves: &mut Vec<Move>,
+    filter: MarketFilter,
     data: &DesignData,
 ) -> Option<Pick> {
     let mut pick = None;
@@ -325,7 +405,7 @@ fn free_agent_grid(
     egui::Grid::new("free agents").striped(true).show(ui, |ui| {
         outside_header(ui, &[String::new(), String::new()]);
         for (a, f) in state.free_agents.iter().enumerate() {
-            if f.status != Status::Active {
+            if f.status != Status::Active || !filter.shows(f) {
                 continue;
             }
             if outside_cells(ui, free_agent_name(a, f, data), f) {
@@ -341,12 +421,13 @@ fn free_agent_grid(
     pick
 }
 
-/// The rival clubs' fighters in activity; returns the one to open or to negotiate for,
-/// with a first price.
+/// The rival clubs' fighters in activity `filter` shows; returns the one to open or to
+/// negotiate for, with a first price.
 fn rival_grid(
     ui: &mut egui::Ui,
     state: &GameState,
     moves: &mut Vec<Move>,
+    filter: MarketFilter,
     data: &DesignData,
 ) -> Option<Pick> {
     let mut pick = None;
@@ -358,7 +439,7 @@ fn rival_grid(
             outside_header(ui, &[tr!("estimated-value"), String::new(), String::new()]);
             for (club, rival) in state.rivals.iter().enumerate() {
                 for (fighter, f) in rival.fighters.iter().enumerate() {
-                    if f.status != Status::Active {
+                    if f.status != Status::Active || !filter.shows(f) {
                         continue;
                     }
                     let id = RivalId { club, fighter };

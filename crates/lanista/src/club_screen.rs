@@ -12,6 +12,7 @@ mod staff;
 use std::path::PathBuf;
 
 use colosseums::contender_view;
+use market::MarketFilter;
 use std::rc::Rc;
 
 use lanista_core::calendar::SeasonPhase;
@@ -144,6 +145,8 @@ pub struct ClubScreen {
     confirm: Option<Confirm>,
     /// The offer being written on the market: the rival fighter and the price.
     offer_draft: Option<(RivalId, u32)>,
+    /// Which fighters out of the club the market lists.
+    market_filter: MarketFilter,
     /// The continent the colosseums view shows, the club's at first.
     shown_continent: Continent,
     /// The prestige of the colosseums the colosseums view shows; `None` shows them all.
@@ -209,6 +212,7 @@ impl ClubScreen {
             message: None,
             confirm: None,
             offer_draft: None,
+            market_filter: MarketFilter::default(),
             bindings,
         };
         screen.read_journal();
@@ -2337,6 +2341,26 @@ mod tests {
         assert_eq!(market::observed_text(&f), "Jamais observé");
         f.observed_weeks = 2;
         assert_eq!(market::observed_text(&f), "Observé 2 semaines");
+    }
+
+    #[test]
+    fn the_market_filters_by_age_fame_and_record() {
+        let screen = screen(7);
+        let mut f = screen.state.free_agents[0].clone();
+        f.age = 25;
+        f.record = lanista_core::fighter::career::Record {
+            wins: 3,
+            losses: 1,
+            draws: 0,
+        };
+        let shows = |filter: MarketFilter| filter.shows(&f);
+        assert!(shows(MarketFilter::default()));
+        assert!(!shows(MarketFilter::new((26, 99), 0, 0, 0)));
+        assert!(!shows(MarketFilter::new((0, 24), 0, 0, 0)));
+        assert!(!shows(MarketFilter::new((0, 99), f.fame.value() + 1, 0, 0)));
+        assert!(shows(MarketFilter::new((25, 25), 0, 3, 75)));
+        assert!(!shows(MarketFilter::new((0, 99), 0, 4, 0)));
+        assert!(!shows(MarketFilter::new((0, 99), 0, 0, 76)));
     }
 
     #[test]
