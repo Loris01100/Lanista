@@ -1,6 +1,6 @@
 # lanista
 
-The game binary: the club screen, the combat screen, saves.
+The game binary: the main menu (`title_screen.rs`), the club screen, the combat screen, saves.
 
 - Every player text is a Fluent key of `assets/lang/<language>.ftl`, read with `lang::tr!("key", name = value)`; a grammar choice is passed as an English selector (`$role`). Tests check that each `tr!` key and each key of `fr.ftl` exist in every language's file, and that the theme's font has a glyph for each character; tests comparing texts stay in French, the default.
 - egui only through `reesch::egui`; the theme is `theme.rs`; the UI is designed for an 800 px high window and scaled.

@@ -1,5 +1,5 @@
-//! The options, laid over the screen from a button of the club's top bar or of the
-//! fight controls: graphics, audio and language in tabs, kept for the next launches.
+//! The options, laid over the screen from the main menu, a button of the club's top
+//! bar or of the fight controls: graphics, audio and language in tabs, kept for the next launches.
 
 use std::cell::Cell;
 use std::path::Path;

@@ -347,12 +347,11 @@ week-title = Semaine { $week }
 menu-news = Nouvelles du monde
 menu-save = Sauvegarder
 menu-load = Charger
-menu-new-game = Nouvelle partie :
 menu-new-club = club { $wealth }
 menu-draw-name = Tirer un nom
 menu-new-game-started = Nouvelle partie, { $club }, club { $wealth } en { $continent }, graine { $seed }
-confirm-new-game = Commencer une nouvelle partie avec { $club }, club { $wealth } en { $continent } ? La partie en cours sera perdue si elle n'est pas sauvegardée.
-confirm-load = Charger l'emplacement { $slot } ({ $game }) ? La partie en cours sera perdue si elle n'est pas sauvegardée.
+confirm-new-game = Commencer une nouvelle partie avec { $club }, club { $wealth } en { $continent } ? La partie à continuer sera perdue si elle n'est pas sauvegardée.
+confirm-load = Charger l'emplacement { $slot } ({ $game }) ? La partie à continuer sera perdue si elle n'est pas sauvegardée.
 confirm-overwrite = Écraser l'emplacement { $slot } ({ $game }) ?
 menu-language = Langue :
 
@@ -543,6 +542,19 @@ options-graphics = Graphismes
 options-audio = Audio
 options-language = Langue
 close = Fermer
+
+## Menu principal
+
+title-continue = Continuer
+title-load = Charger une partie
+title-new-game = Nouvelle partie
+title-quit = Quitter
+new-continent = Continent
+new-culture = Culture
+new-name = Nom du club
+new-wealth = Commencer avec un :
+game = Partie
+main-menu = Menu principal
 fullscreen = Plein écran
 interface-size = Taille de l'interface :
 music = Musique

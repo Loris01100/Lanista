@@ -1,5 +1,5 @@
-//! The game: for now, one club managed week after week, its fights watched on
-//! screen.
+//! The game: the main menu, then one club managed week after week, its fights
+//! watched on screen.
 
 mod club_screen;
 mod combat_screen;
@@ -10,14 +10,15 @@ mod options;
 mod saves;
 mod texts;
 mod theme;
+mod title_screen;
 
 use std::rc::Rc;
 
-use club_screen::ClubScreen;
 use combat_screen::{DEATH_SOUND, HIT_SOUND, MUSIC};
 use lanista_core::design_data::DesignData;
 use macroquad::prelude::*;
 use reesch::{Assets, Audio, Bindings, Button};
+use title_screen::TitleScreen;
 
 /// What the player can do; bound to keys in `main`.
 #[derive(Clone, PartialEq)]
@@ -31,9 +32,6 @@ enum Action {
     /// Play the club's next week.
     NextWeek,
 }
-
-/// Seed of the game started at launch when there is no autosave, the one of `career --seed 7`.
-const CAREER_SEED: u64 = 7;
 
 fn window() -> Conf {
     Conf {
@@ -49,6 +47,9 @@ async fn main() {
     let folder = saves::folder();
     if let Some(folder) = folder.clone() {
         saves::log_panics(folder);
+    }
+    if let Some(code) = folder.as_deref().and_then(saves::read_language) {
+        lang::set_language(&code);
     }
     // `assets/` and `data/` are read from the working directory: the workspace root
     // with `cargo run`, else the executable's folder, wherever it was launched from.
@@ -97,7 +98,7 @@ async fn main() {
             theme::apply(ui);
             options::apply(display);
         },
-        Box::new(ClubScreen::open(data, CAREER_SEED, folder, bindings)),
+        Box::new(TitleScreen::new(data, folder, bindings)),
     )
     .await;
 }

@@ -18,7 +18,7 @@ use std::rc::Rc;
 use lanista_core::calendar::SeasonPhase;
 use lanista_core::colosseum::{Challenge, ColosseumId, Contender, Continent};
 use lanista_core::design_data::DesignData;
-use lanista_core::economy::{Flow, Wealth};
+use lanista_core::economy::Flow;
 use lanista_core::fighter::FighterId;
 use lanista_core::fighter::care::CareRules;
 use lanista_core::fighter::career::{Activity, CareerFighter, FightSummary, Status, WeekPlan};
@@ -31,32 +31,32 @@ use lanista_core::fighter::morale::Morale;
 use lanista_core::fighter::retirement::too_maimed;
 use lanista_core::journal::FightLine;
 use lanista_core::market::Target;
-use lanista_core::names::{self, ClubName};
-use lanista_core::rivals::{self, RivalId};
+use lanista_core::rivals::RivalId;
 use lanista_core::state::{Decisions, GameState, next_week};
 use macroquad::prelude::*;
-use rand_chacha::ChaCha8Rng;
-use rand_chacha::rand_core::SeedableRng;
 use reesch::{Assets, Audio, Bindings, Screen, Transition, egui};
 
 use crate::Action;
 use crate::combat_screen::{CombatScreen, Watched};
 use crate::fight_view::Cast;
-use crate::lang::{self, tr};
+use crate::lang::tr;
 use crate::options;
 use crate::saves;
 use crate::texts::{
     activity_name, challenger_text, change, class_name, club_name, colosseum_name,
-    colosseum_rules_name, condition_text, contender_name, continent_name, culture_name,
-    date_in_sentence, date_text, ease_text, fight_text, fighter_name, illness_text, injury_text,
-    loadout_name, market_news_text, money_line, move_text, named_club, origin_text,
-    personality_text, priced, record_text, rival_fighter_name, staff_move_text, staff_news_text,
-    stat_names, title_news_text, vowel, wealth_name, wealth_text, week_lines, world_news_text,
+    colosseum_rules_name, condition_text, contender_name, continent_name, date_in_sentence,
+    ease_text, fight_text, fighter_name, illness_text, injury_text, loadout_name, market_news_text,
+    money_line, move_text, named_club, origin_text, personality_text, priced, record_text,
+    rival_fighter_name, staff_move_text, staff_news_text, stat_names, title_news_text, vowel,
+    wealth_name, wealth_text, week_lines, world_news_text,
 };
+use crate::title_screen::{Slot, read_slots, slot_text};
 
 const BACKGROUND: Color = Color::new(0.16, 0.13, 0.11, 1.0);
 /// Ranks shown in a colosseum's ranking; the others are unranked.
 const RANKS_SHOWN: usize = 50;
+/// Width of the game's window, as the options'.
+const GAME_WIDTH: f32 = 420.0;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum View {
@@ -78,26 +78,6 @@ enum View {
     Outside(Target),
     /// The rival club at this index: profile, money, titles and fighters.
     Rival(usize),
-}
-
-/// What a save slot holds, as the menu shows it.
-#[derive(Debug, Clone, PartialEq, Eq)]
-enum Slot {
-    Empty,
-    /// A game at this week, of a club of this name and wealth on this continent.
-    Game(u64, ClubName, Wealth, Continent),
-    Unreadable,
-}
-
-/// A choice that loses a game, carried out only once the player confirms it.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-enum Confirm {
-    /// Saves over the game in this slot.
-    Save(usize),
-    /// Loads this slot over the game being played.
-    Load(usize),
-    /// Starts a new game over the one being played.
-    NewGame(Wealth, Continent),
 }
 
 /// One of the club's fights, as the fight summary shows it.
@@ -139,53 +119,24 @@ pub struct ClubScreen {
     message: Option<String>,
     /// What each of `saves::SLOTS` holds.
     slots: [Slot; saves::SLOTS.len()],
-    /// The choice waiting for the player to confirm it.
-    confirm: Option<Confirm>,
+    /// The slot waiting for the player to confirm saving over it.
+    confirm: Option<usize>,
     /// The offer being written on the market: the rival fighter and the price.
     offer_draft: Option<(RivalId, u32)>,
     /// Which fighters out of the club the market lists.
     market_filter: MarketFilter,
     /// Whether the options are laid over the screen.
     options_open: bool,
+    /// Whether the game's window (save slots, main menu) is laid over the screen.
+    game_open: bool,
     /// The continent the colosseums view shows, the club's at first.
     shown_continent: Continent,
     /// The prestige of the colosseums the colosseums view shows; `None` shows them all.
     shown_prestige: Option<u32>,
-    /// Where a new game starts.
-    new_continent: Continent,
-    /// The new game's club: the key of its culture, one of `new_continent`'s, and its
-    /// name, as the player chose or drew them.
-    new_club: (String, ClubName),
     bindings: Bindings<Action>,
 }
 
 impl ClubScreen {
-    /// The game of the autosave in `saves`, or else a new game of `seed`.
-    pub fn open(
-        data: Rc<DesignData>,
-        seed: u64,
-        saves: Option<PathBuf>,
-        bindings: Bindings<Action>,
-    ) -> Self {
-        if let Some(code) = saves.as_deref().and_then(saves::read_language) {
-            lang::set_language(&code);
-        }
-        let autosave = saves
-            .as_deref()
-            .map_or(Ok(None), |folder| saves::read(folder, saves::AUTO, &data));
-        let (state, message) = match autosave {
-            Ok(Some(state)) => (state, Some(tr!("save-resumed"))),
-            Ok(None) => (GameState::new(seed, &data), None),
-            Err(e) => (
-                GameState::new(seed, &data),
-                Some(tr!("save-autosave-unreadable", error = e)),
-            ),
-        };
-        let mut screen = Self::new(data, state, saves, bindings);
-        screen.message = message;
-        screen
-    }
-
     /// The game `state`, saved in `saves`.
     pub fn new(
         data: Rc<DesignData>,
@@ -198,8 +149,6 @@ impl ClubScreen {
             histories: vec![Vec::new(); state.fighters.len()],
             shown_continent: state.continent,
             shown_prestige: None,
-            new_continent: state.continent,
-            new_club: (state.culture.clone(), state.name.clone()),
             slots: read_slots(saves.as_deref(), &data),
             data,
             state,
@@ -214,6 +163,7 @@ impl ClubScreen {
             offer_draft: None,
             market_filter: MarketFilter::default(),
             options_open: false,
+            game_open: false,
             bindings,
         };
         screen.read_journal();
@@ -324,12 +274,20 @@ impl ClubScreen {
         self.last_week = Some((played.week, overview));
     }
 
-    /// Plays on from `state`, a loaded or new game, which the autosave now holds:
-    /// the next launch resumes it, not the game it replaced.
-    fn replace(&mut self, state: GameState) {
-        let saves = self.saves.take();
-        *self = Self::new(Rc::clone(&self.data), state, saves, self.bindings.clone());
-        self.save(saves::AUTO, false);
+    #[cfg(test)]
+    pub fn state(&self) -> &GameState {
+        &self.state
+    }
+
+    #[cfg(test)]
+    pub fn message(&self) -> Option<&str> {
+        self.message.as_deref()
+    }
+
+    /// Shows `message` to the player in the top bar.
+    pub fn telling(mut self, message: String) -> Self {
+        self.message = Some(message);
+        self
     }
 
     /// Writes the game to `file`; tells the player only when asked or when it fails.
@@ -344,51 +302,18 @@ impl ClubScreen {
 
     /// Writes the game to the save slot `slot`.
     fn save_slot(&mut self, slot: usize) {
+        self.confirm = None;
         self.save(saves::SLOTS[slot], true);
         self.slots = read_slots(self.saves.as_deref(), &self.data);
     }
 
-    /// Loads the save slot `slot` over the game being played.
-    fn load(&mut self, slot: usize) {
-        let Some(folder) = &self.saves else { return };
-        match saves::read(folder, saves::SLOTS[slot], &self.data) {
-            Ok(Some(state)) => {
-                self.replace(state);
-                self.message = Some(tr!("save-loaded"));
-            }
-            Ok(None) => self.message = Some(tr!("save-none")),
-            Err(e) => self.message = Some(tr!("save-unreadable", error = e)),
-        }
-    }
-
-    /// Asks the player to confirm `choice`, or carries it out at once when it loses
-    /// nothing: saving to an empty slot.
-    fn ask(&mut self, choice: Confirm) {
-        match choice {
-            Confirm::Save(slot) if self.slots[slot] == Slot::Empty => self.carry_out(choice),
-            _ => self.confirm = Some(choice),
-        }
-    }
-
-    fn carry_out(&mut self, choice: Confirm) {
-        self.confirm = None;
-        match choice {
-            Confirm::Save(slot) => self.save_slot(slot),
-            Confirm::Load(slot) => self.load(slot),
-            Confirm::NewGame(wealth, continent) => {
-                let seed = new_seed();
-                let club = self.new_club.clone();
-                let state = GameState::start(seed, (wealth, continent), Some(club), &self.data);
-                let club = named_club(&state.name);
-                self.replace(state);
-                self.message = Some(tr!(
-                    "menu-new-game-started",
-                    club = club,
-                    wealth = wealth_name(wealth),
-                    continent = continent_name(continent),
-                    seed = seed.to_string()
-                ));
-            }
+    /// Saves to the slot `slot` at once when it is empty, else asks the player to
+    /// confirm saving over the game it holds.
+    fn ask(&mut self, slot: usize) {
+        if self.slots[slot] == Slot::Empty {
+            self.save_slot(slot);
+        } else {
+            self.confirm = Some(slot);
         }
     }
 
@@ -447,6 +372,7 @@ impl ClubScreen {
             ui.selectable_value(&mut self.view, View::Market, tr!("view-market"));
             ui.selectable_value(&mut self.view, View::Staff, tr!("view-staff"));
             ui.separator();
+            ui.toggle_value(&mut self.game_open, tr!("game"));
             ui.toggle_value(&mut self.options_open, tr!("options"));
         });
         // On its own line: a long message would push the views out of the bar.
@@ -483,9 +409,6 @@ impl ClubScreen {
             ui.label(line);
         }
         let play = ui.button(tr!("menu-next-week")).clicked();
-        if self.saves.is_some() {
-            self.files(ui);
-        }
         ui.separator();
         egui::ScrollArea::vertical().show(ui, |ui| {
             if let Some((week, lines)) = &self.last_week {
@@ -503,14 +426,48 @@ impl ClubScreen {
         play
     }
 
-    /// The save slots, saved and loaded, and starting a new game; a choice that loses
-    /// a game waits for the player to confirm it.
-    fn files(&mut self, ui: &mut egui::Ui) {
-        if let Some(choice) = self.confirm {
+    /// The game's window over the screen while `game_open`: each save slot with
+    /// « Sauvegarder », saving over a game once the player confirms it, then « Menu
+    /// principal »; returns whether to go back to the main menu.
+    fn game_window(&mut self, ui: &egui::Context) -> bool {
+        if !self.game_open {
+            return false;
+        }
+        let mut leave = false;
+        let mut close = false;
+        let modal = egui::Modal::new(egui::Id::new("game")).show(ui, |ui| {
+            ui.set_width(GAME_WIDTH);
+            ui.heading(tr!("game"));
+            if self.saves.is_some() {
+                self.save_slots(ui);
+                ui.separator();
+            }
             ui.horizontal(|ui| {
-                ui.colored_label(egui::Color32::LIGHT_RED, self.question(choice));
+                leave = ui.button(tr!("main-menu")).clicked();
+                close = ui.button(tr!("close")).clicked();
+            });
+        });
+        if close || modal.should_close() {
+            self.game_open = false;
+            self.confirm = None;
+        }
+        leave
+    }
+
+    /// Each save slot with « Sauvegarder », or the question before saving over one.
+    fn save_slots(&mut self, ui: &mut egui::Ui) {
+        if let Some(slot) = self.confirm {
+            ui.colored_label(
+                egui::Color32::LIGHT_RED,
+                tr!(
+                    "confirm-overwrite",
+                    slot = slot + 1,
+                    game = slot_text(&self.slots[slot], &self.data)
+                ),
+            );
+            ui.horizontal(|ui| {
                 if ui.button(tr!("confirm")).clicked() {
-                    self.carry_out(choice);
+                    self.save_slot(slot);
                 }
                 if ui.button(tr!("cancel")).clicked() {
                     self.confirm = None;
@@ -521,139 +478,18 @@ impl ClubScreen {
         let mut chosen = None;
         for (i, slot) in self.slots.iter().enumerate() {
             ui.horizontal(|ui| {
-                ui.label(tr!("save-slot", slot = i + 1, game = self.slot_text(slot)));
                 if ui.button(tr!("menu-save")).clicked() {
-                    chosen = Some(Confirm::Save(i));
+                    chosen = Some(i);
                 }
-                let loadable = matches!(slot, Slot::Game(..));
-                if ui
-                    .add_enabled(loadable, egui::Button::new(tr!("menu-load")))
-                    .clicked()
-                {
-                    chosen = Some(Confirm::Load(i));
-                }
+                ui.label(tr!(
+                    "save-slot",
+                    slot = i + 1,
+                    game = slot_text(slot, &self.data)
+                ));
             });
         }
-        ui.horizontal(|ui| {
-            ui.label(tr!("menu-new-game"));
-            let continent = self.new_continent;
-            egui::ComboBox::from_id_salt("new continent")
-                .selected_text(continent_name(self.new_continent))
-                .show_ui(ui, |ui| {
-                    for continent in Continent::ALL {
-                        ui.selectable_value(
-                            &mut self.new_continent,
-                            continent,
-                            continent_name(continent),
-                        );
-                    }
-                });
-            if self.new_continent != continent {
-                self.draw_new_club(None);
-            }
-            self.new_club_name(ui);
-        });
-        ui.horizontal(|ui| {
-            // A club needs a name.
-            let named = !self.new_club.1.name.trim().is_empty();
-            for wealth in Wealth::ALL {
-                let button = egui::Button::new(tr!("menu-new-club", wealth = wealth_name(wealth)));
-                if ui.add_enabled(named, button).clicked() {
-                    chosen = Some(Confirm::NewGame(wealth, self.new_continent));
-                }
-            }
-        });
-        if let Some(choice) = chosen {
-            self.ask(choice);
-        }
-    }
-
-    /// The culture, pattern and name of the new game's club, and « Tirer » to draw
-    /// another name in its culture.
-    fn new_club_name(&mut self, ui: &mut egui::Ui) {
-        let data = Rc::clone(&self.data);
-        let continent = self.new_continent;
-        let (culture, name) = &mut self.new_club;
-        let before = culture.clone();
-        egui::ComboBox::from_id_salt("new culture")
-            .selected_text(culture_name(culture))
-            .show_ui(ui, |ui| {
-                for c in data.cultures.iter().filter(|c| c.continent == continent) {
-                    ui.selectable_value(culture, c.key.clone(), culture_name(&c.key));
-                }
-            });
-        if *culture != before {
-            let culture = culture.clone();
-            self.draw_new_club(Some(&culture));
-            return;
-        }
-        let patterns = data.culture(culture).map_or(&[][..], |c| &c.clubs[..]);
-        egui::ComboBox::from_id_salt("new pattern")
-            .selected_text(named_club(name))
-            .show_ui(ui, |ui| {
-                for pattern in patterns {
-                    let shown = ClubName {
-                        pattern: pattern.clone(),
-                        ..name.clone()
-                    };
-                    ui.selectable_value(&mut name.pattern, pattern.clone(), named_club(&shown));
-                }
-            });
-        ui.add(egui::TextEdit::singleline(&mut name.name).desired_width(120.0));
-        if ui.button(tr!("menu-draw-name")).clicked() {
-            let culture = culture.clone();
-            self.draw_new_club(Some(&culture));
-        }
-    }
-
-    /// Draws the new game's club a name in `culture`, or in a culture drawn on its
-    /// continent.
-    fn draw_new_club(&mut self, culture: Option<&str>) {
-        let mut rng = ChaCha8Rng::seed_from_u64(new_seed());
-        let key = match culture {
-            Some(key) => Some(key.to_owned()),
-            None => rivals::culture_on(&mut rng, Some(self.new_continent), &self.data),
-        };
-        let Some(culture) = key.as_deref().and_then(|key| self.data.culture(key)) else {
-            return;
-        };
-        let name = names::club_name(&mut rng, culture, &[]);
-        self.new_club = (culture.key.clone(), name);
-    }
-
-    fn slot_text(&self, slot: &Slot) -> String {
-        match slot {
-            Slot::Empty => tr!("save-slot-empty"),
-            Slot::Game(week, club, wealth, continent) => tr!(
-                "save-slot-game",
-                club = named_club(club),
-                date = date_text(*week, &self.data),
-                wealth = wealth_name(*wealth),
-                continent = continent_name(*continent)
-            ),
-            Slot::Unreadable => tr!("save-slot-unreadable"),
-        }
-    }
-
-    /// The question asked before carrying out `choice`.
-    fn question(&self, choice: Confirm) -> String {
-        match choice {
-            Confirm::Save(slot) => tr!(
-                "confirm-overwrite",
-                slot = slot + 1,
-                game = self.slot_text(&self.slots[slot])
-            ),
-            Confirm::Load(slot) => tr!(
-                "confirm-load",
-                slot = slot + 1,
-                game = self.slot_text(&self.slots[slot])
-            ),
-            Confirm::NewGame(wealth, continent) => tr!(
-                "confirm-new-game",
-                club = named_club(&self.new_club.1),
-                wealth = wealth_name(wealth),
-                continent = continent_name(continent)
-            ),
+        if let Some(slot) = chosen {
+            self.ask(slot);
         }
     }
 
@@ -1038,8 +874,8 @@ impl Screen for ClubScreen {
             let fights = std::mem::take(&mut self.to_watch);
             return self.watch(fights);
         }
-        // Échap and Espace belong to the options while they are open.
-        let keys = !self.options_open;
+        // Échap and Espace belong to the windows laid over the screen while they are open.
+        let keys = !self.options_open && !self.game_open;
         if keys && self.bindings.pressed(ui, &Action::Quit) {
             if self.view == View::Menu {
                 return Transition::Pop;
@@ -1064,6 +900,9 @@ impl Screen for ClubScreen {
             options::window(ui, audio, self.saves.as_deref(), &mut self.options_open)
         {
             self.message = Some(failed);
+        }
+        if self.game_window(ui) {
+            return Transition::Pop;
         }
         if let Some(seed) = again {
             let all = to_watch(&self.fights, &self.state, &self.data);
@@ -1130,23 +969,6 @@ fn to_watch(fights: &[FightReport], state: &GameState, data: &DesignData) -> Vec
         });
     }
     watched
-}
-
-/// What each save slot in `folder` holds; all empty without a folder.
-fn read_slots(folder: Option<&std::path::Path>, data: &DesignData) -> [Slot; saves::SLOTS.len()] {
-    saves::SLOTS.map(|file| match folder.map(|f| saves::read(f, file, data)) {
-        None | Some(Ok(None)) => Slot::Empty,
-        Some(Ok(Some(state))) => Slot::Game(state.week, state.name, state.wealth, state.continent),
-        Some(Err(_)) => Slot::Unreadable,
-    })
-}
-
-/// A seed for a new game or a drawn name: the game, unlike `lanista_core`, may read
-/// the clock.
-fn new_seed() -> u64 {
-    std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .map_or(0, |d| d.as_secs() ^ u64::from(d.subsec_nanos()))
 }
 
 /// Turns to rest a week the club cannot pay (`next_week` would drop it) or a special
@@ -1448,6 +1270,7 @@ mod tests {
         outside_ease_text, outside_personality_text, potential_text, range_texts, staff_text,
         stage_name, unsellable_text, weeks_left_text,
     };
+    use crate::title_screen::TitleScreen;
     use colosseums::reign_text;
     use lanista_core::colosseum::{Reign, ReignEnd, TitleLoss};
 
@@ -1455,6 +1278,19 @@ mod tests {
         let data = Rc::new(DesignData::load().unwrap());
         let state = GameState::new(seed, &data);
         ClubScreen::new(data, state, None, Bindings::new(Vec::new()))
+    }
+
+    /// The game of seed 7, saved in `folder`.
+    fn saved_screen(data: &Rc<DesignData>, folder: &std::path::Path) -> ClubScreen {
+        let state = GameState::new(7, data);
+        let folder = Some(folder.to_path_buf());
+        ClubScreen::new(Rc::clone(data), state, folder, Bindings::new(Vec::new()))
+    }
+
+    /// What « Continuer » opens at the next launch.
+    fn resume(data: &Rc<DesignData>, folder: &std::path::Path) -> Option<ClubScreen> {
+        let folder = Some(folder.to_path_buf());
+        TitleScreen::new(Rc::clone(data), folder, Bindings::new(Vec::new())).resume()
     }
 
     /// What `career --seed <seed> --weeks <weeks>` plays: the suggested decisions.
@@ -1465,38 +1301,6 @@ mod tests {
             next_week(&mut state, &Decisions::default(), &data);
         }
         state
-    }
-
-    #[test]
-    fn a_new_club_bears_the_name_chosen_or_drawn_in_a_culture_of_its_continent() {
-        let mut screen = screen(7);
-        // The game's club, named as it opened, offered again for the next one.
-        assert_eq!(screen.new_club.1, screen.state.name);
-        assert!(
-            screen
-                .state
-                .rivals
-                .iter()
-                .all(|r| r.name != screen.state.name)
-        );
-        // Another continent draws a culture of it and a name of that culture.
-        screen.new_continent = Continent::Africa;
-        screen.draw_new_club(None);
-        let culture = screen.data.culture(&screen.new_club.0).unwrap();
-        assert_eq!(culture.continent, Continent::Africa);
-        assert!(culture.names.contains(&screen.new_club.1.name));
-        // The player writes its own name.
-        screen.new_club.1.name = "Spartacus".into();
-        let chosen = screen.new_club.clone();
-        screen.carry_out(Confirm::NewGame(Wealth::Rich, Continent::Africa));
-        assert_eq!(
-            (screen.state.culture.clone(), screen.state.name.clone()),
-            chosen
-        );
-        assert_eq!(screen.state.continent, Continent::Africa);
-        let club = named_club(&chosen.1);
-        assert!(club.contains("Spartacus"), "{club}");
-        assert!(screen.message.as_ref().unwrap().contains(&club));
     }
 
     #[test]
@@ -1831,44 +1635,28 @@ mod tests {
     fn each_week_is_saved_and_resumed_at_launch() {
         let data = Rc::new(DesignData::load().unwrap());
         let folder = std::env::temp_dir().join(format!("lanista-club-{}", std::process::id()));
-        let open = || {
-            ClubScreen::open(
-                Rc::clone(&data),
-                7,
-                Some(folder.clone()),
-                Bindings::new(Vec::new()),
-            )
-        };
-        let mut screen = open();
-        assert_eq!((screen.state.week, &screen.message), (1, &None));
+        let mut screen = saved_screen(&data, &folder);
+        assert!(resume(&data, &folder).is_none());
         screen.next_week();
         screen.next_week();
-        let resumed = open();
+        let resumed = resume(&data, &folder).unwrap();
         assert_eq!(resumed.state, screen.state);
         assert_eq!(resumed.message.as_deref(), Some("Partie reprise"));
-        // A manual save is loaded back over a game played further.
+        // A manual save is written to its slot.
         screen.save_slot(0);
-        screen.next_week();
-        screen.load(0);
-        assert_eq!(screen.state, resumed.state);
-        // Quitting right after loading resumes the loaded game, not the one before.
-        assert_eq!(open().state, resumed.state);
+        let slot = saves::read(&folder, saves::SLOTS[0], &data).unwrap();
+        assert_eq!(slot.as_ref(), Some(&screen.state));
         std::fs::remove_dir_all(folder).unwrap();
     }
 
     #[test]
-    fn a_choice_that_loses_a_game_waits_for_confirmation() {
+    fn saving_over_a_game_waits_for_confirmation() {
         let data = Rc::new(DesignData::load().unwrap());
         let folder = std::env::temp_dir().join(format!("lanista-slots-{}", std::process::id()));
-        let mut screen = ClubScreen::open(
-            Rc::clone(&data),
-            7,
-            Some(folder.clone()),
-            Bindings::new(Vec::new()),
-        );
+        let mut screen = saved_screen(&data, &folder);
         screen.next_week();
         // Saving to an empty slot loses nothing: it is done at once.
-        screen.ask(Confirm::Save(1));
+        screen.ask(1);
         assert_eq!(screen.confirm, None);
         let saved = screen.state.clone();
         assert_eq!(
@@ -1885,18 +1673,14 @@ mod tests {
             ]
         );
         screen.next_week();
-        // A new game cancelled leaves the game and its autosave as they were.
-        screen.ask(Confirm::NewGame(Wealth::Rich, screen.state.continent));
-        assert_eq!(screen.state.week, 3);
-        screen.confirm = None;
-        // Saving over a slot and loading wait for the player too.
-        screen.ask(Confirm::Save(1));
-        assert_eq!(screen.confirm, Some(Confirm::Save(1)));
-        screen.confirm = None;
-        screen.ask(Confirm::Load(1));
-        assert_eq!(screen.state.week, 3);
-        screen.carry_out(Confirm::Load(1));
-        assert_eq!((screen.state.clone(), screen.confirm), (saved, None));
+        // Saving over a slot waits for the player.
+        screen.ask(1);
+        assert_eq!(screen.confirm, Some(1));
+        let slot = saves::read(&folder, saves::SLOTS[1], &data).unwrap();
+        assert_eq!(slot, Some(saved));
+        screen.save_slot(1);
+        let slot = saves::read(&folder, saves::SLOTS[1], &data).unwrap();
+        assert_eq!((slot.as_ref(), screen.confirm), (Some(&screen.state), None));
         std::fs::remove_dir_all(folder).unwrap();
     }
 
@@ -1906,20 +1690,12 @@ mod tests {
     fn a_whole_season_is_played_saved_and_reloaded() {
         let data = Rc::new(DesignData::load().unwrap());
         let folder = std::env::temp_dir().join(format!("lanista-season-{}", std::process::id()));
-        let open = || {
-            ClubScreen::open(
-                Rc::clone(&data),
-                7,
-                Some(folder.clone()),
-                Bindings::new(Vec::new()),
-            )
-        };
-        let mut screen = open();
+        let mut screen = saved_screen(&data, &folder);
         let half = u64::from(data.calendar.season_weeks() / 2);
         for _ in 0..half {
             screen.next_week();
         }
-        let mut reloaded = open();
+        let mut reloaded = resume(&data, &folder).unwrap();
         // The journal comes back with the game: each fighter's weeks, the last week, and
         // its fights to watch again.
         assert_ne!(reloaded.histories[0], []);
