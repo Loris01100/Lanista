@@ -432,7 +432,7 @@ impl Screen for CombatScreen {
         self.gauges(ui);
         // ponytail: no screen to tell a failure on; the options then last until the
         // game closes.
-        let _ = options::window(ui, audio, self.settings.as_deref());
+        let _ = options::window(ui, audio, self.settings.as_deref(), 0.0);
         audio.play_music(assets, MUSIC);
         // Speed scales time: more or fewer ticks per frame, animations alike.
         for sound in self.advance(get_frame_time() * self.speed) {

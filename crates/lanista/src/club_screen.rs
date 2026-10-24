@@ -420,7 +420,9 @@ impl ClubScreen {
             SeasonPhase::OffSeason => "off-season",
         };
         let mut transition = None;
-        ui.horizontal(|ui| {
+        // Wrapped: a narrow window or a large interface puts the end on a second row
+        // rather than out of the screen.
+        ui.horizontal_wrapped(|ui| {
             ui.strong(named_club(&self.state.name));
             ui.separator();
             ui.strong(tr!(
@@ -432,10 +434,6 @@ impl ClubScreen {
             ui.separator();
             ui.strong(tr!("top-money", money = self.state.money));
             ui.separator();
-            if let Some(message) = &self.message {
-                ui.label(message);
-                ui.separator();
-            }
             ui.selectable_value(&mut self.view, View::Menu, tr!("view-menu"));
             ui.selectable_value(&mut self.view, View::Roster, tr!("view-roster"));
             ui.add_enabled_ui(!self.fights.is_empty(), |ui| {
@@ -452,6 +450,10 @@ impl ClubScreen {
                 transition = Some(Transition::Push(Box::new(duel)));
             }
         });
+        // On its own line: a long message would push the views out of the bar.
+        if let Some(message) = &self.message {
+            ui.label(message);
+        }
         transition
     }
 
@@ -1043,7 +1045,7 @@ impl Screen for ClubScreen {
         let mut play = self.bindings.pressed(ui, &Action::NextWeek);
         let mut transition = None;
         let mut again = None;
-        egui::TopBottomPanel::top("club").show(ui, |ui| transition = self.top_bar(ui));
+        let bar = egui::TopBottomPanel::top("club").show(ui, |ui| transition = self.top_bar(ui));
         egui::CentralPanel::default().show(ui, |ui| match self.view {
             View::Menu => play |= self.menu(ui),
             View::Roster => self.roster(ui),
@@ -1055,7 +1057,8 @@ impl Screen for ClubScreen {
             View::Outside(target) => self.outside(ui, target),
             View::Rival(club) => self.rival_club(ui, club),
         });
-        if let Some(failed) = options::window(ui, audio, self.saves.as_deref()) {
+        let top = bar.response.rect.bottom();
+        if let Some(failed) = options::window(ui, audio, self.saves.as_deref(), top) {
             self.message = Some(failed);
         }
         if let Some(transition) = transition {

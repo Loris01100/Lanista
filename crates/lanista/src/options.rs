@@ -1,5 +1,5 @@
-//! The options window, closed at first in the top right corner of the club and the
-//! fights: language, volumes, full screen and interface size, kept for the next
+//! The options window, closed at first in the top right corner of the fights and
+//! under the club's top bar: language, volumes, full screen and interface size, kept for the next
 //! launches.
 
 use std::cell::Cell;
@@ -24,8 +24,14 @@ pub fn apply(ui: &egui::Context, display: Display) {
     ui.set_zoom_factor(f32::from(display.interface) / 100.0);
 }
 
-/// Shows the window; the text to show the player when keeping a choice failed.
-pub fn window(ui: &egui::Context, audio: &mut Audio, folder: Option<&Path>) -> Option<String> {
+/// Shows the window `top` points below the top of the screen, under a bar it would
+/// hide; the text to show the player when keeping a choice failed.
+pub fn window(
+    ui: &egui::Context,
+    audio: &mut Audio,
+    folder: Option<&Path>,
+    top: f32,
+) -> Option<String> {
     let mut display = DISPLAY.get();
     let mut language = None;
     let mut set = false;
@@ -38,7 +44,7 @@ pub fn window(ui: &egui::Context, audio: &mut Audio, folder: Option<&Path>) -> O
     egui::Window::new(tr!("options"))
         .resizable(false)
         .default_open(false)
-        .anchor(egui::Align2::RIGHT_TOP, [-12.0, 12.0])
+        .anchor(egui::Align2::RIGHT_TOP, [-12.0, top + 12.0])
         .show(ui, |ui| {
             ui.horizontal(|ui| {
                 ui.label(tr!("menu-language"));
