@@ -103,6 +103,8 @@ Un personnage unique est dessiné à la main, sans calques générés ni teintes
 
 ### Créer le fichier
 
+Le script `art/scripts/fighter_template.lua` crée ce fichier pour une carrure (`art/fighters/<carrure>.aseprite`) : images, tags, durées et calques comme ci-dessous, remplis avec les dessins déjà présents dans `assets/fighters/` (la tête et les cheveux sur la première image seulement), la palette `art/palette.gpl` si elle existe, et un calque verrouillé `_guide` (centre de la case et cercle de 1 m) que l'exportation ignore, comme tout calque dont le nom commence par `_`. À faire à la main sinon :
+
 - Nouveau sprite de 32 × 32 px, mode de couleur RGBA, fond transparent.
 - Charger la palette du jeu (Palette > Load Palette).
 - Un calque par partie, nommé comme dans le tableau des calques (`leg_back`, `arm_back`, `body`, `leg_front`, `head`, `hair`, `arm_front`), plus un calque `_detail` à côté de chaque partie qui en a.
