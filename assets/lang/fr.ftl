@@ -552,6 +552,7 @@ continue = Continuer
 pause = Pause
 resume = Reprendre
 leave-fight = Quitter le combat
+timer = Chrono
 elimination = Élimination
 gauges = Jauges
 mana = Mana

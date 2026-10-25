@@ -235,6 +235,18 @@ impl CombatScreen {
 }
 
 impl CombatScreen {
+    /// The time left before the time limit of the fight shown big, top right.
+    fn timer(&self, ui: &egui::Context) {
+        let arena = &self.fight().arena;
+        egui::Window::new(tr!("timer"))
+            .title_bar(false)
+            .resizable(false)
+            .anchor(egui::Align2::RIGHT_TOP, [-12.0, 12.0])
+            .show(ui, |ui| {
+                ui.heading(clock(arena.max_ticks.saturating_sub(arena.tick)));
+            });
+    }
+
     /// The next elimination of the melee shown big, top middle.
     fn elimination(&self, ui: &egui::Context) {
         let lines = self.fight().elimination_lines();
@@ -357,6 +369,12 @@ fn cost_text(cost: &Cost) -> String {
 fn tenths(ticks: u32) -> String {
     let tenths = (u64::from(ticks) * 10).div_ceil(u64::from(TICKS_PER_SECOND));
     format!("{},{}", tenths / 10, tenths % 10)
+}
+
+/// `ticks` in minutes and seconds, the seconds rounded up: « 0:59 ».
+fn clock(ticks: u32) -> String {
+    let seconds = ticks.div_ceil(TICKS_PER_SECOND);
+    format!("{}:{:02}", seconds / 60, seconds % 60)
 }
 
 /// Where `f` was hit this fight, laid out like a body: the hit points lost on each
@@ -498,6 +516,7 @@ impl Screen for CombatScreen {
                     egui::Frame::popup(ui.style()).show(ui, |ui| ui.label(name));
                 });
         }
+        self.timer(ui);
         self.elimination(ui);
         self.gauges(ui);
         // ponytail: no screen to tell a failure on; the options then last until the
@@ -640,6 +659,15 @@ mod tests {
         };
         assert_eq!(cost_text(&cost), "12 mana 1 élém.");
         assert_eq!(cost_text(&Cost::default()), "");
+    }
+
+    #[test]
+    fn the_timer_counts_down_minutes_and_seconds() {
+        assert_eq!(clock(lanista_core::duel::MAX_TICKS), "1:00");
+        assert_eq!(clock(TICKS_PER_SECOND * 59 + 1), "1:00");
+        assert_eq!(clock(TICKS_PER_SECOND * 5), "0:05");
+        assert_eq!(clock(1), "0:01");
+        assert_eq!(clock(0), "0:00");
     }
 
     #[test]
