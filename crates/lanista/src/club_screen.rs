@@ -25,7 +25,7 @@ use lanista_core::fighter::career::{
     Activity, CareerFighter, FightSummary, Record, Status, WeekPlan,
 };
 use lanista_core::fighter::equipment::Refused;
-use lanista_core::fighter::fame::Fame;
+use lanista_core::fighter::fame::{Fame, FightResult};
 use lanista_core::fighter::form::Form;
 use lanista_core::fighter::illness::IllnessLevel;
 use lanista_core::fighter::injury::{Injury, Severity, Side};
@@ -46,12 +46,12 @@ use crate::lang::tr;
 use crate::options;
 use crate::saves;
 use crate::texts::{
-    Article, activity_name, challenger_text, change, class_name, club_name, colosseum_name,
-    colosseum_rules_name, condition_text, contender_name, continent_name, date_in_sentence,
-    date_text, fight_text, fighter_name, illness_text, injury_text, loadout_name, market_news_text,
-    money_line, move_text, named_club, origin_place, personality_traits, priced, record_text,
-    rival_fighter_name, staff_move_text, staff_news_text, stat_names, title_article, title_changed,
-    wealth_name, wealth_text, week_lines, world_article,
+    Article, activity_name, against_text, challenger_text, change, class_name, club_name,
+    colosseum_name, colosseum_rules_name, condition_text, contender_name, continent_name,
+    date_in_sentence, date_text, fight_text, fighter_name, illness_text, injury_text, loadout_name,
+    market_news_text, money_line, move_text, named_club, origin_place, personality_traits, priced,
+    record_text, result_text, rival_fighter_name, staff_move_text, staff_news_text, stat_names,
+    title_article, title_changed, wealth_name, wealth_text, week_lines, world_article,
 };
 use crate::theme;
 use crate::title_screen::{Slot, read_slots, slot_text};
@@ -767,82 +767,23 @@ impl ClubScreen {
         });
     }
 
-    /// The fight summary; returns the seed of a fight to watch again.
+    /// The fight summary, a card per fight, two side by side; returns the seed of a
+    /// fight to watch again.
     fn fight_summary(&self, ui: &mut egui::Ui) -> Option<u64> {
-        let data = &self.data;
         let mut again = None;
         ui.heading(tr!("view-fights"));
         egui::ScrollArea::vertical().show(ui, |ui| {
-            for (n, report) in self.fights.iter().enumerate() {
-                let fight = &report.fight;
-                let fighter = &self.state.fighters[report.fighter];
-                ui.add_space(8.0);
-                ui.strong(tr!(
-                    "summary-fighter-at",
-                    fighter = fighter_name(report.fighter, fighter, data),
-                    place = colosseum_name(report.colosseum, data)
-                ));
-                ui.label(fight_text(&report.line, data));
-                ui.label(tr!(
-                    "summary-duration",
-                    seconds = fight.ticks / lanista_core::combat::TICKS_PER_SECOND,
-                    seed = fight.seed.to_string()
-                ));
-                egui::Grid::new(("fight", n)).striped(true).show(ui, |ui| {
-                    ui.label("");
-                    ui.strong(tr!("summary-yours"));
-                    // A melee shows the fighter's line only, a duel both sides.
-                    let sides: Vec<_> =
-                        if let (false, Some(opponent)) = (fight.is_melee(), fight.opponent()) {
-                            ui.strong(tr!("summary-opponent", class = class_name(opponent, data)));
-                            fight.report.fighters.iter().collect()
-                        } else {
-                            fight.mine().into_iter().collect()
-                        };
-                    ui.end_row();
-                    let rows = sides.iter().map(|f| {
-                        [
-                            f.damage_dealt,
-                            f.damage_taken,
-                            f.spells_cast,
-                            f.misses,
-                            f.stuns,
-                            f.hp,
-                        ]
-                    });
-                    let names = [
-                        tr!("summary-damage-dealt"),
-                        tr!("summary-damage-taken"),
-                        tr!("summary-spells-cast"),
-                        tr!("summary-misses"),
-                        tr!("summary-stuns"),
-                        tr!("summary-hp-left"),
-                    ];
-                    let values: Vec<[u32; 6]> = rows.collect();
-                    for (row, name) in names.into_iter().enumerate() {
-                        ui.label(name);
-                        for side in &values {
-                            ui.label(side[row].to_string());
+            for (row, pair) in self.fights.chunks(2).enumerate() {
+                ui.columns(2, |columns| {
+                    for (column, report) in columns.iter_mut().zip(pair) {
+                        if fight_card(column, report, &self.state, &self.data) {
+                            again = Some(report.fight.seed);
                         }
-                        ui.end_row();
                     }
                 });
-                ui.label(tr!(
-                    "summary-money",
-                    money = format!("{:+}", report.money),
-                    fame = format!("{:+}", fight.fame_change),
-                    form = change(&tr!("summary-form"), report.form.0, report.form.1)
-                ));
-                if let Some(injury) = report.injury {
-                    ui.label(tr!(
-                        "week-injury",
-                        injury = injury_text(injury, fighter.dominant_hand)
-                    ));
+                if row + 1 < self.fights.len().div_ceil(2) {
+                    ui.add_space(8.0);
                 }
-                if ui.button(tr!("summary-watch-again")).clicked() {
-                    again = Some(fight.seed);
-                }
-                ui.separator();
             }
         });
         again
@@ -1392,6 +1333,180 @@ fn health(ui: &mut egui::Ui, f: &CareerFighter) {
             chip(ui, illness_text(illness), theme::BRONZE.gamma_multiply(0.6));
         }
     });
+}
+
+/// One fight of the summary in a frame: who fought where and how it ended, the two
+/// sides face to face stat by stat, then what it brought the club; returns whether
+/// « Revoir le combat » was clicked.
+fn fight_card(
+    ui: &mut egui::Ui,
+    report: &FightReport,
+    state: &GameState,
+    data: &DesignData,
+) -> bool {
+    let fight = &report.fight;
+    let fighter = &state.fighters[report.fighter];
+    let mut again = false;
+    egui::Frame::group(ui.style())
+        .fill(ui.visuals().extreme_bg_color)
+        .show(ui, |ui| {
+            ui.set_width(ui.available_width());
+            ui.horizontal(|ui| {
+                let name = fighter_name(report.fighter, fighter, data);
+                ui.label(egui::RichText::new(name).strong().color(theme::BRONZE));
+                let place = colosseum_name(report.colosseum, data);
+                ui.label(egui::RichText::new(tr!("summary-at", place = place)).weak());
+                ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                    chip(
+                        ui,
+                        result_text(&report.line),
+                        result_color(ui, &report.line),
+                    );
+                });
+            });
+            ui.horizontal(|ui| {
+                ui.label(against_text(&report.line, data));
+                ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                    let seconds = fight.ticks / lanista_core::combat::TICKS_PER_SECOND;
+                    ui.label(egui::RichText::new(tr!("summary-time", seconds = seconds)).weak())
+                        .on_hover_text(tr!("summary-seed", seed = fight.seed.to_string()));
+                });
+            });
+            ui.add_space(4.0);
+            face_to_face(ui, report, data);
+            ui.add_space(4.0);
+            ui.horizontal_wrapped(|ui| {
+                let money = format!("{:+}", report.money);
+                chip(
+                    ui,
+                    tr!("summary-money-chip", money = money),
+                    signed_color(ui, report.money),
+                );
+                let fame = format!("{:+}", fight.fame_change);
+                let fame_color = signed_color(ui, i64::from(fight.fame_change));
+                chip(ui, tr!("summary-fame-chip", fame = fame), fame_color);
+                let (before, after) = report.form;
+                let form_change = i64::from(after) - i64::from(before);
+                let form = change(&tr!("roster-form"), before, after);
+                chip(ui, form, signed_color(ui, form_change));
+                if let Some(injury) = report.injury {
+                    chip(ui, injury_text(injury, fighter.dominant_hand), theme::BLOOD);
+                }
+            });
+            ui.add_space(2.0);
+            again = ui.button(tr!("summary-watch-again")).clicked();
+        });
+    again
+}
+
+/// A fight's sides stat by stat. A duel puts the club's fighter on the left and its
+/// opponent on the right, a bar each growing out from the stat's name, the longer one
+/// the bigger value; a melee shows the club's fighter alone.
+fn face_to_face(ui: &mut egui::Ui, report: &FightReport, data: &DesignData) {
+    let fight = &report.fight;
+    let names = [
+        tr!("summary-damage-dealt"),
+        tr!("summary-damage-taken"),
+        tr!("summary-spells-cast"),
+        tr!("summary-misses"),
+        tr!("summary-stuns"),
+        tr!("summary-hp-left"),
+    ];
+    let values = |f: &lanista_core::log::FighterReport| {
+        [
+            f.damage_dealt,
+            f.damage_taken,
+            f.spells_cast,
+            f.misses,
+            f.stuns,
+            f.hp,
+        ]
+    };
+    let opponent = fight.opponent().filter(|_| !fight.is_melee());
+    let sides: Vec<[u32; 6]> = if opponent.is_some() {
+        fight.report.fighters.iter().map(values).collect()
+    } else {
+        fight.mine().into_iter().map(values).collect()
+    };
+    let plain = ui.visuals().widgets.active.bg_fill;
+    egui::Grid::new(("face_to_face", fight.seed, report.fighter))
+        .spacing([8.0, 4.0])
+        .show(ui, |ui| {
+            if let Some(opponent) = opponent {
+                ui.label(
+                    egui::RichText::new(tr!("summary-yours"))
+                        .small()
+                        .color(theme::BRONZE),
+                );
+                ui.label("");
+                ui.label("");
+                let class = class_name(opponent, data);
+                ui.label(
+                    egui::RichText::new(tr!("summary-opponent", class = class))
+                        .small()
+                        .weak(),
+                );
+                ui.end_row();
+            }
+            for (row, name) in names.into_iter().enumerate() {
+                match sides.as_slice() {
+                    [mine, theirs] => {
+                        let max = mine[row].max(theirs[row]);
+                        ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                            ui.label(mine[row].to_string());
+                            half_bar(ui, mine[row], max, theme::BRONZE, true);
+                        });
+                        ui.vertical_centered(|ui| ui.label(egui::RichText::new(name).small()));
+                        ui.horizontal(|ui| {
+                            half_bar(ui, theirs[row], max, plain, false);
+                            ui.label(theirs[row].to_string());
+                        });
+                    }
+                    [mine] => {
+                        ui.label(egui::RichText::new(name).small());
+                        ui.label(mine[row].to_string());
+                    }
+                    _ => {}
+                }
+                ui.end_row();
+            }
+        });
+}
+
+/// Width of one side's bar in the fight summary.
+const HALF_BAR_WIDTH: f32 = 90.0;
+
+/// A thin bar filled to `value` out of `max`, from its right end if `leftward`.
+fn half_bar(ui: &mut egui::Ui, value: u32, max: u32, color: egui::Color32, leftward: bool) {
+    let size = egui::vec2(HALF_BAR_WIDTH, 10.0);
+    let (rect, _) = ui.allocate_exact_size(size, egui::Sense::hover());
+    let width = rect.width() * fraction(value, max);
+    let filled = if leftward {
+        egui::Rect::from_min_max(egui::pos2(rect.right() - width, rect.top()), rect.max)
+    } else {
+        egui::Rect::from_min_size(rect.min, egui::vec2(width, rect.height()))
+    };
+    ui.painter().rect_filled(filled, 3.0, color);
+}
+
+/// Green for a win, red for a loss or a death, bronze for giving up, plain for no winner.
+fn result_color(ui: &egui::Ui, line: &FightLine) -> egui::Color32 {
+    match line.result {
+        _ if line.died => theme::BLOOD,
+        FightResult::Won => theme::LAUREL,
+        FightResult::Lost => theme::BLOOD,
+        FightResult::GaveUp => theme::BRONZE.gamma_multiply(0.6),
+        FightResult::Unfinished => ui.visuals().widgets.inactive.bg_fill,
+    }
+}
+
+/// Green for a gain, red for a loss, plain for nothing.
+fn signed_color(ui: &egui::Ui, change: i64) -> egui::Color32 {
+    match change.signum() {
+        1 => theme::LAUREL,
+        -1 => theme::BLOOD,
+        _ => ui.visuals().widgets.inactive.bg_fill,
+    }
 }
 
 /// A small rounded tag on `fill`.

@@ -950,12 +950,22 @@ fn limb_cut(location: Location) -> String {
 }
 
 pub fn fight_text(fight: &FightLine, data: &DesignData) -> String {
+    tr!(
+        "fight",
+        against = against_text(fight, data),
+        result = result_text(fight),
+        fame = format!("{:+}", fight.fame_change)
+    )
+}
+
+/// How the fight ended for the club's fighter: « victoire », « abandon », « décapité »…
+pub fn result_text(fight: &FightLine) -> String {
     let mine = fight.mine.as_ref();
     // Brought to 0 HP, it may still have survived the fatal blow.
     let fell = mine.is_some_and(|f| f.hp == 0);
     let knocked_out = mine.is_some_and(|f| f.knocked_out);
     let severed = mine.and_then(|f| f.severed);
-    let result = match (fight.result, fight.died, severed) {
+    match (fight.result, fight.died, severed) {
         (_, true, Some(Location::Head)) => tr!("result-beheaded"),
         (_, true, _) => tr!("result-dead"),
         (FightResult::Lost, false, Some(limb)) => tr!("result-severed", limb = limb_cut(limb)),
@@ -968,7 +978,11 @@ pub fn fight_text(fight: &FightLine, data: &DesignData) -> String {
             "result-unfinished",
             minutes = fight.max_ticks / (lanista_core::combat::TICKS_PER_SECOND * 60)
         ),
-    };
+    }
+}
+
+/// Who the club's fighter faced: « Contre un Augure, plus fort, sans armure ».
+pub fn against_text(fight: &FightLine, data: &DesignData) -> String {
     let stronger = if fight.against_stronger {
         "true"
     } else {
@@ -993,13 +1007,7 @@ pub fn fight_text(fight: &FightLine, data: &DesignData) -> String {
             .map_or_else(|| "?".into(), |c| data_name("class", &c.key));
         tr!("against-duel", class = class, stronger = stronger)
     };
-    tr!(
-        "fight",
-        against = against,
-        refused = refused,
-        result = result,
-        fame = format!("{:+}", fight.fame_change)
-    )
+    tr!("fight-against", against = against, refused = refused)
 }
 
 /// A place in a melee: « 1er », « 2e »…

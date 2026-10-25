@@ -140,10 +140,11 @@ against-melee = Mêlée à { $size }, { $place }{ $stronger ->
         [true] , plus forts
        *[false] {""}
     }
-fight = { $against }{ $refused ->
+fight-against = { $against }{ $refused ->
         [armour] , sans armure
        *[none] {""}
-    } : { $result }, renommée { $fame }
+    }
+fight = { $against } : { $result }, renommée { $fame }
 
 place = { $place ->
         [1] 1er
@@ -427,8 +428,11 @@ sheet-dead = Mort au combat
 sheet-sold = Vendu
 sheet-released = Libéré
 
-summary-fighter-at = { $fighter }, à { $place }
-summary-duration = Durée { $seconds } s, graine { $seed }
+summary-at = à { $place }
+summary-time = { $seconds } s
+summary-seed = Graine { $seed }
+summary-money-chip = Argent { $money }
+summary-fame-chip = Renommée { $fame }
 summary-yours = Votre combattant
 summary-opponent = L'adversaire ({ $class })
 summary-damage-dealt = Dégâts infligés
@@ -437,8 +441,6 @@ summary-spells-cast = Sorts lancés
 summary-misses = Coups ratés
 summary-stuns = Étourdi
 summary-hp-left = PV restants
-summary-money = Argent { $money }, renommée { $fame }, { $form }
-summary-form = forme
 summary-watch-again = Revoir le combat
 
 plan-abroad = À l'étranger (voyage { $travel })
