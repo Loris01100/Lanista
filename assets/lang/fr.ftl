@@ -644,17 +644,46 @@ music = Musique
 effects = Effets
 
 fighter-number = combattant { $number }
-result-time-up = Temps écoulé, pas de vainqueur
-result-winner = Vainqueur : { $winner }
-result-no-winner = Aucun vainqueur
-result-with-reasons = { $winner } ({ $reasons })
-out-dead = mort
-out-gave-up = abandon
-out-eliminated = éliminé faute de coups
-out-knocked-out = K.-O.
-out-left-for-dead = laissé pour mort, survit
-out-beheaded = décapité
-out-severed = membre tranché
+result-time-up = Temps écoulé : personne ne remporte le combat.
+result-winner = { $winner } remporte le combat.
+result-opponent = { $name }, l'adversaire,
+result-no-winner = Personne ne remporte le combat.
+result-out = Hors du combat : { $ways }.
+verdict-victory = Victoire !
+verdict-defeat = Défaite
+verdict-no-winner = Pas de vainqueur
+out-dead = { $who } est tué.
+out-gave-up = { $who } abandonne.
+out-eliminated = { $who } est éliminé faute de coups.
+out-knocked-out = { $who } est mis K.-O.
+out-left-for-dead = { $who } tombe, laissé pour mort, mais survit.
+out-beheaded = { $who } est décapité.
+out-severed = { $who } a un membre tranché.
+out-count-dead = { $count ->
+        [one] 1 tué
+       *[other] { $count } tués
+    }
+out-count-gave-up = { $count ->
+        [one] 1 abandon
+       *[other] { $count } abandons
+    }
+out-count-eliminated = { $count ->
+        [one] 1 éliminé faute de coups
+       *[other] { $count } éliminés faute de coups
+    }
+out-count-knocked-out = { $count } K.-O.
+out-count-left-for-dead = { $count ->
+        [one] 1 laissé pour mort
+       *[other] { $count } laissés pour morts
+    }
+out-count-beheaded = { $count ->
+        [one] 1 décapité
+       *[other] { $count } décapités
+    }
+out-count-severed = { $count ->
+        [one] 1 membre tranché
+       *[other] { $count } membres tranchés
+    }
 final-duel = Duel final
 elimination-next = Élimination dans { $seconds } s : { $out ->
         [1] 1 combattant sort

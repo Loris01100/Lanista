@@ -7,7 +7,7 @@ use lanista_core::combat::{self, Arena, RADIUS};
 use lanista_core::design_data::DesignData;
 use lanista_core::duel::ais;
 use lanista_core::fighter::injury::Location;
-use lanista_core::fighter::{Effect, FighterId};
+use lanista_core::fighter::{Effect, Fighter, FighterId};
 use lanista_core::log::EventKind;
 use lanista_core::melee::{in_danger, in_final, next_cut};
 use macroquad::prelude::*;
@@ -104,6 +104,68 @@ pub struct Cast {
     /// Those the arena kills who survive the fatal blow, once the fight is over: they
     /// fall and lie down alive, without bleeding out.
     pub survivors: Vec<FighterId>,
+}
+
+/// How a fight ended for the club.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Verdict {
+    /// One of its fighters won.
+    Victory,
+    /// An opponent won.
+    Defeat,
+    /// Nobody won: all out, or the time ran out.
+    NoWinner,
+}
+
+/// How a fighter went out of a fight.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum WayOut {
+    Dead,
+    Beheaded,
+    Severed,
+    LeftForDead,
+    KnockedOut,
+    GaveUp,
+    Eliminated,
+}
+
+impl WayOut {
+    /// In the order a melee's result counts them.
+    const ALL: [Self; 7] = [
+        Self::Dead,
+        Self::Beheaded,
+        Self::Severed,
+        Self::LeftForDead,
+        Self::KnockedOut,
+        Self::GaveUp,
+        Self::Eliminated,
+    ];
+
+    /// The key of the sentence telling a fighter went out this way.
+    fn told(self) -> &'static str {
+        match self {
+            Self::Dead => "out-dead",
+            Self::Beheaded => "out-beheaded",
+            Self::Severed => "out-severed",
+            Self::LeftForDead => "out-left-for-dead",
+            Self::KnockedOut => "out-knocked-out",
+            Self::GaveUp => "out-gave-up",
+            Self::Eliminated => "out-eliminated",
+        }
+    }
+
+    /// The key of how many went out this way.
+    fn counted(self) -> &'static str {
+        match self {
+            Self::Dead => "out-count-dead",
+            Self::Beheaded => "out-count-beheaded",
+            Self::Severed => "out-count-severed",
+            Self::LeftForDead => "out-count-left-for-dead",
+            Self::KnockedOut => "out-count-knocked-out",
+            Self::GaveUp => "out-count-gave-up",
+            Self::Eliminated => "out-count-eliminated",
+        }
+    }
 }
 
 pub struct FightView {
@@ -250,60 +312,89 @@ impl FightView {
             .unwrap_or_else(|| tr!("fighter-number", number = id.0))
     }
 
-    /// The fight's outcome, in words: its winner and how the others went out, named in
-    /// a duel, counted in a melee.
-    #[must_use]
-    pub fn result(&self) -> String {
+    /// The fighter still fighting once the fight is over.
+    fn winner(&self) -> Option<&Fighter> {
         if !self.arena.is_over() {
-            return tr!("result-time-up");
+            return None;
         }
-        let winner = match self.arena.fighters.iter().find(|f| f.is_fighting()) {
-            Some(winner) => tr!("result-winner", winner = self.name(winner.id)),
-            None => tr!("result-no-winner"),
-        };
-        let melee = self.arena.fighters.len() > 2;
-        let out = |how: String, out: &dyn Fn(&lanista_core::fighter::Fighter) -> bool| {
-            let names: Vec<String> = self
-                .arena
-                .fighters
-                .iter()
-                .filter(|f| out(f))
-                .map(|f| self.name(f.id))
+        self.arena.fighters.iter().find(|f| f.is_fighting())
+    }
+
+    /// How the fight ended for the club: `None` when none of its fighters is in it.
+    #[must_use]
+    pub fn verdict(&self) -> Option<Verdict> {
+        if self.cast.club.is_empty() {
+            return None;
+        }
+        Some(match self.winner() {
+            Some(winner) if self.cast.club.contains(&winner.id) => Verdict::Victory,
+            Some(_) => Verdict::Defeat,
+            None => Verdict::NoWinner,
+        })
+    }
+
+    /// How fighter `f` went out of the fight, the gravest way first; `None` while it
+    /// fights.
+    fn way_out(&self, f: &Fighter) -> Option<WayOut> {
+        let survived = self.cast.survivors.contains(&f.id);
+        Some(match f.severed {
+            Some(Location::Head) => WayOut::Beheaded,
+            Some(_) => WayOut::Severed,
+            None if !f.is_alive() && survived => WayOut::LeftForDead,
+            None if !f.is_alive() => WayOut::Dead,
+            None if f.knocked_out => WayOut::KnockedOut,
+            None if f.surrendered => WayOut::GaveUp,
+            None if f.eliminated => WayOut::Eliminated,
+            None => return None,
+        })
+    }
+
+    /// The fight's outcome, in sentences: who won, the opponent told as such when the
+    /// club fights, then how each of the others went out in a duel, how many went out
+    /// each way in a melee.
+    #[must_use]
+    pub fn result(&self) -> Vec<String> {
+        if !self.arena.is_over() {
+            return vec![tr!("result-time-up")];
+        }
+        let winner = self.winner().map_or_else(
+            || tr!("result-no-winner"),
+            |winner| {
+                let name = self.name(winner.id);
+                let opponent = !self.cast.club.is_empty() && !self.cast.club.contains(&winner.id);
+                let name = if opponent {
+                    tr!("result-opponent", name = name)
+                } else {
+                    name
+                };
+                tr!("result-winner", winner = name)
+            },
+        );
+        let out: Vec<(&Fighter, WayOut)> = self
+            .arena
+            .fighters
+            .iter()
+            .filter_map(|f| self.way_out(f).map(|way| (f, way)))
+            .collect();
+        let mut lines = vec![winner];
+        if self.arena.fighters.len() > 2 {
+            let counts: Vec<String> = WayOut::ALL
+                .into_iter()
+                .filter_map(|way| {
+                    let count = out.iter().filter(|(_, w)| *w == way).count();
+                    (count > 0).then(|| tr!(way.counted(), count = count))
+                })
                 .collect();
-            let told = if melee {
-                names.len().to_string()
-            } else {
-                names.join(", ")
-            };
-            (!names.is_empty()).then(|| tr!("labelled", label = how, text = told))
-        };
-        let reasons: Vec<String> = [
-            out(tr!("out-dead"), &|f| {
-                melee && !f.is_alive() && !self.cast.survivors.contains(&f.id)
-            }),
-            out(tr!("out-gave-up"), &|f| f.surrendered),
-            out(tr!("out-eliminated"), &|f| f.eliminated),
-            out(tr!("out-knocked-out"), &|f| f.knocked_out),
-            out(tr!("out-left-for-dead"), &|f| {
-                !f.is_alive() && self.cast.survivors.contains(&f.id)
-            }),
-            out(tr!("out-beheaded"), &|f| f.severed == Some(Location::Head)),
-            out(tr!("out-severed"), &|f| {
-                f.severed.is_some_and(|part| part != Location::Head)
-            }),
-        ]
-        .into_iter()
-        .flatten()
-        .collect();
-        if reasons.is_empty() {
-            winner
+            if !counts.is_empty() {
+                lines.push(tr!("result-out", ways = counts.join(", ")));
+            }
         } else {
-            tr!(
-                "result-with-reasons",
-                winner = winner,
-                reasons = reasons.join(", ")
-            )
+            let told = out
+                .iter()
+                .map(|&(f, way)| tr!(way.told(), who = self.name(f.id)));
+            lines.extend(told);
         }
+        lines
     }
 
     /// What the next check of a melee holds, in words, for the player: when it comes,

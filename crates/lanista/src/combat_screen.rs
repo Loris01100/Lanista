@@ -14,11 +14,12 @@ use reesch::{Assets, Audio, Bindings, SceneTarget, Screen, Transition, egui, pix
 
 use crate::Action;
 use crate::club_screen::gauge;
-use crate::fight_view::{Cast, FightView, STANDS};
+use crate::fight_view::{Cast, FightView, STANDS, Verdict};
 use crate::fighter_sprite::PIXELS_PER_METRE;
 use crate::lang::tr;
 use crate::options;
 use crate::texts::{part_injury_text, part_name};
+use crate::theme;
 
 pub use crate::fight_view::{DEATH_SOUND, HIT_SOUND};
 // ponytail: placeholder music.
@@ -172,7 +173,7 @@ impl CombatScreen {
                         }
                     }
                     if !self.fight().running() {
-                        ui.label(self.fight().result());
+                        result_view(ui, self.fight());
                     }
                     if !self.running() {
                         done = ui.button(tr!("continue")).clicked();
@@ -304,6 +305,24 @@ impl CombatScreen {
                     });
             });
     }
+}
+
+/// The result of `fight`: for the club, « Victoire ! » in green or « Défaite » in red,
+/// big, then who won and how the others went out, a sentence each.
+fn result_view(ui: &mut egui::Ui, fight: &FightView) {
+    ui.vertical(|ui| {
+        if let Some(verdict) = fight.verdict() {
+            let (text, color) = match verdict {
+                Verdict::Victory => (tr!("verdict-victory"), theme::LAUREL),
+                Verdict::Defeat => (tr!("verdict-defeat"), theme::BLOOD),
+                Verdict::NoWinner => (tr!("verdict-no-winner"), theme::BRONZE),
+            };
+            ui.label(egui::RichText::new(text).heading().strong().color(color));
+        }
+        for line in fight.result() {
+            ui.label(line);
+        }
+    });
 }
 
 /// `f`'s spells, one line each with what it costs: ready, recharging (seconds left) or
@@ -612,7 +631,7 @@ mod tests {
         play(&mut expected);
         assert_eq!(log_text(&screen.fight().arena), log_text(&expected));
         assert_eq!(screen.fight().arena.tick, fight.ticks);
-        assert!(screen.fight().result().starts_with("Vainqueur : "));
+        assert!(screen.fight().result()[0].ends_with("remporte le combat."));
         assert!(!screen.running());
     }
 
@@ -730,7 +749,10 @@ mod tests {
         );
         assert_eq!(
             screen.fight().result(),
-            "Vainqueur : combattant 1 (K.-O. : combattant 0)"
+            [
+                "combattant 1 remporte le combat.",
+                "combattant 0 est mis K.-O."
+            ]
         );
     }
 
@@ -767,12 +789,8 @@ mod tests {
         assert!(view.looks.iter().all(|look| look.dead_for.is_none()));
         assert!(!sounds.contains(&DEATH_SOUND));
         let name = view.name(id);
-        assert!(
-            view.result()
-                .contains(&format!("laissé pour mort, survit : {name}")),
-            "{}",
-            view.result()
-        );
+        let fell = format!("{name} tombe, laissé pour mort, mais survit.");
+        assert!(view.result().contains(&fell), "{:?}", view.result());
     }
 
     /// In the standard duel of seed 65, fighter 1 loses an arm: it lies down, alive.
@@ -792,8 +810,46 @@ mod tests {
         );
         assert_eq!(
             screen.fight().result(),
-            "Vainqueur : combattant 0 (membre tranché : combattant 1)"
+            [
+                "combattant 0 remporte le combat.",
+                "combattant 1 a un membre tranché."
+            ]
         );
+    }
+
+    /// In the standard duel of seed 7, fighter 1 knocks fighter 0 out: a defeat for the
+    /// club of fighter 0, its opponent told as such; a victory for the club of fighter 1.
+    #[test]
+    fn the_result_tells_the_club_whether_it_won() {
+        let data = Rc::new(DesignData::load().unwrap());
+        let watch = |club: u32| {
+            let duel = Watched {
+                arena: random_duel(&data, 7),
+                cast: Cast {
+                    names: vec!["Datis".into(), "Augure".into()],
+                    club: vec![FighterId(club)],
+                    survivors: Vec::new(),
+                },
+            };
+            let mut screen =
+                CombatScreen::watch(Rc::clone(&data), vec![duel], Bindings::new(Vec::new()));
+            while screen.running() {
+                screen.advance(1.0 / 60.0);
+            }
+            (screen.fight().verdict(), screen.fight().result())
+        };
+        assert_eq!(
+            watch(0),
+            (
+                Some(Verdict::Defeat),
+                vec![
+                    "Augure, l'adversaire, remporte le combat.".to_owned(),
+                    "Datis est mis K.-O.".to_owned()
+                ]
+            )
+        );
+        assert_eq!(watch(1).0, Some(Verdict::Victory));
+        assert_eq!(watch(1).1[0], "Augure remporte le combat.");
     }
 
     /// The standard duel of `seed`, watched.
