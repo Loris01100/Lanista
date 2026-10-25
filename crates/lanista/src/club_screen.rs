@@ -1429,48 +1429,76 @@ fn face_to_face(ui: &mut egui::Ui, report: &FightReport, data: &DesignData) {
         fight.mine().into_iter().map(values).collect()
     };
     let plain = ui.visuals().widgets.active.bg_fill;
-    egui::Grid::new(("face_to_face", fight.seed, report.fighter))
-        .spacing([8.0, 4.0])
-        .show(ui, |ui| {
-            if let Some(opponent) = opponent {
-                ui.label(
-                    egui::RichText::new(tr!("summary-yours"))
-                        .small()
-                        .color(theme::BRONZE),
-                );
-                ui.label("");
-                ui.label("");
-                let class = class_name(opponent, data);
-                ui.label(
-                    egui::RichText::new(tr!("summary-opponent", class = class))
-                        .small()
-                        .weak(),
-                );
-                ui.end_row();
-            }
+    let [mine, theirs] = sides.as_slice() else {
+        egui::Grid::new(("face_to_face", fight.seed, report.fighter)).show(ui, |ui| {
             for (row, name) in names.into_iter().enumerate() {
-                match sides.as_slice() {
-                    [mine, theirs] => {
-                        let max = mine[row].max(theirs[row]);
-                        ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                            ui.label(mine[row].to_string());
-                            half_bar(ui, mine[row], max, theme::BRONZE, true);
-                        });
-                        ui.vertical_centered(|ui| ui.label(egui::RichText::new(name).small()));
-                        ui.horizontal(|ui| {
-                            half_bar(ui, theirs[row], max, plain, false);
-                            ui.label(theirs[row].to_string());
-                        });
-                    }
-                    [mine] => {
-                        ui.label(egui::RichText::new(name).small());
-                        ui.label(mine[row].to_string());
-                    }
-                    _ => {}
-                }
+                ui.label(egui::RichText::new(name).small());
+                ui.label(sides.first().map_or(0, |mine| mine[row]).to_string());
                 ui.end_row();
             }
         });
+        return;
+    };
+    let class = opponent.map(|o| class_name(o, data)).unwrap_or_default();
+    face_row(
+        ui,
+        |ui| {
+            ui.label(
+                egui::RichText::new(tr!("summary-yours"))
+                    .small()
+                    .color(theme::BRONZE),
+            );
+        },
+        "",
+        |ui| {
+            ui.label(
+                egui::RichText::new(tr!("summary-opponent", class = class))
+                    .small()
+                    .weak(),
+            );
+        },
+    );
+    for (row, name) in names.iter().enumerate() {
+        let max = mine[row].max(theirs[row]);
+        face_row(
+            ui,
+            |ui| {
+                ui.label(mine[row].to_string());
+                half_bar(ui, mine[row], max, theme::BRONZE, true);
+            },
+            name,
+            |ui| {
+                half_bar(ui, theirs[row], max, plain, false);
+                ui.label(theirs[row].to_string());
+            },
+        );
+    }
+}
+
+/// Width of a side of the face to face: its bar and its value.
+const SIDE_WIDTH: f32 = HALF_BAR_WIDTH + 50.0;
+/// Width of the stat's name between the two sides, room for « Dégâts infligés ».
+const STAT_NAME_WIDTH: f32 = 130.0;
+
+/// One line of the face to face: the club's side right-aligned, the stat's `name`
+/// centred on one line, the opponent's side left-aligned, each its fixed width.
+fn face_row(
+    ui: &mut egui::Ui,
+    left: impl FnOnce(&mut egui::Ui),
+    name: &str,
+    right: impl FnOnce(&mut egui::Ui),
+) {
+    let height = ui.spacing().interact_size.y * 0.75;
+    ui.horizontal(|ui| {
+        let layout = egui::Layout::right_to_left(egui::Align::Center);
+        ui.allocate_ui_with_layout(egui::vec2(SIDE_WIDTH, height), layout, left);
+        let centred = egui::Layout::centered_and_justified(egui::Direction::LeftToRight);
+        ui.allocate_ui_with_layout(egui::vec2(STAT_NAME_WIDTH, height), centred, |ui| {
+            ui.add(egui::Label::new(egui::RichText::new(name).small()).extend());
+        });
+        let layout = egui::Layout::left_to_right(egui::Align::Center);
+        ui.allocate_ui_with_layout(egui::vec2(SIDE_WIDTH, height), layout, right);
+    });
 }
 
 /// Width of one side's bar in the fight summary.
