@@ -7,6 +7,7 @@
 
 mod colosseums;
 mod market;
+mod roster;
 mod staff;
 
 use std::path::PathBuf;
@@ -48,11 +49,11 @@ use crate::options;
 use crate::saves;
 use crate::texts::{
     Article, activity_name, against_text, challenger_text, change, class_name, club_name,
-    colosseum_name, colosseum_rules_name, condition_text, contender_name, continent_name,
-    date_in_sentence, date_text, fight_text, fighter_name, illness_text, injury_text, loadout_name,
-    market_news_text, money_line, move_text, named_club, origin_place, personality_traits, priced,
-    record_text, result_text, rival_fighter_name, staff_move_text, staff_news_text, stat_names,
-    title_article, title_changed, wealth_name, wealth_text, week_lines, world_article,
+    colosseum_name, colosseum_rules_name, contender_name, continent_name, date_in_sentence,
+    date_text, fight_text, fighter_name, illness_text, injury_text, loadout_name, market_news_text,
+    money_line, move_text, named_club, origin_place, personality_traits, priced, result_text,
+    rival_fighter_name, staff_move_text, staff_news_text, stat_names, title_article, title_changed,
+    wealth_name, wealth_text, week_lines, world_article,
 };
 use crate::theme;
 use crate::title_screen::{Slot, read_slots, slot_text};
@@ -689,60 +690,6 @@ impl ClubScreen {
         melees.chain(titles).collect()
     }
 
-    fn roster(&mut self, ui: &mut egui::Ui) {
-        ui.heading(tr!("view-roster"));
-        ui.label(tr!("roster-intro"));
-        let data = &self.data;
-        let care = self.state.care_rules(data);
-        let special: Vec<_> = (0..self.state.fighters.len())
-            .map(|i| self.special_fights(i))
-            .collect();
-        egui::ScrollArea::vertical().show(ui, |ui| {
-            let titles = [
-                tr!("roster-fighter"),
-                tr!("roster-age"),
-                tr!("roster-form"),
-                tr!("roster-morale"),
-                tr!("roster-fame"),
-                tr!("record-title"),
-                tr!("roster-condition"),
-                tr!("roster-week"),
-            ];
-            let grid = egui::Grid::new("roster").num_columns(titles.len());
-            grid.striped(true).show(ui, |ui| {
-                for title in titles {
-                    ui.strong(title);
-                }
-                ui.end_row();
-                for (i, (f, plan)) in self
-                    .state
-                    .fighters
-                    .iter()
-                    .zip(&mut self.decisions.plans)
-                    .enumerate()
-                {
-                    if ui.button(fighter_name(i, f, data)).clicked() {
-                        self.view = View::Sheet(i);
-                    }
-                    ui.label(f.age.to_string());
-                    ui.label(f.form.value().to_string());
-                    ui.label(f.morale.value().to_string());
-                    ui.label(f.fame.value().to_string());
-                    ui.label(record_text(f.record));
-                    ui.label(condition_text(f));
-                    if f.status == Status::Active {
-                        let club = (&self.state, &care);
-                        settle_plan(plan, f, &special[i], club, data);
-                        ui.label(plan_summary(plan, f, data));
-                    } else {
-                        ui.label("");
-                    }
-                    ui.end_row();
-                }
-            });
-        });
-    }
-
     fn sheet(&mut self, ui: &mut egui::Ui, index: usize) {
         let data = &self.data;
         let Some(f) = self.state.fighters.get(index) else {
@@ -1015,20 +962,6 @@ fn settle_plan(
 }
 
 /// A fighter's week in a few words, for the roster: "Repos, Double glaive, avec soins".
-fn plan_summary(plan: &WeekPlan, fighter: &CareerFighter, data: &DesignData) -> String {
-    let mut parts = vec![
-        activity_name(plan.activity, data),
-        loadout_name(fighter, plan.loadout, data),
-    ];
-    if plan.care {
-        parts.push(tr!("roster-care"));
-    }
-    if plan.refused.armour {
-        parts.push(tr!("roster-no-armour"));
-    }
-    parts.join(", ")
-}
-
 /// A fighter's week: rest, training, a fight at home or, in a list, abroad, a title
 /// fight or a melee (in `special`, with their names), and care at the
 /// price of the club's `care`, all within the money of the club's `state`.
@@ -1658,6 +1591,7 @@ mod tests {
     use rand_chacha::rand_core::SeedableRng;
 
     use super::*;
+    use crate::texts::condition_text;
     use crate::texts::{
         club_name as rival_club_name, date_in_sentence, ease_text, free_agent_name, named_club,
         outside_ease_text, outside_personality_text, potential_text, range_texts, staff_text,

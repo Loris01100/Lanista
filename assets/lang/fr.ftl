@@ -385,8 +385,13 @@ roster-form = Forme
 roster-morale = Moral
 roster-fame = Renommée
 roster-condition = État
-roster-week = Semaine
 roster-intro = Le nom d'un combattant ouvre sa fiche, où se prépare sa semaine.
+roster-age-years = { $age } ans
+roster-fit = En forme
+roster-recent = Arrivé récemment
+roster-loadout = { $loadout } · aisance { $ease } %
+roster-ease-hint = L'équipement choisi pour la semaine et l'aisance du combattant avec lui, qui monte à chaque combat.
+roster-former = Anciens combattants ({ $count })
 roster-care = avec soins
 roster-no-armour = sans armure
 
