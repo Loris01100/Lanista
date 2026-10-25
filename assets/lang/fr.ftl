@@ -504,6 +504,9 @@ ranking-rank = Rang
 ranking-club = Club
 ranking-elo = Elo
 ranking-no-club = sans club
+recap-title = Classement Elo à { $place } après la semaine
+recap-week = Semaine
+recap-new = nouveau
 colosseum-honours = Palmarès ({ $reigns } { $reigns ->
         [one] règne
        *[other] règnes

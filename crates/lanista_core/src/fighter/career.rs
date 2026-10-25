@@ -877,6 +877,17 @@ impl Activity {
     pub fn fights(self) -> bool {
         !matches!(self, Self::Rest | Self::Train)
     }
+
+    /// The colosseum the fighter fights in this week.
+    #[must_use]
+    pub fn colosseum(self) -> Option<ColosseumId> {
+        match self {
+            Self::Rest | Self::Train => None,
+            Self::Fight(c) | Self::TitleFight(c) | Self::Challenge(c, _) | Self::Melee(c) => {
+                Some(c)
+            }
+        }
+    }
 }
 
 /// Below this form, `suggested_plan` rests.

@@ -1,7 +1,7 @@
 //! The week loop: the player's [`Decisions`], [`next_week`] playing them and the
 //! [`WeekSummary`] it returns.
 
-use crate::colosseum::{Contender, TitleNews, title_kept};
+use crate::colosseum::{ColosseumId, Contender, Rating, TitleNews, title_kept};
 use crate::design_data::DesignData;
 use crate::economy::{Flow, Transaction, Wealth};
 use crate::fighter::career::{Activity, Status, WeekPlan, WeekReport};
@@ -51,6 +51,10 @@ pub struct WeekSummary {
     pub staff: Vec<StaffNews>,
     /// The club's new wealth, when it changed at the start of the off-season.
     pub wealth: Option<Wealth>,
+    /// The ranking before the fights of each colosseum the club's fighters fought in,
+    /// in the order of their first fight there: set against the ranking after the week.
+    #[serde(default)]
+    pub rankings_before: Vec<(ColosseumId, Vec<Rating>)>,
 }
 
 /// Plays one week for the whole club: the market moves and the change of staff before
@@ -76,6 +80,7 @@ pub fn next_week(state: &mut GameState, decisions: &Decisions, data: &DesignData
     let effects = state.staff_effects();
     // A training session's price, and the doctor's for care.
     let costs = (state.training_cost(data), effects.medicine);
+    let rankings: Vec<Vec<Rating>> = state.colosseums.iter().map(|c| c.ranking.clone()).collect();
     let (mut wanted, title_meetings) = week_plans(state, decisions, data);
     rival_staff(state, data);
     let mut plans = state.outsider_plans(data);
@@ -147,6 +152,18 @@ pub fn next_week(state: &mut GameState, decisions: &Decisions, data: &DesignData
     market.extend(answer_offer(state, &decisions.moves, data, &mut ledger));
     birthdays(state, &mut reports, data);
     let wealth = end_week(state, &mut titles, data);
+    let mut rankings_before: Vec<(ColosseumId, Vec<Rating>)> = Vec::new();
+    let fought_in = reports
+        .iter()
+        .flatten()
+        .filter(|r| r.fight.is_some())
+        .filter_map(|r| r.plan.activity.colosseum());
+    for id in fought_in {
+        let ranking = usize::try_from(id.0).ok().and_then(|c| rankings.get(c));
+        if let Some(ranking) = ranking.filter(|_| rankings_before.iter().all(|(c, _)| *c != id)) {
+            rankings_before.push((id, ranking.clone()));
+        }
+    }
     let summary = WeekSummary {
         reports,
         ledger,
@@ -154,6 +171,7 @@ pub fn next_week(state: &mut GameState, decisions: &Decisions, data: &DesignData
         market,
         staff,
         wealth,
+        rankings_before,
     };
     let played = (before.as_slice(), state.fighters.as_slice());
     let money = (money, state.money);

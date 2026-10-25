@@ -1,7 +1,7 @@
 //! The colosseums view and the page of a rival club.
 
 use lanista_core::colosseum::{
-    Colosseum, ColosseumData, ColosseumId, Contender, Continent, Reign, ReignEnd, TitleLoss,
+    Colosseum, ColosseumData, ColosseumId, Contender, Continent, Rating, Reign, ReignEnd, TitleLoss,
 };
 use lanista_core::design_data::DesignData;
 use lanista_core::fighter::career::Status;
@@ -625,6 +625,156 @@ fn ranking(
                 });
         });
     goto
+}
+
+/// How many fighters at the top of a ranking its recap after the week shows.
+const RECAP_TOP: usize = 3;
+/// How many ranks above and below each of the club's fighters the recap shows.
+const RECAP_AROUND: usize = 2;
+
+/// A rank of a ranking's recap after the week.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(super) struct RecapRow {
+    /// From 0, the first.
+    pub rank: usize,
+    pub contender: Contender,
+    pub elo: i32,
+    /// Ranks climbed, below 0 lost; `None` for one unranked before the week.
+    pub climbed: Option<i64>,
+    /// Elo won, below 0 lost; from the starting Elo for one unranked before.
+    pub won: i32,
+    /// Whether one or more ranks are left out above it.
+    pub gap: bool,
+}
+
+/// The ranks of colosseum `id` after the week that its recap shows, set against
+/// `before`, its ranking before the fights: the first `RECAP_TOP` and the
+/// `RECAP_AROUND` around each of the club's fighters. Ranks count those still
+/// fighting, and the club's fighters out of activity since the fight.
+pub(super) fn recap_rows(
+    id: ColosseumId,
+    before: &[Rating],
+    state: &GameState,
+    data: &DesignData,
+) -> Vec<RecapRow> {
+    let colosseum = usize::try_from(id.0)
+        .ok()
+        .and_then(|c| state.colosseums.get(c));
+    let Some(colosseum) = colosseum else {
+        return Vec::new();
+    };
+    let rosters = state.rosters();
+    let counted =
+        |r: &&Rating| matches!(r.contender, Contender::Club(_)) || rosters.active(r.contender);
+    let now: Vec<&Rating> = colosseum.ranking.iter().filter(counted).collect();
+    let was: Vec<&Rating> = before.iter().filter(counted).collect();
+    let ours: Vec<usize> = (0..now.len())
+        .filter(|&rank| matches!(now[rank].contender, Contender::Club(_)))
+        .collect();
+    let shown =
+        |rank: usize| rank < RECAP_TOP || ours.iter().any(|&o| rank.abs_diff(o) <= RECAP_AROUND);
+    let mut rows = Vec::new();
+    let mut last = None;
+    for (rank, rating) in now.iter().enumerate().filter(|&(rank, _)| shown(rank)) {
+        let old = was.iter().position(|w| w.contender == rating.contender);
+        let to_i64 = |n: usize| i64::try_from(n).unwrap_or(i64::MAX);
+        let elo_before = old.map_or(data.world.elo_start, |o| was[o].elo);
+        rows.push(RecapRow {
+            rank,
+            contender: rating.contender,
+            elo: rating.elo,
+            climbed: old.map(|o| to_i64(o) - to_i64(rank)),
+            won: rating.elo.saturating_sub(elo_before),
+            gap: last.map_or(rank > 0, |l: usize| rank > l + 1),
+        });
+        last = Some(rank);
+    }
+    rows
+}
+
+/// The ranking of colosseum `id` after the week in a card, set against `before`, its
+/// ranking before the fights (see [`recap_rows`]): each rank with the ranks it climbed
+/// or lost and the Elo it won or lost, the club's fighters in bronze, « … » for the
+/// ranks left out.
+pub(super) fn ranking_recap(
+    ui: &mut egui::Ui,
+    id: ColosseumId,
+    before: &[Rating],
+    state: &GameState,
+    data: &DesignData,
+) {
+    let rows = recap_rows(id, before, state, data);
+    egui::Frame::group(ui.style())
+        .fill(ui.visuals().extreme_bg_color)
+        .show(ui, |ui| {
+            ui.set_width(ui.available_width());
+            let title = tr!("recap-title", place = colosseum_name(id, data));
+            ui.label(egui::RichText::new(title).strong().color(theme::BRONZE));
+            egui::Grid::new(("recap", id.0))
+                .num_columns(6)
+                .striped(true)
+                .show(ui, |ui| {
+                    for title in [
+                        tr!("ranking-rank"),
+                        String::new(),
+                        tr!("roster-fighter"),
+                        tr!("ranking-club"),
+                        tr!("ranking-elo"),
+                        tr!("recap-week"),
+                    ] {
+                        ui.strong(title);
+                    }
+                    ui.end_row();
+                    for row in rows {
+                        if row.gap {
+                            ui.label(egui::RichText::new("…").weak());
+                            ui.end_row();
+                        }
+                        recap_row(ui, row, state, data);
+                    }
+                });
+        });
+}
+
+/// A rank of a ranking's recap: rank, ranks climbed, name and class, club, Elo and
+/// Elo won.
+fn recap_row(ui: &mut egui::Ui, row: RecapRow, state: &GameState, data: &DesignData) {
+    let ours = matches!(row.contender, Contender::Club(_));
+    let paint = |text: egui::RichText| {
+        if ours {
+            text.strong().color(theme::BRONZE)
+        } else {
+            text
+        }
+    };
+    ui.label(paint(egui::RichText::new((row.rank + 1).to_string())));
+    let weak = ui.visuals().weak_text_color();
+    let (moved, color) = match row.climbed {
+        None => (tr!("recap-new"), theme::BRONZE),
+        Some(0) => ("=".to_owned(), weak),
+        Some(n) if n > 0 => (format!("▲ {n}"), theme::LAUREL),
+        Some(n) => (format!("▼ {}", n.unsigned_abs()), theme::BLOOD),
+    };
+    ui.label(egui::RichText::new(moved).color(color));
+    ui.horizontal(|ui| {
+        let (name, class) = ranked_name(row.contender, state, data);
+        ui.label(paint(egui::RichText::new(name)));
+        ui.label(egui::RichText::new(class).small().weak());
+    });
+    let club = match row.contender {
+        Contender::Rival(id) => egui::RichText::new(club_name(id.club, state)),
+        Contender::FreeAgent(_) => egui::RichText::new(tr!("ranking-no-club")).weak(),
+        Contender::Club(_) => paint(egui::RichText::new(named_club(&state.name))),
+    };
+    ui.label(club);
+    ui.label(paint(egui::RichText::new(row.elo.to_string())));
+    let won = match row.won {
+        0 => egui::RichText::new("=").color(weak),
+        n if n > 0 => egui::RichText::new(format!("+{n}")).color(theme::LAUREL),
+        n => egui::RichText::new(n.to_string()).color(theme::BLOOD),
+    };
+    ui.label(won);
+    ui.end_row();
 }
 
 pub(super) fn contender_view(contender: Contender) -> View {

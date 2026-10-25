@@ -12,7 +12,7 @@ mod staff;
 
 use std::path::PathBuf;
 
-use colosseums::{ContinentPart, contender_view};
+use colosseums::{ContinentPart, contender_view, ranking_recap};
 use market::{MarketFilter, MarketTab};
 use std::rc::Rc;
 
@@ -888,6 +888,11 @@ impl ClubScreen {
                 if row + 1 < self.fights.len().div_ceil(2) {
                     ui.add_space(8.0);
                 }
+            }
+            let played = self.state.journal.last.iter();
+            for (id, before) in played.flat_map(|w| &w.summary.rankings_before) {
+                ui.add_space(8.0);
+                ranking_recap(ui, *id, before, &self.state, &self.data);
             }
         });
         again
@@ -2715,6 +2720,34 @@ mod tests {
         assert_eq!(market::observed_text(&f), "Jamais observé");
         f.observed_weeks = 2;
         assert_eq!(market::observed_text(&f), "Observé 2 semaines");
+    }
+
+    #[test]
+    fn the_recap_sets_the_ranking_after_the_week_against_the_one_before() {
+        let mut screen = screen(7);
+        // Past the season's opening and its melees.
+        screen.state.week = 2;
+        let rome = ColosseumId(1);
+        screen.decisions.plans[0].activity = Activity::Fight(rome);
+        screen.next_week();
+        let summary = &screen.state.journal.last.as_ref().unwrap().summary;
+        let [(id, before)] = summary.rankings_before.as_slice() else {
+            panic!("{:?}", summary.rankings_before);
+        };
+        let rows = colosseums::recap_rows(*id, before, &screen.state, &screen.data);
+        let ours = rows
+            .iter()
+            .find(|r| r.contender == Contender::Club(0))
+            .expect("the club's fighter in the recap");
+        let fight = &screen.fights[0].fight;
+        assert_eq!(ours.won > 0, fight.result == FightResult::Won);
+        // The first ranks, then the club's fighter and those around it.
+        assert_eq!(rows[0].rank, 0);
+        assert!(rows.windows(2).all(|w| w[0].rank < w[1].rank));
+        assert!(
+            rows.iter()
+                .all(|r| r.gap == (r.rank > 0 && rows.iter().all(|o| o.rank != r.rank - 1)))
+        );
     }
 
     #[test]

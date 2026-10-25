@@ -1591,6 +1591,12 @@ mod tests {
             .flat_map(|r| &r.fighters)
             .position(|f| Some(f.potential) == fight.opponent().map(|o| o.potential));
         assert!(opponent.is_some());
+        // Rome's ranking before the fight is kept, to set against the one after it.
+        let [(id, before)] = summary.rankings_before.as_slice() else {
+            panic!("{:?}", summary.rankings_before);
+        };
+        assert_eq!(*id, ColosseumId(1));
+        assert_ne!(*before, state.colosseums[1].ranking);
     }
 
     /// A game of seed 7 whose fighter leads Rome's ranking.
