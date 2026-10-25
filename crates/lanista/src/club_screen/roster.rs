@@ -2,13 +2,12 @@
 
 use lanista_core::design_data::DesignData;
 use lanista_core::fighter::career::{Activity, CareerFighter, Status, WeekPlan};
-use lanista_core::fighter::fame::Fame;
 use lanista_core::fighter::form::Form;
 use lanista_core::fighter::morale::Morale;
 use lanista_core::state::GameState;
 use reesch::egui;
 
-use super::{ClubScreen, View, chip, meter, settle_plan, wrapped_chip};
+use super::{ClubScreen, View, chip, fraction, meter, settle_plan, wrapped_chip};
 use crate::lang::tr;
 use crate::texts::{
     activity_name, class_name, condition_text, illness_text, injury_text, loadout_name,
@@ -21,7 +20,7 @@ const CARD_WIDTH: f32 = 420.0;
 
 impl ClubScreen {
     /// A card per fighter in activity, side by side as the width allows: its name,
-    /// class and age, its form, morale and fame as bars, its health and its week as
+    /// class and age, its fame as a tag, its form and morale as bars, its health and its week as
     /// tags; the former fighters below, folded.
     pub(super) fn roster(&mut self, ui: &mut egui::Ui) {
         ui.heading(tr!("view-roster"));
@@ -99,6 +98,9 @@ fn fighter_card(
                 open = ui.link(name.color(theme::BRONZE)).clicked();
                 let class = ui.visuals().widgets.inactive.bg_fill;
                 chip(ui, class_name(fighter, data), class);
+                let fame = tr!("roster-fame-chip", fame = fighter.fame.value());
+                chip(ui, fame, theme::BRONZE.gamma_multiply(0.6))
+                    .on_hover_text(tr!("roster-fame-hint"));
                 ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                     let age = tr!("roster-age-years", age = fighter.age);
                     ui.label(egui::RichText::new(age).weak());
@@ -114,28 +116,50 @@ fn fighter_card(
     open
 }
 
-/// Form, morale and fame as bars, form and morale in red when low.
+/// Form and morale as bars, from red when empty through bronze to green when full.
 fn bars(ui: &mut egui::Ui, index: usize, fighter: &CareerFighter) {
-    let level = |value: u32| match value {
-        60.. => theme::LAUREL,
-        30.. => theme::BRONZE,
-        _ => theme::BLOOD,
-    };
     let form = fighter.form.value();
     let morale = fighter.morale.value();
-    let fame = fighter.fame.value();
     egui::Grid::new(("roster-bars", index)).show(ui, |ui| {
-        for (name, value, max, color) in [
-            (tr!("roster-form"), form, Form::MAX, level(form)),
-            (tr!("roster-morale"), morale, Morale::MAX, level(morale)),
-            (tr!("roster-fame"), fame, Fame::MAX, theme::BRONZE),
+        for (name, value, max) in [
+            (tr!("roster-form"), form, Form::MAX),
+            (tr!("roster-morale"), morale, Morale::MAX),
         ] {
             ui.label(name);
-            meter(ui, value, max, color, None);
+            meter(ui, value, max, level_color(value, max), None);
             ui.label(value.to_string());
             ui.end_row();
         }
     });
+}
+
+/// Red for none of `max`, bronze for half, green for all, blended in between.
+fn level_color(value: u32, max: u32) -> egui::Color32 {
+    let share = fraction(value, max);
+    if share < 0.5 {
+        blend(theme::BLOOD, theme::BRONZE, share * 2.0)
+    } else {
+        blend(theme::BRONZE, theme::LAUREL, share * 2.0 - 1.0)
+    }
+}
+
+/// `from` moved by `t`, from 0 to 1, toward `to`.
+fn blend(from: egui::Color32, to: egui::Color32, t: f32) -> egui::Color32 {
+    let channel = |a: u8, b: u8| {
+        let value = f32::from(a) + (f32::from(b) - f32::from(a)) * t;
+        #[expect(
+            clippy::cast_possible_truncation,
+            clippy::cast_sign_loss,
+            reason = "a value between two u8"
+        )]
+        let value = value.round() as u8;
+        value
+    };
+    egui::Color32::from_rgb(
+        channel(from.r(), to.r()),
+        channel(from.g(), to.g()),
+        channel(from.b(), to.b()),
+    )
 }
 
 /// Its health as tags: each injury healing in red, each after-effect plain, an
