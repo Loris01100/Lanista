@@ -548,16 +548,19 @@ staff-intro = L'entraîneur rend l'entraînement plus profitable et moins fatiga
 staff-candidates = Candidats
 staff-salary = Salaire { $salary } / sem.
 staff-session = Séance { $session }
+staff-session-hint = Prix de chaque séance d'entraînement
 staff-progress = Progression +{ $progress } %
 staff-form = Forme épargnée { $form }
-staff-care-weeks = Soins : il reste { $kept } % des semaines
+staff-care-weeks = Convalescence { $kept } %
+staff-care-weeks-hint = Part des semaines d'arrêt qui restent après les soins
 staff-care-cost = Prix des soins { $cost } %
-staff-spared = Séquelle évitée { $spared } %
-staff-revealed = +{ $revealed } stat révélée / sem.
+staff-spared = Séquelles évitées { $spared } %
+staff-revealed = +{ $revealed } stat / sem.
 staff-ranges = Fourchettes { $width } %
+staff-ranges-hint = Largeur des fourchettes de stats d'un combattant observé, par rapport à l'habituelle
 staff-potential = { $potential ->
         [0] Potentiel non estimé
-       *[other] Potentiel à { $potential } % près
+       *[other] Potentiel ± { $potential } %
     }
 staff-personality = { $seen ->
         [true] Personnalité vue

@@ -1544,17 +1544,55 @@ fn signed_color(ui: &egui::Ui, change: i64) -> egui::Color32 {
     }
 }
 
-/// A small rounded tag on `fill`.
+/// Horizontal margin inside a tag.
+const CHIP_MARGIN: i8 = 10;
+
+/// A small rounded tag on `fill`, its text on one line.
 fn chip(
     ui: &mut egui::Ui,
     text: impl Into<egui::WidgetText>,
     fill: egui::Color32,
 ) -> egui::Response {
+    let galley = chip_galley(ui, text);
+    chip_of(ui, galley, fill)
+}
+
+/// A tag as `chip` draws it, first going to the next row of a wrapping layout when it
+/// does not fit on this one. Not for a grid's cell: a new row there is the grid's.
+fn wrapped_chip(
+    ui: &mut egui::Ui,
+    text: impl Into<egui::WidgetText>,
+    fill: egui::Color32,
+) -> egui::Response {
+    let galley = chip_galley(ui, text);
+    let width = galley.size().x + 2.0 * f32::from(CHIP_MARGIN);
+    let row_started = ui.cursor().min.x > ui.max_rect().min.x;
+    if row_started && width > ui.available_width() {
+        ui.end_row();
+    }
+    chip_of(ui, galley, fill)
+}
+
+/// A tag's text laid out on one line.
+fn chip_galley(ui: &egui::Ui, text: impl Into<egui::WidgetText>) -> std::sync::Arc<egui::Galley> {
+    text.into().into_galley(
+        ui,
+        Some(egui::TextWrapMode::Extend),
+        f32::INFINITY,
+        egui::TextStyle::Body,
+    )
+}
+
+fn chip_of(
+    ui: &mut egui::Ui,
+    galley: std::sync::Arc<egui::Galley>,
+    fill: egui::Color32,
+) -> egui::Response {
     egui::Frame::new()
         .fill(fill)
         .corner_radius(10.0)
-        .inner_margin(egui::Margin::symmetric(10, 2))
-        .show(ui, |ui| ui.label(text))
+        .inner_margin(egui::Margin::symmetric(CHIP_MARGIN, 2))
+        .show(ui, |ui| ui.label(galley))
         .response
 }
 

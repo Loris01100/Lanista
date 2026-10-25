@@ -12,7 +12,7 @@ use lanista_core::state::GameState;
 use reesch::egui;
 
 use super::market::estimate;
-use super::{ClubScreen, RANKS_SHOWN, View, chip};
+use super::{ClubScreen, RANKS_SHOWN, View, chip, wrapped_chip};
 use crate::lang::tr;
 use crate::texts::{
     arena_effect, arena_name, class_name, club_name, colosseum_name, colosseum_rules_name,
@@ -496,16 +496,16 @@ fn purses(
     let plain = ui.visuals().widgets.inactive.bg_fill;
     ui.horizontal_wrapped(|ui| {
         let arena = tr!("colosseum-arena-chip", arena = arena_name(rules.arena));
-        chip(ui, arena, plain).on_hover_text(arena_effect(rules.arena));
+        wrapped_chip(ui, arena, plain).on_hover_text(arena_effect(rules.arena));
         let fee = state.entry_fee(id, data).unwrap_or(0);
-        let fee_chip = chip(ui, tr!("colosseum-fee-chip", fee = fee), plain);
+        let fee_chip = wrapped_chip(ui, tr!("colosseum-fee-chip", fee = fee), plain);
         if fee > rules.purses.entry_fee {
             fee_chip.on_hover_text(tr!("colosseum-fee-travel"));
         }
         let prize = rules.purses.win_prize;
-        chip(ui, tr!("colosseum-prize-chip", prize = prize), plain);
+        wrapped_chip(ui, tr!("colosseum-prize-chip", prize = prize), plain);
         let bonus = rules.purses.champion_bonus;
-        chip(ui, tr!("colosseum-bonus-chip", bonus = bonus), plain);
+        wrapped_chip(ui, tr!("colosseum-bonus-chip", bonus = bonus), plain);
     });
 }
 

@@ -6,7 +6,7 @@ use lanista_core::staff::{Candidate, Coaching, Medicine, Person, Role, Scouting,
 use lanista_core::state::GameState;
 use reesch::egui;
 
-use super::{ClubScreen, chip};
+use super::{ClubScreen, chip, wrapped_chip};
 use crate::lang::tr;
 use crate::texts::{role_title, staff_move_text, weeks_left_text};
 use crate::theme;
@@ -144,6 +144,8 @@ struct Effect {
     text: String,
     /// The higher the better, to compare with the holder's.
     score: i64,
+    /// What the tag means, in its tooltip.
+    hint: Option<String>,
 }
 
 impl Effect {
@@ -151,7 +153,13 @@ impl Effect {
         Self {
             text,
             score: score.into(),
+            hint: None,
         }
+    }
+
+    fn hint(mut self, hint: String) -> Self {
+        self.hint = Some(hint);
+        self
     }
 }
 
@@ -166,7 +174,10 @@ fn effect_chips(ui: &mut egui::Ui, effects: &[Effect], held: Option<&[Effect]>) 
                 Some(std::cmp::Ordering::Less) => theme::BLOOD,
                 _ => plain,
             };
-            chip(ui, &effect.text, color);
+            let tag = wrapped_chip(ui, &effect.text, color);
+            if let Some(hint) = &effect.hint {
+                tag.on_hover_text(hint);
+            }
         }
     });
 }
@@ -211,7 +222,8 @@ fn salary_effect(salary: u32) -> Effect {
 fn trainer_effects(salary: u32, session: u32, coaching: Coaching) -> Vec<Effect> {
     vec![
         salary_effect(salary),
-        Effect::new(tr!("staff-session", session = session), -i64::from(session)),
+        Effect::new(tr!("staff-session", session = session), -i64::from(session))
+            .hint(tr!("staff-session-hint")),
         Effect::new(
             tr!("staff-progress", progress = coaching.progress_percent),
             coaching.progress_percent,
@@ -230,7 +242,8 @@ fn doctor_effects(salary: u32, medicine: &Medicine, care: &CareRules) -> Vec<Eff
     let spared = medicine.after_effect_spared_percent;
     vec![
         salary_effect(salary),
-        Effect::new(tr!("staff-care-weeks", kept = kept), -i64::from(kept)),
+        Effect::new(tr!("staff-care-weeks", kept = kept), -i64::from(kept))
+            .hint(tr!("staff-care-weeks-hint")),
         Effect::new(tr!("staff-care-cost", cost = cost), -i64::from(cost)),
         Effect::new(tr!("staff-spared", spared = spared), spared),
     ]
@@ -255,7 +268,8 @@ fn recruiter_effects(salary: u32, scouting: &Scouting) -> Vec<Effect> {
         Effect::new(
             tr!("staff-ranges", width = scouting.range_width_percent),
             -i64::from(scouting.range_width_percent),
-        ),
+        )
+        .hint(tr!("staff-ranges-hint")),
         Effect::new(
             tr!("staff-potential", potential = potential),
             potential_score,
