@@ -21,13 +21,16 @@ use lanista_core::design_data::DesignData;
 use lanista_core::economy::Flow;
 use lanista_core::fighter::FighterId;
 use lanista_core::fighter::care::CareRules;
-use lanista_core::fighter::career::{Activity, CareerFighter, FightSummary, Status, WeekPlan};
+use lanista_core::fighter::career::{
+    Activity, CareerFighter, FightSummary, Record, Status, WeekPlan,
+};
 use lanista_core::fighter::equipment::Refused;
 use lanista_core::fighter::fame::Fame;
 use lanista_core::fighter::form::Form;
 use lanista_core::fighter::illness::IllnessLevel;
 use lanista_core::fighter::injury::{Injury, Severity, Side};
 use lanista_core::fighter::morale::Morale;
+use lanista_core::fighter::personality::Personality;
 use lanista_core::fighter::retirement::too_maimed;
 use lanista_core::journal::FightLine;
 use lanista_core::market::Target;
@@ -45,10 +48,10 @@ use crate::saves;
 use crate::texts::{
     Article, activity_name, challenger_text, change, class_name, club_name, colosseum_name,
     colosseum_rules_name, condition_text, contender_name, continent_name, date_in_sentence,
-    date_text, ease_text, fight_text, fighter_name, illness_text, injury_text, loadout_name,
-    market_news_text, money_line, move_text, named_club, origin_text, personality_text, priced,
-    record_text, rival_fighter_name, staff_move_text, staff_news_text, stat_names, title_article,
-    title_changed, wealth_name, wealth_text, week_lines, world_article,
+    date_text, fight_text, fighter_name, illness_text, injury_text, loadout_name, market_news_text,
+    money_line, move_text, named_club, origin_place, personality_traits, priced, record_text,
+    rival_fighter_name, staff_move_text, staff_news_text, stat_names, title_article, title_changed,
+    wealth_name, wealth_text, week_lines, world_article,
 };
 use crate::theme;
 use crate::title_screen::{Slot, read_slots, slot_text};
@@ -758,11 +761,7 @@ impl ClubScreen {
                 .id_salt("history")
                 .show(ui, |ui| {
                     for (week, lines) in self.histories.get(index).into_iter().flatten() {
-                        ui.strong(tr!("week-title", week = *week));
-                        for line in lines {
-                            ui.label(line);
-                        }
-                        ui.add_space(6.0);
+                        week_card(ui, *week, lines);
                     }
                 });
         });
@@ -939,7 +938,28 @@ impl Screen for ClubScreen {
     }
 }
 
-/// A section of the newspaper: its name in bronze over a rule.
+/// One week of a fighter's history in a frame: the week in bronze beside what it did,
+/// what came of it below in small print.
+fn week_card(ui: &mut egui::Ui, week: u64, lines: &[String]) {
+    egui::Frame::group(ui.style())
+        .fill(ui.visuals().extreme_bg_color)
+        .show(ui, |ui| {
+            ui.set_width(ui.available_width());
+            let mut lines = lines.iter();
+            ui.horizontal(|ui| {
+                let title = tr!("week-title", week = week);
+                ui.label(egui::RichText::new(title).strong().color(theme::BRONZE));
+                if let Some(what) = lines.next() {
+                    ui.strong(what);
+                }
+            });
+            for line in lines {
+                ui.label(egui::RichText::new(line).small());
+            }
+        });
+}
+
+/// A section of the newspaper, or of a sheet: its name in bronze over a rule.
 fn section(ui: &mut egui::Ui, name: &str) {
     ui.add_space(8.0);
     ui.label(egui::RichText::new(name).strong().color(theme::BRONZE));
@@ -1199,92 +1219,236 @@ fn challenge_picker(
     });
 }
 
-/// A fighter's sheet: identity, gauges, stats, personality and health.
+/// A fighter's sheet, drawn more than written: tags for who it is, bars for its
+/// gauges, stats, ease and personality, coloured tags for its record and health.
 fn sheet(ui: &mut egui::Ui, index: usize, f: &CareerFighter, data: &DesignData) {
-    let rules = &data.fighter;
     ui.heading(tr!(
         "sheet-title",
         fighter = fighter_name(index, f, data),
         age = f.age
     ));
-    if let Some(origin) = origin_text(f, data) {
-        ui.label(origin);
-    }
-    let hand = match f.dominant_hand {
-        _ if f.ambidextrous => tr!("sheet-ambidextrous"),
-        Side::Right => tr!("sheet-right-handed"),
-        Side::Left => tr!("sheet-left-handed"),
-    };
-    ui.label(hand);
-    ui.label(tr!(
-        "sheet-loadout",
-        loadout = loadout_name(f, f.loadout, data)
-    ));
-    ui.label(tr!("sheet-ease", ease = ease_text(f, data)));
-    match f.status {
-        Status::Active => {}
-        Status::Retired if too_maimed(&f.injuries, &rules.retirement) => {
-            ui.colored_label(egui::Color32::GOLD, tr!("sheet-retired-maimed"));
-        }
-        Status::Retired => {
-            ui.colored_label(egui::Color32::GOLD, tr!("sheet-retired"));
-        }
-        Status::Dead => {
-            ui.colored_label(egui::Color32::LIGHT_RED, tr!("sheet-dead"));
-        }
-        Status::Sold => {
-            ui.label(tr!("sheet-sold"));
-        }
-        Status::Released => {
-            ui.label(tr!("sheet-released"));
-        }
-    }
-    ui.add_space(8.0);
-    gauge(ui, &tr!("roster-form"), f.form.value(), Form::MAX);
-    gauge(ui, &tr!("roster-morale"), f.morale.value(), Morale::MAX);
-    gauge(ui, &tr!("roster-fame"), f.fame.value(), Fame::MAX);
-    ui.label(tr!(
-        "sheet-record",
-        career = record_text(f.record),
-        season = record_text(f.season_record)
-    ));
+    identity(ui, f, data);
+    egui::ScrollArea::vertical()
+        .id_salt("sheet")
+        .show(ui, |ui| {
+            section(ui, &tr!("sheet-condition"));
+            egui::Grid::new("condition").show(ui, |ui| {
+                for (name, value, max, color) in [
+                    (tr!("roster-form"), f.form.value(), Form::MAX, theme::LAUREL),
+                    (
+                        tr!("roster-morale"),
+                        f.morale.value(),
+                        Morale::MAX,
+                        theme::SEA,
+                    ),
+                    (tr!("roster-fame"), f.fame.value(), Fame::MAX, theme::BRONZE),
+                ] {
+                    ui.label(name);
+                    meter(ui, value, max, color, None);
+                    ui.label(value.to_string());
+                    ui.end_row();
+                }
+            });
+            section(ui, &tr!("record-title"));
+            egui::Grid::new("record").show(ui, |ui| {
+                for (name, record) in [
+                    (tr!("sheet-career"), f.record),
+                    (tr!("sheet-season"), f.season_record),
+                ] {
+                    ui.label(name);
+                    record_chips(ui, record);
+                    ui.end_row();
+                }
+            });
+            section(ui, &tr!("sheet-stats"));
+            stat_meters(ui, f, data);
+            section(ui, &tr!("sheet-ease-title"));
+            egui::Grid::new("ease").show(ui, |ui| {
+                let loadouts = data.class(f.class).map_or(0, |c| c.loadouts.len());
+                for l in 0..loadouts {
+                    let name = egui::RichText::new(loadout_name(f, l, data));
+                    ui.label(if l == f.loadout { name.strong() } else { name });
+                    meter(ui, f.ease_with(l), 100, theme::BRONZE, None);
+                    ui.label(f.ease_with(l).to_string());
+                    ui.end_row();
+                }
+            });
+            section(ui, &tr!("personality-title"));
+            egui::Grid::new("personality").show(ui, |ui| {
+                for (name, value) in personality_traits(&f.personality) {
+                    ui.label(name);
+                    meter(ui, value, Personality::MAX, theme::SEA, None);
+                    ui.label(value.to_string());
+                    ui.end_row();
+                }
+            });
+            section(ui, &tr!("sheet-health"));
+            health(ui, f);
+        });
+}
 
-    ui.add_space(8.0);
-    egui::Grid::new("stats").striped(true).show(ui, |ui| {
-        ui.label("");
-        ui.label(tr!("sheet-trained"));
-        ui.label(tr!("sheet-fighting"));
-        ui.end_row();
-        let fighting = f.fighting_stats(rules).to_array();
-        for ((name, trained), now) in stat_names()
+/// Where a fighter comes from, its hand, its loadout and, once its career is over,
+/// why: one tag each.
+fn identity(ui: &mut egui::Ui, f: &CareerFighter, data: &DesignData) {
+    let rules = &data.fighter;
+    let plain = ui.visuals().widgets.inactive.bg_fill;
+    ui.horizontal_wrapped(|ui| {
+        if let Some(origin) = origin_place(f, data) {
+            chip(ui, origin, plain);
+        }
+        let hand = match f.dominant_hand {
+            _ if f.ambidextrous => tr!("sheet-ambidextrous"),
+            Side::Right => tr!("sheet-right-handed"),
+            Side::Left => tr!("sheet-left-handed"),
+        };
+        chip(ui, hand, plain);
+        chip(
+            ui,
+            loadout_name(f, f.loadout, data),
+            theme::BRONZE.gamma_multiply(0.6),
+        )
+        .on_hover_text(tr!("sheet-loadout"));
+        let status = match f.status {
+            Status::Active => None,
+            Status::Retired if too_maimed(&f.injuries, &rules.retirement) => {
+                Some((tr!("sheet-retired-maimed"), theme::BRONZE))
+            }
+            Status::Retired => Some((tr!("sheet-retired"), theme::BRONZE)),
+            Status::Dead => Some((tr!("sheet-dead"), theme::BLOOD)),
+            Status::Sold => Some((tr!("sheet-sold"), plain)),
+            Status::Released => Some((tr!("sheet-released"), plain)),
+        };
+        if let Some((text, fill)) = status {
+            chip(ui, text, fill);
+        }
+    });
+}
+
+/// Each stat as a bar: faded up to its trained value, full up to what it fights with,
+/// the standard duel's stat at its middle; then the value, and what injuries or form
+/// take off it in red.
+fn stat_meters(ui: &mut egui::Ui, f: &CareerFighter, data: &DesignData) {
+    let fighting = f.fighting_stats(&data.fighter).to_array();
+    let standard = lanista_core::duel::STATS.to_array();
+    egui::Grid::new("stats").show(ui, |ui| {
+        for (((name, trained), now), standard) in stat_names()
             .into_iter()
             .zip(f.stats.to_array())
             .zip(fighting)
+            .zip(standard)
         {
             ui.label(name);
-            ui.label(trained.to_string());
-            ui.label(now.to_string());
+            meter(ui, now, standard * 2, theme::BRONZE, Some(trained)).on_hover_text(tr!(
+                "sheet-stat-hover",
+                trained = trained,
+                fighting = now
+            ));
+            ui.horizontal(|ui| {
+                ui.label(trained.to_string());
+                if now != trained {
+                    let change = i64::from(now) - i64::from(trained);
+                    let color = if change < 0 {
+                        theme::BLOOD
+                    } else {
+                        theme::LAUREL
+                    };
+                    ui.label(
+                        egui::RichText::new(format!("{change:+}"))
+                            .small()
+                            .color(color),
+                    );
+                }
+            });
             ui.end_row();
         }
     });
+}
 
-    ui.add_space(8.0);
-    ui.label(personality_text(&f.personality));
-    ui.add_space(8.0);
-    ui.strong(tr!("sheet-injuries"));
-    if f.injuries.is_empty() {
-        ui.label(tr!("sheet-none"));
+/// Wins, losses and draws as green, red and plain tags.
+fn record_chips(ui: &mut egui::Ui, record: Record) {
+    let plain = ui.visuals().widgets.inactive.bg_fill;
+    ui.horizontal(|ui| {
+        chip(ui, tr!("record-wins", count = record.wins), theme::LAUREL);
+        chip(
+            ui,
+            tr!("record-losses", count = record.losses),
+            theme::BLOOD,
+        );
+        chip(ui, tr!("record-draws", count = record.draws), plain);
+    });
+}
+
+/// A green « En bonne santé », or a red tag for each injury and a bronze one for an
+/// illness.
+fn health(ui: &mut egui::Ui, f: &CareerFighter) {
+    ui.horizontal_wrapped(|ui| {
+        if f.injuries.is_empty() && f.illness.is_none() {
+            chip(ui, tr!("sheet-healthy"), theme::LAUREL);
+        }
+        for injury in &f.injuries {
+            chip(ui, injury_text(*injury, f.dominant_hand), theme::BLOOD);
+        }
+        if let Some(illness) = f.illness {
+            chip(ui, illness_text(illness), theme::BRONZE.gamma_multiply(0.6));
+        }
+    });
+}
+
+/// A small rounded tag on `fill`.
+fn chip(
+    ui: &mut egui::Ui,
+    text: impl Into<egui::WidgetText>,
+    fill: egui::Color32,
+) -> egui::Response {
+    egui::Frame::new()
+        .fill(fill)
+        .corner_radius(10.0)
+        .inner_margin(egui::Margin::symmetric(10, 2))
+        .show(ui, |ui| ui.label(text))
+        .response
+}
+
+/// Width of the sheet's bars: room for the name and value beside them on the Steam Deck.
+const METER_WIDTH: f32 = 200.0;
+
+/// A thin bar filled to `value` out of `max` in `color`; with `behind`, faded up to it
+/// first, for a value `value` falls short of.
+fn meter(
+    ui: &mut egui::Ui,
+    value: u32,
+    max: u32,
+    color: egui::Color32,
+    behind: Option<u32>,
+) -> egui::Response {
+    let size = egui::vec2(METER_WIDTH, 12.0);
+    let (rect, response) = ui.allocate_exact_size(size, egui::Sense::hover());
+    let painter = ui.painter();
+    painter.rect_filled(rect, 4.0, ui.visuals().extreme_bg_color);
+    let filled = |share: f32| {
+        let mut part = rect;
+        part.set_width(rect.width() * share);
+        part
+    };
+    if let Some(behind) = behind {
+        painter.rect_filled(
+            filled(fraction(behind, max)),
+            4.0,
+            color.gamma_multiply(0.35),
+        );
     }
-    for injury in &f.injuries {
-        ui.label(injury_text(*injury, f.dominant_hand));
-    }
-    ui.strong(tr!("sheet-illness"));
-    ui.label(f.illness.map_or_else(|| tr!("sheet-none"), illness_text));
+    painter.rect_filled(filled(fraction(value, max)), 4.0, color);
+    response
+}
+
+/// `value` out of `max`, at most 1.
+fn fraction(value: u32, max: u32) -> f32 {
+    let share = f32::from(u16::try_from(value).unwrap_or(u16::MAX))
+        / f32::from(u16::try_from(max.max(1)).unwrap_or(u16::MAX));
+    share.min(1.0)
 }
 
 pub(crate) fn gauge(ui: &mut egui::Ui, name: &str, value: u32, max: u32) {
-    let fraction = f32::from(u16::try_from(value).unwrap_or(u16::MAX))
-        / f32::from(u16::try_from(max.max(1)).unwrap_or(u16::MAX));
+    let fraction = fraction(value, max);
     ui.add(egui::ProgressBar::new(fraction).text(format!("{name} {value}")));
 }
 
@@ -1302,7 +1466,7 @@ mod tests {
 
     use super::*;
     use crate::texts::{
-        club_name as rival_club_name, date_in_sentence, free_agent_name, named_club,
+        club_name as rival_club_name, date_in_sentence, ease_text, free_agent_name, named_club,
         outside_ease_text, outside_personality_text, potential_text, range_texts, staff_text,
         stage_name, unsellable_text, weeks_left_text,
     };

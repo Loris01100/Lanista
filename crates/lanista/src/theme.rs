@@ -5,7 +5,11 @@ use reesch::egui::{self, Color32, FontFamily, FontId, Stroke, TextStyle, vec2};
 
 const PARCHMENT: Color32 = Color32::from_rgb(0xEA, 0xDB, 0xC0);
 pub const BRONZE: Color32 = Color32::from_rgb(0xC8, 0x96, 0x3E);
-const BLOOD: Color32 = Color32::from_rgb(0xC0, 0x3A, 0x30);
+pub const BLOOD: Color32 = Color32::from_rgb(0xC0, 0x3A, 0x30);
+/// Olive green: wins, good health, a full gauge.
+pub const LAUREL: Color32 = Color32::from_rgb(0x7E, 0x9A, 0x48);
+/// Faded blue: morale, the calm traits.
+pub const SEA: Color32 = Color32::from_rgb(0x4E, 0x7C, 0x9A);
 const WOOD_DARKEST: Color32 = Color32::from_rgb(0x1A, 0x15, 0x12);
 const WOOD_DARK: Color32 = Color32::from_rgb(0x24, 0x1E, 0x19);
 const WOOD: Color32 = Color32::from_rgb(0x2E, 0x26, 0x20);

@@ -75,9 +75,14 @@ pub fn stage_name(name: &FighterName) -> String {
 /// "Origine : Grèce (Europe)": the culture a fighter comes from and its continent;
 /// `None` for one with no culture.
 pub fn origin_text(fighter: &CareerFighter, data: &DesignData) -> Option<String> {
+    origin_place(fighter, data).map(|place| tr!("sheet-origin", place = place))
+}
+
+/// "Grèce (Europe)": [`origin_text`] without its label.
+pub fn origin_place(fighter: &CareerFighter, data: &DesignData) -> Option<String> {
     let culture = data.culture(&fighter.culture)?;
     Some(tr!(
-        "sheet-origin",
+        "origin-place",
         culture = culture_name(&culture.key),
         continent = continent_name(culture.continent)
     ))
@@ -203,15 +208,14 @@ pub fn potential_text(fighter: &CareerFighter, scouting: &Scouting) -> String {
     range_text(potential_range(fighter, scouting))
 }
 
-/// "Agressivité 60, prudence 40, goût du spectacle 50, détermination 70".
-pub fn personality_text(p: &Personality) -> String {
-    tr!(
-        "personality",
-        aggression = p.aggression.value(),
-        caution = p.caution.value(),
-        showmanship = p.showmanship.value(),
-        determination = p.determination.value()
-    )
+/// Each trait of a personality with its name: ("Agressivité", 60)…
+pub fn personality_traits(p: &Personality) -> [(String, u32); 4] {
+    [
+        (tr!("trait-aggression"), p.aggression.value()),
+        (tr!("trait-caution"), p.caution.value()),
+        (tr!("trait-showmanship"), p.showmanship.value()),
+        (tr!("trait-determination"), p.determination.value()),
+    ]
 }
 
 /// The personality of a fighter out of the club, in short, if the recruiter sees it:
