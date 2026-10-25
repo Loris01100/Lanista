@@ -458,11 +458,16 @@ plan-challenge-rival = { $name }, Elo { $elo }{ $accepts ->
 
 ## Colisées et clubs rivaux
 
-colosseums-title = Colisées ({ $continent })
+continent-colosseums = Colisées ({ $count })
+continent-clubs = Clubs rivaux ({ $count })
 colosseums-none = Aucun colisée de ce niveau sur ce continent pour l'instant
 continent-home = { $continent } (chez vous)
-rival-clubs-title = Clubs rivaux ({ $continent })
-rival-club-line = { $club } ({ $culture }), { $profile } et { $wealth } : { $fighters } combattants ; relation { $relation }
+clubs-culture = Culture
+clubs-profile = Profil
+clubs-wealth = Richesse
+clubs-fighters = Combattants
+clubs-relation = Relation
+clubs-titles = Titres
 champion-of = Champion de { $place } : { $fighter }
 standing-ranked = { $place }, Elo { $elo }
 standing-champion = champion, { $standing }
@@ -477,14 +482,17 @@ rival-relation = Relation avec { $club } : { $relation }
 rival-history = Ce qui s'est passé entre vous
 rival-gone = { $gone } anciens combattants : retraités, morts, vendus ou libérés
 
-colosseum-arena = Arène : { $arena }, prestige { $prestige } / 5
-colosseum-purses = Inscription { $fee }{ $travel ->
-        [true] {" "}(voyage compris)
-       *[false] {""}
-    }, prime de victoire { $prize }, bonus champion { $bonus }
+colosseum-arena-chip = Arène : { $arena }
+colosseum-prestige = Prestige { $prestige } / 5
+colosseum-fee-chip = Inscription { $fee }
+colosseum-fee-travel = Voyage compris
+colosseum-prize-chip = Victoire { $prize }
+colosseum-bonus-chip = Bonus champion { $bonus }
 colosseum-champion = Champion :
 colosseum-no-champion = aucun
-colosseum-title-weeks = Titre défendu ou pris en semaine { $since }, à défendre au plus tard en semaine { $deadline }
+colosseum-defend-by = à défendre d'ici la semaine { $deadline }
+colosseum-title-since = Titre défendu ou pris en semaine { $since }
+ranked-unnamed = n° { $number }
 ranking-rank = Rang
 ranking-club = Club
 ranking-elo = Elo

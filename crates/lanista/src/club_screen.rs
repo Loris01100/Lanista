@@ -11,7 +11,7 @@ mod staff;
 
 use std::path::PathBuf;
 
-use colosseums::contender_view;
+use colosseums::{ContinentPart, contender_view};
 use market::MarketFilter;
 use std::rc::Rc;
 
@@ -72,7 +72,8 @@ enum View {
     Sheet(usize),
     /// The summary of last week's fights.
     Fights,
-    /// Each colosseum: arena, prestige, purses, champion and ranking.
+    /// One continent's colosseums (arena, prestige, purses, champion and ranking) or
+    /// its rival clubs.
     Colosseums,
     /// Free agents, rival fighters for sale, and the club's fighters to sell or release.
     Market,
@@ -140,6 +141,8 @@ pub struct ClubScreen {
     shown_continent: Continent,
     /// The prestige of the colosseums the colosseums view shows; `None` shows them all.
     shown_prestige: Option<u32>,
+    /// Whether the colosseums view shows the continent's colosseums or its rival clubs.
+    shown_part: ContinentPart,
     bindings: Bindings<Action>,
 }
 
@@ -156,6 +159,7 @@ impl ClubScreen {
             histories: vec![Vec::new(); state.fighters.len()],
             shown_continent: state.continent,
             shown_prestige: None,
+            shown_part: ContinentPart::Colosseums,
             slots: read_slots(saves.as_deref(), &data),
             data,
             state,
@@ -1601,7 +1605,7 @@ mod tests {
     use lanista_core::duel::play;
     use lanista_core::log::Report;
     use lanista_core::market::Move;
-    use lanista_core::relations::{Change, Reason};
+    use lanista_core::relations::{Change, Reason, Standing};
     use lanista_core::staff::{Candidate, Person, Role, Scouting, Staff, StaffMove};
     use lanista_core::state::News;
     use rand_chacha::ChaCha8Rng;
@@ -2152,14 +2156,48 @@ mod tests {
     #[test]
     fn the_rival_clubs_are_listed() {
         let screen = screen(7);
-        let lines = screen.rival_lines();
-        assert_eq!(lines.len(), screen.state.rivals.len());
+        let rows = screen.rival_rows();
+        assert_eq!(rows.len(), screen.state.rivals.len());
+        let cells: Vec<_> = rows[..3]
+            .iter()
+            .map(|r| {
+                (
+                    r.name.as_str(),
+                    r.culture.as_str(),
+                    r.profile.as_str(),
+                    r.wealth.as_str(),
+                    r.fighters,
+                    r.relation.as_str(),
+                )
+            })
+            .collect();
         assert_eq!(
-            lines[..3],
+            cells,
             [
-                "Palestre d'Arrhichion (Grèce), agressif et pauvre : 10 combattants ; relation +0, neutre",
-                "Dar Zénobie (Monde arabe), vétéran et pauvre : 10 combattants ; relation +0, neutre",
-                "Clan de Cochise (Tribus amérindiennes), agressif et pauvre : 10 combattants ; relation +0, neutre",
+                (
+                    "Palestre d'Arrhichion",
+                    "Grèce",
+                    "agressif",
+                    "pauvre",
+                    10,
+                    "+0, neutre"
+                ),
+                (
+                    "Dar Zénobie",
+                    "Monde arabe",
+                    "vétéran",
+                    "pauvre",
+                    10,
+                    "+0, neutre"
+                ),
+                (
+                    "Clan de Cochise",
+                    "Tribus amérindiennes",
+                    "agressif",
+                    "pauvre",
+                    10,
+                    "+0, neutre"
+                ),
             ]
         );
     }
@@ -2194,7 +2232,7 @@ mod tests {
                 format!("+5 : vous lui avez vendu {fighter} (saison 1, semaine 3)"),
             ]
         );
-        assert!(screen.rival_lines()[0].ends_with("; relation -25, tendu"));
+        assert_eq!(screen.rival_rows()[0].relation, "-25, tendu");
         assert_eq!(screen.relation_lines(1), Vec::<String>::new());
     }
 
@@ -2258,7 +2296,7 @@ mod tests {
             &"Dar Zénobie est votre rival depuis saison 1, semaine 4 : recettes à 150 %, renommée +3 par combat"
                 .to_owned()
         ));
-        assert!(screen.rival_lines()[1].ends_with("; relation +0, rival"));
+        assert_eq!(screen.rival_rows()[1].standing, Standing::Rival);
     }
 
     /// Phase 6 bis milestone: over three seasons on screen, a player who fills the club

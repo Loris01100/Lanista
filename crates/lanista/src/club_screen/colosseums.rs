@@ -6,34 +6,86 @@ use lanista_core::colosseum::{
 use lanista_core::design_data::DesignData;
 use lanista_core::fighter::career::Status;
 use lanista_core::market::Target;
+use lanista_core::relations::Standing;
 use lanista_core::rivals::RivalId;
 use lanista_core::state::GameState;
 use reesch::egui;
 
 use super::market::estimate;
-use super::{ClubScreen, RANKS_SHOWN, View};
+use super::{ClubScreen, RANKS_SHOWN, View, chip};
 use crate::lang::tr;
 use crate::texts::{
-    arena_effect, arena_name, club_name, colosseum_name, colosseum_rules_name, condition_text,
-    contender_name, continent_name, culture_name, culture_text, date_in_sentence, date_text,
-    named_club, place_name, profile_name, record_text, relation_change_text, relation_text,
-    rival_fighter_name, staff_text, wealth_name,
+    arena_effect, arena_name, class_name, club_name, colosseum_name, colosseum_rules_name,
+    condition_text, contender_name, continent_name, culture_name, culture_text, date_in_sentence,
+    date_text, named_club, place_name, profile_name, record_text, relation_change_text,
+    relation_text, rival_fighter_name, staff_text, stage_name, wealth_name,
 };
+use crate::theme;
 
 impl ClubScreen {
-    /// One continent at a time, the club's first: its rival clubs, then its colosseums
-    /// side by side. Every name opens its page.
+    /// One continent at a time, the club's first, in two tabs: its colosseums side by
+    /// side, each in a card, or its rival clubs in a table. Every name opens its page.
     pub(super) fn colosseums(&mut self, ui: &mut egui::Ui) {
-        let mut goto = self.continent_clubs(ui);
+        self.continent_tabs(ui);
         let shown = self.shown_continent;
-        ui.heading(tr!("colosseums-title", continent = continent_name(shown)));
+        let clubs = self
+            .state
+            .rivals
+            .iter()
+            .filter(|r| r.is_open() && r.continent == shown)
+            .count();
+        let colosseums = self
+            .data
+            .world
+            .colosseums
+            .iter()
+            .filter(|c| c.continent == shown)
+            .count();
         ui.horizontal(|ui| {
-            ui.selectable_value(&mut self.shown_prestige, None, tr!("prestige-all"));
-            for prestige in PRESTIGES {
-                let name = prestige_name(prestige);
-                ui.selectable_value(&mut self.shown_prestige, Some(prestige), name);
+            let part = &mut self.shown_part;
+            let name = tr!("continent-colosseums", count = colosseums);
+            ui.selectable_value(part, ContinentPart::Colosseums, name);
+            ui.selectable_value(
+                part,
+                ContinentPart::Clubs,
+                tr!("continent-clubs", count = clubs),
+            );
+            if *part == ContinentPart::Colosseums {
+                ui.separator();
+                let prestige = &mut self.shown_prestige;
+                ui.selectable_value(prestige, None, tr!("prestige-all"));
+                for p in PRESTIGES {
+                    ui.selectable_value(prestige, Some(p), prestige_name(p));
+                }
             }
         });
+        ui.add_space(4.0);
+        let goto = match self.shown_part {
+            ContinentPart::Colosseums => self.continent_colosseums(ui),
+            ContinentPart::Clubs => self.continent_clubs(ui),
+        };
+        if let Some(view) = goto {
+            self.go_to(view);
+        }
+    }
+
+    /// The continents to choose from, the club's marked.
+    fn continent_tabs(&mut self, ui: &mut egui::Ui) {
+        ui.horizontal(|ui| {
+            for continent in Continent::ALL {
+                let mut name = continent_name(continent);
+                if continent == self.state.continent {
+                    name = tr!("continent-home", continent = name);
+                }
+                ui.selectable_value(&mut self.shown_continent, continent, name);
+            }
+        });
+    }
+
+    /// The colosseums of the continent shown at the prestige shown, a card each side
+    /// by side; returns the page clicked.
+    fn continent_colosseums(&self, ui: &mut egui::Ui) -> Option<View> {
+        let shown = self.shown_continent;
         let prestige = self.shown_prestige;
         let data = &self.data;
         let state = &self.state;
@@ -47,59 +99,89 @@ impl ClubScreen {
         if colosseums.is_empty() {
             ui.label(tr!("colosseums-none"));
         }
+        let mut goto = None;
         ui.columns(colosseums.len().max(1), |columns| {
             for ((id, (colosseum, rules)), ui) in colosseums.into_iter().zip(columns) {
                 goto = colosseum_column(ui, id, colosseum, rules, state, data).or(goto);
             }
         });
-        if let Some(view) = goto {
-            self.go_to(view);
-        }
-    }
-
-    /// The continents to choose from, then the rival clubs of the one shown; returns the
-    /// page of the club clicked.
-    fn continent_clubs(&mut self, ui: &mut egui::Ui) -> Option<View> {
-        ui.horizontal(|ui| {
-            for continent in Continent::ALL {
-                let mut name = continent_name(continent);
-                if continent == self.state.continent {
-                    name = tr!("continent-home", continent = name);
-                }
-                ui.selectable_value(&mut self.shown_continent, continent, name);
-            }
-        });
-        let shown = self.shown_continent;
-        ui.heading(tr!("rival-clubs-title", continent = continent_name(shown)));
-        let mut goto = None;
-        for (club, line) in self.rival_lines().into_iter().enumerate() {
-            let here = self
-                .state
-                .rivals
-                .get(club)
-                .is_some_and(|r| r.is_open() && r.continent == shown);
-            if here && ui.link(line).clicked() {
-                goto = Some(View::Rival(club));
-            }
-        }
         goto
     }
 
-    /// "Ludus Magnus (Rome), prudent et riche : 10 combattants ; relation +12, ami" for
-    /// each rival club, in club order; its money stays hidden.
-    pub(super) fn rival_lines(&self) -> Vec<String> {
+    /// The rival clubs of the continent shown, a row each; returns the page of the club
+    /// clicked.
+    fn continent_clubs(&self, ui: &mut egui::Ui) -> Option<View> {
+        let shown = self.shown_continent;
+        let mut goto = None;
+        let rows = self.rival_rows();
+        egui::ScrollArea::vertical().show(ui, |ui| {
+            egui::Grid::new("rival clubs")
+                .striped(true)
+                .spacing([16.0, 6.0])
+                .show(ui, |ui| {
+                    for title in [
+                        tr!("ranking-club"),
+                        tr!("clubs-culture"),
+                        tr!("clubs-profile"),
+                        tr!("clubs-wealth"),
+                        tr!("clubs-fighters"),
+                        tr!("clubs-relation"),
+                        tr!("clubs-titles"),
+                    ] {
+                        ui.strong(title);
+                    }
+                    ui.end_row();
+                    for row in rows {
+                        let rival = &self.state.rivals[row.club];
+                        if !rival.is_open() || rival.continent != shown {
+                            continue;
+                        }
+                        let name = egui::RichText::new(&row.name).strong();
+                        if ui.link(name.color(theme::BRONZE)).clicked() {
+                            goto = Some(View::Rival(row.club));
+                        }
+                        ui.label(&row.culture);
+                        ui.label(&row.profile);
+                        ui.label(&row.wealth);
+                        ui.label(row.fighters.to_string());
+                        chip(ui, &row.relation, standing_color(ui, row.standing));
+                        ui.horizontal(|ui| {
+                            for title in &row.titles {
+                                chip(ui, title, theme::BRONZE.gamma_multiply(0.6));
+                            }
+                        });
+                        ui.end_row();
+                    }
+                });
+        });
+        goto
+    }
+
+    /// Each rival club as its row in the table of clubs, in club order; its money stays
+    /// hidden.
+    pub(super) fn rival_rows(&self) -> Vec<RivalRow> {
+        let data = &self.data;
+        let state = &self.state;
         (0..)
-            .zip(&self.state.rivals)
+            .zip(&state.rivals)
             .map(|(club, rival)| {
-                tr!(
-                    "rival-club-line",
-                    club = named_club(&rival.name),
-                    culture = culture_name(&rival.culture),
-                    profile = profile_name(rival.profile),
-                    wealth = wealth_name(rival.wealth),
-                    fighters = rival.active(),
-                    relation = relation_text(club, &self.state, &self.data)
-                )
+                RivalRow {
+                club,
+                name: named_club(&rival.name),
+                culture: culture_name(&rival.culture),
+                profile: profile_name(rival.profile),
+                wealth: wealth_name(rival.wealth),
+                fighters: rival.active(),
+                relation: relation_text(club, state, data),
+                standing: state.standing(club, data),
+                titles: (0..)
+                    .zip(&state.colosseums)
+                    .filter(|(_, c)| {
+                        matches!(c.champion, Some(Contender::Rival(id)) if id.club == club)
+                    })
+                    .map(|(c, _)| colosseum_name(ColosseumId(c), data))
+                    .collect(),
+            }
             })
             .collect()
     }
@@ -281,6 +363,31 @@ impl ClubScreen {
     }
 }
 
+/// Which half of a continent the colosseums view shows.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(super) enum ContinentPart {
+    Colosseums,
+    Clubs,
+}
+
+/// A rival club as the table of clubs shows it.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(super) struct RivalRow {
+    /// Its index among the rival clubs.
+    pub(super) club: usize,
+    pub(super) name: String,
+    pub(super) culture: String,
+    pub(super) profile: String,
+    pub(super) wealth: String,
+    /// Its fighters in activity.
+    pub(super) fighters: usize,
+    /// "+12, ami": its relation with the player's club.
+    pub(super) relation: String,
+    pub(super) standing: Standing,
+    /// The colosseums one of its fighters is champion of.
+    pub(super) titles: Vec<String>,
+}
+
 /// The colosseums' levels, by prestige: major, middling, weak.
 const PRESTIGES: [u32; 3] = [3, 2, 1];
 
@@ -292,15 +399,24 @@ fn prestige_name(prestige: u32) -> String {
     }
 }
 
+/// Green for a friend, red for a rival, bronze for a tense relation.
+fn standing_color(ui: &egui::Ui, standing: Standing) -> egui::Color32 {
+    match standing {
+        Standing::Ally | Standing::Friend => theme::LAUREL,
+        Standing::Neutral => ui.visuals().widgets.inactive.bg_fill,
+        Standing::Tense => theme::BRONZE.gamma_multiply(0.6),
+        Standing::Rival => theme::BLOOD,
+    }
+}
+
 /// A fighter's standing in a colosseum where it is not among the ranks shown.
 pub(super) fn not_ranked() -> String {
     tr!("not-ranked")
 }
 
-/// The page of a ranked fighter: the club's sheet, or what the club sees of an
-/// outsider.
-/// One colosseum's column: its arena, purses, champion and ranking; returns the page
-/// clicked.
+/// One colosseum's column: a card with its name, level, arena and purses, its
+/// champion and when the title is to be defended, then its honours and its ranking;
+/// returns the page clicked.
 fn colosseum_column(
     ui: &mut egui::Ui,
     id: ColosseumId,
@@ -310,53 +426,107 @@ fn colosseum_column(
     data: &DesignData,
 ) -> Option<View> {
     let mut goto = None;
-    ui.strong(colosseum_rules_name(rules));
-    ui.label(tr!(
-        "colosseum-arena",
-        arena = arena_name(rules.arena),
-        prestige = rules.prestige
-    ))
-    .on_hover_text(arena_effect(rules.arena));
-    let fee = state.entry_fee(id, data).unwrap_or(0);
-    let travel = fee > rules.purses.entry_fee;
-    ui.label(tr!(
-        "colosseum-purses",
-        fee = fee,
-        travel = if travel { "true" } else { "false" },
-        prize = rules.purses.win_prize,
-        bonus = rules.purses.champion_bonus
-    ));
-    ui.horizontal(|ui| {
-        ui.colored_label(egui::Color32::GOLD, tr!("colosseum-champion"));
-        match colosseum.champion {
-            Some(c) => {
-                if ui.link(contender_name(c, state, data)).clicked() {
-                    goto = Some(contender_view(c));
-                }
-            }
-            None => {
-                ui.label(tr!("colosseum-no-champion"));
-            }
-        }
-    });
-    ui.label(tr!(
-        "colosseum-title-weeks",
-        since = colosseum.title_since,
-        deadline = colosseum.defense_deadline(&data.world)
-    ));
-    egui::CollapsingHeader::new(tr!("colosseum-honours", reigns = colosseum.reigns.len()))
-        .id_salt(("honours", id.0))
+    egui::Frame::group(ui.style())
+        .fill(ui.visuals().extreme_bg_color)
         .show(ui, |ui| {
-            for reign in colosseum.reigns.iter().rev() {
-                ui.horizontal_wrapped(|ui| {
-                    if ui.link(contender_name(reign.holder, state, data)).clicked() {
-                        goto = Some(contender_view(reign.holder));
-                    }
-                    ui.label(reign_text(reign, state, data));
+            ui.set_width(ui.available_width());
+            ui.horizontal(|ui| {
+                let name = egui::RichText::new(colosseum_rules_name(rules));
+                ui.label(name.strong().color(theme::BRONZE));
+                ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                    let plain = ui.visuals().widgets.inactive.bg_fill;
+                    chip(
+                        ui,
+                        tr!("colosseum-prestige", prestige = rules.prestige),
+                        plain,
+                    );
                 });
-            }
+            });
+            purses(ui, id, rules, state, data);
+            ui.horizontal_wrapped(|ui| {
+                ui.colored_label(egui::Color32::GOLD, tr!("colosseum-champion"));
+                match colosseum.champion {
+                    Some(c) => {
+                        let (name, _) = ranked_name(c, state, data);
+                        let link = ui
+                            .link(egui::RichText::new(name).strong())
+                            .on_hover_text(contender_name(c, state, data));
+                        if link.clicked() {
+                            goto = Some(contender_view(c));
+                        }
+                        let deadline = colosseum.defense_deadline(&data.world);
+                        let defend = tr!("colosseum-defend-by", deadline = deadline);
+                        ui.label(egui::RichText::new(defend).weak())
+                            .on_hover_text(tr!(
+                                "colosseum-title-since",
+                                since = colosseum.title_since
+                            ));
+                    }
+                    None => {
+                        ui.label(tr!("colosseum-no-champion"));
+                    }
+                }
+            });
+            egui::CollapsingHeader::new(tr!("colosseum-honours", reigns = colosseum.reigns.len()))
+                .id_salt(("honours", id.0))
+                .show(ui, |ui| {
+                    for reign in colosseum.reigns.iter().rev() {
+                        ui.horizontal_wrapped(|ui| {
+                            if ui.link(contender_name(reign.holder, state, data)).clicked() {
+                                goto = Some(contender_view(reign.holder));
+                            }
+                            ui.label(reign_text(reign, state, data));
+                        });
+                    }
+                });
         });
+    ui.add_space(4.0);
     ranking(ui, id, colosseum, state, data).or(goto)
+}
+
+/// A colosseum's arena and purses as tags, the arena's effect and the travel in a
+/// tooltip.
+fn purses(
+    ui: &mut egui::Ui,
+    id: ColosseumId,
+    rules: &ColosseumData,
+    state: &GameState,
+    data: &DesignData,
+) {
+    let plain = ui.visuals().widgets.inactive.bg_fill;
+    ui.horizontal_wrapped(|ui| {
+        let arena = tr!("colosseum-arena-chip", arena = arena_name(rules.arena));
+        chip(ui, arena, plain).on_hover_text(arena_effect(rules.arena));
+        let fee = state.entry_fee(id, data).unwrap_or(0);
+        let fee_chip = chip(ui, tr!("colosseum-fee-chip", fee = fee), plain);
+        if fee > rules.purses.entry_fee {
+            fee_chip.on_hover_text(tr!("colosseum-fee-travel"));
+        }
+        let prize = rules.purses.win_prize;
+        chip(ui, tr!("colosseum-prize-chip", prize = prize), plain);
+        let bonus = rules.purses.champion_bonus;
+        chip(ui, tr!("colosseum-bonus-chip", bonus = bonus), plain);
+    });
+}
+
+/// "Nakula" and "Augure": how a ranking names a contender, its club in a column of
+/// its own.
+fn ranked_name(contender: Contender, state: &GameState, data: &DesignData) -> (String, String) {
+    let number = match contender {
+        Contender::Club(i) | Contender::FreeAgent(i) => i,
+        Contender::Rival(id) => id.fighter,
+    } + 1;
+    state.rosters().fighter(contender).map_or_else(
+        || ("?".into(), String::new()),
+        |f| {
+            let name = if f.name.is_empty() {
+                tr!("ranked-unnamed", number = number)
+            } else {
+                stage_name(&f.name)
+            };
+            (name, class_name(f, data))
+        },
+    )
 }
 
 /// "pour Ludus Magnus, de saison 1, semaine 3 à saison 2, semaine 7, 2 défenses, battu".
@@ -390,7 +560,8 @@ pub(super) fn reign_text(reign: &Reign, state: &GameState, data: &DesignData) ->
     )
 }
 
-/// A colosseum's first `RANKS_SHOWN` fighters; returns the page clicked.
+/// A colosseum's first `RANKS_SHOWN` fighters, each with its class in small print,
+/// the club's in bronze; returns the page clicked.
 fn ranking(
     ui: &mut egui::Ui,
     id: ColosseumId,
@@ -404,6 +575,7 @@ fn ranking(
         .id_salt(("ranking", id.0))
         .show(ui, |ui| {
             egui::Grid::new(("ranking", id.0))
+                .num_columns(4)
                 .striped(true)
                 .show(ui, |ui| {
                     for title in [
@@ -418,9 +590,17 @@ fn ranking(
                     for (rank, rating) in ranked.take(RANKS_SHOWN).enumerate() {
                         let c = rating.contender;
                         ui.label((rank + 1).to_string());
-                        if ui.link(contender_name(c, state, data)).clicked() {
-                            goto = Some(contender_view(c));
-                        }
+                        ui.horizontal(|ui| {
+                            let (name, class) = ranked_name(c, state, data);
+                            let mut name = egui::RichText::new(name);
+                            if matches!(c, Contender::Club(_)) {
+                                name = name.strong().color(theme::BRONZE);
+                            }
+                            if ui.link(name).clicked() {
+                                goto = Some(contender_view(c));
+                            }
+                            ui.label(egui::RichText::new(class).small().weak());
+                        });
                         match c {
                             Contender::Rival(id) => {
                                 if ui.link(club_name(id.club, state)).clicked() {
@@ -428,10 +608,11 @@ fn ranking(
                                 }
                             }
                             Contender::FreeAgent(_) => {
-                                ui.label(tr!("ranking-no-club"));
+                                ui.label(egui::RichText::new(tr!("ranking-no-club")).weak());
                             }
                             Contender::Club(_) => {
-                                ui.label("");
+                                let club = egui::RichText::new(named_club(&state.name));
+                                ui.label(club.color(theme::BRONZE));
                             }
                         }
                         ui.label(rating.elo.to_string());
