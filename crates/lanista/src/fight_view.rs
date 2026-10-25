@@ -15,6 +15,7 @@ use reesch::{Animation, AnimationEvent, AnimationPlayer, Assets, FixedStep};
 
 use crate::fighter_sprite::{Dress, Missing, Placement, SHEET, SPRITE_SIZE, draw_fighter};
 use crate::lang::tr;
+use crate::texts::part_name;
 
 // ponytail: placeholder sounds; per-spell and per-class sounds in `data/` later.
 pub const HIT_SOUND: &str = "placeholder/hit.wav";
@@ -64,6 +65,17 @@ const BLOOD_BLOTS: [(f32, f32, f32); 4] = [
 const DEAD_SHADE: f32 = 0.6;
 /// Brightness of a fighter out of the fight standing: it gave up or was eliminated.
 const OUT_SHADE: f32 = 0.75;
+/// Seconds a word over a fighter lasts, at fight speed.
+pub const POPUP_SECONDS: f32 = 1.2;
+/// A hit's words wait for the impact frame of its cast: two frames of 0.06 s.
+const IMPACT_DELAY: f32 = 0.12;
+/// Words stacked over a fighter at once; the next one takes the lowest place again.
+const POPUP_ROWS: usize = 3;
+/// Where a word appears over a fighter's center, how far it rises in its life, and
+/// the gap between two stacked, in meters.
+const POPUP_START: f32 = 1.15;
+const POPUP_CLIMB: f32 = 0.6;
+const POPUP_GAP: f32 = 0.4;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Pose {
@@ -168,9 +180,44 @@ impl WayOut {
     }
 }
 
+/// What a word over a fighter tells, for its color.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Tone {
+    /// Hit points lost to a hit or a mine.
+    Damage,
+    Miss,
+    /// A wound that lasts, or the hit points it takes.
+    Wound,
+    /// Down or out of the fight.
+    Out,
+}
+
+/// A word over a fighter for a moment: the damage of a hit, a miss, a wound.
+#[derive(Debug, Clone, PartialEq)]
+pub struct Popup {
+    pub fighter: FighterId,
+    pub text: String,
+    pub tone: Tone,
+    /// Seconds since it appeared, at fight speed; below 0 until its hit's impact.
+    pub age: f32,
+    /// Its place in the stack over the fighter, 0 the lowest.
+    row: usize,
+}
+
+impl Popup {
+    /// How opaque it is: fully, then fading out over the last third of its life.
+    #[must_use]
+    pub fn fade(&self) -> f32 {
+        let left = 1.0 - self.age / POPUP_SECONDS;
+        (left * 3.0).clamp(0.0, 1.0)
+    }
+}
+
 pub struct FightView {
     pub arena: Arena,
     pub cast: Cast,
+    /// The words over the fighters, the oldest first.
+    pub popups: Vec<Popup>,
     ais: Vec<Box<dyn CombatAi>>,
     step: FixedStep,
     /// Fighter positions before the last tick, to interpolate from.
@@ -207,6 +254,7 @@ impl FightView {
             previous: positions(&arena),
             arena,
             cast,
+            popups: Vec::new(),
             step: FixedStep::new(combat::TICKS_PER_SECOND),
             seen_events: 0,
             looks,
@@ -235,8 +283,9 @@ impl FightView {
         let ticks = self.arena.max_ticks;
         combat::run(&mut self.arena, &mut self.ais, ticks);
         self.previous = positions(&self.arena);
-        // No cast animation for hits nobody saw.
+        // No cast animation nor word for hits nobody saw.
         self.seen_events = self.arena.log.len();
+        self.popups.clear();
     }
 
     /// Plays the ticks due after `dt` seconds of fight time, then animates;
@@ -258,8 +307,13 @@ impl FightView {
 
     /// Returns the sounds to play: a hit at each impact frame of a cast that hit,
     /// a cry at each death. A survivor of the fatal blow falls without one.
+    /// Each new hit, wound or fall puts its word over the fighter.
     fn animate(&mut self, dt: f32) -> Vec<&'static str> {
         let mut sounds = Vec::new();
+        for popup in &mut self.popups {
+            popup.age += dt;
+        }
+        self.popups.retain(|p| p.age < POPUP_SECONDS);
         // A cast resolves within one tick: the log, not `action`, shows it.
         for event in &self.arena.log[self.seen_events..] {
             if let EventKind::Cast { caster, missed, .. } = event.kind
@@ -268,6 +322,16 @@ impl FightView {
                 look.pose = Pose::Cast;
                 look.player = AnimationPlayer::default();
                 look.missed = missed;
+            }
+            if let Some((fighter, text, tone, delay)) = popup(event.kind) {
+                let row = self.popups.iter().filter(|p| p.fighter == fighter).count() % POPUP_ROWS;
+                self.popups.push(Popup {
+                    fighter,
+                    text,
+                    tone,
+                    age: -delay,
+                    row,
+                });
             }
         }
         self.seen_events = self.arena.log.len();
@@ -434,6 +498,174 @@ impl FightView {
             ));
         }
         lines
+    }
+
+    /// The last `count` moments of the fight, in sentences, the latest last: who hit
+    /// whom with what, for how much and where, the misses, wounds, falls and pacts. In a
+    /// melee the club fights, only those its fighters take part in.
+    #[must_use]
+    pub fn feed(&self, count: usize) -> Vec<String> {
+        let melee = self.arena.fighters.len() > 2 && !self.cast.club.is_empty();
+        let mut lines: Vec<String> = self
+            .arena
+            .log
+            .iter()
+            .rev()
+            .filter_map(|e| self.told(e.kind))
+            .filter(|(ids, _)| !melee || ids.iter().any(|id| self.cast.club.contains(id)))
+            .map(|(_, line)| line)
+            .take(count)
+            .collect();
+        lines.reverse();
+        lines
+    }
+
+    /// The sentence the feed tells `kind` in and the fighters it is about; `None` for
+    /// what it leaves out: each second of bleeding, the floor's elements, a mine laid,
+    /// the death of one just beheaded.
+    fn told(&self, kind: EventKind) -> Option<([FighterId; 2], String)> {
+        let part = |p: Location| part_name(p).to_lowercase();
+        Some(match kind {
+            EventKind::Cast { caster, target, .. } => ([caster, target], self.told_cast(kind)),
+            EventKind::Blast {
+                owner,
+                target,
+                damage,
+                ..
+            } => (
+                [owner, target],
+                tr!("feed-blast", target = self.name(target), damage = damage),
+            ),
+            EventKind::Afflicted {
+                fighter,
+                effect: Effect::Bleeding { part: at, .. },
+            } => (
+                [fighter; 2],
+                tr!("feed-bleeding", who = self.name(fighter), part = part(at)),
+            ),
+            EventKind::Afflicted {
+                fighter,
+                effect: Effect::Blinded { percent },
+            } => (
+                [fighter; 2],
+                tr!("feed-blinded", who = self.name(fighter), percent = percent),
+            ),
+            EventKind::Stun { fighter } => {
+                ([fighter; 2], tr!("feed-stunned", who = self.name(fighter)))
+            }
+            EventKind::Rise { fighter } => {
+                ([fighter; 2], tr!("feed-rise", who = self.name(fighter)))
+            }
+            EventKind::Sever {
+                fighter,
+                part: Location::Head,
+            } => ([fighter; 2], tr!("out-beheaded", who = self.name(fighter))),
+            EventKind::Sever { fighter, part: at } => (
+                [fighter; 2],
+                tr!("feed-severed", who = self.name(fighter), part = part(at)),
+            ),
+            EventKind::Death { fighter } => {
+                let f = self.arena.fighter(fighter)?;
+                if f.severed == Some(Location::Head) {
+                    return None;
+                }
+                let way = if self.cast.survivors.contains(&fighter) {
+                    WayOut::LeftForDead
+                } else {
+                    WayOut::Dead
+                };
+                ([fighter; 2], tr!(way.told(), who = self.name(fighter)))
+            }
+            EventKind::Surrender { fighter } => (
+                [fighter; 2],
+                tr!(WayOut::GaveUp.told(), who = self.name(fighter)),
+            ),
+            EventKind::KnockedOut { fighter } => (
+                [fighter; 2],
+                tr!(WayOut::KnockedOut.told(), who = self.name(fighter)),
+            ),
+            EventKind::Eliminated { fighter } => (
+                [fighter; 2],
+                tr!(WayOut::Eliminated.told(), who = self.name(fighter)),
+            ),
+            EventKind::Pact { a, b } => {
+                ([a, b], tr!("feed-pact", a = self.name(a), b = self.name(b)))
+            }
+            EventKind::PactBroken {
+                a,
+                b,
+                betrayer: Some(betrayer),
+            } => ([a, b], tr!("feed-betrayal", betrayer = self.name(betrayer))),
+            EventKind::PactBroken {
+                a,
+                b,
+                betrayer: None,
+            } => (
+                [a, b],
+                tr!("feed-pact-ended", a = self.name(a), b = self.name(b)),
+            ),
+            EventKind::Bled { .. } | EventKind::Gather { .. } | EventKind::Lay { .. } => {
+                return None;
+            }
+        })
+    }
+
+    /// The feed's sentence for cast `kind`: who cast what on whom, missed or for how
+    /// many HP, and where it landed in an arena with rules.
+    fn told_cast(&self, kind: EventKind) -> String {
+        let EventKind::Cast {
+            caster,
+            target,
+            spell,
+            damage,
+            missed,
+            part,
+        } = kind
+        else {
+            return String::new();
+        };
+        let spell = self
+            .arena
+            .fighter(caster)
+            .and_then(|f| f.spells.get(spell))
+            .map_or_else(String::new, |s| s.name.clone());
+        let (caster, target) = (self.name(caster), self.name(target));
+        match (missed, part) {
+            (true, _) => tr!("feed-miss", caster = caster, spell = spell, target = target),
+            (false, Some(part)) => tr!(
+                "feed-hit-part",
+                caster = caster,
+                spell = spell,
+                target = target,
+                damage = damage,
+                part = part_name(part).to_lowercase()
+            ),
+            (false, None) => tr!(
+                "feed-hit",
+                caster = caster,
+                spell = spell,
+                target = target,
+                damage = damage
+            ),
+        }
+    }
+
+    /// The words over the fighters whose hit has landed, each with the point of the
+    /// world its text stands on: over its fighter, stacked, rising as it ages.
+    #[must_use]
+    pub fn shown_popups(&self) -> Vec<(Vec2, &Popup)> {
+        let at = self.drawn_positions();
+        self.popups
+            .iter()
+            .filter(|p| p.age >= 0.0)
+            .filter_map(|p| {
+                let place = index(p.fighter.0).and_then(|i| at.get(i))?;
+                #[expect(clippy::cast_precision_loss, reason = "three rows at most")]
+                let row = p.row as f32;
+                let rise = POPUP_START + POPUP_CLIMB * p.age / POPUP_SECONDS + POPUP_GAP * row;
+                Some((vec2(place.x, place.y - rise), p))
+            })
+            .collect()
     }
 
     /// The world area to show: the floor and a meter around it.
@@ -624,6 +856,64 @@ fn draw_blood(x: f32, y: f32, spread: f32, mirror: bool) {
             BLOOD,
         );
     }
+}
+
+/// The word `kind` puts over a fighter, its tone and how long it waits for its hit's
+/// impact; `None` for what shows no word: a death has its cry, the rest its feed line.
+fn popup(kind: EventKind) -> Option<(FighterId, String, Tone, f32)> {
+    Some(match kind {
+        EventKind::Cast {
+            target,
+            missed: true,
+            ..
+        } => (target, tr!("popup-miss"), Tone::Miss, IMPACT_DELAY),
+        EventKind::Cast { target, damage, .. } => (
+            target,
+            tr!("popup-damage", damage = damage),
+            Tone::Damage,
+            IMPACT_DELAY,
+        ),
+        EventKind::Blast { target, damage, .. } => (
+            target,
+            tr!("popup-damage", damage = damage),
+            Tone::Damage,
+            0.0,
+        ),
+        EventKind::Bled {
+            fighter, damage, ..
+        } if damage > 0 => (
+            fighter,
+            tr!("popup-damage", damage = damage),
+            Tone::Wound,
+            0.0,
+        ),
+        EventKind::Afflicted { fighter, effect } => {
+            let key = match effect {
+                Effect::Bleeding { .. } => "popup-bleeding",
+                Effect::Blinded { .. } => "popup-blinded",
+            };
+            (fighter, tr!(key), Tone::Wound, IMPACT_DELAY)
+        }
+        EventKind::Stun { fighter } => (fighter, tr!("popup-stunned"), Tone::Out, IMPACT_DELAY),
+        EventKind::KnockedOut { fighter } => (fighter, tr!("popup-knocked-out"), Tone::Out, 0.0),
+        EventKind::Surrender { fighter } => (fighter, tr!("popup-gave-up"), Tone::Out, 0.0),
+        EventKind::Sever { fighter, part } => {
+            let key = if part == Location::Head {
+                "popup-beheaded"
+            } else {
+                "popup-severed"
+            };
+            (fighter, tr!(key), Tone::Wound, IMPACT_DELAY)
+        }
+        EventKind::Bled { .. }
+        | EventKind::Death { .. }
+        | EventKind::Rise { .. }
+        | EventKind::Eliminated { .. }
+        | EventKind::Pact { .. }
+        | EventKind::PactBroken { .. }
+        | EventKind::Gather { .. }
+        | EventKind::Lay { .. } => return None,
+    })
 }
 
 fn positions(arena: &Arena) -> Vec<combat::Vec2> {

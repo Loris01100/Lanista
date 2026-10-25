@@ -688,6 +688,31 @@ out-count-severed = { $count ->
         [one] 1 membre tranché
        *[other] { $count } membres tranchés
     }
+feed = Déroulé
+feed-hit = { $caster } : { $spell } sur { $target }, -{ $damage } PV
+feed-hit-part = { $caster } : { $spell } sur { $target }, -{ $damage } PV ({ $part })
+feed-miss = { $caster } : { $spell } sur { $target }, raté
+feed-blast = Une mine frappe { $target }, -{ $damage } PV
+feed-bleeding = { $who } saigne ({ $part }).
+feed-blinded = { $who } est aveuglé : -{ $percent } % de précision.
+feed-stunned = { $who } est étourdi.
+feed-rise = { $who } se relève.
+feed-severed = { $who } perd un membre ({ $part }).
+feed-pact = { $a } et { $b } s'allient.
+feed-betrayal = { $betrayer } trahit son allié.
+feed-pact-ended = L'alliance entre { $a } et { $b } prend fin.
+popup-damage = -{ $damage }
+popup-miss = raté
+popup-bleeding = saigne
+popup-blinded = aveuglé
+popup-stunned = étourdi
+popup-knocked-out = K.-O.
+popup-gave-up = abandonne
+popup-severed = tranché !
+popup-beheaded = décapité !
+state-stunned = Étourdi, { $seconds } s
+state-bleeding = Saigne : { $part }, { $seconds } s
+state-blinded = Aveuglé : -{ $percent } % de précision, { $seconds } s
 final-duel = Duel final
 elimination-next = Élimination dans { $seconds } s : { $out ->
         [1] 1 combattant sort

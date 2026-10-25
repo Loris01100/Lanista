@@ -7,14 +7,14 @@ use std::rc::Rc;
 use lanista_core::combat::TICKS_PER_SECOND;
 use lanista_core::design_data::{Cost, DesignData};
 use lanista_core::fighter::injury::{Location, Side};
-use lanista_core::fighter::{Fighter, FighterId};
+use lanista_core::fighter::{Effect, Fighter, FighterId};
 use lanista_core::log::{Event, EventKind};
 use macroquad::prelude::*;
 use reesch::{Assets, Audio, Bindings, SceneTarget, Screen, Transition, egui, pixel_camera};
 
 use crate::Action;
 use crate::club_screen::gauge;
-use crate::fight_view::{Cast, FightView, STANDS, Verdict};
+use crate::fight_view::{Cast, FightView, STANDS, Tone, Verdict};
 use crate::fighter_sprite::PIXELS_PER_METRE;
 use crate::lang::tr;
 use crate::options;
@@ -37,6 +37,13 @@ const THUMBNAIL_FRAME: Color = Color::new(0.9, 0.85, 0.7, 1.0);
 const FINISHED: Color = Color::new(0.55, 0.55, 0.55, 1.0);
 /// Width of the pause menu.
 const PAUSE_WIDTH: f32 = 220.0;
+/// Lines of the fight's feed, and its width.
+const FEED_LINES: usize = 6;
+const FEED_WIDTH: f32 = 340.0;
+/// Size of the words over the fighters, in points.
+const POPUP_SIZE: f32 = 22.0;
+/// Damage taken by the club's fighters, a lighter blood to read on the sand.
+const CLUB_HURT: egui::Color32 = egui::Color32::from_rgb(0xF0, 0x5A, 0x48);
 
 /// A fight to watch: before its first tick, with who is who.
 #[derive(Debug, Clone, PartialEq)]
@@ -265,8 +272,74 @@ impl CombatScreen {
             });
     }
 
+    /// The last moments of the fight shown big, under the timer: who hit whom, for how
+    /// much and where, the wounds and falls.
+    fn feed(&self, ui: &egui::Context) {
+        let lines = self.fight().feed(FEED_LINES);
+        if lines.is_empty() {
+            return;
+        }
+        egui::Window::new(tr!("feed"))
+            .title_bar(false)
+            .resizable(false)
+            .anchor(egui::Align2::RIGHT_TOP, [-12.0, 72.0])
+            .show(ui, |ui| {
+                ui.set_width(FEED_WIDTH);
+                let weak = ui.visuals().weak_text_color();
+                let last = lines.len() - 1;
+                for (k, line) in lines.iter().enumerate() {
+                    let text = egui::RichText::new(line).small();
+                    ui.label(if k == last { text } else { text.color(weak) });
+                }
+            });
+    }
+
+    /// Over the fighters of the fight shown big, the words of their last hits and
+    /// wounds, rising and fading: the damage taken, red for the club's fighters, a miss
+    /// in grey, a wound in blood, a fall in bronze.
+    fn popups(&self, ui: &egui::Context) {
+        let fight = self.fight();
+        let camera = self.main_camera();
+        let points = ui.pixels_per_point();
+        let painter = ui.layer_painter(egui::LayerId::new(
+            egui::Order::Background,
+            egui::Id::new("popups"),
+        ));
+        let font = egui::FontId::proportional(POPUP_SIZE);
+        for (at, popup) in fight.shown_popups() {
+            let screen = camera.world_to_screen(at) / points;
+            let pos = egui::pos2(screen.x, screen.y);
+            let color = match popup.tone {
+                Tone::Damage if fight.cast.club.contains(&popup.fighter) => CLUB_HURT,
+                Tone::Damage => theme::PARCHMENT,
+                Tone::Miss => egui::Color32::from_gray(0xB0),
+                Tone::Wound => CLUB_HURT,
+                Tone::Out => theme::BRONZE,
+            };
+            let fade = popup.fade();
+            let shadow = egui::Color32::BLACK.gamma_multiply(fade);
+            for offset in [egui::vec2(1.5, 1.5), egui::vec2(-1.0, 1.5)] {
+                painter.text(
+                    pos + offset,
+                    egui::Align2::CENTER_BOTTOM,
+                    &popup.text,
+                    font.clone(),
+                    shadow,
+                );
+            }
+            painter.text(
+                pos,
+                egui::Align2::CENTER_BOTTOM,
+                &popup.text,
+                font.clone(),
+                color.gamma_multiply(fade),
+            );
+        }
+    }
+
     /// Hit points, mana, endurance and elements of the fight shown big, bottom left, the
-    /// spells each fighter has and where it was hit: both fighters of a duel, the club's in a melee.
+    /// spells each fighter has, where it was hit and what still lasts on it: both fighters
+    /// of a duel, the club's in a melee.
     fn gauges(&self, ui: &egui::Context) {
         let fight = self.fight();
         let fighters = &fight.arena.fighters;
@@ -301,6 +374,14 @@ impl CombatScreen {
                             }
                             spells(ui, f);
                             anatomy(ui, &fight.arena.log, f);
+                            for (line, wound) in states(f) {
+                                let color = if wound {
+                                    ui.visuals().error_fg_color
+                                } else {
+                                    ui.visuals().warn_fg_color
+                                };
+                                ui.label(egui::RichText::new(line).small().color(color));
+                            }
                         }
                     });
             });
@@ -455,6 +536,39 @@ fn anatomy(ui: &mut egui::Ui, log: &[Event], f: &Fighter) {
     });
 }
 
+/// What lasts on `f` now, a line each with the seconds left, and whether it is a wound:
+/// down stunned, each part bleeding, its accuracy lost.
+fn states(f: &Fighter) -> Vec<(String, bool)> {
+    let mut lines = Vec::new();
+    if !f.is_fighting() {
+        return lines;
+    }
+    if f.stunned_ticks > 0 {
+        lines.push((
+            tr!("state-stunned", seconds = tenths(f.stunned_ticks)),
+            false,
+        ));
+    }
+    for lasting in &f.effects {
+        let seconds = tenths(lasting.ticks_left);
+        lines.push(match lasting.effect {
+            Effect::Bleeding { part, .. } => (
+                tr!(
+                    "state-bleeding",
+                    part = part_name(part).to_lowercase(),
+                    seconds = seconds
+                ),
+                true,
+            ),
+            Effect::Blinded { percent } => (
+                tr!("state-blinded", percent = percent, seconds = seconds),
+                false,
+            ),
+        });
+    }
+    lines
+}
+
 /// Hit points `id` lost on `part` in `log`: hits and mine blasts landing on it, and its
 /// bleeding.
 fn part_damage(log: &[Event], id: FighterId, part: Location) -> u32 {
@@ -536,8 +650,10 @@ impl Screen for CombatScreen {
                 });
         }
         self.timer(ui);
+        self.feed(ui);
         self.elimination(ui);
         self.gauges(ui);
+        self.popups(ui);
         // ponytail: no screen to tell a failure on; the options then last until the
         // game closes.
         let _ = options::window(ui, audio, self.settings.as_deref(), &mut self.options_open);
@@ -954,6 +1070,82 @@ mod tests {
             }
         }
         assert!(bled, "no fight bled");
+    }
+
+    /// In the standard duel of seed 7, fighter 1's Guillotine takes 48 HP off fighter
+    /// 0's head at tick 78 and stuns it: its damage and its stun rise over fighter 0
+    /// once the blow lands, then fade away; the feed tells the blow, the stun and the
+    /// knock-out.
+    #[test]
+    fn a_hit_shows_its_damage_over_its_target_and_in_the_feed() {
+        use crate::fight_view::POPUP_SECONDS;
+
+        let mut screen = screen(7);
+        while screen.fight().arena.log.is_empty() {
+            screen.advance(1.0 / 60.0);
+        }
+        let words = |screen: &CombatScreen| -> Vec<(FighterId, String, Tone)> {
+            screen
+                .fight()
+                .shown_popups()
+                .into_iter()
+                .map(|(_, p)| (p.fighter, p.text.clone(), p.tone))
+                .collect()
+        };
+        // Still before the impact.
+        assert_eq!(screen.fight().popups.len(), 2);
+        assert_eq!(words(&screen), Vec::new());
+        for _ in 0..10 {
+            screen.advance(1.0 / 60.0);
+        }
+        assert_eq!(
+            words(&screen),
+            [
+                (FighterId(0), "-48".to_owned(), Tone::Damage),
+                (FighterId(0), "étourdi".to_owned(), Tone::Out)
+            ]
+        );
+        let shown = screen.fight().shown_popups();
+        assert!(shown[1].0.y < shown[0].0.y, "stacked over the first");
+        let lines = screen.fight().feed(6);
+        assert_eq!(
+            lines,
+            [
+                "combattant 1 : Guillotine sur combattant 0, -48 PV (tête)",
+                "combattant 0 est étourdi."
+            ]
+        );
+        for _ in 0..60 {
+            screen.advance(POPUP_SECONDS / 60.0);
+        }
+        assert_eq!(screen.fight().popups, Vec::new());
+        screen.skip();
+        assert_eq!(screen.fight().feed(6)[2], "combattant 0 est mis K.-O.");
+        assert_eq!(screen.fight().popups, Vec::new());
+    }
+
+    /// A stunned fighter tells how long it stays down, a bleeding part how long it bleeds.
+    #[test]
+    fn the_gauges_tell_what_lasts_on_a_fighter() {
+        use lanista_core::fighter::Lasting;
+
+        let mut f = random_duel(&DesignData::load().unwrap(), 7).fighters[0].clone();
+        assert_eq!(states(&f), Vec::new());
+        f.stunned_ticks = 45;
+        f.effects.push(Lasting {
+            effect: Effect::Bleeding {
+                part: Location::Leg(Side::Left),
+                source: FighterId(1),
+            },
+            ticks_left: 30,
+        });
+        assert_eq!(
+            states(&f),
+            [
+                ("Étourdi, 1,5 s".to_owned(), false),
+                ("Saigne : jambe gauche, 1,0 s".to_owned(), true)
+            ]
+        );
     }
 
     #[test]
