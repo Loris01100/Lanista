@@ -12,7 +12,7 @@ use crate::texts::{role_title, staff_move_text, weeks_left_text};
 use crate::theme;
 
 impl ClubScreen {
-    /// The staff: this week's changes, then a card for each post, side by side: who
+    /// The staff: this week's changes, then one post at a time, chosen by its tab: who
     /// holds it and what it brings, and the candidates on the market to hire in its
     /// place, what each brings in green where better than the holder, in red where worse.
     pub(super) fn staff(&mut self, ui: &mut egui::Ui) {
@@ -45,12 +45,19 @@ impl ClubScreen {
         if let Some(n) = cancel {
             chosen.remove(n);
         }
-        egui::ScrollArea::vertical().show(ui, |ui| {
-            ui.columns(Role::ALL.len(), |columns| {
-                for (role, ui) in Role::ALL.into_iter().zip(columns) {
-                    post_card(ui, role, state, chosen, data);
+        ui.horizontal(|ui| {
+            for role in Role::ALL {
+                let mut name = role_title(role);
+                if let Some(level) = state.staff.level(role) {
+                    name = tr!("staff-tab-held", role = name, level = level);
                 }
-            });
+                ui.selectable_value(&mut self.shown_role, role, name);
+            }
+        });
+        ui.add_space(4.0);
+        let role = self.shown_role;
+        egui::ScrollArea::vertical().show(ui, |ui| {
+            post_card(ui, role, state, chosen, data);
         });
     }
 }

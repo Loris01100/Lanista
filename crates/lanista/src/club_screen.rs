@@ -35,6 +35,7 @@ use lanista_core::fighter::retirement::too_maimed;
 use lanista_core::journal::FightLine;
 use lanista_core::market::Target;
 use lanista_core::rivals::RivalId;
+use lanista_core::staff::Role;
 use lanista_core::state::{Decisions, GameState, WorldNews, next_week};
 use macroquad::prelude::*;
 use reesch::{Assets, Audio, Bindings, Screen, Transition, egui};
@@ -135,6 +136,8 @@ pub struct ClubScreen {
     market_filter: MarketFilter,
     /// The market's tab shown.
     market_tab: MarketTab,
+    /// The post the staff view shows.
+    shown_role: Role,
     /// Whether the options are laid over the screen.
     options_open: bool,
     /// Whether the game's window (save slots, main menu) is laid over the screen.
@@ -177,6 +180,7 @@ impl ClubScreen {
             offer_draft: None,
             market_filter: MarketFilter::default(),
             market_tab: MarketTab::FreeAgents,
+            shown_role: Role::Trainer,
             options_open: false,
             game_open: false,
             bindings,
@@ -1567,7 +1571,8 @@ fn wrapped_chip(
     let galley = chip_galley(ui, text);
     let width = galley.size().x + 2.0 * f32::from(CHIP_MARGIN);
     let row_started = ui.cursor().min.x > ui.max_rect().min.x;
-    if row_started && width > ui.available_width() {
+    // `available_width` is a whole row's in a wrapping layout, not what is left of it.
+    if row_started && width > ui.available_size_before_wrap().x {
         ui.end_row();
     }
     chip_of(ui, galley, fill)

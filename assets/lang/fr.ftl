@@ -546,6 +546,7 @@ release = Libérer
 
 staff-intro = L'entraîneur rend l'entraînement plus profitable et moins fatigant, le médecin rend les soins plus efficaces et évite des séquelles, le recruteur montre mieux les combattants observés. Les candidats arrivent et partent du marché, chacun avec ses stats et son salaire, et les clubs rivaux y engagent aussi. Chaque salaire est payé chaque semaine, même à crédit ; un changement compte dès la semaine qui se joue.
 staff-candidates = Candidats
+staff-tab-held = { $role } (niveau { $level })
 staff-salary = Salaire { $salary } / sem.
 staff-session = Séance { $session }
 staff-session-hint = Prix de chaque séance d'entraînement
