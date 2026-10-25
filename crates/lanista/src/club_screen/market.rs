@@ -586,6 +586,7 @@ fn sale_grid(ui: &mut egui::Ui, state: &GameState, moves: &mut Vec<Move>, data: 
             ui.strong(title);
         }
         ui.strong(tr!("market-sale-status"));
+        ui.strong(tr!("market-actions"));
         ui.end_row();
         for (i, f) in state.fighters.iter().enumerate() {
             if f.status != Status::Active {
@@ -608,7 +609,9 @@ fn sale_grid(ui: &mut egui::Ui, state: &GameState, moves: &mut Vec<Move>, data: 
             } else {
                 ui.label("");
             }
-            ui.horizontal_wrapped(|ui| {
+            // Not wrapped: a grid's cell starts with no width, a wrapped row there would
+            // break after each letter.
+            ui.horizontal(|ui| {
                 if state.transfer_list.contains(&i) {
                     toggle(ui, moves, Move::Unlist(i), &tr!("unlist"), true);
                 } else if state.kept.contains(&i) {

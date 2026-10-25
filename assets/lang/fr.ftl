@@ -537,6 +537,7 @@ market-tab-rivals = Clubs rivaux ({ $count })
 market-tab-yours = Vos combattants ({ $count })
 market-full = Effectif complet
 market-sale-status = Vente
+market-actions = Décisions de la semaine
 market-listed = En vente
 market-counter-offer = { $club } demande { $price } pour { $fighter }
 market-offer-this-price = Offrir ce prix
