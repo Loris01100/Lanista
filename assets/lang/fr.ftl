@@ -225,18 +225,6 @@ weeks-left = { $n ->
        *[other] encore { $n } semaines
     }
 
-trainer = salaire { $salary } par semaine, séance { $session }, progression +{ $progress } %, { $form } de forme épargnée par séance
-doctor = salaire { $salary } par semaine, les soins laissent { $kept } % des semaines ({ $kept_alone } sans médecin), prix des soins { $cost } %, séquelle évitée { $spared } fois sur 100
-recruiter = salaire { $salary } par semaine, { $revealed } stat de plus révélée par semaine, fourchettes à { $width } %, { $potential ->
-        [0] potentiel non estimé
-       *[other] potentiel estimé à { $potential } % près
-    }, { $personality ->
-        [seen] personnalité vue
-       *[hidden] personnalité cachée
-    }, { $ease ->
-        [seen] aisance vue
-       *[hidden] aisance cachée
-    }
 
 ## Monde
 
@@ -519,21 +507,27 @@ reign-now = aujourd'hui
 
 ## Marché (vue)
 
-market-intro = { $active } / { $max } combattants en activité. Une observation et une offre par semaine ; le club rival répond à une offre en fin de semaine, puis le combattant. Un nom ouvre la fiche du combattant.
+market-roster = Effectif { $active } / { $max }
+market-rules = Une observation et une offre par semaine ; le club rival répond à une offre en fin de semaine, puis le combattant. Un nom ouvre la fiche du combattant.
+market-this-week = Cette semaine
+market-tab-free = Free agents ({ $count })
+market-tab-rivals = Clubs rivaux ({ $count })
+market-tab-yours = Vos combattants ({ $count })
+market-full = Effectif complet
+market-sale-status = Vente
+market-listed = En vente
 market-counter-offer = { $club } demande { $price } pour { $fighter }
 market-offer-this-price = Offrir ce prix
 market-offer-for = Offre pour { $fighter } :
 market-rival-refuses = { $club } est votre rival : il refuse de traiter avec vous
 market-make-offer = Faire l'offre
-market-free-agents = Free agents (gratuits ; ils combattent dans les colisées sans droit d'entrée)
-market-rival-fighters = Combattants des clubs rivaux
+market-free-agents = Gratuits à recruter ; ils combattent dans les colisées sans droit d'entrée.
 filter-age = Âge de
 filter-to = à
 filter-fame = Renommée min.
 filter-wins = Victoires min.
 filter-win-rate = Taux de victoires min.
 filter-clear = Tout montrer
-market-your-fighters = Vos combattants
 outside-club = Club : { $club }
 outside-summary = { $condition }, renommée { $fame }, bilan { $record }
 never-observed = Jamais observé
@@ -551,8 +545,28 @@ release = Libérer
 ## Personnel (vue)
 
 staff-intro = L'entraîneur rend l'entraînement plus profitable et moins fatigant, le médecin rend les soins plus efficaces et évite des séquelles, le recruteur montre mieux les combattants observés. Les candidats arrivent et partent du marché, chacun avec ses stats et son salaire, et les clubs rivaux y engagent aussi. Chaque salaire est payé chaque semaine, même à crédit ; un changement compte dès la semaine qui se joue.
-staff-held = Niveau { $level } : { $text }
-staff-no-trainer = Aucun : séance { $session }, sans bonus
+staff-candidates = Candidats
+staff-salary = Salaire { $salary } / sem.
+staff-session = Séance { $session }
+staff-progress = Progression +{ $progress } %
+staff-form = Forme épargnée { $form }
+staff-care-weeks = Soins : il reste { $kept } % des semaines
+staff-care-cost = Prix des soins { $cost } %
+staff-spared = Séquelle évitée { $spared } %
+staff-revealed = +{ $revealed } stat révélée / sem.
+staff-ranges = Fourchettes { $width } %
+staff-potential = { $potential ->
+        [0] Potentiel non estimé
+       *[other] Potentiel à { $potential } % près
+    }
+staff-personality = { $seen ->
+        [true] Personnalité vue
+       *[false] Personnalité cachée
+    }
+staff-ease = { $seen ->
+        [true] Aisance vue
+       *[false] Aisance cachée
+    }
 staff-nobody = Aucun
 staff-no-candidate = Aucun candidat sur le marché
 staff-level = Niveau { $level }

@@ -511,7 +511,11 @@ fn purses(
 
 /// "Nakula" and "Augure": how a ranking names a contender, its club in a column of
 /// its own.
-fn ranked_name(contender: Contender, state: &GameState, data: &DesignData) -> (String, String) {
+pub(super) fn ranked_name(
+    contender: Contender,
+    state: &GameState,
+    data: &DesignData,
+) -> (String, String) {
     let number = match contender {
         Contender::Club(i) | Contender::FreeAgent(i) => i,
         Contender::Rival(id) => id.fighter,

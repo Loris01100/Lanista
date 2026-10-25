@@ -9,7 +9,6 @@ use lanista_core::combat::ArenaKind;
 use lanista_core::design_data::DesignData;
 use lanista_core::economy::{Flow, Transaction, Wealth};
 use lanista_core::fighter::STAT_COUNT;
-use lanista_core::fighter::care::CareRules;
 use lanista_core::fighter::career::{Activity, CareerFighter, Record, Status};
 use lanista_core::fighter::fame::FightResult;
 use lanista_core::fighter::illness::{Illness, IllnessLevel};
@@ -22,10 +21,7 @@ use lanista_core::market::{
 use lanista_core::names::{ClubName, FighterName};
 use lanista_core::relations::{Change, Reason, Standing};
 use lanista_core::rivals::{Profile, RivalId};
-use lanista_core::staff::{
-    Candidate, DoctorRules, RecruiterRules, Role, Scouting, Staff, StaffMove, StaffNews,
-    TrainerRules,
-};
+use lanista_core::staff::{Candidate, Role, Scouting, Staff, StaffMove, StaffNews};
 use lanista_core::state::{GameState, News, WorldNews};
 
 use crate::lang::tr;
@@ -359,52 +355,6 @@ pub fn staff_news_text(news: StaffNews) -> String {
 /// How long a candidate stays on the market: "encore 3 semaines", or "dernière semaine".
 pub fn weeks_left_text(weeks: u32) -> String {
     tr!("weeks-left", n = weeks)
-}
-
-/// What a trainer costs and brings: "salaire 20 par semaine, séance 6, progression
-/// +20 %, 1 de forme épargnée par séance".
-pub fn trainer_text(trainer: &TrainerRules) -> String {
-    tr!(
-        "trainer",
-        salary = trainer.salary,
-        session = trainer.training_cost,
-        progress = trainer.coaching.progress_percent,
-        form = trainer.coaching.form_spared
-    )
-}
-
-/// What a doctor costs and brings: "salaire 20 par semaine, les soins laissent 40 %
-/// des semaines (50 sans médecin), prix des soins 110 %, séquelle évitée 30 fois sur 100".
-pub fn doctor_text(doctor: &DoctorRules, care: &CareRules) -> String {
-    let medicine = &doctor.medicine;
-    tr!(
-        "doctor",
-        salary = doctor.salary,
-        kept = medicine.care_rules(care).weeks_kept_percent,
-        kept_alone = care.weeks_kept_percent,
-        cost = medicine.care_cost_percent,
-        spared = medicine.after_effect_spared_percent
-    )
-}
-
-/// What a recruiter costs and brings: "salaire 30 par semaine, 1 stat de plus
-/// révélée par semaine, fourchettes à 70 %, potentiel estimé à 40 % près, personnalité
-/// cachée, aisance vue".
-pub fn recruiter_text(recruiter: &RecruiterRules) -> String {
-    let scouting = &recruiter.scouting;
-    tr!(
-        "recruiter",
-        salary = recruiter.salary,
-        revealed = scouting.revealed_per_week,
-        width = scouting.range_width_percent,
-        potential = scouting.potential_range_percent,
-        personality = if scouting.personality {
-            "seen"
-        } else {
-            "hidden"
-        },
-        ease = if scouting.ease { "seen" } else { "hidden" }
-    )
 }
 
 /// What happened on the market, in one line, from the game after the week.

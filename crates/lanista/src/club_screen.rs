@@ -12,7 +12,7 @@ mod staff;
 use std::path::PathBuf;
 
 use colosseums::{ContinentPart, contender_view};
-use market::MarketFilter;
+use market::{MarketFilter, MarketTab};
 use std::rc::Rc;
 
 use lanista_core::calendar::SeasonPhase;
@@ -133,6 +133,8 @@ pub struct ClubScreen {
     offer_draft: Option<(RivalId, u32)>,
     /// Which fighters out of the club the market lists.
     market_filter: MarketFilter,
+    /// The market's tab shown.
+    market_tab: MarketTab,
     /// Whether the options are laid over the screen.
     options_open: bool,
     /// Whether the game's window (save slots, main menu) is laid over the screen.
@@ -174,6 +176,7 @@ impl ClubScreen {
             confirm: None,
             offer_draft: None,
             market_filter: MarketFilter::default(),
+            market_tab: MarketTab::FreeAgents,
             options_open: false,
             game_open: false,
             bindings,
