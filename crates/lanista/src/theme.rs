@@ -3,7 +3,7 @@
 
 use reesch::egui::{self, Color32, FontFamily, FontId, Stroke, TextStyle, vec2};
 
-const PARCHMENT: Color32 = Color32::from_rgb(0xEA, 0xDB, 0xC0);
+pub const PARCHMENT: Color32 = Color32::from_rgb(0xEA, 0xDB, 0xC0);
 pub const BRONZE: Color32 = Color32::from_rgb(0xC8, 0x96, 0x3E);
 pub const BLOOD: Color32 = Color32::from_rgb(0xC0, 0x3A, 0x30);
 /// Olive green: wins, good health, a full gauge.
@@ -11,6 +11,10 @@ pub const LAUREL: Color32 = Color32::from_rgb(0x7E, 0x9A, 0x48);
 /// Faded blue: morale, the calm traits.
 pub const SEA: Color32 = Color32::from_rgb(0x4E, 0x7C, 0x9A);
 const WOOD_DARKEST: Color32 = Color32::from_rgb(0x1A, 0x15, 0x12);
+/// Text on parchment: the newspaper, the calendar's weeks.
+pub const INK: Color32 = WOOD_DARKEST;
+/// Red ink on parchment: the newspaper's sections, the player's club in it.
+pub const RED_INK: Color32 = Color32::from_rgb(0x8A, 0x24, 0x1C);
 const WOOD_DARK: Color32 = Color32::from_rgb(0x24, 0x1E, 0x19);
 const WOOD: Color32 = Color32::from_rgb(0x2E, 0x26, 0x20);
 const WOOD_LIGHT: Color32 = Color32::from_rgb(0x4A, 0x3B, 0x2E);

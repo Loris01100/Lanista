@@ -1,7 +1,7 @@
 //! What the player reads, from the language files: fighters, injuries, illnesses, fights,
 //! weeks, money, colosseums, the market and the staff.
 
-use lanista_core::calendar::Date;
+use lanista_core::calendar::{Date, roman_numeral};
 use lanista_core::colosseum::{
     ColosseumData, ColosseumId, Contender, Continent, TitleNews, title_kept,
 };
@@ -662,6 +662,13 @@ pub fn relation_change_text(change: Change, state: &GameState, data: &DesignData
 pub fn date_text(week: u64, data: &DesignData) -> String {
     let when = Date::of(week, &data.calendar);
     tr!("date", season = when.season, week = when.week)
+}
+
+/// "Anno DCLXXX ab Urbe condita": the year of the season of `week`, since the
+/// founding of Rome, in Roman numerals.
+pub fn year_text(week: u64, data: &DesignData) -> String {
+    let year = Date::of(week, &data.calendar).year(&data.calendar);
+    tr!("year", year = roman_numeral(year))
 }
 
 /// "saison 2, semaine 7", within a sentence.

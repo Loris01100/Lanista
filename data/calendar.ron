@@ -6,4 +6,7 @@
     great_event_weeks: 4,
     // Ageing, retirements, rookies, open market.
     off_season_weeks: 4,
+    // The year of the first season, counted from the founding of Rome: 680 ab Urbe
+    // condita is 74 BC, the eve of Spartacus' revolt.
+    first_year: 680,
 )

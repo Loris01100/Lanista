@@ -115,6 +115,7 @@ week-retires = Prend sa retraite à { $age } ans
 
 date = Saison { $season }, semaine { $week }
 date-in-sentence = saison { $season }, semaine { $week }
+year = Anno { $year } ab Urbe condita
 detailed = { $what } : { $details }
 
 ## Combats
@@ -280,13 +281,16 @@ headline-founded = Un nouveau ludus ouvre ses portes : { $club } ({ $culture }),
 ## Journal
 
 paper-name = Acta Diurna
-paper-issue = { $date } · les nouvelles des arènes du monde
+paper-issue = { $date }, { $year } · les nouvelles des arènes du monde
 paper-first-issue = Les nouvelles des arènes du monde
+paper-no-issue = Pas encore de numéro : il paraîtra à la fin de la première semaine.
+paper-older = ◀ Numéro précédent
+paper-newer = Numéro suivant ▶
+paper-latest = Dernier numéro
 paper-club = Dans nos murs
 paper-titles = Les combats pour le titre
 paper-defended = Titres défendus
 paper-world = Échos du monde
-paper-past = Les semaines passées
 
 ## Relations
 
@@ -347,6 +351,7 @@ top-money = Argent : { $money }
 view-menu = Menu
 view-roster = Combattants
 view-fights = Résumé des combats
+view-paper = Acta Diurna
 view-colosseums = Colisées
 view-market = Marché
 view-staff = Personnel
@@ -356,6 +361,13 @@ menu-club = { $club } : { $wealth }, en { $continent }
 menu-alerts = Alertes
 menu-active = { $active } / { $max } combattants en activité
 menu-next-week = Semaine suivante (Espace)
+menu-read-paper = Lire l'Acta Diurna
+calendar-season = Saison { $season } · semaine { $week } sur { $weeks }
+phase-name = { $phase ->
+        [competition] Compétition
+        [great-event] Grand événement
+       *[off-season] Intersaison
+    }
 week-title = Semaine { $week }
 menu-save = Sauvegarder
 menu-load = Charger

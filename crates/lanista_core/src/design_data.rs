@@ -896,7 +896,8 @@ mod tests {
         assert_eq!(field(CLASSES, &foreign_look), "appearance.classes");
         let not_a_chance = FIGHTER.replacen("worsening_chance: 0.5", "worsening_chance: 1.5", 1);
         assert_eq!(field(CLASSES, &not_a_chance), "illness.worsening_chance");
-        let no_week = "(competition_weeks: 0, great_event_weeks: 0, off_season_weeks: 0)";
+        let no_week =
+            "(competition_weeks: 0, great_event_weeks: 0, off_season_weeks: 0, first_year: 680)";
         assert!(matches!(
             DesignData::from_ron(
                 CLASSES, COMBAT, FIGHTER, no_week, ECONOMY, WORLD, NAMES, STAT_MODEL

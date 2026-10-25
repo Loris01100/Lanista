@@ -1,5 +1,5 @@
-//! The player's club, week after week: the general menu, the fighter list, a
-//! fighter's sheet, the summary of the week's fights, the colosseums, the market and the
+//! The player's club, week after week: the general menu and its calendar, the fighter
+//! list, a fighter's sheet, the summary of the week's fights, the newspaper, the colosseums, the market and the
 //! staff (in their own modules), with the sheet of a fighter out of the club and the page
 //! of a rival club. Fights are watched in the combat screen; the same seed and decisions
 //! give the same game as the `career` tool. The game is saved after every week, and when
@@ -16,7 +16,7 @@ use colosseums::{ContinentPart, contender_view};
 use market::{MarketFilter, MarketTab};
 use std::rc::Rc;
 
-use lanista_core::calendar::SeasonPhase;
+use lanista_core::calendar::{CalendarRules, Date, SeasonPhase};
 use lanista_core::colosseum::{ColosseumId, Contender, Continent};
 use lanista_core::design_data::DesignData;
 use lanista_core::economy::Flow;
@@ -53,7 +53,7 @@ use crate::texts::{
     date_text, fight_text, fighter_name, illness_text, injury_text, loadout_name, market_news_text,
     money_line, move_text, named_club, origin_place, personality_traits, priced, result_text,
     rival_fighter_name, staff_move_text, staff_news_text, stat_names, title_article, title_changed,
-    wealth_name, wealth_text, week_lines, world_article,
+    wealth_name, wealth_text, week_lines, world_article, year_text,
 };
 use crate::theme;
 use crate::title_screen::{Slot, read_slots, slot_text};
@@ -63,10 +63,20 @@ const BACKGROUND: Color = Color::new(0.16, 0.13, 0.11, 1.0);
 const RANKS_SHOWN: usize = 50;
 /// Width of the game's window, as the options'.
 const GAME_WIDTH: f32 = 420.0;
+/// Widest a page of the newspaper gets, margins included.
+const PAPER_WIDTH: f32 = 960.0;
+/// Width from which the newspaper sets its last issue in two columns.
+const PAPER_COLUMNS_FROM: f32 = 720.0;
+/// The phases of a season, in order, as the calendar's legend shows them.
+const PHASES: [SeasonPhase; 3] = [
+    SeasonPhase::Competition,
+    SeasonPhase::GreatEvent,
+    SeasonPhase::OffSeason,
+];
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum View {
-    /// The general menu: date, money, alerts, last week, « Semaine suivante ».
+    /// The general menu: the season's calendar, alerts, « Semaine suivante ».
     Menu,
     /// The fighter list, each fighter's week decided in one click.
     Roster,
@@ -74,6 +84,8 @@ enum View {
     Sheet(usize),
     /// The summary of last week's fights.
     Fights,
+    /// The newspaper, the Acta Diurna, one issue at a time.
+    Paper,
     /// One continent's colosseums (arena, prestige, purses, champion and ranking) or
     /// its rival clubs.
     Colosseums,
@@ -139,6 +151,8 @@ pub struct ClubScreen {
     market_tab: MarketTab,
     /// The post the staff view shows.
     shown_role: Role,
+    /// The week of the newspaper's issue shown; `None` shows the last one.
+    shown_issue: Option<u64>,
     /// Whether the options are laid over the screen.
     options_open: bool,
     /// Whether the game's window (save slots, main menu) is laid over the screen.
@@ -182,6 +196,7 @@ impl ClubScreen {
             market_filter: MarketFilter::default(),
             market_tab: MarketTab::FreeAgents,
             shown_role: Role::Trainer,
+            shown_issue: None,
             options_open: false,
             game_open: false,
             bindings,
@@ -331,6 +346,7 @@ impl ClubScreen {
     fn next_week(&mut self) {
         next_week(&mut self.state, &self.decisions, &self.data);
         self.read_journal();
+        self.shown_issue = None;
         self.to_watch = to_watch(&self.fights, &self.state, &self.data);
         // Free agents are new each week: the one on screen may be gone or replaced. A
         // rival club's fighter sold or let go is followed.
@@ -353,11 +369,7 @@ impl ClubScreen {
 
     fn top_bar(&mut self, ui: &mut egui::Ui) {
         let date = self.state.date(&self.data);
-        let phase = match date.phase(&self.data.calendar) {
-            SeasonPhase::Competition => "competition",
-            SeasonPhase::GreatEvent => "great-event",
-            SeasonPhase::OffSeason => "off-season",
-        };
+        let phase = phase_key(date.phase(&self.data.calendar));
         // Wrapped: a narrow window or a large interface puts the end on a second row
         // rather than out of the screen.
         ui.horizontal_wrapped(|ui| {
@@ -377,6 +389,7 @@ impl ClubScreen {
             ui.add_enabled_ui(!self.fights.is_empty(), |ui| {
                 ui.selectable_value(&mut self.view, View::Fights, tr!("view-fights"));
             });
+            ui.selectable_value(&mut self.view, View::Paper, tr!("view-paper"));
             ui.selectable_value(&mut self.view, View::Colosseums, tr!("view-colosseums"));
             ui.selectable_value(&mut self.view, View::Market, tr!("view-market"));
             ui.selectable_value(&mut self.view, View::Staff, tr!("view-staff"));
@@ -399,6 +412,8 @@ impl ClubScreen {
             wealth = wealth_text(self.state.wealth),
             continent = continent_name(self.state.continent)
         ));
+        ui.add_space(6.0);
+        self.calendar(ui);
         let alerts = self.alerts();
         if !alerts.is_empty() {
             ui.add_space(6.0);
@@ -417,61 +432,192 @@ impl ClubScreen {
         for line in self.pending_lines() {
             ui.label(line);
         }
-        let play = ui.button(tr!("menu-next-week")).clicked();
-        ui.separator();
-        egui::ScrollArea::vertical().show(ui, |ui| self.paper(ui));
+        let mut play = false;
+        ui.horizontal(|ui| {
+            play = ui.button(tr!("menu-next-week")).clicked();
+            if self.last_week.is_some() && ui.button(tr!("menu-read-paper")).clicked() {
+                self.shown_issue = None;
+                self.view = View::Paper;
+            }
+        });
         play
     }
 
-    /// The club's newspaper, the Acta Diurna: the club's week, the week's title fights,
-    /// the world's other news of the week, then the past weeks' news.
-    fn paper(&self, ui: &mut egui::Ui) {
+    /// The season as a Roman calendar: its year since the founding of Rome in Roman
+    /// numerals, then a cell per week in its phase's colour, the weeks played faded and
+    /// the week to play ringed, and the phases' legend.
+    fn calendar(&self, ui: &mut egui::Ui) {
+        let rules = &self.data.calendar;
+        let today = self.state.date(&self.data);
+        let weeks = rules.season_weeks();
+        egui::Frame::group(ui.style())
+            .fill(ui.visuals().extreme_bg_color)
+            .show(ui, |ui| {
+                ui.set_width(ui.available_width());
+                ui.horizontal_wrapped(|ui| {
+                    let year = year_text(self.state.week, &self.data).to_uppercase();
+                    ui.label(egui::RichText::new(year).heading().color(theme::BRONZE));
+                    let season = tr!(
+                        "calendar-season",
+                        season = today.season,
+                        week = today.week,
+                        weeks = weeks
+                    );
+                    ui.label(egui::RichText::new(season).weak());
+                });
+                let gap = 4.0;
+                let count = f32::from(u16::try_from(weeks).unwrap_or(u16::MAX).max(1));
+                let side = ((ui.available_width() - gap * (count - 1.0)) / count).clamp(24.0, 48.0);
+                ui.horizontal_wrapped(|ui| {
+                    ui.spacing_mut().item_spacing = egui::vec2(gap, gap);
+                    for week in 1..=weeks {
+                        let date = Date {
+                            season: today.season,
+                            week,
+                        };
+                        week_cell(ui, date, today, side, rules);
+                    }
+                });
+                ui.horizontal_wrapped(|ui| {
+                    for phase in PHASES {
+                        let (rect, _) =
+                            ui.allocate_exact_size(egui::vec2(14.0, 14.0), egui::Sense::hover());
+                        ui.painter().rect_filled(rect, 3.0, phase_color(phase));
+                        let name = tr!("phase-name", phase = phase_key(phase));
+                        ui.label(egui::RichText::new(name).small());
+                    }
+                });
+            });
+    }
+
+    /// The weeks with an issue of the newspaper, newest first: the last week played, then
+    /// each past week with news.
+    fn issues(&self) -> Vec<u64> {
         let played = self.last_week.as_ref().map(|(week, _)| *week);
-        ui.vertical_centered(|ui| {
-            ui.heading(egui::RichText::new(tr!("paper-name").to_uppercase()).strong());
-            let issue = played.map_or_else(
-                || tr!("paper-first-issue"),
-                |week| tr!("paper-issue", date = date_text(week, &self.data)),
-            );
-            ui.label(egui::RichText::new(issue).italics().weak());
+        let past = self.news_pages().into_iter().map(|(week, _)| week);
+        played
+            .into_iter()
+            .chain(past.filter(|&week| Some(week) != played))
+            .collect()
+    }
+
+    /// The club's newspaper, the Acta Diurna, one issue at a time on a page of
+    /// parchment, « Numéro précédent » and « Numéro suivant » above it. The last
+    /// issue tells the club's week, the week's title fights and the world's other news;
+    /// a past one, the world's news of its week.
+    fn paper(&mut self, ui: &mut egui::Ui) {
+        let issues = self.issues();
+        let shown = self
+            .shown_issue
+            .and_then(|week| issues.iter().position(|&w| w == week))
+            .unwrap_or(0);
+        ui.horizontal(|ui| {
+            let older = shown + 1 < issues.len();
+            if ui
+                .add_enabled(older, egui::Button::new(tr!("paper-older")))
+                .clicked()
+            {
+                self.shown_issue = issues.get(shown + 1).copied();
+            }
+            if ui
+                .add_enabled(shown > 0, egui::Button::new(tr!("paper-newer")))
+                .clicked()
+            {
+                self.shown_issue = issues.get(shown - 1).copied();
+            }
+            if shown > 0 && ui.button(tr!("paper-latest")).clicked() {
+                self.shown_issue = None;
+            }
         });
-        if let Some((_, lines)) = &self.last_week {
-            section(ui, &tr!("paper-club"));
-            for line in lines {
+        let week = issues.get(shown).copied();
+        let latest = shown == 0 && self.last_week.is_some();
+        egui::ScrollArea::vertical().show(ui, |ui| {
+            parchment(ui, |ui| {
+                self.masthead(ui, week);
+                match week {
+                    None => {
+                        ui.label(egui::RichText::new(tr!("paper-no-issue")).italics());
+                    }
+                    Some(_) if latest => self.last_issue(ui),
+                    Some(week) => {
+                        let pages = self.news_pages();
+                        let articles = pages.iter().find(|(w, _)| *w == week);
+                        paper_section(ui, &tr!("paper-world"));
+                        for article in articles.into_iter().flat_map(|(_, a)| a) {
+                            article_view(ui, article, true);
+                        }
+                    }
+                }
+            });
+        });
+    }
+
+    /// The newspaper's name, then the issue's date and year between two rules.
+    fn masthead(&self, ui: &mut egui::Ui, week: Option<u64>) {
+        ui.vertical_centered(|ui| {
+            let name = egui::RichText::new(tr!("paper-name").to_uppercase())
+                .size(44.0)
+                .strong()
+                .extra_letter_spacing(6.0);
+            ui.label(name);
+            let issue = week.map_or_else(
+                || tr!("paper-first-issue"),
+                |week| {
+                    tr!(
+                        "paper-issue",
+                        date = date_text(week, &self.data),
+                        year = year_text(week, &self.data)
+                    )
+                },
+            );
+            ui.separator();
+            ui.label(egui::RichText::new(issue).italics());
+            ui.separator();
+        });
+    }
+
+    /// The last issue: the club's week beside the week's title fights and the world's
+    /// other news, in two columns on a wide enough page.
+    fn last_issue(&self, ui: &mut egui::Ui) {
+        let club = |ui: &mut egui::Ui| {
+            paper_section(ui, &tr!("paper-club"));
+            for line in self.last_week.iter().flat_map(|(_, lines)| lines) {
                 ui.label(line);
             }
-        }
-        let (changed, defended): (Vec<_>, Vec<_>) =
-            self.week_titles.iter().partition(|(changed, _)| *changed);
-        if !self.week_titles.is_empty() {
-            section(ui, &tr!("paper-titles"));
-            for (_, article) in changed {
-                article_view(ui, article, true);
-            }
-            if !defended.is_empty() {
-                ui.add_space(4.0);
-                ui.label(egui::RichText::new(tr!("paper-defended")).italics());
-                for (_, article) in defended {
-                    article_view(ui, article, false);
+        };
+        let world = |ui: &mut egui::Ui| {
+            let (changed, defended): (Vec<_>, Vec<_>) =
+                self.week_titles.iter().partition(|(changed, _)| *changed);
+            if !self.week_titles.is_empty() {
+                paper_section(ui, &tr!("paper-titles"));
+                for (_, article) in changed {
+                    article_view(ui, article, true);
+                }
+                if !defended.is_empty() {
+                    ui.add_space(4.0);
+                    ui.label(egui::RichText::new(tr!("paper-defended")).italics());
+                    for (_, article) in defended {
+                        article_view(ui, article, false);
+                    }
                 }
             }
-        }
-        let mut pages = self.news_pages().into_iter().peekable();
-        if let Some((_, articles)) = pages.next_if(|&(week, _)| Some(week) == played) {
-            section(ui, &tr!("paper-world"));
-            for article in &articles {
-                article_view(ui, article, true);
-            }
-        }
-        if pages.peek().is_some() {
-            section(ui, &tr!("paper-past"));
-            for (week, articles) in pages {
-                ui.add_space(4.0);
-                ui.label(egui::RichText::new(date_text(week, &self.data)).italics());
-                for article in &articles {
-                    article_view(ui, article, false);
+            let played = self.last_week.as_ref().map(|(week, _)| *week);
+            let pages = self.news_pages();
+            if let Some((_, articles)) = pages.iter().find(|(week, _)| Some(*week) == played) {
+                paper_section(ui, &tr!("paper-world"));
+                for article in articles {
+                    article_view(ui, article, true);
                 }
             }
+        };
+        if ui.available_width() >= PAPER_COLUMNS_FROM {
+            ui.columns(2, |columns| {
+                club(&mut columns[0]);
+                world(&mut columns[1]);
+            });
+        } else {
+            club(ui);
+            world(ui);
         }
     }
 
@@ -807,6 +953,7 @@ impl Screen for ClubScreen {
             View::Roster => self.roster(ui),
             View::Sheet(i) => self.sheet(ui, i),
             View::Fights => again = self.fight_summary(ui),
+            View::Paper => self.paper(ui),
             View::Colosseums => self.colosseums(ui),
             View::Market => self.market(ui),
             View::Staff => self.staff(ui),
@@ -858,22 +1005,108 @@ fn week_card(ui: &mut egui::Ui, week: u64, lines: &[String]) {
         });
 }
 
-/// A section of the newspaper, or of a sheet: its name in bronze over a rule.
+/// A week of the season's calendar, `side` wide and high: its number on its phase's
+/// colour, faded once played, ringed when it is `today`; its date and phase on hover.
+fn week_cell(ui: &mut egui::Ui, date: Date, today: Date, side: f32, rules: &CalendarRules) {
+    let phase = date.phase(rules);
+    let (rect, response) = ui.allocate_exact_size(egui::vec2(side, side), egui::Sense::hover());
+    let played = date < today;
+    let mut fill = phase_color(phase);
+    if played {
+        fill = fill.gamma_multiply(0.3);
+    }
+    let painter = ui.painter();
+    painter.rect_filled(rect, 4.0, fill);
+    if date == today {
+        let ring = egui::Stroke::new(3.0_f32, ui.visuals().text_color());
+        painter.rect_stroke(rect, 4.0, ring, egui::StrokeKind::Outside);
+    }
+    let ink = if played {
+        ui.visuals().weak_text_color()
+    } else {
+        theme::INK
+    };
+    painter.text(
+        rect.center(),
+        egui::Align2::CENTER_CENTER,
+        date.week.to_string(),
+        egui::FontId::proportional(14.0),
+        ink,
+    );
+    response.on_hover_text(tr!(
+        "top-date",
+        season = date.season,
+        week = date.week,
+        phase = phase_key(phase)
+    ));
+}
+
+/// The key of `phase` in the language files.
+fn phase_key(phase: SeasonPhase) -> &'static str {
+    match phase {
+        SeasonPhase::Competition => "competition",
+        SeasonPhase::GreatEvent => "great-event",
+        SeasonPhase::OffSeason => "off-season",
+    }
+}
+
+/// The colour of `phase` in the season's calendar.
+fn phase_color(phase: SeasonPhase) -> egui::Color32 {
+    match phase {
+        SeasonPhase::Competition => theme::BRONZE,
+        SeasonPhase::GreatEvent => theme::BLOOD,
+        SeasonPhase::OffSeason => theme::SEA,
+    }
+}
+
+/// A section of a sheet: its name in bronze over a rule.
 fn section(ui: &mut egui::Ui, name: &str) {
     ui.add_space(8.0);
     ui.label(egui::RichText::new(name).strong().color(theme::BRONZE));
     ui.separator();
 }
 
+/// A page of the newspaper: dark ink on parchment in a bronze frame, centred, no wider
+/// than `PAPER_WIDTH`.
+fn parchment(ui: &mut egui::Ui, add: impl FnOnce(&mut egui::Ui)) {
+    let margin = 24;
+    let width = ui.available_width().min(PAPER_WIDTH) - 2.0 * f32::from(margin);
+    ui.vertical_centered(|ui| {
+        egui::Frame::new()
+            .fill(theme::PARCHMENT)
+            .stroke(egui::Stroke::new(2.0_f32, theme::BRONZE))
+            .corner_radius(4.0)
+            .inner_margin(egui::Margin::same(margin))
+            .show(ui, |ui| {
+                ui.set_width(width);
+                let visuals = ui.visuals_mut();
+                visuals.override_text_color = Some(theme::INK);
+                visuals.widgets.noninteractive.bg_stroke.color = theme::INK;
+                ui.with_layout(egui::Layout::top_down(egui::Align::Min), add);
+            });
+    });
+}
+
+/// A section of the newspaper: its name in red ink, in capitals, over a rule.
+fn paper_section(ui: &mut egui::Ui, name: &str) {
+    ui.add_space(10.0);
+    let name = egui::RichText::new(name.to_uppercase())
+        .strong()
+        .extra_letter_spacing(2.0)
+        .color(theme::RED_INK);
+    ui.label(name);
+    ui.separator();
+}
+
 /// An article of the newspaper: its headline, in bold if `major`, and then who it is
-/// about in small print; one about the player's club in bronze.
+/// about in small print; one about the player's club in red ink.
 fn article_view(ui: &mut egui::Ui, article: &Article, major: bool) {
     let mut headline = egui::RichText::new(&article.headline);
     if major {
         headline = headline.strong();
     }
     if article.ours {
-        headline = headline.color(theme::BRONZE);
+        headline = headline.color(theme::RED_INK);
     }
     ui.label(headline);
     if let (true, Some(byline)) = (major, &article.byline) {
@@ -2482,6 +2715,22 @@ mod tests {
         assert_eq!(market::observed_text(&f), "Jamais observé");
         f.observed_weeks = 2;
         assert_eq!(market::observed_text(&f), "Observé 2 semaines");
+    }
+
+    #[test]
+    fn the_newspaper_opens_on_the_last_week_played() {
+        let mut screen = screen(7);
+        assert_eq!(screen.issues(), Vec::<u64>::new());
+        for _ in 0..3 {
+            screen.next_week();
+        }
+        let issues = screen.issues();
+        assert_eq!(issues.first(), Some(&3));
+        // Newest first, each week once.
+        assert!(issues.windows(2).all(|w| w[0] > w[1]));
+        screen.shown_issue = issues.last().copied();
+        screen.next_week();
+        assert_eq!(screen.shown_issue, None);
     }
 
     #[test]

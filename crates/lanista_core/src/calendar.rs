@@ -10,6 +10,8 @@ pub struct CalendarRules {
     pub competition_weeks: u32,
     pub great_event_weeks: u32,
     pub off_season_weeks: u32,
+    /// The year of the first season, counted from the founding of Rome.
+    pub first_year: u64,
 }
 
 impl CalendarRules {
@@ -63,6 +65,14 @@ impl Date {
         self.week == 1
     }
 
+    /// The year of this season, counted from the founding of Rome (ab Urbe condita).
+    #[must_use]
+    pub fn year(self, rules: &CalendarRules) -> u64 {
+        rules
+            .first_year
+            .saturating_add(self.season.saturating_sub(1))
+    }
+
     #[must_use]
     pub fn phase(self, rules: &CalendarRules) -> SeasonPhase {
         if self.week <= rules.competition_weeks {
@@ -75,6 +85,39 @@ impl Date {
     }
 }
 
+/// `number` in Roman numerals, "DCLXXX" for 680; thousands beyond MMMCMXCIX are
+/// written as as many M, and 0 as "N" (nulla).
+#[must_use]
+pub fn roman_numeral(number: u64) -> String {
+    const NUMERALS: [(u64, &str); 13] = [
+        (1000, "M"),
+        (900, "CM"),
+        (500, "D"),
+        (400, "CD"),
+        (100, "C"),
+        (90, "XC"),
+        (50, "L"),
+        (40, "XL"),
+        (10, "X"),
+        (9, "IX"),
+        (5, "V"),
+        (4, "IV"),
+        (1, "I"),
+    ];
+    if number == 0 {
+        return "N".into();
+    }
+    let mut left = number;
+    let mut text = String::new();
+    for (value, numeral) in NUMERALS {
+        while left >= value {
+            text.push_str(numeral);
+            left -= value;
+        }
+    }
+    text
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -83,6 +126,7 @@ mod tests {
         competition_weeks: 22,
         great_event_weeks: 4,
         off_season_weeks: 4,
+        first_year: 680,
     };
 
     fn date(week: u64) -> Date {
@@ -114,5 +158,24 @@ mod tests {
         assert_eq!(phase(27), SeasonPhase::OffSeason);
         assert_eq!(phase(30), SeasonPhase::OffSeason);
         assert_eq!(phase(31), SeasonPhase::Competition);
+    }
+
+    #[test]
+    fn a_season_is_a_year_since_the_founding_of_rome() {
+        assert_eq!(date(1).year(&RULES), 680);
+        assert_eq!(date(30).year(&RULES), 680);
+        assert_eq!(date(31).year(&RULES), 681);
+    }
+
+    #[test]
+    fn years_are_written_in_roman_numerals() {
+        assert_eq!(roman_numeral(0), "N");
+        assert_eq!(roman_numeral(4), "IV");
+        assert_eq!(roman_numeral(9), "IX");
+        assert_eq!(roman_numeral(14), "XIV");
+        assert_eq!(roman_numeral(680), "DCLXXX");
+        assert_eq!(roman_numeral(709), "DCCIX");
+        assert_eq!(roman_numeral(1994), "MCMXCIV");
+        assert_eq!(roman_numeral(4000), "MMMM");
     }
 }
