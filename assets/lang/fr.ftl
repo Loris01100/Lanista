@@ -13,6 +13,7 @@ stat-melee-defense = DC
 stat-ranged-defense = DL
 
 fighter-name = { $name } ({ $class })
+fighter-elo = { $name } · Elo { $elo }
 fighter-unnamed = { $class } n° { $number }
 fighter-numbered = { $name } { $number }
 free-agent-name = { $name } ({ $class }, free agent)
@@ -468,7 +469,7 @@ summary-seed = Graine { $seed }
 summary-money-chip = Argent { $money }
 summary-fame-chip = Renommée { $fame }
 summary-yours = Votre combattant
-summary-opponent = L'adversaire ({ $class })
+summary-opponent = { $them }
 summary-damage-dealt = Dégâts infligés
 summary-damage-taken = Dégâts reçus
 summary-spells-cast = Sorts lancés

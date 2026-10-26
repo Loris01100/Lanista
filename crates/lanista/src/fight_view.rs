@@ -116,6 +116,9 @@ pub struct Cast {
     /// Those the arena kills who survive the fatal blow, once the fight is over: they
     /// fall and lie down alive, without bleeding out.
     pub survivors: Vec<FighterId>,
+    /// Each fighter's Elo in the fight's colosseum, in the arena's order; `None` for one
+    /// unranked.
+    pub elos: Vec<Option<i32>>,
 }
 
 /// How a fight ended for the club.
@@ -374,6 +377,15 @@ impl FightView {
             .and_then(|i| self.cast.names.get(i))
             .cloned()
             .unwrap_or_else(|| tr!("fighter-number", number = id.0))
+    }
+
+    /// "Flamma (Augure) · Elo 1520": the fighter's name with its Elo, when ranked.
+    pub fn name_and_elo(&self, id: FighterId) -> String {
+        let name = self.name(id);
+        match index(id.0).and_then(|i| self.cast.elos.get(i).copied().flatten()) {
+            Some(elo) => tr!("fighter-elo", name = name.as_str(), elo = elo),
+            None => name,
+        }
     }
 
     /// The fighter still fighting once the fight is over.

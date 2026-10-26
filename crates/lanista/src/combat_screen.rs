@@ -361,7 +361,7 @@ impl CombatScreen {
                     .max_height(height)
                     .show(ui, |ui| {
                         for f in shown {
-                            ui.strong(fight.name(f.id));
+                            ui.strong(fight.name_and_elo(f.id));
                             gauge(ui, &tr!("stat-hp"), f.hp, f.stats.hp);
                             for (name, g) in [
                                 (tr!("mana"), &f.mana),
@@ -706,7 +706,7 @@ mod tests {
         Cast {
             names: vec!["votre combattant".into(), "l'adversaire".into()],
             club: vec![FighterId(0)],
-            survivors: Vec::new(),
+            ..Cast::default()
         }
     }
 
@@ -944,7 +944,7 @@ mod tests {
                 cast: Cast {
                     names: vec!["Datis".into(), "Augure".into()],
                     club: vec![FighterId(club)],
-                    survivors: Vec::new(),
+                    ..Cast::default()
                 },
             };
             let mut screen =

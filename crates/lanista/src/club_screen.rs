@@ -51,7 +51,7 @@ use crate::texts::{
     colosseum_name, colosseum_rules_name, contender_name, continent_name, date_in_sentence,
     date_text, fight_text, fighter_name, illness_text, injury_text, loadout_name, market_news_text,
     money_line, move_text, named_club, origin_place, priced, result_text, rival_fighter_name,
-    staff_move_text, staff_news_text, stat_names, temperament_name, temperament_text,
+    staff_move_text, staff_news_text, stage_name, stat_names, temperament_name, temperament_text,
     title_article, title_changed, trait_memory, trait_name, trait_text, wealth_name, wealth_text,
     week_lines, world_article, year_text,
 };
@@ -1121,8 +1121,8 @@ fn article_view(ui: &mut egui::Ui, article: &Article, major: bool) {
 
 /// The week's fights to watch, in club order, each once, though several of the club's
 /// fighters shared a melee: the fight before its first tick, the club's fighters named
-/// and ringed, the others by their class, and those who fall at 0 HP but survive the
-/// fatal blow.
+/// and ringed, the others by name and class, everyone's Elo there, and those who fall
+/// at 0 HP but survive the fatal blow.
 fn to_watch(fights: &[FightReport], state: &GameState, data: &DesignData) -> Vec<Watched> {
     let mut seeds = Vec::new();
     let mut watched = Vec::new();
@@ -1150,8 +1150,14 @@ fn to_watch(fights: &[FightReport], state: &GameState, data: &DesignData) -> Vec
                     .setup
                     .fighters
                     .get(k)
-                    .map_or_else(|| "?".into(), |o| class_name(o, data))
+                    .map_or_else(|| "?".into(), |o| outsider_name(o, data))
             })
+            .collect();
+        let elos = fight
+            .setup
+            .fighters
+            .iter()
+            .map(|f| elo_in(state, report.colosseum, f))
             .collect();
         let survivors = (0..)
             .zip(fight.survived_fatal_blow.iter().copied())
@@ -1164,10 +1170,43 @@ fn to_watch(fights: &[FightReport], state: &GameState, data: &DesignData) -> Vec
                 names,
                 club: mine.iter().map(|f| f.fight.me).collect(),
                 survivors,
+                elos,
             },
         });
     }
     watched
+}
+
+/// "Flamma (Augure)": a fighter of a fight not of the club, as it went in; by its class
+/// if it has no name.
+fn outsider_name(fighter: &CareerFighter, data: &DesignData) -> String {
+    let class = class_name(fighter, data);
+    if fighter.name.is_empty() {
+        class
+    } else {
+        tr!(
+            "fighter-name",
+            name = stage_name(&fighter.name),
+            class = class
+        )
+    }
+}
+
+/// `fighter`'s Elo in `colosseum` now, found by its number among those ranked there;
+/// `None` if unranked.
+fn elo_in(state: &GameState, colosseum: ColosseumId, fighter: &CareerFighter) -> Option<i32> {
+    let rosters = state.rosters();
+    state
+        .colosseums
+        .get(usize::try_from(colosseum.0).ok()?)?
+        .ranking
+        .iter()
+        .find(|r| {
+            rosters
+                .fighter(r.contender)
+                .is_some_and(|f| f.id == fighter.id)
+        })
+        .map(|r| r.elo)
 }
 
 /// Turns to rest a week the club cannot pay (`next_week` would drop it) or a special
@@ -1576,7 +1615,7 @@ fn fight_card(
                 });
             });
             ui.add_space(4.0);
-            face_to_face(ui, report, data);
+            face_to_face(ui, report, state, data);
             ui.add_space(4.0);
             ui.horizontal_wrapped(|ui| {
                 let money = format!("{:+}", report.money);
@@ -1605,7 +1644,7 @@ fn fight_card(
 /// A fight's sides stat by stat. A duel puts the club's fighter on the left and its
 /// opponent on the right, a bar each growing out from the stat's name, the longer one
 /// the bigger value; a melee shows the club's fighter alone.
-fn face_to_face(ui: &mut egui::Ui, report: &FightReport, data: &DesignData) {
+fn face_to_face(ui: &mut egui::Ui, report: &FightReport, state: &GameState, data: &DesignData) {
     let fight = &report.fight;
     let names = [
         tr!("summary-damage-dealt"),
@@ -1642,7 +1681,13 @@ fn face_to_face(ui: &mut egui::Ui, report: &FightReport, data: &DesignData) {
         });
         return;
     };
-    let class = opponent.map(|o| class_name(o, data)).unwrap_or_default();
+    let them = opponent.map_or_else(String::new, |o| {
+        let name = outsider_name(o, data);
+        elo_in(state, report.colosseum, o).map_or_else(
+            || name.clone(),
+            |elo| tr!("fighter-elo", name = name.as_str(), elo = elo),
+        )
+    });
     face_row(
         ui,
         |ui| {
@@ -1655,7 +1700,7 @@ fn face_to_face(ui: &mut egui::Ui, report: &FightReport, data: &DesignData) {
         "",
         |ui| {
             ui.label(
-                egui::RichText::new(tr!("summary-opponent", class = class))
+                egui::RichText::new(tr!("summary-opponent", them = them))
                     .small()
                     .weak(),
             );
@@ -1964,6 +2009,13 @@ mod tests {
         screen.decisions.plans[0].activity = Activity::Challenge(home, rival);
         screen.next_week();
         assert_eq!(screen.fights[0].fight.opponent(), Some(&resident));
+        // Watched, that fighter is told by its name, its class and its Elo there.
+        let cast = &screen.to_watch[0].cast;
+        let class = class_name(&resident, &screen.data);
+        let named = format!("{} ({class})", stage_name(&resident.name));
+        assert_eq!(cast.names[1], named);
+        let elo = screen.state.colosseums[0].elo(Contender::Rival(rival), &screen.data.world);
+        assert_eq!(cast.elos[1], Some(elo));
         // A week of rest: nothing to watch, nothing to sum up.
         screen.decisions.plans[0].activity = Activity::Rest;
         screen.next_week();
