@@ -115,8 +115,13 @@ pub fn next_week(state: &mut GameState, decisions: &Decisions, data: &DesignData
                 Activity::TitleFight(_) => title_meetings[i],
                 activity => opponent(
                     &mut state.rng,
-                    (&state.colosseums, &state.rivals, &state.free_agents),
-                    (activity, &*fighter),
+                    (
+                        &state.colosseums,
+                        &state.rivals,
+                        &state.free_agents,
+                        &data.world,
+                    ),
+                    (activity, i, fighter),
                     &plans,
                     &fought,
                 ),
@@ -152,18 +157,7 @@ pub fn next_week(state: &mut GameState, decisions: &Decisions, data: &DesignData
     market.extend(answer_offer(state, &decisions.moves, data, &mut ledger));
     birthdays(state, &mut reports, data);
     let wealth = end_week(state, &mut titles, data);
-    let mut rankings_before: Vec<(ColosseumId, Vec<Rating>)> = Vec::new();
-    let fought_in = reports
-        .iter()
-        .flatten()
-        .filter(|r| r.fight.is_some())
-        .filter_map(|r| r.plan.activity.colosseum());
-    for id in fought_in {
-        let ranking = usize::try_from(id.0).ok().and_then(|c| rankings.get(c));
-        if let Some(ranking) = ranking.filter(|_| rankings_before.iter().all(|(c, _)| *c != id)) {
-            rankings_before.push((id, ranking.clone()));
-        }
-    }
+    let rankings_before = rankings_before(&reports, &rankings);
     let summary = WeekSummary {
         reports,
         ledger,
@@ -177,6 +171,27 @@ pub fn next_week(state: &mut GameState, decisions: &Decisions, data: &DesignData
     let money = (money, state.money);
     state.journal.record(week, played, money, &summary, data);
     summary
+}
+
+/// The rankings, as they were before the week, of the colosseums where the club's
+/// fighters fought.
+fn rankings_before(
+    reports: &[Option<WeekReport>],
+    rankings: &[Vec<Rating>],
+) -> Vec<(ColosseumId, Vec<Rating>)> {
+    let mut before: Vec<(ColosseumId, Vec<Rating>)> = Vec::new();
+    let fought_in = reports
+        .iter()
+        .flatten()
+        .filter(|r| r.fight.is_some())
+        .filter_map(|r| r.plan.activity.colosseum());
+    for id in fought_in {
+        let ranking = usize::try_from(id.0).ok().and_then(|c| rankings.get(c));
+        if let Some(ranking) = ranking.filter(|_| before.iter().all(|(c, _)| *c != id)) {
+            before.push((id, ranking.clone()));
+        }
+    }
+    before
 }
 
 /// What the week `report` of the club's fighter `i`, of `fame` before it, costs and

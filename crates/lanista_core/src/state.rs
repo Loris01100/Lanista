@@ -2745,7 +2745,7 @@ mod tests {
     #[test]
     fn three_seasons_live_without_the_player() {
         let data = DesignData::load().unwrap();
-        let mut state = GameState::new(4, &data);
+        let mut state = GameState::new(1, &data);
         state.fighters[0].status = Status::Retired;
         let start = state.clone();
         let season = u64::from(data.calendar.season_weeks());
@@ -2995,9 +2995,10 @@ mod tests {
             &state.colosseums[..],
             &state.rivals[..],
             &state.free_agents[..],
+            &data.world,
         );
         let me = &state.fighters[0];
-        let capua = (capua, me);
+        let capua = (capua, 0, me);
         assert_eq!(
             opponent(&mut rng, world, capua, &only, &fought),
             Some((0, one))
@@ -3008,12 +3009,29 @@ mod tests {
         };
         let challenge = Activity::Challenge(ColosseumId(0), four);
         assert_eq!(
-            opponent(&mut rng, world, (challenge, me), &only, &fought),
+            opponent(&mut rng, world, (challenge, 0, me), &only, &fought),
             Some((0, Contender::Rival(four)))
         );
         // A free agent registered there is met too.
         let agent = Contender::FreeAgent(2);
         only.set_activity(agent, capua.0);
+        // The club's fighter meets the closest in Elo of those registered.
+        let mut ranked = state.colosseums.clone();
+        let elo = data.world.elo_start;
+        ranked[0].ranking = [
+            (Contender::Club(0), elo),
+            (one, elo + 400),
+            (agent, elo + 30),
+        ]
+        .map(|(contender, elo)| crate::colosseum::Rating { contender, elo })
+        .to_vec();
+        let near = (&ranked[..], world.1, world.2, world.3);
+        for _ in 0..8 {
+            assert_eq!(
+                opponent(&mut rng, near, capua, &only, &fought),
+                Some((0, agent))
+            );
+        }
         // A spiteful fighter meets first the one it bears a grudge against.
         let mut spiteful = me.clone();
         spiteful.traits = vec![Trait::Spiteful];
@@ -3021,7 +3039,7 @@ mod tests {
         spiteful.grudges = vec![(theirs.id, theirs.name.clone())];
         for _ in 0..8 {
             assert_eq!(
-                opponent(&mut rng, world, (capua.0, &spiteful), &only, &fought),
+                opponent(&mut rng, world, (capua.0, 0, &spiteful), &only, &fought),
                 Some((0, agent))
             );
         }

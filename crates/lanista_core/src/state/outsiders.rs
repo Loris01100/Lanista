@@ -6,7 +6,7 @@ use std::cmp::Reverse;
 
 use rand_chacha::ChaCha8Rng;
 
-use crate::colosseum::{Colosseum, ColosseumId, Contender, Rosters, pick_opponent};
+use crate::colosseum::{Colosseum, ColosseumId, Contender, Rosters, WorldRules, pick_opponent};
 use crate::design_data::DesignData;
 use crate::fighter::career::{Activity, CareerFighter, Status, WeekPlan};
 use crate::fighter::fame::FightResult;
@@ -302,14 +302,20 @@ pub(super) fn pay_rival(rivals: &mut [Rival], club: usize, amount: i64) {
 }
 
 /// The colosseum and the outsider met in a fight (`activity`) by the club's fighter
-/// `me`: the rival fighter challenged while still fighting (someone may have killed it
-/// earlier in the week), otherwise one at random among those registered there (in
-/// `plans`) who have not `fought` yet, those `me` bears a grudge against first, or else
-/// among those ranked there, or else among anyone.
+/// `me`, the club's `i`th: the rival fighter challenged while still fighting (someone
+/// may have killed it earlier in the week), otherwise the closest in Elo there, at
+/// random between the equally close, among those registered there (in `plans`) who
+/// have not `fought` yet, those `me` bears a grudge against first, or else among those
+/// ranked there, or else among anyone.
 pub(super) fn opponent(
     rng: &mut ChaCha8Rng,
-    (colosseums, rivals, free_agents): (&[Colosseum], &[Rival], &[CareerFighter]),
-    (activity, me): (Activity, &CareerFighter),
+    (colosseums, rivals, free_agents, rules): (
+        &[Colosseum],
+        &[Rival],
+        &[CareerFighter],
+        &WorldRules,
+    ),
+    (activity, i, me): (Activity, usize, &CareerFighter),
     plans: &OutsiderPlans,
     fought: &[Contender],
 ) -> Option<(usize, Contender)> {
@@ -352,7 +358,14 @@ pub(super) fn opponent(
     let candidates = [foes, registered, ranked, everyone]
         .into_iter()
         .find(|c| !c.is_empty())?;
-    Some((c, pick_opponent(rng, &candidates)?))
+    let mine = colosseum.elo(Contender::Club(i), rules);
+    let gap = |o: &Contender| (colosseum.elo(*o, rules) - mine).unsigned_abs();
+    let closest = candidates.iter().map(gap).min()?;
+    let nearest: Vec<Contender> = candidates
+        .into_iter()
+        .filter(|o| gap(o) == closest)
+        .collect();
+    Some((c, pick_opponent(rng, &nearest)?))
 }
 
 #[cfg(test)]

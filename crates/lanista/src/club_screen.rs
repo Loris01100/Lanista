@@ -2014,8 +2014,18 @@ mod tests {
         let class = class_name(&resident, &screen.data);
         let named = format!("{} ({class})", stage_name(&resident.name));
         assert_eq!(cast.names[1], named);
-        let elo = screen.state.colosseums[0].elo(Contender::Rival(rival), &screen.data.world);
-        assert_eq!(cast.elos[1], Some(elo));
+        // Found by its number: it may have changed club or left the ranking since.
+        let rosters = screen.state.rosters();
+        let elo = screen.state.colosseums[0]
+            .ranking
+            .iter()
+            .find(|r| {
+                rosters
+                    .fighter(r.contender)
+                    .is_some_and(|f| f.id == resident.id)
+            })
+            .map(|r| r.elo);
+        assert_eq!(cast.elos[1], elo);
         // A week of rest: nothing to watch, nothing to sum up.
         screen.decisions.plans[0].activity = Activity::Rest;
         screen.next_week();
