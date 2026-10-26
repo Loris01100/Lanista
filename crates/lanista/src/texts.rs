@@ -255,7 +255,7 @@ pub fn trait_text(t: Trait) -> String {
 pub fn trait_memory(fighter: &CareerFighter, t: Trait) -> Option<String> {
     match t {
         Trait::Spiteful if !fighter.grudges.is_empty() => {
-            let names: Vec<String> = fighter.grudges.iter().map(stage_name).collect();
+            let names: Vec<String> = fighter.grudges.iter().map(|(_, n)| stage_name(n)).collect();
             Some(tr!("trait-grudges", names = names.join(", ")))
         }
         Trait::Superstitious => fighter
@@ -1105,6 +1105,9 @@ pub fn week_lines(week: &FighterWeek, dominant: Side, data: &DesignData) -> Vec<
     }
     if week.illness_healed {
         lines.push(tr!("week-illness-healed"));
+    }
+    for &t in &week.new_traits {
+        lines.push(tr!("week-trait", name = trait_name(t)));
     }
     if week.birthday {
         lines.push(tr!("week-birthday", age = week.age));

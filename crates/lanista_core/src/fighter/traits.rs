@@ -119,6 +119,8 @@ pub struct VainRules {
 pub struct SpitefulRules {
     /// Of every stat in a duel against a fighter it bears a grudge against.
     pub grudge_percent: u32,
+    /// Duels lost to the same fighter that make a fighter spiteful.
+    pub earned_defeats: u32,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
@@ -128,6 +130,8 @@ pub struct SuperstitiousRules {
     pub lucky_percent: u32,
     /// Morale lost in a week its loadout changes.
     pub loadout_morale: u32,
+    /// Duels won in a row on the same floor that make a fighter superstitious.
+    pub earned_wins: u32,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
@@ -135,6 +139,8 @@ pub struct SuperstitiousRules {
 pub struct PackLeaderRules {
     /// Morale gained every week by the other active fighters of its club.
     pub weekly_morale: u32,
+    /// Wins in its career that make a fighter a pack leader.
+    pub earned_wins: u32,
 }
 
 #[cfg(test)]

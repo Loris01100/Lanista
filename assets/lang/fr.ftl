@@ -130,6 +130,7 @@ week-after-effect-spared = Séquelle évitée par le médecin
 week-healed = Guéri : { $location }
 week-ill = Tombe malade : { $illness }
 week-illness-healed = Maladie guérie
+week-trait = Devient { $name }
 week-birthday = Un an de plus : { $age } ans
 week-season-gains = Bilan de la saison : { $gains } progrès
 week-stats = Stats : { $stats }

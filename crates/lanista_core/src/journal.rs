@@ -11,6 +11,7 @@ use crate::fighter::fame::FightResult;
 use crate::fighter::illness::Illness;
 use crate::fighter::injury::Injury;
 use crate::fighter::retirement::too_maimed;
+use crate::fighter::traits::Trait;
 use crate::fighter::{ClassId, Stats};
 use crate::log::FighterReport;
 use crate::state::WeekSummary;
@@ -44,6 +45,9 @@ pub struct FighterWeek {
     pub healed_injuries: Vec<Injury>,
     pub new_illness: Option<Illness>,
     pub illness_healed: bool,
+    /// The traits it earned.
+    #[serde(default)]
+    pub new_traits: Vec<Trait>,
     /// A year went by: the fighter is now `age`.
     pub birthday: bool,
     pub season_gains: u32,
@@ -128,6 +132,12 @@ impl FighterWeek {
             healed_injuries: report.healed_injuries.clone(),
             new_illness: report.new_illness,
             illness_healed: report.illness_healed,
+            new_traits: after
+                .traits
+                .iter()
+                .filter(|t| !before.traits.contains(t))
+                .copied()
+                .collect(),
             birthday: report.birthday,
             season_gains: report.season_gains,
             form: (before.form.value(), after.form.value()),

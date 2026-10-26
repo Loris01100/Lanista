@@ -100,6 +100,9 @@ pub struct GameState {
     /// it was kept.
     #[serde(default)]
     pub journal: Journal,
+    /// The last `CareerFighter::id` given.
+    #[serde(default)]
+    pub last_fighter_id: u64,
     /// The only source of chance after the start: same seed and decisions, same game.
     pub rng: ChaCha8Rng,
 }
@@ -147,6 +150,7 @@ impl GameState {
             news: Vec::new(),
             relations: BTreeMap::new(),
             journal: Journal::default(),
+            last_fighter_id: 0,
             rng,
         };
         state.open_world(data);
@@ -252,15 +256,17 @@ impl GameState {
         }
     }
 
-    /// `fighter` named as it comes into the world: a culture drawn on `continent` (on
-    /// any without one, `rivals::culture_on`), then one of its fighters' names that no
-    /// fighter in activity bears (`names::fighter_name`).
+    /// `fighter` named as it comes into the world: the next `id`, a culture drawn on
+    /// `continent` (on any without one, `rivals::culture_on`), then one of its
+    /// fighters' names that no fighter in activity bears (`names::fighter_name`).
     fn named(
         &mut self,
         mut fighter: CareerFighter,
         continent: Option<Continent>,
         data: &DesignData,
     ) -> CareerFighter {
+        self.last_fighter_id += 1;
+        fighter.id = self.last_fighter_id;
         let culture = rivals::culture_on(&mut self.rng, continent, data);
         let Some(culture) = culture.and_then(|key| data.culture(&key)) else {
             return fighter;
@@ -1120,6 +1126,7 @@ mod tests {
         let culture = data.culture(&named.culture).unwrap();
         assert_eq!(culture.continent, state.continent);
         assert!(culture.fighters.contains(&named.name.name), "{named:?}");
+        fighter.id = named.id;
         fighter.name.clone_from(&named.name);
         fighter.culture.clone_from(&named.culture);
         assert_eq!(state.fighters, [fighter]);

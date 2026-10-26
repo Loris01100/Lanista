@@ -66,6 +66,10 @@ impl Record {
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct CareerFighter {
+    /// Its number in the world, given as it comes into it (`GameState::named`) and to
+    /// no one else; 0 for a fighter out of a game.
+    #[serde(default)]
+    pub id: u64,
     pub class: ClassId,
     /// Its stage name, given as it comes into the world (`GameState::named`); empty
     /// for a fighter out of a game.
@@ -97,12 +101,19 @@ pub struct CareerFighter {
     /// Its traits, 0 to 2, for life.
     #[serde(default)]
     pub traits: Vec<Trait>,
-    /// The fighters that beat a spiteful one in a duel and it has not beaten since.
+    /// The fighters that beat a spiteful one in a duel and it has not beaten since, by
+    /// `id`, with their name to tell them.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
-    pub grudges: Vec<FighterName>,
+    pub grudges: Vec<(u64, FighterName)>,
     /// The floor of a superstitious fighter's first duel won.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub lucky_floor: Option<ArenaKind>,
+    /// Who beat it in a duel, by `id`, once a defeat, until it turns spiteful.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub defeats_by: Vec<u64>,
+    /// The floor of its last duels, all won, and how many.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub win_streak: Option<(ArenaKind, u32)>,
     pub morale: Morale,
     pub fame: Fame,
     pub form: Form,
@@ -165,6 +176,7 @@ impl CareerFighter {
         let loadouts = data.class(class).map_or(0, |c| c.loadouts.len());
         let ease = rules.ease.random(rng, loadouts);
         let mut fighter = Self {
+            id: 0,
             class,
             name: FighterName::default(),
             culture: String::new(),
@@ -179,6 +191,8 @@ impl CareerFighter {
             traits,
             grudges: Vec::new(),
             lucky_floor: None,
+            defeats_by: Vec::new(),
+            win_streak: None,
             morale: Morale::neutral(),
             fame: Fame::default(),
             form: Form::full(),
@@ -223,6 +237,7 @@ impl CareerFighter {
 
     fn moved_entry(class: ClassId, status: Status, to: Contender) -> Self {
         Self {
+            id: 0,
             class,
             name: FighterName::default(),
             culture: String::new(),
@@ -237,6 +252,8 @@ impl CareerFighter {
             traits: Vec::new(),
             grudges: Vec::new(),
             lucky_floor: None,
+            defeats_by: Vec::new(),
+            win_streak: None,
             morale: Morale::neutral(),
             fame: Fame::default(),
             form: Form::full(),
@@ -555,7 +572,7 @@ impl CareerFighter {
     ) -> Fighter {
         let traits = &data.fighter.traits;
         let mut percent = 100;
-        if self.has(Trait::Spiteful) && self.grudges.contains(&opponent.name) {
+        if self.has(Trait::Spiteful) && self.bears_grudge(opponent) {
             percent = percent_of(percent, traits.spiteful.grudge_percent);
         }
         if self.has(Trait::Superstitious) && self.lucky_floor == Some(kind) {
@@ -607,24 +624,72 @@ impl CareerFighter {
         }
     }
 
-    /// What a duel against `opponent` on the floor of `kind`, ended with `result`, leaves
-    /// a spiteful fighter, a grudge or one settled, and a superstitious one, its lucky
-    /// floor at its first win.
-    fn remember(&mut self, opponent: &Self, kind: ArenaKind, result: FightResult) {
-        // ponytail: by name, which a later fighter may bear once this one is gone.
-        let name = &opponent.name;
-        if self.has(Trait::Spiteful) && !name.is_empty() {
-            match result {
-                FightResult::Won => self.grudges.retain(|g| g != name),
-                FightResult::Lost | FightResult::GaveUp if !self.grudges.contains(name) => {
-                    self.grudges.push(name.clone());
+    /// What a duel against `opponent` on the floor of `kind`, ended with `result`, leaves:
+    /// a spiteful fighter a grudge or one settled, a superstitious one its lucky floor at
+    /// its first win; and the traits earned (see [`TraitRules`](crate::fighter::traits::TraitRules)):
+    /// spiteful after `earned_defeats` defeats by the same fighter, superstitious after
+    /// `earned_wins` duels won in a row on the same floor, which becomes its lucky one, a
+    /// pack leader at `earned_wins` wins in its career.
+    fn remember(
+        &mut self,
+        opponent: &Self,
+        kind: ArenaKind,
+        result: FightResult,
+        rules: &FighterRules,
+    ) {
+        let traits = &rules.traits;
+        let id = opponent.id;
+        let won = result == FightResult::Won;
+        if id != 0 {
+            if won {
+                self.grudges.retain(|&(g, _)| g != id);
+            } else if matches!(result, FightResult::Lost | FightResult::GaveUp) {
+                if !self.has(Trait::Spiteful) {
+                    self.defeats_by.push(id);
+                    let defeats = self.defeats_by.iter().filter(|&&d| d == id).count();
+                    let earned =
+                        usize::try_from(traits.spiteful.earned_defeats).unwrap_or(usize::MAX);
+                    if defeats >= earned && self.earn(Trait::Spiteful) {
+                        self.defeats_by.clear();
+                    }
                 }
-                _ => {}
+                if self.has(Trait::Spiteful) && !self.bears_grudge(opponent) {
+                    self.grudges.push((id, opponent.name.clone()));
+                }
             }
         }
-        if self.has(Trait::Superstitious) && result == FightResult::Won {
-            self.lucky_floor.get_or_insert(kind);
+        self.win_streak = match self.win_streak {
+            Some((floor, n)) if won && floor == kind => Some((kind, n + 1)),
+            _ if won => Some((kind, 1)),
+            _ => None,
+        };
+        if self.has(Trait::Superstitious) {
+            if won {
+                self.lucky_floor.get_or_insert(kind);
+            }
+        } else if self
+            .win_streak
+            .is_some_and(|(_, n)| n >= traits.superstitious.earned_wins)
+            && self.earn(Trait::Superstitious)
+        {
+            self.lucky_floor = Some(kind);
         }
+        if won && self.record.wins >= traits.pack_leader.earned_wins {
+            self.earn(Trait::PackLeader);
+        }
+    }
+
+    /// Takes `t` unless it has it or a trait that excludes it; whether it did.
+    fn earn(&mut self, t: Trait) -> bool {
+        let open = !self.traits.iter().any(|&had| had.excludes(t));
+        if open {
+            self.traits.push(t);
+        }
+        open
+    }
+
+    fn bears_grudge(&self, opponent: &Self) -> bool {
+        self.grudges.iter().any(|&(g, _)| g == opponent.id)
     }
 
     /// A week in a club whose `fighters` may have a pack leader: every active fighter
@@ -810,8 +875,8 @@ impl CareerFighter {
             self.take_side(mine, stronger, 0, rng, rules),
             opponent.take_side(theirs, weaker, 0, rng, rules),
         ];
-        self.remember(opponent, kind, taken[0].outcome.result);
-        opponent.remember(self, kind, taken[1].outcome.result);
+        self.remember(opponent, kind, taken[0].outcome.result, rules);
+        opponent.remember(self, kind, taken[1].outcome.result, rules);
         taken
     }
 
@@ -884,8 +949,8 @@ impl CareerFighter {
         let equipped = (FighterId(1), Refused::NONE);
         let theirs = opponent.take_fame_and_death(&arena, equipped, weaker, rng, rules);
         let mine = self.take_fame_and_death(&arena, (FighterId(0), refused), stronger, rng, rules);
-        self.remember(opponent, kind, mine.outcome.result);
-        opponent.remember(self, kind, theirs.outcome.result);
+        self.remember(opponent, kind, mine.outcome.result, rules);
+        opponent.remember(self, kind, theirs.outcome.result, rules);
         let died = self.status == Status::Dead;
         // Fallen at 0 HP in the arena, yet alive after the fight.
         let survived = |id: usize, fighter: &Self| {
@@ -1523,8 +1588,9 @@ mod tests {
         assert_eq!(plain.morale.value(), neutral);
     }
 
-    fn named(traits: &[Trait], name: &str) -> CareerFighter {
+    fn named(traits: &[Trait], id: u64, name: &str) -> CareerFighter {
         CareerFighter {
+            id,
             name: FighterName {
                 name: name.into(),
                 number: 0,
@@ -1543,31 +1609,33 @@ mod tests {
 
     #[test]
     fn the_spiteful_fights_harder_against_who_beat_it_until_it_wins() {
-        let mut spiteful = named(&[Trait::Spiteful], "Flamma");
-        let (winner, other) = (named(&[], "Spiculus"), named(&[], "Crixus"));
+        let mut spiteful = named(&[Trait::Spiteful], 1, "Flamma");
+        let winner = named(&[], 2, "Spiculus");
+        // The same name, borne by another.
+        let other = named(&[], 3, "Spiculus");
         let sand = ArenaKind::Sand;
         let before = hp_against(&spiteful, &winner, sand);
-        spiteful.remember(&winner, sand, FightResult::Lost);
-        spiteful.remember(&winner, sand, FightResult::GaveUp);
-        assert_eq!(spiteful.grudges, vec![winner.name.clone()]);
+        spiteful.remember(&winner, sand, FightResult::Lost, &data().fighter);
+        spiteful.remember(&winner, sand, FightResult::GaveUp, &data().fighter);
+        assert_eq!(spiteful.grudges, vec![(winner.id, winner.name.clone())]);
         assert!(hp_against(&spiteful, &winner, sand) > before);
         assert_eq!(hp_against(&spiteful, &other, sand), before);
-        spiteful.remember(&winner, sand, FightResult::Won);
+        spiteful.remember(&winner, sand, FightResult::Won, &data().fighter);
         assert_eq!(spiteful.grudges, []);
-        let mut plain = named(&[], "Flamma");
-        plain.remember(&winner, sand, FightResult::Lost);
+        let mut plain = named(&[], 1, "Flamma");
+        plain.remember(&winner, sand, FightResult::Lost, &data().fighter);
         assert_eq!(plain.grudges, []);
     }
 
     #[test]
     fn the_superstitious_keeps_the_floor_of_its_first_win_and_hates_new_loadouts() {
-        let mut f = named(&[Trait::Superstitious], "Flamma");
-        let opponent = named(&[], "Spiculus");
+        let mut f = named(&[Trait::Superstitious], 1, "Flamma");
+        let opponent = named(&[], 2, "Spiculus");
         let (pillars, sand) = (ArenaKind::Pillars, ArenaKind::Sand);
-        f.remember(&opponent, sand, FightResult::Lost);
+        f.remember(&opponent, sand, FightResult::Lost, &data().fighter);
         assert_eq!(f.lucky_floor, None);
-        f.remember(&opponent, pillars, FightResult::Won);
-        f.remember(&opponent, sand, FightResult::Won);
+        f.remember(&opponent, pillars, FightResult::Won, &data().fighter);
+        f.remember(&opponent, sand, FightResult::Won, &data().fighter);
         assert_eq!(f.lucky_floor, Some(pillars));
         assert!(hp_against(&f, &opponent, pillars) > hp_against(&f, &opponent, sand));
         let data = data();
@@ -1580,6 +1648,42 @@ mod tests {
         let lost = data.fighter.traits.superstitious.loadout_morale;
         assert_eq!(changed(&[Trait::Superstitious]), Morale::NEUTRAL - lost);
         assert_eq!(changed(&[]), Morale::NEUTRAL);
+    }
+
+    #[test]
+    fn a_career_earns_traits() {
+        let rules = &data().fighter;
+        let traits = &rules.traits;
+        let (sand, pillars) = (ArenaKind::Sand, ArenaKind::Pillars);
+        let (winner, other) = (named(&[], 2, "Spiculus"), named(&[], 3, "Crixus"));
+        let mut f = named(&[], 1, "Flamma");
+        for _ in 1..traits.spiteful.earned_defeats {
+            f.remember(&winner, sand, FightResult::Lost, rules);
+            f.remember(&other, sand, FightResult::Lost, rules);
+        }
+        assert_eq!(f.traits, []);
+        f.remember(&winner, sand, FightResult::GaveUp, rules);
+        assert_eq!(f.traits, [Trait::Spiteful]);
+        assert_eq!(f.grudges, [(winner.id, winner.name.clone())]);
+        let mut f = named(&[], 1, "Flamma");
+        let wins = traits.superstitious.earned_wins;
+        for _ in 1..wins {
+            f.remember(&other, sand, FightResult::Won, rules);
+        }
+        f.remember(&other, pillars, FightResult::Won, rules);
+        for _ in 1..wins {
+            f.remember(&other, sand, FightResult::Won, rules);
+        }
+        assert_eq!(f.traits, []);
+        f.remember(&other, sand, FightResult::Won, rules);
+        assert_eq!(f.traits, [Trait::Superstitious]);
+        assert_eq!(f.lucky_floor, Some(sand));
+        let mut f = named(&[], 1, "Flamma");
+        f.record.wins = traits.pack_leader.earned_wins;
+        f.remember(&other, sand, FightResult::Lost, rules);
+        assert_eq!(f.traits, []);
+        f.remember(&other, sand, FightResult::Won, rules);
+        assert_eq!(f.traits, [Trait::PackLeader]);
     }
 
     #[test]
