@@ -391,6 +391,13 @@ pub(super) fn estimate(fighter: &CareerFighter, data: &DesignData) -> u32 {
     value(fighter, &data.economy.market) / 10 * 10
 }
 
+/// The weekly wage `fighter` would ask to join the club.
+fn asked_wage_text(fighter: &CareerFighter, data: &DesignData) -> String {
+    let economy = &data.economy;
+    let wage = economy.contracts.asked_wage(fighter, &economy.market);
+    tr!("wage", wage = wage)
+}
+
 /// Replaces the week's offer with one of `price` for rival fighter `id`.
 fn set_offer(moves: &mut Vec<Move>, id: RivalId, price: u32) {
     moves.retain(|m| !matches!(m, Move::Offer(..)));
@@ -509,7 +516,7 @@ fn free_agent_grid(
     );
     let room = state.can_hire(data);
     market_grid("free agents").show(ui, |ui| {
-        outside_header(ui, false, &[String::new()]);
+        outside_header(ui, false, &[tr!("market-asked-wage"), String::new()]);
         for (a, f) in state.free_agents.iter().enumerate() {
             if f.status != Status::Active || !filter.shows(f) {
                 continue;
@@ -519,6 +526,7 @@ fn free_agent_grid(
                 pick = Some(Pick::Open(Target::FreeAgent(a)));
             }
             record_cells(ui, f);
+            ui.label(asked_wage_text(f, data));
             ui.horizontal(|ui| {
                 let observe = Move::Observe(Target::FreeAgent(a));
                 toggle(ui, moves, observe, &observe_label(f), true);
@@ -545,7 +553,12 @@ fn rival_grid(
 ) -> Option<Pick> {
     let mut pick = None;
     market_grid("rival fighters").show(ui, |ui| {
-        outside_header(ui, true, &[tr!("estimated-value"), String::new()]);
+        let titles = [
+            tr!("estimated-value"),
+            tr!("market-asked-wage"),
+            String::new(),
+        ];
+        outside_header(ui, true, &titles);
         for (club, rival) in state.rivals.iter().enumerate() {
             for (fighter, f) in rival.fighters.iter().enumerate() {
                 if f.status != Status::Active || !filter.shows(f) {
@@ -562,6 +575,7 @@ fn rival_grid(
                 record_cells(ui, f);
                 let estimate = estimate(f, data);
                 ui.colored_label(theme::BRONZE, tr!("estimate", value = estimate));
+                ui.label(asked_wage_text(f, data));
                 ui.horizontal(|ui| {
                     let observe = Move::Observe(Target::Rival(id));
                     toggle(ui, moves, observe, &observe_label(f), true);
@@ -576,18 +590,21 @@ fn rival_grid(
     pick
 }
 
-/// The club's fighters in activity, each with whether it is for sale, to put on the
-/// transfer list or take off it, to make not for sale or for sale again, with the rival
-/// clubs' offers to accept, or to release.
+/// The club's fighters in activity, each with its contract and whether it is for sale,
+/// to put on the transfer list or take off it, to make not for sale or for sale again,
+/// with the rival clubs' offers to accept, to renew in its contract's last season at its
+/// asked wage, or to release.
 fn sale_grid(ui: &mut egui::Ui, state: &GameState, moves: &mut Vec<Move>, data: &DesignData) {
     market_grid("club market").show(ui, |ui| {
         ui.strong(tr!("roster-fighter"));
         for title in [tr!("roster-age"), tr!("roster-fame"), tr!("record-title")] {
             ui.strong(title);
         }
+        ui.strong(tr!("market-contract"));
         ui.strong(tr!("market-sale-status"));
         ui.strong(tr!("market-actions"));
         ui.end_row();
+        let season = state.date(data).season;
         for (i, f) in state.fighters.iter().enumerate() {
             if f.status != Status::Active {
                 continue;
@@ -598,6 +615,14 @@ fn sale_grid(ui: &mut egui::Ui, state: &GameState, moves: &mut Vec<Move>, data: 
                 ui.label(egui::RichText::new(class).small().weak());
             });
             record_cells(ui, f);
+            match f.contract {
+                Some(c) if c.ends <= season => {
+                    let text = tr!("contract-last-season", wage = c.wage);
+                    ui.colored_label(theme::BLOOD, text)
+                }
+                Some(c) => ui.label(tr!("contract-until", wage = c.wage, season = c.ends)),
+                None => ui.label(""),
+            };
             let plain = ui.visuals().widgets.inactive.bg_fill;
             let unsellable = unsellable_text(f, state, data);
             if state.transfer_list.contains(&i) {
@@ -633,6 +658,11 @@ fn sale_grid(ui: &mut egui::Ui, state: &GameState, moves: &mut Vec<Move>, data: 
                         price = offer.price
                     );
                     toggle(ui, moves, accept, &label, state.may_move(accept, data));
+                }
+                let renew = Move::Renew(i);
+                if state.may_move(renew, data) {
+                    let wage = state.contract_for(f, data).wage;
+                    toggle(ui, moves, renew, &tr!("renew", wage = wage), true);
                 }
                 toggle(ui, moves, Move::Release(i), &tr!("release"), true);
             });

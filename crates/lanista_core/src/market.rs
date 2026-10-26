@@ -84,6 +84,9 @@ pub enum Move {
     /// club offers for it unasked (see `MarketRules::unsolicited_percent`).
     Keep(usize),
     Unkeep(usize),
+    /// Renew the contract of the club's fighter at this index, in its last season, at
+    /// its asked wage (`ContractRules`).
+    Renew(usize),
     /// Accept a rival club's offer (`SaleOffer`) for the club's fighter.
     AcceptOffer {
         fighter: usize,
@@ -125,6 +128,12 @@ pub enum MarketNews {
     FighterRefused(RivalId),
     /// Accepted, but the club had no place or not enough money, or the fighter was gone.
     Failed(RivalId),
+    /// The club's fighter at this index renewed its contract.
+    Renewed(usize),
+    /// It refused to renew, its morale too low.
+    RenewalRefused(usize),
+    /// Its contract ended unrenewed: it left, a free agent.
+    ContractEnded(usize),
 }
 
 /// What `fighter` is worth on the market: its stats, fame and record.

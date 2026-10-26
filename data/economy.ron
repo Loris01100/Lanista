@@ -13,6 +13,18 @@
     upkeep: 10,
     // Each training session without a trainer.
     training_cost: 5,
+    // The contracts of the player's club's fighters (the rival clubs pay the upkeep
+    // alone). A fighter signed, bought or renewed asks each week, on top of the upkeep,
+    // wage_percent of its value, give or take up to ego_percent at an ego of 100 or 0;
+    // its contract ends at the start of the off-season seasons later, when it leaves,
+    // a free agent, unless renewed during that season at its new asked wage; it agrees
+    // to renew from renewal_morale.
+    contracts: (
+        wage_percent: 2,
+        ego_percent: 25,
+        seasons: 2,
+        renewal_morale: 35,
+    ),
     staff: (
         // Every salary is paid every week, even into debt, once for every so many
         // fighters in activity, at least once: a larger club gives its staff more work.

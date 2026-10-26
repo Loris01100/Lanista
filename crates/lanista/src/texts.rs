@@ -326,6 +326,7 @@ pub fn move_text(m: Move, state: &GameState, data: &DesignData) -> String {
         Move::Unlist(i) => tr!("move-unlist", fighter = club(i)),
         Move::Keep(i) => tr!("move-keep", fighter = club(i)),
         Move::Unkeep(i) => tr!("move-unkeep", fighter = club(i)),
+        Move::Renew(i) => tr!("move-renew", fighter = club(i)),
         Move::AcceptOffer { fighter, rival } => {
             let price = state
                 .sale_offers
@@ -450,6 +451,9 @@ pub fn market_news_text(news: MarketNews, state: &GameState, data: &DesignData) 
             let fighter = rival(id);
             tr!("market-failed", vowel = vowel(&fighter), fighter = fighter)
         }
+        MarketNews::Renewed(i) => tr!("market-renewed", fighter = club(i)),
+        MarketNews::RenewalRefused(i) => tr!("market-renewal-refused", fighter = club(i)),
+        MarketNews::ContractEnded(i) => tr!("market-contract-ended", fighter = club(i)),
     }
 }
 
@@ -1070,6 +1074,7 @@ pub fn money_line(before: i64, after: i64, ledger: &[Transaction]) -> String {
                 Flow::Purchase => tr!("flow-purchase"),
                 Flow::Sale => tr!("flow-sale"),
                 Flow::Salary => tr!("flow-salary"),
+                Flow::Wage => tr!("flow-wage"),
             };
             format!("{name} {amount:+}")
         })

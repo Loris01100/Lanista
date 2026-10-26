@@ -11,7 +11,7 @@ use serde::{Deserialize, Serialize};
 use crate::calendar::Date;
 use crate::colosseum::{Colosseum, ColosseumId, Contender, Continent, Odds, Rosters, TitleNews};
 use crate::design_data::DesignData;
-use crate::economy::Wealth;
+use crate::economy::{Contract, Wealth};
 use crate::fighter::care::CareRules;
 use crate::fighter::career::{Activity, CareerFighter, Status, WeekPlan, suggested_plan};
 use crate::fighter::equipment::Refused;
@@ -167,7 +167,8 @@ impl GameState {
     /// generated fighters up to `roster.wanted`, ranked nowhere yet. Then brings the free agents up
     /// to their fewest, and the staff candidates up to `StaffMarketRules::candidates`
     /// for each post. Last, names the fighters in activity who have none, and the
-    /// player's club if it has none (`name_the_club`).
+    /// player's club if it has none (`name_the_club`), and gives a contract to the
+    /// club's fighters in activity who have none: the first one, those of an older save.
     pub fn open_world(&mut self, data: &DesignData) {
         let drawn = self.rivals.len();
         let count = usize::try_from(data.world.clubs.count).unwrap_or(0);
@@ -225,6 +226,20 @@ impl GameState {
         staff::fill_market(&mut self.staff_market, &data.economy.staff, &mut self.rng);
         self.name_the_nameless(data);
         self.name_the_club(data);
+        for i in 0..self.fighters.len() {
+            let fighter = &self.fighters[i];
+            if fighter.status == Status::Active && fighter.contract.is_none() {
+                self.fighters[i].contract = Some(self.contract_for(fighter, data));
+            }
+        }
+    }
+
+    /// The contract `fighter` signs with the club this week (`ContractRules::signed`).
+    #[must_use]
+    pub fn contract_for(&self, fighter: &CareerFighter, data: &DesignData) -> Contract {
+        let economy = &data.economy;
+        let season = self.date(data).season;
+        economy.contracts.signed(fighter, season, &economy.market)
     }
 
     /// Names the player's club if it has no name: a culture of its continent, then a
@@ -725,6 +740,10 @@ impl GameState {
             Move::Unlist(i) => self.transfer_list.contains(&i),
             Move::Keep(i) => ours(i) && !self.kept.contains(&i) && !self.transfer_list.contains(&i),
             Move::Unkeep(i) => self.kept.contains(&i),
+            Move::Renew(i) => {
+                let season = self.date(data).season;
+                ours(i) && self.fighters[i].contract.is_some_and(|c| c.ends <= season)
+            }
             Move::AcceptOffer { fighter, rival } => {
                 ours(fighter)
                     && self.rival_has_place(rival, data)
@@ -1141,6 +1160,9 @@ mod tests {
         fighter.id = named.id;
         fighter.name.clone_from(&named.name);
         fighter.culture.clone_from(&named.culture);
+        // Under contract until the third season's off-season.
+        fighter.contract = Some(state.contract_for(&fighter, &data));
+        assert_eq!(named.contract.map(|c| c.ends), Some(3));
         assert_eq!(state.fighters, [fighter]);
         // A rich club starts with more money, and the same fighter.
         let rich = game_of(7, Wealth::Rich, &data);
@@ -1364,6 +1386,39 @@ mod tests {
     }
 
     #[test]
+    fn a_contract_is_renewed_in_its_last_season_or_ends_at_the_off_season() {
+        let data = data();
+        let mut state = game(7, &data);
+        // Not in its last season yet.
+        assert!(!state.may_move(Move::Renew(0), &data));
+        let calendar = &data.calendar;
+        // The great event's last week: the off-season starts next week.
+        state.week = u64::from(calendar.competition_weeks + calendar.great_event_weeks);
+        state.fighters[0].contract.as_mut().unwrap().ends = 1;
+        let renew = Decisions {
+            moves: vec![Move::Renew(0)],
+            ..plan(Activity::Rest, false)
+        };
+        let mut happy = state.clone();
+        happy.fighters[0].morale = crate::fighter::morale::Morale::new(100);
+        let asked = happy.contract_for(&happy.fighters[0], &data);
+        let summary = next_week(&mut happy, &renew, &data);
+        assert_eq!(summary.market, [MarketNews::Renewed(0)]);
+        assert_eq!(happy.fighters[0].contract, Some(asked));
+        assert_eq!(asked.ends, 1 + data.economy.contracts.seasons);
+        next_week(&mut happy, &plan(Activity::Rest, false), &data);
+        assert_eq!(happy.fighters[0].status, Status::Active);
+        // Too unhappy to renew: it leaves as the off-season starts.
+        state.fighters[0].morale = crate::fighter::morale::Morale::new(0);
+        let summary = next_week(&mut state, &renew, &data);
+        assert_eq!(summary.market, [MarketNews::RenewalRefused(0)]);
+        let summary = next_week(&mut state, &plan(Activity::Rest, false), &data);
+        assert!(summary.market.contains(&MarketNews::ContractEnded(0)));
+        assert_eq!(state.fighters[0].status, Status::Released);
+        assert!(!state.may_move(Move::Renew(0), &data));
+    }
+
+    #[test]
     fn upkeep_and_training_are_paid() {
         let data = data();
         let economy = &data.economy;
@@ -1371,14 +1426,19 @@ mod tests {
         let summary = next_week(&mut state, &plan(Activity::Train, false), &data);
         let cost = i64::from(economy.training_cost);
         let upkeep = i64::from(economy.upkeep);
+        let wage = i64::from(state.fighters[0].contract.unwrap().wage);
         let modest = &economy.wealth.modest;
         assert_eq!(
             flows(&summary),
-            [(Flow::Training, -cost), (Flow::Upkeep, -upkeep)]
+            [
+                (Flow::Training, -cost),
+                (Flow::Upkeep, -upkeep),
+                (Flow::Wage, -wage)
+            ]
         );
         assert_eq!(
             state.money,
-            i64::from(modest.starting_money) - cost - upkeep
+            i64::from(modest.starting_money) - cost - upkeep - wage
         );
     }
 
@@ -1479,7 +1539,8 @@ mod tests {
         let summary = next_week(&mut state, &plan(Activity::Train, true), &data);
         let report = summary.reports[0].as_ref().unwrap();
         assert_eq!(report.plan, REST);
-        assert_eq!(state.money, -i64::from(data.economy.upkeep));
+        let wage = state.fighters[0].contract.unwrap().wage;
+        assert_eq!(state.money, -i64::from(data.economy.upkeep + wage));
     }
 
     #[test]

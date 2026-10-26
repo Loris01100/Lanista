@@ -1,13 +1,15 @@
 //! Money: what comes in (prizes, receipts, sales: only the fighters bring it) and goes
-//! out (upkeep, care, training, entry fees, staff salaries), and a club's wealth: poor,
-//! modest or rich, which sets its starting money and changes with its money at each
-//! off-season.
+//! out (upkeep, the fighters' wages, care, training, entry fees, staff salaries), the
+//! contracts of the club's fighters, and a club's wealth: poor, modest or rich, which
+//! sets its starting money and changes with its money at each off-season.
 
 use serde::{Deserialize, Serialize};
 
+use crate::fighter::career::CareerFighter;
 use crate::fighter::fame::Fame;
 use crate::fighter::melee::place_share;
-use crate::market::MarketRules;
+use crate::fighter::percent_of;
+use crate::market::{MarketRules, value};
 use crate::staff::StaffRules;
 
 /// Prices and purses, from `data/economy.ron`.
@@ -22,6 +24,7 @@ pub struct EconomyRules {
     pub upkeep: u32,
     /// Paid for each training session without a trainer.
     pub training_cost: u32,
+    pub contracts: ContractRules,
     pub staff: StaffRules,
     pub market: MarketRules,
 }
@@ -95,6 +98,51 @@ impl WealthRules {
     }
 }
 
+/// The contracts of the player's club's fighters, from `data/economy.ron`.
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct ContractRules {
+    /// The weekly wage a fighter asks, in percent of its value (`market::value`).
+    pub wage_percent: u32,
+    /// How much its ego moves it: by this percentage at an ego of 100 or 0, linear
+    /// in between.
+    pub ego_percent: u32,
+    /// Seasons a contract signed or renewed runs, the current one apart.
+    pub seasons: u64,
+    /// Least morale at which a fighter agrees to renew.
+    pub renewal_morale: u32,
+}
+
+impl ContractRules {
+    /// The weekly wage `fighter` asks for its value and ego, at least 1.
+    #[must_use]
+    pub fn asked_wage(&self, fighter: &CareerFighter, market: &MarketRules) -> u32 {
+        let ego = i64::from(fighter.personality.ego.value()) - 50;
+        let percent = 100 + ego * i64::from(self.ego_percent) / 50;
+        let wage = percent_of(value(fighter, market), self.wage_percent);
+        percent_of(wage, u32::try_from(percent.max(0)).unwrap_or(0)).max(1)
+    }
+
+    /// The contract `fighter` signs in `season`: its asked wage until the start of the
+    /// off-season `seasons` later.
+    #[must_use]
+    pub fn signed(&self, fighter: &CareerFighter, season: u64, market: &MarketRules) -> Contract {
+        Contract {
+            wage: self.asked_wage(fighter, market),
+            ends: season.saturating_add(self.seasons),
+        }
+    }
+}
+
+/// What a fighter of the player's club is paid each week, and until when.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub struct Contract {
+    pub wage: u32,
+    /// The season at whose off-season start the fighter leaves, a free agent, unless
+    /// renewed during it.
+    pub ends: u64,
+}
+
 /// A colosseum's fee and purses.
 #[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -147,6 +195,8 @@ pub enum Flow {
     Sale,
     /// A staff member's weekly salary.
     Salary,
+    /// A fighter's weekly wage, by its contract.
+    Wage,
 }
 
 /// Money in (positive) or out (negative) for one of the club's fighters, or for the club.

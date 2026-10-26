@@ -38,7 +38,7 @@ pub(super) fn market_moves(
     let order = |m: &Move| match *m {
         Move::AcceptOffer { .. } => 0,
         Move::Release(_) => 1,
-        Move::List(_) | Move::Unlist(_) | Move::Keep(_) | Move::Unkeep(_) => 2,
+        Move::List(_) | Move::Unlist(_) | Move::Keep(_) | Move::Unkeep(_) | Move::Renew(_) => 2,
         Move::Sign(_) => 3,
         Move::Observe(_) | Move::Offer(..) => u8::MAX,
     };
@@ -59,6 +59,7 @@ pub(super) fn market_moves(
                 };
                 let mut sold = state.fighters[fighter].clone();
                 sold.joined = Some(state.week);
+                sold.contract = None;
                 state.fighters[fighter].status = Status::Sold;
                 state.rivals[rival].fighters.push(sold);
                 let to = RivalId {
@@ -79,20 +80,27 @@ pub(super) fn market_moves(
                 news.push(MarketNews::Sold(offer));
             }
             Move::Release(i) => {
-                let released = state.fighters[i].clone();
-                state.fighters[i].status = Status::Released;
-                state.free_agents.push(released);
-                let to = Contender::FreeAgent(state.free_agents.len() - 1);
-                state.transfer(Contender::Club(i), to);
+                release(state, i);
                 news.push(MarketNews::Released(i));
             }
             Move::List(i) => state.transfer_list.push(i),
             Move::Unlist(i) => state.transfer_list.retain(|&l| l != i),
             Move::Keep(i) => state.kept.push(i),
             Move::Unkeep(i) => state.kept.retain(|&k| k != i),
+            Move::Renew(i) => {
+                let fighter = &state.fighters[i];
+                if fighter.morale.value() < data.economy.contracts.renewal_morale {
+                    news.push(MarketNews::RenewalRefused(i));
+                } else {
+                    let contract = state.contract_for(fighter, data);
+                    state.fighters[i].contract = Some(contract);
+                    news.push(MarketNews::Renewed(i));
+                }
+            }
             Move::Sign(a) => {
                 let mut agent = state.free_agents[a].clone();
                 agent.joined = Some(state.week);
+                agent.contract = Some(state.contract_for(&agent, data));
                 state.free_agents[a].status = Status::Sold;
                 state.fighters.push(agent);
                 let i = state.fighters.len() - 1;
@@ -106,6 +114,37 @@ pub(super) fn market_moves(
     state.transfer_list.retain(active);
     state.kept.retain(active);
     news
+}
+
+/// Lets the club's fighter `i` go, for nothing: a free agent.
+fn release(state: &mut GameState, i: usize) {
+    let mut released = state.fighters[i].clone();
+    released.contract = None;
+    state.fighters[i].status = Status::Released;
+    state.free_agents.push(released);
+    let to = Contender::FreeAgent(state.free_agents.len() - 1);
+    state.transfer(Contender::Club(i), to);
+}
+
+/// At the start of the off-season, the club's fighters whose contract ends this season
+/// leave, free agents.
+pub(super) fn contracts_end(state: &mut GameState, data: &DesignData) -> Vec<MarketNews> {
+    if !off_season_starts(state, data) {
+        return Vec::new();
+    }
+    let season = state.date(data).season;
+    let ended: Vec<usize> = (0..state.fighters.len())
+        .filter(|&i| {
+            let fighter = &state.fighters[i];
+            fighter.status == Status::Active && fighter.contract.is_some_and(|c| c.ends <= season)
+        })
+        .collect();
+    for &i in &ended {
+        release(state, i);
+    }
+    state.transfer_list.retain(|i| !ended.contains(i));
+    state.kept.retain(|i| !ended.contains(i));
+    ended.into_iter().map(MarketNews::ContractEnded).collect()
 }
 
 /// The answer to the first offer of `moves`, if still allowed (see `negotiate`).
@@ -159,6 +198,7 @@ fn negotiate(
     }
     let mut bought = fighter.clone();
     bought.joined = Some(state.week);
+    bought.contract = Some(state.contract_for(&bought, data));
     state.rivals[id.club].fighters[id.fighter].status = Status::Sold;
     state.fighters.push(bought);
     let amount = i64::from(price);
@@ -468,6 +508,7 @@ pub(super) fn buy_from_rival(
     }
     let mut bought = fighter.clone();
     bought.joined = Some(state.week);
+    bought.contract = Some(state.contract_for(&bought, data));
     let held: Vec<usize> = (0..state.colosseums.len())
         .filter(|&c| state.colosseums[c].champion == Some(Contender::Rival(id)))
         .collect();

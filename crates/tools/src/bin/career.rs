@@ -1,5 +1,6 @@
 //! `career --seed 7 --weeks 10`: follows one generated fighter week after week and
-//! prints what each week changed (form, morale, fame, stats, injuries, illness).
+//! prints what each week changed (form, morale, fame, stats, injuries, illness),
+//! under a contract that never ends: its life, not its club's choices.
 
 use std::fmt::Write;
 use std::process::ExitCode;
@@ -29,6 +30,9 @@ fn main() -> ExitCode {
         }
     };
     let mut state = GameState::new(seed, &data);
+    if let Some(contract) = &mut state.fighters[0].contract {
+        contract.ends = u64::MAX;
+    }
     println!("seed {seed}, money {}", state.money);
     print!("{}", describe(&state.fighters[0], &data));
     for week in 1..=weeks {

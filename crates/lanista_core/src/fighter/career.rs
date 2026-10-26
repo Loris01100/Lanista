@@ -8,6 +8,7 @@ use crate::colosseum::{ColosseumId, Contender};
 use crate::combat::{Arena, ArenaKind, Vec2};
 use crate::design_data::{DesignData, FighterRules};
 use crate::duel::{STATS, play};
+use crate::economy::Contract;
 use crate::fighter::appearance::Appearance;
 use crate::fighter::care::CareRules;
 use crate::fighter::equipment::Refused;
@@ -135,6 +136,9 @@ pub struct CareerFighter {
     /// The week it joined its club by a signing or a sale; `None` for one there from
     /// the start. It may not be sold before `GameState::sellable_from`.
     pub joined: Option<u64>,
+    /// Its contract with the player's club, while there; `None` anywhere else.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub contract: Option<Contract>,
     /// Where it went, for the entry a rival club's fighter or a free agent left behind:
     /// the fighter lives on there, and this entry keeps only its class and status
     /// (`CareerFighter::moved`).
@@ -204,6 +208,7 @@ impl CareerFighter {
             observed_weeks: 0,
             appearance,
             joined: None,
+            contract: None,
             moved_to: None,
         };
         fighter.loadout = fighter.preferred_loadout();
@@ -265,6 +270,7 @@ impl CareerFighter {
             observed_weeks: 0,
             appearance: Appearance::default(),
             joined: None,
+            contract: None,
             moved_to: Some(to),
         }
     }

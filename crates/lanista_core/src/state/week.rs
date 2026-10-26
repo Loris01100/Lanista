@@ -16,7 +16,7 @@ use super::clubs::{club_lives, off_season_starts, rival_staff, staff_week, wealt
 use super::colosseums::{end_colosseum_weeks, title_fight};
 use super::melee::melees;
 use super::outsiders::{met, opponent, outsider_weeks, pay_rival};
-use super::transfers::{answer_offer, market_moves, rival_market, trim_market};
+use super::transfers::{answer_offer, contracts_end, market_moves, rival_market, trim_market};
 use super::{GameState, News, WorldNews, affordable, entry_fee, relate, week_plans};
 
 /// The player's decisions for one week.
@@ -59,8 +59,9 @@ pub struct WeekSummary {
 
 /// Plays one week for the whole club: the market moves and the change of staff before
 /// the week, the staff's salaries, then each fighter's week in
-/// club order, paid for, then the week of the rival clubs and the free agents, the
-/// answer to the player's offer, everyone a year older at the start of the off-season,
+/// club order, paid for with its upkeep and wage, then the week of the rival clubs and
+/// the free agents, the answer to the player's offer, the contracts ending and
+/// everyone a year older at the start of the off-season,
 /// each club's new wealth at the start of the off-season
 /// and the rival clubs' market, then the colosseums' titles, and moves to the next
 /// week. A fight is against an outsider, a rival fighter or a free agent, and
@@ -71,7 +72,8 @@ pub struct WeekSummary {
 /// A choice the club cannot pay for at its turn is dropped: no care, and rest instead
 /// of training or of a fight with an entry fee. A title fight the fighter may not have
 /// (`GameState::title_opponent`) is rest too, and so is a challenge it may not have
-/// (`GameState::may_challenge`). Upkeep and salaries are always paid, even into debt.
+/// (`GameState::may_challenge`). Upkeep, wages and salaries are always paid, even into
+/// debt.
 pub fn next_week(state: &mut GameState, decisions: &Decisions, data: &DesignData) -> WeekSummary {
     let (week, money, before) = (state.week, state.money, state.fighters.clone());
     let mut ledger = Vec::new();
@@ -143,18 +145,22 @@ pub fn next_week(state: &mut GameState, decisions: &Decisions, data: &DesignData
             report
         };
         if report.is_some() {
-            let upkeep = -i64::from(data.economy.upkeep);
-            state.money += upkeep;
-            ledger.push(Transaction {
-                fighter: Some(i),
-                flow: Flow::Upkeep,
-                amount: upkeep,
-            });
+            let wage = state.fighters[i].contract.map_or(0, |c| c.wage);
+            for (flow, amount) in [(Flow::Upkeep, data.economy.upkeep), (Flow::Wage, wage)] {
+                let amount = -i64::from(amount);
+                state.money += amount;
+                ledger.push(Transaction {
+                    fighter: Some(i),
+                    flow,
+                    amount,
+                });
+            }
         }
         reports.push(report);
     }
     outsider_weeks(state, plans, &fought, data);
     market.extend(answer_offer(state, &decisions.moves, data, &mut ledger));
+    market.extend(contracts_end(state, data));
     birthdays(state, &mut reports, data);
     let wealth = end_week(state, &mut titles, data);
     let rankings_before = rankings_before(&reports, &rankings);
