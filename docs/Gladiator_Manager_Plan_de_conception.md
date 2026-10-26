@@ -134,6 +134,16 @@ La personnalité est fixe (native) : un tempérament, que le joueur voit, et deu
 | Enragé | Sans peur, s'acharne d'autant plus qu'il est blessé | Renommée accrue, se blesse plus, trahit ses alliés de mêlée |
 | Orgueilleux | Abandonne bien plus tard face à plus faible | Renommée accrue, moral qui varie fort au gré des combats |
 
+Un combattant a aussi de 0 à 2 traits, fixes eux aussi et visibles, chacun lié à une décision du joueur :
+
+| Trait | Décision | Effet |
+| --- | --- | --- |
+| Bourreau de travail | Entraîner ou reposer | Progresse plus vite à l'entraînement, perd du moral au repos |
+| Nonchalant | Entraîner ou reposer | Gagne du moral au repos ; l'entraînement lui coûte du moral et plus de forme |
+| Vaniteux | Où combattre | Gagne du moral dans un grand colisée ou un combat pour le titre, en perd dans un petit |
+
+Le bourreau de travail et le nonchalant s'excluent.
+
 L'audace fixe le seuil d'abandon : un timide abandonne tôt et meurt rarement, un audacieux continue à PV critiques et peut recevoir un coup fatal. Le joueur n'a aucun contrôle sur ce seuil. L'ego dit le goût du public : il retient le combattant dans l'arène et le rend plus difficile à recruter pour un petit club.
 
 Le moral monte avec les victoires et la renommée, baisse avec les défaites, les blessures et les maladies. Il donne un petit bonus ou malus en combat et module la progression. Il n'y a pas de loyauté.

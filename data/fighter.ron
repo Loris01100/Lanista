@@ -100,6 +100,19 @@
             proud: (weight: 1, boldness: 60, ego: 85, fame_percent: 125, morale_percent: 200, injury_percent: 100),
         ),
     ),
+    traits: (
+        // Chances of a new fighter having 0, 1 and 2 traits, each drawn evenly among
+        // those its first does not exclude (the workaholic and the nonchalant exclude
+        // each other). Morale changes go through the temperament's morale_percent.
+        count_weights: (2, 2, 1),
+        // training_percent is added to the trainer's coaching percentage.
+        workaholic: (training_percent: 50, rest_morale: 1),
+        // training_form_percent of the form a session costs.
+        nonchalant: (rest_morale: 1, training_morale: 3, training_form_percent: 150),
+        // A duel for a title, or in a colosseum of at least great_prestige, is a great
+        // stage; one of at most small_prestige, a small one.
+        vain: (great_prestige: 3, small_prestige: 1, great_morale: 5, small_morale: 5),
+    ),
     morale: (
         // Morale goes from 0 to 100, neutral at 50.
         victory: 10,

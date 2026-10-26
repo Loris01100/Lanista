@@ -19,6 +19,9 @@ pub enum MoraleEvent {
     Illness,
     /// Fame points gained; a loss of fame does not touch morale.
     FameGained(u32),
+    /// A trait's way of taking the week: this much morale gained, or lost.
+    Lifted(u32),
+    Lowered(u32),
 }
 
 impl Morale {
@@ -53,6 +56,8 @@ impl Morale {
             MoraleEvent::FameGained(fame) => {
                 Self::new(self.0.saturating_add(percent_of(fame, rules.fame_percent)))
             }
+            MoraleEvent::Lifted(points) => Self::new(self.0.saturating_add(points)),
+            MoraleEvent::Lowered(points) => Self(self.0.saturating_sub(points)),
         }
     }
 

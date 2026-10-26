@@ -11,6 +11,7 @@ pub mod morale;
 pub mod personality;
 pub mod progression;
 pub mod retirement;
+pub mod traits;
 
 use std::sync::Arc;
 

@@ -24,6 +24,7 @@ use crate::fighter::morale::MoraleRules;
 use crate::fighter::personality::PersonalityRules;
 use crate::fighter::progression::ProgressionRules;
 use crate::fighter::retirement::RetirementRules;
+use crate::fighter::traits::TraitRules;
 use crate::learned::{ClassModels, MODELS_DIR};
 use crate::melee::MeleeRules;
 use crate::names::Culture;
@@ -56,6 +57,7 @@ pub struct FighterRules {
     pub illness: IllnessRules,
     pub care: CareRules,
     pub personality: PersonalityRules,
+    pub traits: TraitRules,
     pub morale: MoraleRules,
     pub fame: FameRules,
     pub progression: ProgressionRules,

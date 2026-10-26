@@ -25,6 +25,7 @@ use crate::fighter::progression::{
     ProgressEvent, age_decline, progress, random_potential, season_gains, season_progress,
 };
 use crate::fighter::retirement::{decides_to_retire, too_maimed};
+use crate::fighter::traits::{Trait, random_traits};
 use crate::fighter::{ClassId, Condition, Fighter, FighterId, Stats, percent_of};
 use crate::log::{Report, places};
 use crate::names::FighterName;
@@ -93,6 +94,9 @@ pub struct CareerFighter {
     /// In years.
     pub age: u32,
     pub personality: Personality,
+    /// Its traits, 0 to 2, for life.
+    #[serde(default)]
+    pub traits: Vec<Trait>,
     pub morale: Morale,
     pub fame: Fame,
     pub form: Form,
@@ -150,6 +154,7 @@ impl CareerFighter {
         let (youngest, oldest) = rules.career.start_age;
         let age = rng.random_range(youngest..=oldest);
         let personality = Personality::random(rng, &rules.personality);
+        let traits = random_traits(rng, &rules.traits);
         let appearance = Appearance::random(rng, &rules.appearance);
         let loadouts = data.class(class).map_or(0, |c| c.loadouts.len());
         let ease = rules.ease.random(rng, loadouts);
@@ -165,6 +170,7 @@ impl CareerFighter {
             ease,
             age,
             personality,
+            traits,
             morale: Morale::neutral(),
             fame: Fame::default(),
             form: Form::full(),
@@ -220,6 +226,7 @@ impl CareerFighter {
             ease: Vec::new(),
             age: 0,
             personality: Personality::neutral(),
+            traits: Vec::new(),
             morale: Morale::neutral(),
             fame: Fame::default(),
             form: Form::full(),
@@ -331,12 +338,26 @@ impl CareerFighter {
                     Some(illness) => illness.rest(self.form, &rules.illness, &rules.form),
                     None => self.form.after(FormEvent::Rest, &rules.form),
                 };
+                if plan.activity == Activity::Rest {
+                    self.take_rest(rules);
+                }
             }
             Activity::Train => {
                 let coaching = staff.coaching;
-                let lost = rules.form.training.saturating_sub(coaching.form_spared);
+                let mut lost = rules.form.training.saturating_sub(coaching.form_spared);
+                let mut coaching_percent = coaching.progress_percent;
+                let traits = &rules.traits;
+                if self.has(Trait::Workaholic) {
+                    coaching_percent += traits.workaholic.training_percent;
+                }
+                if self.has(Trait::Nonchalant) {
+                    lost = percent_of(lost, traits.nonchalant.training_form_percent);
+                    self.feel(
+                        MoraleEvent::Lowered(traits.nonchalant.training_morale),
+                        rules,
+                    );
+                }
                 self.form = Form::new(self.form.value().saturating_sub(lost));
-                let coaching_percent = coaching.progress_percent;
                 self.progress(ProgressEvent::Training { coaching_percent }, rng, rules);
             }
             Activity::Fight(id) | Activity::TitleFight(id) | Activity::Challenge(id, _) => {
@@ -357,6 +378,10 @@ impl CareerFighter {
                 let refused = plan.refused;
                 let (fight, injury, spared) =
                     self.fight(opponent, (arena, refused), form, medicine, rng, data);
+                let prestige = data.world.colosseum(id).map_or(0, |c| c.prestige);
+                let title = matches!(plan.activity, Activity::TitleFight(_));
+                self.on_stage(prestige, title, rules);
+                opponent.on_stage(prestige, title, rules);
                 report.fight = Some(fight);
                 report.new_injury = injury;
                 report.after_effect_spared = spared;
@@ -507,6 +532,42 @@ impl CareerFighter {
             fighter.surrender_hp = percent_of(fighter.surrender_hp, percent);
         }
         fighter
+    }
+
+    #[must_use]
+    pub fn has(&self, t: Trait) -> bool {
+        self.traits.contains(&t)
+    }
+
+    /// What a week of rest does to its morale: the workaholic sulks, the nonchalant
+    /// enjoys it.
+    fn take_rest(&mut self, rules: &FighterRules) {
+        if self.has(Trait::Workaholic) {
+            self.feel(
+                MoraleEvent::Lowered(rules.traits.workaholic.rest_morale),
+                rules,
+            );
+        }
+        if self.has(Trait::Nonchalant) {
+            self.feel(
+                MoraleEvent::Lifted(rules.traits.nonchalant.rest_morale),
+                rules,
+            );
+        }
+    }
+
+    /// What a duel in a colosseum of `prestige`, for a title or not, does to the morale
+    /// of a vain survivor: lifted on a great stage, lowered on a small one.
+    pub fn on_stage(&mut self, prestige: u32, title: bool, rules: &FighterRules) {
+        if self.status == Status::Dead || !self.has(Trait::Vain) {
+            return;
+        }
+        let vain = &rules.traits.vain;
+        if title || prestige >= vain.great_prestige {
+            self.feel(MoraleEvent::Lifted(vain.great_morale), rules);
+        } else if prestige <= vain.small_prestige {
+            self.feel(MoraleEvent::Lowered(vain.small_morale), rules);
+        }
     }
 
     /// Its temperament's trade-off.
@@ -1277,6 +1338,108 @@ mod tests {
         )
         .unwrap();
         assert_eq!(f.form.value(), 60);
+    }
+
+    /// Fighter 7, balanced, at form 80 and neutral morale, with `traits` alone.
+    fn with_traits(traits: &[Trait]) -> CareerFighter {
+        CareerFighter {
+            personality: Personality::neutral(),
+            traits: traits.to_vec(),
+            form: Form::new(80),
+            ..fighter(7)
+        }
+    }
+
+    fn week(f: &mut CareerFighter, activity: Activity, data: &DesignData) {
+        let mut rng = ChaCha8Rng::seed_from_u64(0);
+        f.play_week(
+            plan(activity),
+            None,
+            StaffEffects::default(),
+            &mut rng,
+            data,
+        )
+        .unwrap();
+    }
+
+    #[test]
+    fn the_workaholic_sulks_at_rest_and_the_nonchalant_at_training() {
+        let data = data();
+        let rules = &data.fighter.traits;
+        let neutral = Morale::NEUTRAL;
+        let mut workaholic = with_traits(&[Trait::Workaholic]);
+        week(&mut workaholic, Activity::Rest, &data);
+        assert_eq!(
+            workaholic.morale.value(),
+            neutral - rules.workaholic.rest_morale
+        );
+        let mut nonchalant = with_traits(&[Trait::Nonchalant]);
+        week(&mut nonchalant, Activity::Rest, &data);
+        assert_eq!(
+            nonchalant.morale.value(),
+            neutral + rules.nonchalant.rest_morale
+        );
+        let mut plain = with_traits(&[]);
+        let mut nonchalant = with_traits(&[Trait::Nonchalant]);
+        week(&mut plain, Activity::Train, &data);
+        week(&mut nonchalant, Activity::Train, &data);
+        assert_eq!(plain.morale.value(), neutral);
+        assert_eq!(
+            nonchalant.morale.value(),
+            neutral - rules.nonchalant.training_morale
+        );
+        let cost = |f: &CareerFighter| 80 - f.form.value();
+        assert_eq!(
+            cost(&nonchalant),
+            percent_of(cost(&plain), rules.nonchalant.training_form_percent)
+        );
+    }
+
+    #[test]
+    fn the_workaholic_gains_more_from_training() {
+        let data = data();
+        let trained = |traits: &[Trait]| {
+            let mut f = with_traits(traits);
+            f.age = 20;
+            f.potential = f.stats.map(|v| v * 2);
+            let mut rng = ChaCha8Rng::seed_from_u64(0);
+            for _ in 0..100 {
+                f.form = Form::full();
+                f.morale = Morale::neutral();
+                let staff = StaffEffects::default();
+                f.play_week(plan(Activity::Train), None, staff, &mut rng, &data);
+            }
+            f.stats.to_array().iter().sum::<u32>()
+        };
+        assert!(trained(&[Trait::Workaholic]) > trained(&[]));
+    }
+
+    #[test]
+    fn the_vain_likes_great_stages_and_scorns_small_ones() {
+        let rules = &data().fighter;
+        let vain = &rules.traits.vain;
+        let staged = |prestige, title| {
+            let mut f = with_traits(&[Trait::Vain]);
+            f.on_stage(prestige, title, rules);
+            f.morale.value()
+        };
+        let neutral = Morale::NEUTRAL;
+        assert_eq!(
+            staged(vain.great_prestige, false),
+            neutral + vain.great_morale
+        );
+        assert_eq!(
+            staged(vain.small_prestige, true),
+            neutral + vain.great_morale
+        );
+        assert_eq!(
+            staged(vain.small_prestige, false),
+            neutral - vain.small_morale
+        );
+        assert_eq!(staged(vain.small_prestige + 1, false), neutral);
+        let mut plain = with_traits(&[]);
+        plain.on_stage(vain.small_prestige, false, rules);
+        assert_eq!(plain.morale.value(), neutral);
     }
 
     #[test]

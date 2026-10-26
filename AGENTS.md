@@ -28,7 +28,7 @@ cargo run -p lanista                 # the game executable
 cargo run --release -p tools --bin simulate -- --seed 42    # one duel, log and report
 cargo run --release -p tools --bin batch -- --fights 10000  # win rate per class, average duration
 cargo run --release -p tools --bin career -- --seed 7 --weeks 10  # one fighter's weeks
-cargo run --release -p tools --bin temperaments -- --worlds 8     # careers by temperament, clubs closed, in worlds without the player
+cargo run --release -p tools --bin temperaments -- --worlds 8     # careers by temperament and trait, clubs closed, in worlds without the player
 cargo run --release -p tools --bin calibrate -- --fights 20000    # fit data/stat_model.ron on real duels
 cargo run --release -p tools --bin compare -- --fights 20000      # real duels against the model, fails on a gap over --tolerance points
 cargo test                           # all crates

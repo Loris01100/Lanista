@@ -155,10 +155,10 @@ pub(super) fn outsider_weeks(
         }
     }
     let mut done = fought.to_vec();
-    for (c, (purses, arena)) in world
+    for (c, (purses, arena, prestige)) in world
         .colosseums
         .iter()
-        .map(|r| (&r.purses, r.arena))
+        .map(|r| (&r.purses, r.arena, r.prestige))
         .enumerate()
         .take(state.colosseums.len())
     {
@@ -196,8 +196,10 @@ pub(super) fn outsider_weeks(
                 &mut state.rng,
                 data,
             );
-            first.end_fought_week(&mut state.rng, data);
-            second.end_fought_week(&mut state.rng, data);
+            for f in [&mut first, &mut second] {
+                f.on_stage(prestige, false, &data.fighter);
+                f.end_fought_week(&mut state.rng, data);
+            }
             put_outsider(state, a, first);
             put_outsider(state, b, second);
             done.extend([a, b]);

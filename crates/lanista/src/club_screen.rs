@@ -52,7 +52,8 @@ use crate::texts::{
     date_text, fight_text, fighter_name, illness_text, injury_text, loadout_name, market_news_text,
     money_line, move_text, named_club, origin_place, priced, result_text, rival_fighter_name,
     staff_move_text, staff_news_text, stat_names, temperament_name, temperament_text,
-    title_article, title_changed, wealth_name, wealth_text, week_lines, world_article, year_text,
+    title_article, title_changed, trait_name, trait_text, wealth_name, wealth_text, week_lines,
+    world_article, year_text,
 };
 use crate::theme;
 use crate::title_screen::{Slot, read_slots, slot_text};
@@ -1399,6 +1400,10 @@ fn sheet(ui: &mut egui::Ui, index: usize, f: &CareerFighter, data: &DesignData) 
             let temperament = f.personality.temperament;
             ui.label(egui::RichText::new(temperament_name(temperament)).strong());
             ui.label(temperament_text(temperament));
+            for &t in &f.traits {
+                ui.label(egui::RichText::new(trait_name(t)).strong());
+                ui.label(trait_text(t));
+            }
             section(ui, &tr!("sheet-health"));
             health(ui, f);
         });
@@ -2066,7 +2071,7 @@ mod tests {
         assert_ne!(potential_text(observed, &scouting), "?");
         assert_eq!(
             outside_personality_text(observed, &scouting),
-            temperament_name(observed.personality.temperament)
+            crate::texts::personality_text(observed)
         );
         let data = &screen.data;
         let ease = outside_ease_text(observed, &scouting, data);
@@ -2392,25 +2397,25 @@ mod tests {
             cells,
             [
                 (
-                    "Familia Maximus",
+                    "Familia Marcellus",
                     "Rome",
-                    "spectacle",
+                    "marchand",
                     "pauvre",
                     10,
                     "+0, neutre"
                 ),
                 (
-                    "École Guan Yu",
-                    "Asie de l'Est",
-                    "formateur",
-                    "modeste",
+                    "Horde de Batu",
+                    "Steppe",
+                    "agressif",
+                    "riche",
                     10,
                     "+0, neutre"
                 ),
                 (
-                    "Clan de Tashunka",
+                    "Loge de Tashunka",
                     "Tribus amérindiennes",
-                    "vétéran",
+                    "prudent",
                     "pauvre",
                     10,
                     "+0, neutre"
@@ -2470,9 +2475,9 @@ mod tests {
                 what: WorldNews::Title(1, TitleNews::Vacated { to: None }),
             },
         ];
-        let founded = "Un nouveau ludus ouvre ses portes : Familia Maximus (Rome), en Europe";
+        let founded = "Un nouveau ludus ouvre ses portes : Familia Marcellus (Rome), en Europe";
         let vacated = "Le champion de Rome n'est plus, son trône reste vide";
-        let closed = "Faillite : École Guan Yu ferme ses portes, ses combattants partent au marché";
+        let closed = "Faillite : Horde de Batu ferme ses portes, ses combattants partent au marché";
         assert_eq!(
             headlines(&screen),
             [
@@ -2505,11 +2510,11 @@ mod tests {
             headlines(&screen),
             [(
                 4,
-                vec!["École Guan Yu se déclare votre rival : vos combats contre lui attireront les foules".to_owned()]
+                vec!["Horde de Batu se déclare votre rival : vos combats contre lui attireront les foules".to_owned()]
             )]
         );
         assert!(screen.alerts().contains(
-            &"École Guan Yu est votre rival depuis saison 1, semaine 4 : recettes à 150 %, renommée +3 par combat"
+            &"Horde de Batu est votre rival depuis saison 1, semaine 4 : recettes à 150 %, renommée +3 par combat"
                 .to_owned()
         ));
         assert_eq!(screen.rival_rows()[1].standing, Standing::Rival);

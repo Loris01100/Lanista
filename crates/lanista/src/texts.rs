@@ -14,6 +14,7 @@ use lanista_core::fighter::fame::FightResult;
 use lanista_core::fighter::illness::{Illness, IllnessLevel};
 use lanista_core::fighter::injury::{Injury, Location, Severity, Side};
 use lanista_core::fighter::personality::Temperament;
+use lanista_core::fighter::traits::Trait;
 use lanista_core::journal::{FightLine, FighterWeek, Retired};
 use lanista_core::market::{
     MarketNews, Move, Target, ease_seen, personality_seen, potential_range, stat_ranges,
@@ -229,12 +230,41 @@ pub fn temperament_text(temperament: Temperament) -> String {
     ))
 }
 
-/// The temperament of a fighter out of the club, if the recruiter sees it, or "?".
+fn trait_key(t: Trait) -> &'static str {
+    match t {
+        Trait::Workaholic => "workaholic",
+        Trait::Nonchalant => "nonchalant",
+        Trait::Vain => "vain",
+    }
+}
+
+/// A trait's name: "vaniteux".
+pub fn trait_name(t: Trait) -> String {
+    tr!(&format!("trait-{}", trait_key(t)))
+}
+
+/// What a trait does, in a sentence or two.
+pub fn trait_text(t: Trait) -> String {
+    tr!(&format!("trait-{}-text", trait_key(t)))
+}
+
+/// Its temperament and traits: "Téméraire, vaniteux".
+pub fn personality_text(fighter: &CareerFighter) -> String {
+    let temperament = temperament_name(fighter.personality.temperament);
+    let traits = fighter.traits.iter().map(|&t| trait_name(t));
+    std::iter::once(temperament)
+        .chain(traits)
+        .collect::<Vec<_>>()
+        .join(", ")
+}
+
+/// The temperament and traits of a fighter out of the club, if the recruiter sees
+/// them, or "?".
 pub fn outside_personality_text(fighter: &CareerFighter, scouting: &Scouting) -> String {
     if !personality_seen(fighter, scouting) {
         return "?".into();
     }
-    temperament_name(fighter.personality.temperament)
+    personality_text(fighter)
 }
 
 /// "3 V, 1 D, 2 N".
