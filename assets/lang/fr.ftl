@@ -453,6 +453,7 @@ sheet-ease-title = Aisance
 sheet-health = Santé
 sheet-healthy = En bonne santé
 sheet-stat-hover = Entraîné { $trained }, en combat { $fighting }
+    Barre pleine : le meilleur combattant en activité ({ $best })
 ease-loadout = { $loadout } { $ease }
 ease-title = Aisance
 sheet-retired-maimed = A pris sa retraite, trop mutilé

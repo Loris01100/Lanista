@@ -20,7 +20,6 @@ use lanista_core::calendar::{CalendarRules, Date, SeasonPhase};
 use lanista_core::colosseum::{ColosseumId, Contender, Continent};
 use lanista_core::design_data::DesignData;
 use lanista_core::economy::Flow;
-use lanista_core::fighter::FighterId;
 use lanista_core::fighter::care::CareRules;
 use lanista_core::fighter::career::{
     Activity, CareerFighter, FightSummary, Record, Status, WeekPlan,
@@ -32,6 +31,7 @@ use lanista_core::fighter::illness::IllnessLevel;
 use lanista_core::fighter::injury::{Injury, Severity, Side};
 use lanista_core::fighter::morale::Morale;
 use lanista_core::fighter::retirement::too_maimed;
+use lanista_core::fighter::{FighterId, Stats};
 use lanista_core::journal::FightLine;
 use lanista_core::market::Target;
 use lanista_core::rivals::RivalId;
@@ -847,7 +847,7 @@ impl ClubScreen {
             self.view = View::Roster;
         }
         ui.columns(2, |columns| {
-            sheet(&mut columns[0], index, f, data);
+            sheet(&mut columns[0], index, f, best_stats(&self.state), data);
             let ui = &mut columns[1];
             ui.heading(tr!("sheet-this-week"));
             if f.status == Status::Active
@@ -1351,7 +1351,7 @@ fn challenge_picker(
 
 /// A fighter's sheet, drawn more than written: tags for who it is, bars for its
 /// gauges, stats, ease and personality, coloured tags for its record and health.
-fn sheet(ui: &mut egui::Ui, index: usize, f: &CareerFighter, data: &DesignData) {
+fn sheet(ui: &mut egui::Ui, index: usize, f: &CareerFighter, best: Stats, data: &DesignData) {
     ui.heading(tr!(
         "sheet-title",
         fighter = fighter_name(index, f, data),
@@ -1391,7 +1391,7 @@ fn sheet(ui: &mut egui::Ui, index: usize, f: &CareerFighter, data: &DesignData) 
                 }
             });
             section(ui, &tr!("sheet-stats"));
-            stat_meters(ui, f, data);
+            stat_meters(ui, f, best, data);
             section(ui, &tr!("sheet-ease-title"));
             egui::Grid::new("ease").show(ui, |ui| {
                 let loadouts = data.class(f.class).map_or(0, |c| c.loadouts.len());
@@ -1456,24 +1456,36 @@ fn identity(ui: &mut egui::Ui, f: &CareerFighter, data: &DesignData) {
     });
 }
 
+/// The best trained value of each stat among the world's active fighters: the club's,
+/// the rival clubs' and the free agents.
+fn best_stats(state: &GameState) -> Stats {
+    state
+        .fighters
+        .iter()
+        .chain(state.rivals.iter().flat_map(|r| &r.fighters))
+        .chain(&state.free_agents)
+        .filter(|f| f.status == Status::Active)
+        .fold(Stats::default(), |best, f| best.zip(f.stats, u32::max))
+}
+
 /// Each stat as a bar: faded up to its trained value, full up to what it fights with,
-/// the standard duel's stat at its middle; then the value, and what injuries or form
-/// take off it in red.
-fn stat_meters(ui: &mut egui::Ui, f: &CareerFighter, data: &DesignData) {
+/// full against `best`, the world's best trained value; then the value, and what
+/// injuries or form take off it in red.
+fn stat_meters(ui: &mut egui::Ui, f: &CareerFighter, best: Stats, data: &DesignData) {
     let fighting = f.fighting_stats(&data.fighter).to_array();
-    let standard = lanista_core::duel::STATS.to_array();
     egui::Grid::new("stats").show(ui, |ui| {
-        for (((name, trained), now), standard) in stat_names()
+        for (((name, trained), now), best) in stat_names()
             .into_iter()
             .zip(f.stats.to_array())
             .zip(fighting)
-            .zip(standard)
+            .zip(best.to_array())
         {
             ui.label(name);
-            meter(ui, now, standard * 2, theme::BRONZE, Some(trained)).on_hover_text(tr!(
+            meter(ui, now, best, theme::BRONZE, Some(trained)).on_hover_text(tr!(
                 "sheet-stat-hover",
                 trained = trained,
-                fighting = now
+                fighting = now,
+                best = best
             ));
             ui.horizontal(|ui| {
                 ui.label(trained.to_string());
