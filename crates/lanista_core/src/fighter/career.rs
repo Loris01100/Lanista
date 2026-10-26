@@ -490,7 +490,8 @@ impl CareerFighter {
 
     /// This fighter ready for a duel against `opponent`, as fighter `id` without the
     /// `refused` pieces of equipment, at `position`: as [`CareerFighter::combat_fighter`],
-    /// but a proud one never gives up against a weaker opponent.
+    /// but a proud one keeps only `proud_surrender_percent` of its surrender threshold
+    /// against a weaker opponent.
     fn duel_fighter(
         &self,
         opponent: &Self,
@@ -502,7 +503,8 @@ impl CareerFighter {
         if self.personality.temperament == Temperament::Proud
             && self.stronger_than(opponent, &data.fighter)
         {
-            fighter.surrender_hp = 0;
+            let percent = data.fighter.personality.proud_surrender_percent;
+            fighter.surrender_hp = percent_of(fighter.surrender_hp, percent);
         }
         fighter
     }
@@ -515,20 +517,17 @@ impl CareerFighter {
             .get(self.personality.temperament)
     }
 
-    /// Its morale after `event`, a loss scaled by its temperament's `morale_loss_percent`.
+    /// Its morale after `event`, the change scaled by its temperament's `morale_percent`.
     fn feel(&mut self, event: MoraleEvent, rules: &FighterRules) {
-        let after = self.morale.after(event, &rules.morale);
-        let lost = self.morale.value().saturating_sub(after.value());
-        self.morale = if lost == 0 {
-            after
+        let before = self.morale.value();
+        let after = self.morale.after(event, &rules.morale).value();
+        let percent = self.temperament(rules).morale_percent;
+        let value = if after < before {
+            before.saturating_sub(percent_of(before - after, percent))
         } else {
-            let percent = self.temperament(rules).morale_loss_percent;
-            Morale::new(
-                self.morale
-                    .value()
-                    .saturating_sub(percent_of(lost, percent)),
-            )
+            before.saturating_add(percent_of(after - before, percent))
         };
+        self.morale = Morale::new(value);
     }
 
     /// Whether this fighter's fighting stats add up to more than `other`'s.
@@ -1427,6 +1426,8 @@ mod tests {
         assert!(awkward.stats.melee_defense < easy.stats.melee_defense);
         assert_eq!(awkward.stats.hp, easy.stats.hp);
         f.ease = vec![100, 0];
+        // Timid, so that it gives up early and lives to learn from the fight.
+        f.personality.boldness = crate::fighter::personality::TraitValue::new(0);
         let mut rng = ChaCha8Rng::seed_from_u64(1);
         let fight = plan(Activity::Fight(ColosseumId(0)));
         let fight = WeekPlan {

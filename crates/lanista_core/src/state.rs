@@ -434,8 +434,8 @@ impl GameState {
     }
 
     /// Each rival fighter's plan this week, by club, from its club's rules
-    /// (`rivals::plan`); each club's money, but the upkeep of this week and the next,
-    /// goes to its fighters in roster order.
+    /// (`rivals::plan`); each club's money, but the week's upkeep, goes to its fighters
+    /// in roster order.
     #[must_use]
     pub fn rival_plans(&self, data: &DesignData) -> Vec<Vec<WeekPlan>> {
         let odds = self.odds(data);
@@ -444,7 +444,7 @@ impl GameState {
             .enumerate()
             .map(|(club, rival)| {
                 let upkeep = i64::try_from(rival.active()).unwrap_or(i64::MAX);
-                let mut left = rival.money - 2 * upkeep * i64::from(data.economy.upkeep);
+                let mut left = rival.money - upkeep * i64::from(data.economy.upkeep);
                 let profile = Some(rival.rules(data));
                 (0..)
                     .zip(&rival.fighters)
@@ -1550,6 +1550,8 @@ mod tests {
         // Even a broke club can fight: the first colosseum is free.
         let mut state = game(2, &data);
         state.money = 0;
+        // Twice as strong as a generated fighter, so that it wins some.
+        state.fighters[0].stats = state.fighters[0].stats.map(|v| v * 2);
         let mut won = false;
         for _ in 0..20 {
             let summary = next_week(
@@ -1567,7 +1569,7 @@ mod tests {
             assert_eq!(flows.contains(&prize), fight.result == FightResult::Won);
             won |= fight.result == FightResult::Won;
         }
-        assert!(won, "seed 2 wins a fight in 20 weeks");
+        assert!(won, "a strong fighter wins a fight in 20 weeks");
     }
 
     #[test]
@@ -1734,7 +1736,7 @@ mod tests {
     #[test]
     fn rival_champions_defend_without_the_player() {
         let data = data();
-        let mut state = game(1, &data);
+        let mut state = game(2, &data);
         let rest = plan(Activity::Rest, false);
         let mut fights = 0;
         for _ in 0..12 {
@@ -2008,6 +2010,8 @@ mod tests {
         market.unsolicited_percent = 100;
         market.unsolicited_max_percent = 100;
         let mut state = game(7, &data);
+        // Too tired to fight, so that it does not die before the offers.
+        state.fighters[0].form = crate::fighter::form::Form::new(10);
         next_week(&mut state, &Decisions::default(), &data);
         // Not listed: a single club offers, its gamble on top of its price.
         let [offer] = state.sale_offers[..] else {
@@ -2287,9 +2291,8 @@ mod tests {
             next_week(&mut state, &Decisions::default(), &data);
         }
         // A free agent arrived mid-season, a year away from its birthday by its own count.
-        let newcomer = state.free_agents.len();
         let agent = crate::market::free_agent(&mut state.rng, &data);
-        state.free_agents.push(agent);
+        state.free_agents.push(agent.clone());
         while state.week < off_season {
             let summary = next_week(&mut state, &Decisions::default(), &data);
             assert!(summary.reports.iter().flatten().all(|r| !r.birthday));
@@ -2303,7 +2306,7 @@ mod tests {
                 assert!(report.as_ref().is_some_and(|r| r.birthday));
             }
         }
-        let agent = &before.free_agents[newcomer];
+        // Signed or not, it lives on with its potential and its look.
         let now = state
             .free_agents
             .iter()

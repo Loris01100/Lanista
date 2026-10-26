@@ -42,3 +42,7 @@ test = false
 [[bin]]
 name = "simulate"
 test = false
+
+[[bin]]
+name = "temperaments"
+test = false

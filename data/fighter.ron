@@ -83,19 +83,21 @@
         surrender_percent_boldest: 10,
         // A new fighter draws a temperament by weight, then each axis (boldness, ego,
         // from 0 to 100) within spread of the temperament's. Each temperament's trade-off:
-        // percentages of every fame change, of every morale loss and of the chance of an
+        // percentages of every fame change, of every morale change (up or down) and of the chance of an
         // injury after a fight. The berserker is never afraid and presses harder the more
-        // it is hurt; the proud never gives up against a weaker opponent (in code).
+        // it is hurt (in code); the proud keeps proud_surrender_percent of its surrender
+        // threshold against a weaker opponent (0: never gives up).
         spread: 15,
+        proud_surrender_percent: 50,
         temperaments: (
             // The standard duel's and the tests', never drawn.
-            balanced: (weight: 0, boldness: 50, ego: 50, fame_percent: 100, morale_loss_percent: 100, injury_percent: 100),
-            reckless: (weight: 1, boldness: 85, ego: 55, fame_percent: 125, morale_loss_percent: 100, injury_percent: 125),
-            showman: (weight: 1, boldness: 45, ego: 90, fame_percent: 150, morale_loss_percent: 150, injury_percent: 100),
-            methodical: (weight: 1, boldness: 35, ego: 15, fame_percent: 75, morale_loss_percent: 50, injury_percent: 100),
-            survivor: (weight: 1, boldness: 10, ego: 45, fame_percent: 100, morale_loss_percent: 100, injury_percent: 50),
-            berserker: (weight: 1, boldness: 80, ego: 20, fame_percent: 100, morale_loss_percent: 100, injury_percent: 150),
-            proud: (weight: 1, boldness: 75, ego: 85, fame_percent: 125, morale_loss_percent: 200, injury_percent: 100),
+            balanced: (weight: 0, boldness: 50, ego: 50, fame_percent: 100, morale_percent: 100, injury_percent: 100),
+            reckless: (weight: 1, boldness: 70, ego: 55, fame_percent: 150, morale_percent: 100, injury_percent: 100),
+            showman: (weight: 1, boldness: 50, ego: 90, fame_percent: 150, morale_percent: 150, injury_percent: 100),
+            methodical: (weight: 1, boldness: 45, ego: 15, fame_percent: 75, morale_percent: 50, injury_percent: 100),
+            survivor: (weight: 1, boldness: 15, ego: 45, fame_percent: 100, morale_percent: 100, injury_percent: 50),
+            berserker: (weight: 1, boldness: 65, ego: 20, fame_percent: 125, morale_percent: 100, injury_percent: 125),
+            proud: (weight: 1, boldness: 60, ego: 85, fame_percent: 125, morale_percent: 200, injury_percent: 100),
         ),
     ),
     morale: (

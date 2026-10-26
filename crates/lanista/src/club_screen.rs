@@ -2241,9 +2241,11 @@ mod tests {
         let data = Rc::new(DesignData::load().unwrap());
         let folder = std::env::temp_dir().join(format!("lanista-season-{}", std::process::id()));
         let mut screen = saved_screen(&data, &folder);
-        let half = u64::from(data.calendar.season_weeks() / 2);
-        for _ in 0..half {
+        // Halfway, on a week the club fought, so that there is a fight to watch again.
+        let mut half = 0;
+        while half < u64::from(data.calendar.season_weeks() / 2) || screen.fights.is_empty() {
             screen.next_week();
+            half += 1;
         }
         let mut reloaded = resume(&data, &folder).unwrap();
         // The journal comes back with the game: each fighter's weeks, the last week, and
@@ -2520,7 +2522,7 @@ mod tests {
     #[test]
     fn three_seasons_where_a_club_becomes_a_rival_one_closes_and_one_is_founded() {
         let data = Rc::new(DesignData::load().unwrap());
-        let mut screen = screen(1);
+        let mut screen = screen(2);
         let mut rivalry = None;
         let (mut closed, mut founded) = (false, false);
         for _ in 0..3 * u64::from(data.calendar.season_weeks()) {

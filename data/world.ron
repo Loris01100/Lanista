@@ -62,7 +62,7 @@
         count: 40,
         max: 100,
         founded: 1,
-        ruined_below: 1500,
+        ruined_below: 1750,
         ruined_seasons: 2,
         profiles: [(1, Cautious), (1, Aggressive), (1, Merchant), (1, Mentor), (1, Veteran), (1, Showman)],
         // Many poor, few rich.

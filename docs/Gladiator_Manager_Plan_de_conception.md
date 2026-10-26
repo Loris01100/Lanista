@@ -127,12 +127,12 @@ La personnalité est fixe (native) : un tempérament, que le joueur voit, et deu
 
 | Tempérament | En combat | Hors combat |
 | --- | --- | --- |
-| Téméraire | Presse sans relâche, n'abandonne presque jamais | Renommée accrue, se blesse et meurt plus souvent |
-| Cabotin | Garde son coup le plus spectaculaire pour le public | Renommée qui monte et descend plus vite, moral fragile après une défaite |
+| Téméraire | Presse sans relâche, abandonne très tard | Renommée accrue, meurt plus souvent |
+| Cabotin | Garde son coup le plus spectaculaire pour le public | Renommée et moral qui montent et descendent plus vite |
 | Méthodique | Se bat sans chercher à plaire | Renommée lente, moral stable |
 | Survivant | Abandonne tôt, meurt rarement | Se blesse moins, mais chaque abandon coûte de la renommée |
-| Enragé | Sans peur, s'acharne d'autant plus qu'il est blessé | Se blesse plus, trahit ses alliés de mêlée |
-| Orgueilleux | N'abandonne jamais face à plus faible | Renommée accrue, moral qui chute fort à chaque revers |
+| Enragé | Sans peur, s'acharne d'autant plus qu'il est blessé | Renommée accrue, se blesse plus, trahit ses alliés de mêlée |
+| Orgueilleux | Abandonne bien plus tard face à plus faible | Renommée accrue, moral qui varie fort au gré des combats |
 
 L'audace fixe le seuil d'abandon : un timide abandonne tôt et meurt rarement, un audacieux continue à PV critiques et peut recevoir un coup fatal. Le joueur n'a aucun contrôle sur ce seuil. L'ego dit le goût du public : il retient le combattant dans l'arène et le rend plus difficile à recruter pour un petit club.
 

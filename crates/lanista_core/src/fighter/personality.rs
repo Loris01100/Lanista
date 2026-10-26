@@ -37,7 +37,7 @@ pub enum Temperament {
     Survivor,
     /// Never afraid, and presses harder the more it is hurt.
     Berserker,
-    /// Never gives up against a weaker opponent.
+    /// Gives up later against a weaker opponent.
     Proud,
 }
 
@@ -120,6 +120,9 @@ pub struct PersonalityRules {
     pub surrender_percent_boldest: u32,
     /// Largest gap between an axis and its temperament's value, either way.
     pub spread: u32,
+    /// Percentage of its surrender threshold a proud fighter keeps against a weaker
+    /// opponent; 0 never gives up.
+    pub proud_surrender_percent: u32,
     pub temperaments: Temperaments,
 }
 
@@ -134,8 +137,9 @@ pub struct TemperamentRules {
     pub ego: u32,
     /// Of every fame change, gained or lost.
     pub fame_percent: u32,
-    /// Of every morale loss.
-    pub morale_loss_percent: u32,
+    /// Of every morale change, up or down: below 100 a steady morale, above it a
+    /// swinging one.
+    pub morale_percent: u32,
     /// Of the chance of an injury after a fight.
     pub injury_percent: u32,
 }

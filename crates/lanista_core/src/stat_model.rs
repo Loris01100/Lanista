@@ -94,8 +94,8 @@ pub struct StatModel {
     /// Chance the loser of a finished fight was beheaded, by the winner's class.
     pub beheaded: Vec<f64>,
     /// Chance the loser of a finished fight neither knocked out nor cut (limb or head)
-    /// falls to 0 HP rather than gives up, by band of boldness: the first band
-    /// starts at 0, the last ends at 100.
+    /// falls to 0 HP rather than gives up, by band of its surrender threshold
+    /// ([`death_band`]): the first band never gives up, the last gives up at half its HP.
     pub death: Vec<f64>,
     /// Chance a fighter not knocked out was stunned in the fight, by its opponent's class.
     pub stunned: Vec<f64>,
@@ -182,6 +182,17 @@ impl Ending {
 #[must_use]
 pub fn sigmoid(z: f64) -> f64 {
     1.0 / (1.0 + libm::exp(-z))
+}
+
+/// The band of `fighter`'s surrender threshold among `bands`, from 0 to half its max
+/// HP in even steps, a higher threshold in the last: what decides whether a beaten
+/// fighter gives up or falls, whatever its temperament (a proud one against a weaker
+/// opponent never gives up).
+#[must_use]
+pub fn death_band(fighter: &Fighter, bands: usize) -> usize {
+    let percent = u64::from(fighter.surrender_hp) * 100 / u64::from(fighter.stats.hp.max(1));
+    let band = usize::try_from(percent).unwrap_or(usize::MAX) * bands / 50;
+    band.min(bands.saturating_sub(1))
 }
 
 /// The features of `fighter` the winner's regression reads, in the order of
@@ -345,11 +356,8 @@ impl StatModel {
     /// falls to 0 HP rather than gives up.
     #[must_use]
     pub fn death_chance(&self, loser: &Fighter) -> f64 {
-        let boldness = loser.condition.personality.boldness.value();
-        let band = usize::try_from(boldness).unwrap_or(usize::MAX) * self.death.len()
-            / usize::try_from(Personality::MAX + 1).unwrap_or(1);
         self.death
-            .get(band.min(self.death.len().saturating_sub(1)))
+            .get(death_band(loser, self.death.len()))
             .copied()
             .unwrap_or(0.0)
     }
@@ -503,8 +511,13 @@ mod tests {
         Fighter::new(FighterId(0), class, class_data, stats, Vec2::new(0.0, 0.0))
     }
 
+    /// `f` with `boldness`, and the surrender threshold it brings.
     fn bold(mut f: Fighter, boldness: u32) -> Fighter {
         f.condition.personality.boldness = TraitValue::new(boldness);
+        f.surrender_hp = f
+            .condition
+            .personality
+            .surrender_hp(f.stats.hp, &data().fighter.personality);
         f
     }
 

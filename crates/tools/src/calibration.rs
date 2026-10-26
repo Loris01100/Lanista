@@ -10,12 +10,15 @@ use lanista_core::fighter::form::Form;
 use lanista_core::fighter::illness::roll_illness;
 use lanista_core::fighter::injury::{Location, roll_injury};
 use lanista_core::fighter::morale::Morale;
+use lanista_core::fighter::personality::{Personality, TraitValue};
 use lanista_core::fighter::{Fighter, FighterId};
-use lanista_core::stat_model::{Ending, SpectacularHits, StatModel, Winner, features, sigmoid};
+use lanista_core::stat_model::{
+    Ending, SpectacularHits, StatModel, Winner, death_band, features, sigmoid,
+};
 use rand::{RngExt, SeedableRng};
 use rand_chacha::ChaCha8Rng;
 
-/// Bands of boldness in the death table.
+/// Bands of surrender threshold in the death table (`stat_model::death_band`).
 pub const DEATH_BANDS: usize = 10;
 /// Entries of the spectacular hits tables: 0 to 3 hits, then 4 or more.
 pub const HIT_COUNTS: usize = 5;
@@ -32,13 +35,16 @@ pub struct Sample {
     pub sides: [Ending; 2],
 }
 
-/// A generated fighter in a random state: form and morale anywhere from 0 to 100,
-/// with the injuries of two fights and the illness of a week drawn at that form.
+/// A generated fighter in a random state: form, morale, boldness and ego anywhere from
+/// 0 to 100, so that the model knows every value and not only its temperament's, with
+/// the injuries of two fights and the illness of a week drawn at that form.
 pub fn varied_fighter(rng: &mut ChaCha8Rng, data: &DesignData) -> CareerFighter {
     let rules = &data.fighter;
     let mut fighter = CareerFighter::random(rng, data);
     fighter.form = Form::new(rng.random_range(0..=Form::MAX));
     fighter.morale = Morale::new(rng.random_range(0..=Morale::MAX));
+    fighter.personality.boldness = TraitValue::new(rng.random_range(0..=Personality::MAX));
+    fighter.personality.ego = TraitValue::new(rng.random_range(0..=Personality::MAX));
     for _ in 0..2 {
         fighter.injuries.extend(roll_injury(
             rng,
@@ -67,7 +73,7 @@ pub fn record(seed: u64, kind: ArenaKind, data: &DesignData) -> Sample {
 
 /// The model fitted on `samples`, for `classes` classes: a logistic regression on the
 /// fights with a winner, then the share of each ending (knock-out, lost limb, beheading,
-/// death by boldness of the others), of the stunned and of the bled.
+/// death by surrender threshold of the others), of the stunned and of the bled.
 #[must_use]
 pub fn fit(samples: &[Sample], classes: usize) -> StatModel {
     let class = |f: &Fighter| usize::try_from(f.class.0).unwrap_or(0).min(classes - 1);
@@ -131,13 +137,7 @@ pub fn fit(samples: &[Sample], classes: usize) -> StatModel {
         if loser.knocked_out || loser.severed.is_some() {
             continue;
         }
-        let boldness = s.fighters[1 - winner]
-            .condition
-            .personality
-            .boldness
-            .value();
-        let band = (usize::try_from(boldness).unwrap_or(usize::MAX) * DEATH_BANDS / 101)
-            .min(DEATH_BANDS - 1);
+        let band = death_band(&s.fighters[1 - winner], DEATH_BANDS);
         death[band] = (death[band].0 + u64::from(loser.died), death[band].1 + 1);
     }
     let all_deaths = death
