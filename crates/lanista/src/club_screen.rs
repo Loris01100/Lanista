@@ -780,7 +780,8 @@ impl ClubScreen {
                     "alert-title-defense",
                     fighter = fighter_name(i, f, &self.data),
                     place = colosseum_rules_name(rules),
-                    week = colosseum.defense_deadline(&self.data.world)
+                    week =
+                        date_in_sentence(colosseum.defense_deadline(&self.data.world), &self.data)
                 ));
             }
         }
@@ -2436,7 +2437,7 @@ mod tests {
         assert_eq!(
             screen.alerts(),
             [format!(
-                "{name} : titre de Rome à défendre au plus tard en semaine 5"
+                "{name} : titre de Rome à défendre au plus tard en saison 1, semaine 5"
             )]
         );
         // The rival champions defend in week 5, without the player.

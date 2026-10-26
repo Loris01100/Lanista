@@ -455,11 +455,14 @@ fn colosseum_column(
                             goto = Some(contender_view(c));
                         }
                         let deadline = colosseum.defense_deadline(&data.world);
-                        let defend = tr!("colosseum-defend-by", deadline = deadline);
+                        let defend = tr!(
+                            "colosseum-defend-by",
+                            deadline = date_in_sentence(deadline, data)
+                        );
                         ui.label(egui::RichText::new(defend).weak())
                             .on_hover_text(tr!(
                                 "colosseum-title-since",
-                                since = colosseum.title_since
+                                since = date_in_sentence(colosseum.title_since, data)
                             ));
                     }
                     None => {
