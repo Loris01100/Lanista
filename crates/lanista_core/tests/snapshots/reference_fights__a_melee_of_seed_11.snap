@@ -10,66 +10,60 @@ expression: reference_melee(11)
 [    6] fighter 3 casts Trait de feu on fighter 4: missed
 [    6] fighter 7 casts Trait de feu on fighter 6: 19 damage to the head
 [    6] fighter 5 casts Trait de feu on fighter 6: 19 damage to the head
-[   36] fighters 0 and 1 make a pact
 [   36] fighters 3 and 4 make a pact
-[   36] fighter 7 casts Coup de bâton on fighter 6: 12 damage to the body
-[   36] fighter 6 casts Frappe brutale on fighter 7: 48 damage to the right arm
-[   42] fighter 6 casts Charge au bouclier on fighter 7: 29 damage to the head
-[   54] fighter 5 casts Trait de feu on fighter 6: 15 damage to the head
-[   54] fighter 6 dies
+[   36] fighters 6 and 7 make a pact
+[   48] fighters 0 and 1 make a pact
 [   54] fighter 1 casts Trait de feu on fighter 2: 19 damage to the body
+[   54] fighter 5 casts Trait de feu on fighter 6: 19 damage to the head
+[   60] fighter 1 casts Coup de bâton on fighter 2: 12 damage to the left leg
 [   60] fighter 2 casts Frappe brutale on fighter 1: 48 damage to the right arm
-[   60] fighter 1 is stunned
-[   66] fighter 7 casts Trait de feu on fighter 5: 19 damage to the left leg
-[   84] fighter 3 casts Trait de feu on fighter 2: missed
-[  102] fighter 5 casts Trait de feu on fighter 4: 19 damage to the head
-[  120] fighter 1 is knocked out
-[  132] fighter 2 casts Charge au bouclier on fighter 0: 29 damage to the head
-[  132] fighter 0 is stunned
-[  132] fighter 3 casts Trait de feu on fighter 2: missed
-[  150] fighter 5 casts Trait de feu on fighter 4: 19 damage to the left leg
-[  156] fighter 5 casts Coup de bâton on fighter 4: missed
-[  156] fighter 4 casts Frappe brutale on fighter 5: 48 damage to the left arm
-[  162] fighter 4 casts Charge au bouclier on fighter 5: 29 damage to the head
-[  162] fighter 5 is stunned
-[  162] fighter 3 casts Coup de bâton on fighter 2: missed
-[  162] fighter 2 casts Coup de glaive on fighter 3: 19 damage to the body
-[  180] fighter 3 casts Trait de feu on fighter 2: 19 damage to the head
-[  186] fighter 3 casts Éclair on fighter 2: 8 damage to the head
-[  186] fighter 2 dies
-[  186] fighter 7 casts Éclair on fighter 4: 27 damage to the left leg
-[  186] fighter 4 dies
-[  192] fighter 0 gets up
-[  192] fighters 0 and 3 make a pact
-[  222] fighter 5 gets up
-[  222] fighter 7 casts Trait de feu on fighter 5: 4 damage to the left arm
-[  222] fighter 5 dies
-[  228] the pact between fighters 0 and 3 ends
-[  228] fighter 3 casts Trait de feu on fighter 0: missed
-[  270] fighter 7 casts Trait de feu on fighter 0: 19 damage to the body
-[  276] fighter 3 casts Trait de feu on fighter 0: 19 damage to the head
-[  282] fighter 0 casts Frappe brutale on fighter 3: missed
-[  282] fighter 3 casts Coup de bâton on fighter 0: 12 damage to the body
-[  288] fighter 0 casts Charge au bouclier on fighter 3: missed
-[  318] fighter 7 casts Trait de feu on fighter 0: 19 damage to the body
-[  324] fighter 3 casts Trait de feu on fighter 0: 2 damage to the body
-[  324] fighter 0 dies
-[  366] fighter 7 casts Trait de feu on fighter 3: 19 damage to the head
-[  372] fighter 3 casts Trait de feu on fighter 7: missed
-[  384] fighter 7 casts Coup de bâton on fighter 3: missed
-[  384] fighter 3 casts Coup de bâton on fighter 7: 12 damage to the left arm
-[  396] fighter 7 casts Éclair on fighter 3: missed
-[  420] fighter 3 casts Trait de feu on fighter 7: 11 damage to the body
-[  420] fighter 7 dies
+[   66] fighter 2 casts Charge au bouclier on fighter 1: 29 damage to the right arm
+[   78] fighter 0 casts Frappe brutale on fighter 2: 15 damage to the left arm
+[   78] fighter 2 dies
+[  102] fighter 5 casts Trait de feu on fighter 6: 8 damage to the left arm
+[  102] fighter 6 dies
+[  108] fighter 7 casts Trait de feu on fighter 0: 19 damage to the right arm
+[  126] fighter 5 casts Coup de bâton on fighter 4: 12 damage to the head
+[  126] fighter 4 casts Frappe brutale on fighter 5: 48 damage to the right leg
+[  126] fighter 5 is stunned
+[  156] fighter 7 casts Trait de feu on fighter 0: 19 damage to the body
+[  174] fighter 3 casts Trait de feu on fighter 0: 19 damage to the left arm
+[  180] fighter 7 casts Coup de bâton on fighter 0: 12 damage to the right leg
+[  180] fighter 0 casts Charge au bouclier on fighter 7: 29 damage to the head
+[  186] fighter 5 gets up
+[  186] fighter 3 casts Éclair on fighter 0: missed
+[  186] fighter 7 casts Éclair on fighter 0: 31 damage to the left leg
+[  186] fighter 0 dies
+[  186] fighter 1 casts Éclair on fighter 3: 35 damage to the head
+[  186] fighter 5 casts Éclair on fighter 4: 35 damage to the head
+[  192] fighter 4 casts Charge au bouclier on fighter 5: 29 damage to the right arm
+[  192] fighter 5 is stunned
+[  204] fighter 7 casts Trait de feu on fighter 3: 19 damage to the left leg
+[  222] fighter 3 casts Trait de feu on fighter 7: 19 damage to the body
+[  252] fighter 5 gets up
+[  252] fighter 5 casts Trait de feu on fighter 4: 18 damage to the head
+[  252] fighter 4 dies
+[  252] fighter 7 casts Trait de feu on fighter 3: 19 damage to the right leg
+[  264] fighter 7 casts Coup de bâton on fighter 3: 12 damage to the body
+[  264] fighter 3 casts Coup de bâton on fighter 7: 12 damage to the body
+[  270] fighter 3 casts Trait de feu on fighter 7: 19 damage to the head
+[  276] fighter 1 casts Trait de feu on fighter 3: 15 damage to the right leg
+[  276] fighter 3 dies
+[  360] fighter 7 casts Trait de feu on fighter 1: missed
+[  360] fighter 1 casts Trait de feu on fighter 7: 19 damage to the body
+[  372] fighter 1 casts Éclair on fighter 7: 2 damage to the head
+[  372] fighter 7 dies
+[  420] fighter 5 casts Éclair on fighter 1: 23 damage to the head
+[  420] fighter 1 dies
 
-over after 421 ticks, winner: fighter 3
-fighter 0: 0/100 HP, dealt 0, taken 100, 2 spells cast, 2 missed, stunned once
-fighter 1: 52/100 HP, dealt 73, taken 48, 3 spells cast, 0 missed, stunned once, knocked out
-fighter 2: 0/100 HP, dealt 96, taken 100, 3 spells cast, 0 missed
-fighter 3: 62/100 HP, dealt 118, taken 38, 14 spells cast, 6 missed
+over after 421 ticks, winner: fighter 5
+fighter 0: 0/100 HP, dealt 44, taken 100, 2 spells cast, 0 missed
+fighter 1: 0/100 HP, dealt 156, taken 100, 8 spells cast, 0 missed
+fighter 2: 0/100 HP, dealt 77, taken 100, 2 spells cast, 0 missed
+fighter 3: 0/100 HP, dealt 104, taken 100, 7 spells cast, 2 missed
 fighter 4: 0/100 HP, dealt 77, taken 100, 2 spells cast, 0 missed
-fighter 5: 0/100 HP, dealt 107, taken 100, 6 spells cast, 1 missed, stunned once
-fighter 6: 0/100 HP, dealt 77, taken 100, 2 spells cast, 0 missed
-fighter 7: 0/100 HP, dealt 138, taken 100, 11 spells cast, 3 missed
+fighter 5: 23/100 HP, dealt 169, taken 77, 8 spells cast, 0 missed, stunned 2 times
+fighter 6: 0/100 HP, dealt 0, taken 100, 0 spells cast, 0 missed
+fighter 7: 0/100 HP, dealt 150, taken 100, 10 spells cast, 2 missed
 
-places: [3, 7, 5, 1, 5, 4, 8, 2]
+places: [6, 2, 8, 4, 5, 1, 7, 3]

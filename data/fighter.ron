@@ -77,10 +77,26 @@
         weeks_kept_percent: 50,
     ),
     personality: (
-        // Surrender threshold, as a percentage of max HP, from determination 0 to 100:
-        // a fearful fighter gives up early, a fully determined one fights to the death.
-        surrender_percent_least_determined: 50,
-        surrender_percent_most_determined: 10,
+        // Surrender threshold, as a percentage of max HP, from boldness 0 to 100:
+        // a timid fighter gives up early, the boldest fights almost to the death.
+        surrender_percent_most_timid: 50,
+        surrender_percent_boldest: 10,
+        // A new fighter draws a temperament by weight, then each axis (boldness, ego,
+        // from 0 to 100) within spread of the temperament's. Each temperament's trade-off:
+        // percentages of every fame change, of every morale loss and of the chance of an
+        // injury after a fight. The berserker is never afraid and presses harder the more
+        // it is hurt; the proud never gives up against a weaker opponent (in code).
+        spread: 15,
+        temperaments: (
+            // The standard duel's and the tests', never drawn.
+            balanced: (weight: 0, boldness: 50, ego: 50, fame_percent: 100, morale_loss_percent: 100, injury_percent: 100),
+            reckless: (weight: 1, boldness: 85, ego: 55, fame_percent: 125, morale_loss_percent: 100, injury_percent: 125),
+            showman: (weight: 1, boldness: 45, ego: 90, fame_percent: 150, morale_loss_percent: 150, injury_percent: 100),
+            methodical: (weight: 1, boldness: 35, ego: 15, fame_percent: 75, morale_loss_percent: 50, injury_percent: 100),
+            survivor: (weight: 1, boldness: 10, ego: 45, fame_percent: 100, morale_loss_percent: 100, injury_percent: 50),
+            berserker: (weight: 1, boldness: 80, ego: 20, fame_percent: 100, morale_loss_percent: 100, injury_percent: 150),
+            proud: (weight: 1, boldness: 75, ego: 85, fame_percent: 125, morale_loss_percent: 200, injury_percent: 100),
+        ),
     ),
     morale: (
         // Morale goes from 0 to 100, neutral at 50.
@@ -219,8 +235,9 @@
         // Percent per year from 30 (counting it) and per permanent injury.
         per_year: 5,
         per_permanent_injury: 15,
-        // Determination 0 raises the chance by this percentage of it, 100 lowers it as much.
-        determination_percent: 50,
+        // Ego 0 raises the chance by this percentage of it, 100 lowers it as much: the
+        // crowd holds the vain in the arena.
+        ego_percent: 50,
         // An arm and a leg lost are the most a fighter fights on without: a second arm
         // or a second leg lost, and it retires at once.
         max_lost_arms: 1,

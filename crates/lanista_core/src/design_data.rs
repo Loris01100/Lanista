@@ -743,9 +743,9 @@ fn melee_problem(rules: &MeleeRules) -> Option<(&'static str, &'static str)> {
     } else if pacts.distance.is_nan() {
         Some(("melee.pacts.distance", "not a number"))
     } else if [
-        pacts.form_percent_least_cautious,
-        pacts.form_percent_most_cautious,
-        pacts.betrayal_percent_most_aggressive,
+        pacts.form_percent_most_timid,
+        pacts.form_percent_boldest,
+        pacts.betrayal_percent_boldest,
     ]
     .iter()
     .any(|&p| p > 100)

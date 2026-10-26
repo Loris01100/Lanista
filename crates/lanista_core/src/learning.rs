@@ -18,7 +18,7 @@ use crate::fighter::form::Form;
 use crate::fighter::illness::IllnessLevel;
 use crate::fighter::injury::{Location, Severity, Side};
 use crate::fighter::morale::Morale;
-use crate::fighter::personality::Personality;
+use crate::fighter::personality::{Personality, Temperament};
 use crate::fighter::{Fighter, FighterId, Gauge, STAT_COUNT};
 use crate::log::EventKind;
 use crate::melee::melee_arena;
@@ -42,8 +42,8 @@ const MOVES: [Vec2; 8] = [
 ];
 /// Values of a fighter's own state in an observation, its class aside: hit points,
 /// mana, endurance, position, standing, surrender share, stats, form, morale,
-/// personality, injury by location, illness, refused equipment.
-const OWN_VALUES: usize = 6 + 1 + STAT_COUNT + 2 + 4 + INJURY_LOCATIONS + 1 + 2;
+/// boldness, ego and whether a berserker, injury by location, illness, refused equipment.
+const OWN_VALUES: usize = 6 + 1 + STAT_COUNT + 2 + 3 + INJURY_LOCATIONS + 1 + 2;
 /// Head, body, then left and right arm and leg.
 const INJURY_LOCATIONS: usize = 6;
 /// Values of the arena: size, speed, time left, nearest pillar's offset and radius.
@@ -359,15 +359,11 @@ impl Senses {
             ratio(condition.form.value(), Form::MAX),
             ratio(condition.morale.value(), Morale::MAX),
         ]);
-        values.extend(
-            [
-                traits.aggression,
-                traits.caution,
-                traits.showmanship,
-                traits.determination,
-            ]
-            .map(|t| ratio(t.value(), Personality::MAX)),
-        );
+        values.extend([
+            ratio(traits.boldness.value(), Personality::MAX),
+            ratio(traits.ego.value(), Personality::MAX),
+            flag(traits.temperament == Temperament::Berserker),
+        ]);
         let mut injuries = [0.0; INJURY_LOCATIONS];
         for injury in &condition.injuries {
             let slot = &mut injuries[location_index(injury.location)];
@@ -591,7 +587,7 @@ mod tests {
         });
         let o = &env.observations()[0];
         assert_eq!(o.len(), env.observation_size());
-        let injuries = 6 + 1 + STAT_COUNT + 2 + 4;
+        let injuries = 6 + 1 + STAT_COUNT + 2 + 3;
         assert_eq!(
             o[injuries..injuries + INJURY_LOCATIONS],
             [0.0, 0.0, 1.0, 0.0, 0.0, 0.0]

@@ -209,12 +209,12 @@ mod tests {
         let data = DesignData::load().unwrap();
         let names: Vec<String> = data.classes.iter().map(|c| c.key.clone()).collect();
         for kind in ArenaKind::ALL {
-            let pairs: Vec<Pair> = (1_000_000..1_002_000)
+            let pairs: Vec<Pair> = (1_000_000..1_010_000)
                 .map(|seed| play(seed, kind, &data))
                 .collect();
             let rates = rates(&pairs, &names);
             assert_eq!(rates.len(), 7 + names.len());
-            // Two thousand fights, some 500 by class, leave a few points of chance on each side.
+            // Ten thousand fights, some 2500 by class, leave a point or two of chance on each side.
             for rate in &rates {
                 assert!(rate.gap() < 4.0, "{kind:?} {rate:?}");
             }

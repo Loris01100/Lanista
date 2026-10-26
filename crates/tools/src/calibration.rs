@@ -15,7 +15,7 @@ use lanista_core::stat_model::{Ending, SpectacularHits, StatModel, Winner, featu
 use rand::{RngExt, SeedableRng};
 use rand_chacha::ChaCha8Rng;
 
-/// Bands of determination in the death table.
+/// Bands of boldness in the death table.
 pub const DEATH_BANDS: usize = 10;
 /// Entries of the spectacular hits tables: 0 to 3 hits, then 4 or more.
 pub const HIT_COUNTS: usize = 5;
@@ -40,9 +40,12 @@ pub fn varied_fighter(rng: &mut ChaCha8Rng, data: &DesignData) -> CareerFighter 
     fighter.form = Form::new(rng.random_range(0..=Form::MAX));
     fighter.morale = Morale::new(rng.random_range(0..=Morale::MAX));
     for _ in 0..2 {
-        fighter
-            .injuries
-            .extend(roll_injury(rng, fighter.form, &rules.injury, &rules.form));
+        fighter.injuries.extend(roll_injury(
+            rng,
+            (fighter.form, 100),
+            &rules.injury,
+            &rules.form,
+        ));
     }
     fighter.illness = roll_illness(rng, fighter.form, &rules.illness, &rules.form);
     fighter
@@ -64,7 +67,7 @@ pub fn record(seed: u64, kind: ArenaKind, data: &DesignData) -> Sample {
 
 /// The model fitted on `samples`, for `classes` classes: a logistic regression on the
 /// fights with a winner, then the share of each ending (knock-out, lost limb, beheading,
-/// death by determination of the others), of the stunned and of the bled.
+/// death by boldness of the others), of the stunned and of the bled.
 #[must_use]
 pub fn fit(samples: &[Sample], classes: usize) -> StatModel {
     let class = |f: &Fighter| usize::try_from(f.class.0).unwrap_or(0).min(classes - 1);
@@ -128,12 +131,12 @@ pub fn fit(samples: &[Sample], classes: usize) -> StatModel {
         if loser.knocked_out || loser.severed.is_some() {
             continue;
         }
-        let determination = s.fighters[1 - winner]
+        let boldness = s.fighters[1 - winner]
             .condition
             .personality
-            .determination
+            .boldness
             .value();
-        let band = (usize::try_from(determination).unwrap_or(usize::MAX) * DEATH_BANDS / 101)
+        let band = (usize::try_from(boldness).unwrap_or(usize::MAX) * DEATH_BANDS / 101)
             .min(DEATH_BANDS - 1);
         death[band] = (death[band].0 + u64::from(loser.died), death[band].1 + 1);
     }

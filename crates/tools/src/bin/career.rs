@@ -79,11 +79,10 @@ fn describe(fighter: &CareerFighter, data: &DesignData) -> String {
     );
     let _ = writeln!(
         text,
-        "personality: aggression {}, caution {}, showmanship {}, determination {} (gives up at {} HP)",
-        p.aggression.value(),
-        p.caution.value(),
-        p.showmanship.value(),
-        p.determination.value(),
+        "personality: {:?}, boldness {}, ego {} (gives up at {} HP)",
+        p.temperament,
+        p.boldness.value(),
+        p.ego.value(),
         p.surrender_hp(fighter.stats.hp, &data.fighter.personality)
     );
     let _ = writeln!(text, "stats:     {}", stats_text(fighter.stats));

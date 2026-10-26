@@ -43,7 +43,7 @@ pub struct MarketRules {
     /// refuses a lower one.
     pub counter_percent: u32,
     /// A fighter's chance of refusing to join the player's club, before its fame, the
-    /// club's and its caution.
+    /// club's and its ego.
     pub refusal_percent: u32,
     /// Each week, the chance a rival club offers unasked for one of the player's
     /// fighters neither listed nor kept: this, plus a point per `unsolicited_value` of
@@ -237,7 +237,7 @@ pub fn ease_seen(fighter: &CareerFighter, scouting: &Scouting) -> bool {
 
 /// Whether `fighter` refuses to join the player's club, whose best fame is
 /// `club_fame`: `refusal_percent`, plus half its fame above the club's (less below),
-/// plus a fifth of its caution above the middle (less below), between 0 and 90 %.
+/// plus a fifth of its ego above the middle (less below), between 0 and 90 %.
 pub fn refuses_to_join<R: Rng + ?Sized>(
     rng: &mut R,
     fighter: &CareerFighter,
@@ -245,8 +245,8 @@ pub fn refuses_to_join<R: Rng + ?Sized>(
     rules: &MarketRules,
 ) -> bool {
     let fame = i64::from(fighter.fame.value()) - i64::from(club_fame.value());
-    let caution = i64::from(fighter.personality.caution.value()) - 50;
-    let percent = (i64::from(rules.refusal_percent) + fame / 2 + caution / 5).clamp(0, 90);
+    let ego = i64::from(fighter.personality.ego.value()) - 50;
+    let percent = (i64::from(rules.refusal_percent) + fame / 2 + ego / 5).clamp(0, 90);
     i64::from(rng.random_range(0..100_u32)) < percent
 }
 
@@ -401,12 +401,12 @@ mod tests {
     }
 
     #[test]
-    fn famous_and_cautious_fighters_refuse_more_often() {
+    fn famous_and_vain_fighters_refuse_more_often() {
         let data = data();
         let rules = &data.economy.market;
         let mut rng = ChaCha8Rng::seed_from_u64(4);
         let mut fighter = CareerFighter::random(&mut rng, &data);
-        fighter.personality.caution = 50.into();
+        fighter.personality.ego = 50.into();
         let refusals = |fighter: &CareerFighter, club: Fame, rng: &mut ChaCha8Rng| {
             (0..1000)
                 .filter(|_| refuses_to_join(rng, fighter, club, rules))
@@ -418,7 +418,7 @@ mod tests {
         fighter.fame = Fame::default().changed_by(60);
         assert!(refusals(&fighter, Fame::default(), &mut rng) > base + 200);
         // A famous club tempts it.
-        fighter.personality.caution = 0.into();
+        fighter.personality.ego = 0.into();
         assert_eq!(
             refusals(&fighter, Fame::default().changed_by(100), &mut rng),
             0

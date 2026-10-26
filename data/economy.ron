@@ -92,7 +92,7 @@
         // and refuses a lower one.
         counter_percent: 75,
         // A fighter's chance of refusing to join, plus half its fame above the club's
-        // best, plus a fifth of its caution above 50.
+        // best, plus a fifth of its ego above 50.
         refusal_percent: 20,
         // Each week, the chance a rival club offers unasked for one of the player's
         // fighters neither listed nor kept: so much, plus a point per so much of its

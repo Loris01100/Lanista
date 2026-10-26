@@ -14,15 +14,15 @@
     // spell's damage kind (Cutting a third of Blunt, Neutral never), raised by
     // head_injury_percent of it per head injury.
     // A stunned fighter stays down for `ticks` (30 per second), its opponent waiting,
-    // then gets up with a chance from its determination, lower for each stun after the
+    // then gets up with a chance from its boldness, lower for each stun after the
     // first; if it does not, it is knocked out and loses, alive.
     stun: (
         blunt_hundredths: 500,
         cutting_hundredths: 167,
         head_injury_percent: 50,
         ticks: 60,
-        rise_percent_least_determined: 30,
-        rise_percent_most_determined: 90,
+        rise_percent_most_timid: 30,
+        rise_percent_boldest: 90,
         rise_percent_lost_per_stun: 20,
     ),
     // A cutting hit that lands may sever the part it lands on: the head, killing, with
@@ -140,14 +140,14 @@
         paid_places: 12,
         // Two standing fighters without an ally, within `distance` meters between their
         // edges, make a pact at each decision (5 per second) with a chance from the
-        // caution of the less cautious (from 0 to 100); allies do not aim at each other.
-        // A pact is betrayed at each decision with a chance from the aggression of the
-        // more aggressive, and every pact breaks once break_fighting or fewer are left.
+        // boldness of the bolder (from 0 to 100); allies do not aim at each other.
+        // A pact is betrayed at each decision with a chance from the boldness of the
+        // bolder, and every pact breaks once break_fighting or fewer are left.
         pacts: (
             distance: 3.0,
-            form_percent_least_cautious: 0,
-            form_percent_most_cautious: 10,
-            betrayal_percent_most_aggressive: 2,
+            form_percent_most_timid: 10,
+            form_percent_boldest: 0,
+            betrayal_percent_boldest: 2,
             break_fighting: 3,
         ),
         // Every every_ticks (15 s), the next number of out who dealt the least damage

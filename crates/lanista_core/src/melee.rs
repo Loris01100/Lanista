@@ -72,12 +72,12 @@ pub struct PactRules {
     /// Two fighters this close, in meters between their edges, may make a pact.
     pub distance: f64,
     /// Chance, in percent at each decision, that two such fighters make one, from
-    /// caution 0 to caution 100 of the less cautious.
-    pub form_percent_least_cautious: u32,
-    pub form_percent_most_cautious: u32,
-    /// Chance, in percent at each decision, that a pact is broken, at aggression 100
-    /// of the more aggressive; none at aggression 0.
-    pub betrayal_percent_most_aggressive: u32,
+    /// boldness 0 to boldness 100 of the bolder.
+    pub form_percent_most_timid: u32,
+    pub form_percent_boldest: u32,
+    /// Chance, in percent at each decision, that a pact is broken, at boldness 100
+    /// of the bolder; none at boldness 0.
+    pub betrayal_percent_boldest: u32,
     /// Every pact breaks once this many fighters, or fewer, are still fighting.
     pub break_fighting: u32,
 }
@@ -86,9 +86,9 @@ impl PactRules {
     /// No pact is ever made: a duel, or a melee without alliances.
     pub const NEVER: Self = Self {
         distance: 0.0,
-        form_percent_least_cautious: 0,
-        form_percent_most_cautious: 0,
-        betrayal_percent_most_aggressive: 0,
+        form_percent_most_timid: 0,
+        form_percent_boldest: 0,
+        betrayal_percent_boldest: 0,
         break_fighting: 2,
     };
 }
@@ -180,10 +180,10 @@ fn happens(arena: &mut Arena, percent: u64) -> bool {
 
 /// Updates the pacts at a decision, before the fighters decide, in this order: a pact
 /// with a fighter out of the fight ends; each other pact is betrayed with the chance
-/// of its more aggressive member, who betrays it (`PactBroken`); all break once `break_fighting` or
+/// of its bolder member, who betrays it (`PactBroken`); all break once `break_fighting` or
 /// fewer fighters are still fighting (`PactBroken`); else, in index order, two
 /// standing fighters without a pact, within `distance`, make one with the chance of
-/// their less cautious member, plus their `Arena::pact_points` (`Pact`). Draws only for chances strictly between 0 and
+/// their bolder member, plus their `Arena::pact_points` (`Pact`). Draws only for chances strictly between 0 and
 /// 100, so an arena without pacts draws nothing.
 pub fn update_pacts(arena: &mut Arena) {
     let rules = arena.pact_rules;
@@ -195,13 +195,13 @@ pub fn update_pacts(arena: &mut Arena) {
         if !fa.is_fighting() || !fb.is_fighting() {
             continue;
         }
-        let aggression = |f: &crate::fighter::Fighter| f.condition.personality.aggression.value();
-        let (bolder, betrayer) = if aggression(fb) > aggression(fa) {
-            (aggression(fb), b)
+        let boldness = |f: &crate::fighter::Fighter| f.condition.personality.boldness.value();
+        let (bolder, betrayer) = if boldness(fb) > boldness(fa) {
+            (boldness(fb), b)
         } else {
-            (aggression(fa), a)
+            (boldness(fa), a)
         };
-        let betrayal = trait_percent(0, rules.betrayal_percent_most_aggressive, bolder);
+        let betrayal = trait_percent(0, rules.betrayal_percent_boldest, bolder);
         if happens(arena, betrayal) {
             let betrayer = Some(betrayer);
             log(arena, EventKind::PactBroken { a, b, betrayer });
@@ -228,12 +228,12 @@ pub fn update_pacts(arena: &mut Arena) {
             if edge_distance(fa, fb) > rules.distance {
                 continue;
             }
-            let caution = |f: &crate::fighter::Fighter| f.condition.personality.caution.value();
-            let wary = caution(fa).min(caution(fb));
+            let boldness = |f: &crate::fighter::Fighter| f.condition.personality.boldness.value();
+            let bolder = boldness(fa).max(boldness(fb));
             let chance = trait_percent(
-                rules.form_percent_least_cautious,
-                rules.form_percent_most_cautious,
-                wary,
+                rules.form_percent_most_timid,
+                rules.form_percent_boldest,
+                bolder,
             );
             let (a, b) = (fa.id, fb.id);
             let points = arena
@@ -396,9 +396,9 @@ mod tests {
     /// Pacts made for sure between fighters within 2 m, never betrayed.
     const SURE: PactRules = PactRules {
         distance: 2.0,
-        form_percent_least_cautious: 100,
-        form_percent_most_cautious: 100,
-        betrayal_percent_most_aggressive: 0,
+        form_percent_most_timid: 100,
+        form_percent_boldest: 100,
+        betrayal_percent_boldest: 0,
         break_fighting: 2,
     };
 
@@ -453,7 +453,8 @@ mod tests {
             ]
         };
         let never = PactRules {
-            form_percent_most_cautious: 0,
+            form_percent_most_timid: 0,
+            form_percent_boldest: 0,
             ..SURE
         };
         let mut friends = Arena::new(20.0, 20.0, pair(), 0).with_pacts(never);
@@ -492,7 +493,7 @@ mod tests {
     }
 
     #[test]
-    fn the_aggressive_betray() {
+    fn the_bold_betray() {
         let fighters = vec![
             test_fighter(0, 5.0, 5.0),
             test_fighter(1, 6.5, 5.0),
@@ -500,11 +501,11 @@ mod tests {
             test_fighter(3, 19.0, 19.0),
         ];
         let treacherous = PactRules {
-            betrayal_percent_most_aggressive: 100,
+            betrayal_percent_boldest: 100,
             ..SURE
         };
         let mut arena = Arena::new(20.0, 20.0, fighters, 0).with_pacts(treacherous);
-        arena.fighters[1].condition.personality.aggression = TraitValue::new(100);
+        arena.fighters[1].condition.personality.boldness = TraitValue::new(100);
         let mut ais = waiting(&arena);
         tick(&mut arena, &mut ais);
         for _ in 0..TICKS_PER_DECISION {
@@ -701,7 +702,7 @@ mod tests {
                         let at = Vec2::new(0.0, 0.0);
                         let stats = crate::duel::STATS;
                         let mut f = Fighter::new(FighterId(id), class, class_data, stats, at);
-                        let personality = Personality::random(&mut rng);
+                        let personality = Personality::random(&mut rng, &data.fighter.personality);
                         f.surrender_hp = personality.surrender_hp(100, &data.fighter.personality);
                         f.condition.personality = personality;
                         f

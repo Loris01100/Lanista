@@ -123,8 +123,8 @@ fn two_swords_against_two_daggers_on_sand() {
     insta::assert_snapshot!(loadout_duel(ArenaKind::Sand, [(2, 1), (3, 1)], 42));
 }
 
-/// A melee of 8, murmillos and augurs in turn with the standard duel's stats, cautious
-/// enough to make pacts, aggressive enough to break some, on sand: its log and places.
+/// A melee of 8, murmillos and augurs in turn with the standard duel's stats, timid
+/// enough to make pacts, bold enough to break some, on sand: its log and places.
 fn reference_melee(seed: u64) -> String {
     let data = DesignData::load().unwrap();
     let fighters = (0..8)
@@ -132,9 +132,7 @@ fn reference_melee(seed: u64) -> String {
             let class = ClassId(id % 2);
             let class_data = data.class(class).unwrap();
             let mut f = Fighter::new(FighterId(id), class, class_data, STATS, Vec2::new(0.0, 0.0));
-            let personality = &mut f.condition.personality;
-            personality.caution = TraitValue::new(90);
-            personality.aggression = TraitValue::new(20 + 10 * id);
+            f.condition.personality.boldness = TraitValue::new(10 + 5 * id);
             f
         })
         .collect();

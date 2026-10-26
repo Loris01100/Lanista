@@ -20,12 +20,12 @@ use crate::fighter::injury::{
 };
 use crate::fighter::melee::{Entrant, melee_start};
 use crate::fighter::morale::{Morale, MoraleEvent};
-use crate::fighter::personality::Personality;
+use crate::fighter::personality::{Personality, Temperament, TemperamentRules};
 use crate::fighter::progression::{
     ProgressEvent, age_decline, progress, random_potential, season_gains, season_progress,
 };
 use crate::fighter::retirement::{decides_to_retire, too_maimed};
-use crate::fighter::{ClassId, Condition, Fighter, FighterId, Stats};
+use crate::fighter::{ClassId, Condition, Fighter, FighterId, Stats, percent_of};
 use crate::log::{Report, places};
 use crate::names::FighterName;
 use crate::rivals::RivalId;
@@ -149,7 +149,7 @@ impl CareerFighter {
         };
         let (youngest, oldest) = rules.career.start_age;
         let age = rng.random_range(youngest..=oldest);
-        let personality = Personality::random(rng);
+        let personality = Personality::random(rng, &rules.personality);
         let appearance = Appearance::random(rng, &rules.appearance);
         let loadouts = data.class(class).map_or(0, |c| c.loadouts.len());
         let ease = rules.ease.random(rng, loadouts);
@@ -475,18 +475,60 @@ impl CareerFighter {
     ) -> Arena {
         let layout = data.combat.arenas.get(kind);
         let (width, middle) = (layout.width, layout.height / 2.0);
+        let (left, right) = (
+            Vec2::new(width * 0.15, middle),
+            Vec2::new(width * 0.85, middle),
+        );
         let fighters = vec![
-            self.combat_fighter(FighterId(0), refused, data, Vec2::new(width * 0.15, middle)),
-            opponent.combat_fighter(
-                FighterId(1),
-                Refused::NONE,
-                data,
-                Vec2::new(width * 0.85, middle),
-            ),
+            self.duel_fighter(opponent, (FighterId(0), refused), data, left),
+            opponent.duel_fighter(self, (FighterId(1), Refused::NONE), data, right),
         ];
         Arena::new(width, layout.height, fighters, seed)
             .with_rules(&data.combat)
             .with_layout(layout)
+    }
+
+    /// This fighter ready for a duel against `opponent`, as fighter `id` without the
+    /// `refused` pieces of equipment, at `position`: as [`CareerFighter::combat_fighter`],
+    /// but a proud one never gives up against a weaker opponent.
+    fn duel_fighter(
+        &self,
+        opponent: &Self,
+        (id, refused): (FighterId, Refused),
+        data: &DesignData,
+        position: Vec2,
+    ) -> Fighter {
+        let mut fighter = self.combat_fighter(id, refused, data, position);
+        if self.personality.temperament == Temperament::Proud
+            && self.stronger_than(opponent, &data.fighter)
+        {
+            fighter.surrender_hp = 0;
+        }
+        fighter
+    }
+
+    /// Its temperament's trade-off.
+    fn temperament<'a>(&self, rules: &'a FighterRules) -> &'a TemperamentRules {
+        rules
+            .personality
+            .temperaments
+            .get(self.personality.temperament)
+    }
+
+    /// Its morale after `event`, a loss scaled by its temperament's `morale_loss_percent`.
+    fn feel(&mut self, event: MoraleEvent, rules: &FighterRules) {
+        let after = self.morale.after(event, &rules.morale);
+        let lost = self.morale.value().saturating_sub(after.value());
+        self.morale = if lost == 0 {
+            after
+        } else {
+            let percent = self.temperament(rules).morale_loss_percent;
+            Morale::new(
+                self.morale
+                    .value()
+                    .saturating_sub(percent_of(lost, percent)),
+            )
+        };
     }
 
     /// Whether this fighter's fighting stats add up to more than `other`'s.
@@ -542,7 +584,7 @@ impl CareerFighter {
     }
 
     /// As [`CareerFighter::take_side`], but `fame_change` is all the fame the fight
-    /// brings, whatever its result: a melee's.
+    /// brings, whatever its result: a melee's. Its temperament's `fame_percent` scales it.
     pub(crate) fn take_fame_and_side<R: Rng + ?Sized>(
         &mut self,
         side: Ending,
@@ -555,6 +597,8 @@ impl CareerFighter {
             against_stronger,
             spectacular_hits: side.spectacular_hits,
         };
+        let percent = i64::from(self.temperament(rules).fame_percent);
+        let fame_change = i32::try_from(i64::from(fame_change) * percent / 100).unwrap_or(i32::MAX);
         self.fame = self.fame.changed_by(fame_change);
         self.record.add(outcome.result);
         self.season_record.add(outcome.result);
@@ -584,7 +628,7 @@ impl CareerFighter {
 
     fn take_injury(&mut self, injury: Injury, rules: &FighterRules) {
         self.injuries.push(injury);
-        self.morale = self.morale.after(MoraleEvent::Injury, &rules.morale);
+        self.feel(MoraleEvent::Injury, rules);
     }
 
     /// A fight against `opponent` that the statistical model resolves instead of a
@@ -623,8 +667,8 @@ impl CareerFighter {
         let rules = &data.fighter;
         let origin = Vec2::new(0.0, 0.0);
         let [mine, theirs] = data.stat_model.get(kind).resolve(
-            &self.combat_fighter(FighterId(0), Refused::NONE, data, origin),
-            &opponent.combat_fighter(FighterId(1), Refused::NONE, data, origin),
+            &self.duel_fighter(opponent, (FighterId(0), Refused::NONE), data, origin),
+            &opponent.duel_fighter(self, (FighterId(1), Refused::NONE), data, origin),
             &data.combat.hits,
             rng,
         );
@@ -747,23 +791,22 @@ impl CareerFighter {
         }
         match taken.outcome.result {
             FightResult::Won => {
-                self.morale = self.morale.after(MoraleEvent::Victory, &rules.morale);
+                self.feel(MoraleEvent::Victory, rules);
             }
             FightResult::Lost | FightResult::GaveUp => {
-                self.morale = self.morale.after(MoraleEvent::Defeat, &rules.morale);
+                self.feel(MoraleEvent::Defeat, rules);
             }
             FightResult::Unfinished => {}
         }
         if let Ok(gained @ 1..) = u32::try_from(taken.fame_change) {
-            self.morale = self
-                .morale
-                .after(MoraleEvent::FameGained(gained), &rules.morale);
+            self.feel(MoraleEvent::FameGained(gained), rules);
         }
         let (injury, spared) = if taken.wound.is_some() {
             (taken.wound, false)
         } else {
             // The risk follows the form the fighter went in with.
-            let rolled = roll_injury(rng, self.form, &rules.injury, &rules.form);
+            let percent = self.temperament(rules).injury_percent;
+            let rolled = roll_injury(rng, (self.form, percent), &rules.injury, &rules.form);
             let spared_percent = medicine.after_effect_spared_percent;
             let injury = rolled.map(|i| spare_after_effect(rng, i, spared_percent, &rules.injury));
             (
@@ -824,7 +867,7 @@ impl CareerFighter {
             self.illness = roll_illness(rng, self.form, &rules.illness, &rules.form);
             report.new_illness = self.illness;
             if self.illness.is_some() {
-                self.morale = self.morale.after(MoraleEvent::Illness, &rules.morale);
+                self.feel(MoraleEvent::Illness, rules);
             }
         }
     }

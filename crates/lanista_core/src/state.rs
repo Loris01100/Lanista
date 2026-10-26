@@ -434,8 +434,8 @@ impl GameState {
     }
 
     /// Each rival fighter's plan this week, by club, from its club's rules
-    /// (`rivals::plan`); each club's money, but the week's upkeep, goes to its fighters
-    /// in roster order.
+    /// (`rivals::plan`); each club's money, but the upkeep of this week and the next,
+    /// goes to its fighters in roster order.
     #[must_use]
     pub fn rival_plans(&self, data: &DesignData) -> Vec<Vec<WeekPlan>> {
         let odds = self.odds(data);
@@ -444,7 +444,7 @@ impl GameState {
             .enumerate()
             .map(|(club, rival)| {
                 let upkeep = i64::try_from(rival.active()).unwrap_or(i64::MAX);
-                let mut left = rival.money - upkeep * i64::from(data.economy.upkeep);
+                let mut left = rival.money - 2 * upkeep * i64::from(data.economy.upkeep);
                 let profile = Some(rival.rules(data));
                 (0..)
                     .zip(&rival.fighters)
@@ -1906,7 +1906,8 @@ mod tests {
         assert_eq!(summary.market, [MarketNews::Countered(target, asked)]);
         assert_eq!(countered, target);
         // Above its price (which a week may move): the club accepts, then the fighter
-        // decides.
+        // decides. Too tired to fight that week, so that it does not die before.
+        state.rivals[2].fighters[0].form = crate::fighter::form::Form::new(10);
         let before = state.money;
         let asked = asked + 500;
         let summary = next_week(&mut state, &moves(&[Move::Offer(target, asked)]), &data);
@@ -2237,7 +2238,10 @@ mod tests {
 
     #[test]
     fn rookies_arrive_and_old_fighters_worth_less_are_released_in_the_off_season() {
-        let data = data();
+        let mut data = data();
+        // Nobody retires, so that the release alone decides.
+        data.fighter.retirement.per_year = 0;
+        data.fighter.retirement.per_permanent_injury = 0;
         let market = &data.economy.market;
         let mut state = game(3, &data);
         state.fighters[0].status = Status::Retired;
@@ -2363,20 +2367,18 @@ mod tests {
         let closed = &state.rivals[poor];
         assert_eq!(closed.closed, Some(week));
         assert_eq!(closed.active(), 0);
-        // Released, unless it retired at its birthday the same week.
+        // Released, unless it retired at its birthday or died in a fight the same week.
         let released = closed
             .fighters
             .iter()
-            .filter(|f| matches!(f.status, Status::Released | Status::Retired));
+            .filter(|f| matches!(f.status, Status::Released | Status::Retired | Status::Dead));
         assert!(released.count() >= leaving);
         assert_eq!(closed.staff, Staff::default());
         assert!(state.rivals[0].is_open());
         let founded = &state.rivals[3];
         assert!(founded.is_open());
-        assert_eq!(
-            founded.active(),
-            usize::try_from(data.world.roster.wanted).unwrap()
-        );
+        // A rich one may buy one more the same week.
+        assert!(founded.active() >= usize::try_from(data.world.roster.wanted).unwrap());
         let told: Vec<_> = state.news.iter().map(|n| (n.week, n.what)).collect();
         assert!(told.contains(&(week, WorldNews::Closed(poor))));
         assert!(told.contains(&(week, WorldNews::Founded(3))));
@@ -2439,7 +2441,7 @@ mod tests {
     fn star(fighter: &mut CareerFighter) {
         fighter.stats = fighter.stats.map(|_| 500);
         fighter.fame = Fame::default();
-        fighter.personality.caution = crate::fighter::personality::TraitValue::new(0);
+        fighter.personality.ego = crate::fighter::personality::TraitValue::new(0);
     }
 
     #[test]

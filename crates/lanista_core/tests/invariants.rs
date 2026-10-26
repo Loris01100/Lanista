@@ -75,7 +75,7 @@ fn melee(kind: ArenaKind, count: u32, seed: u64) -> (Arena, Vec<Box<dyn CombatAi
             let class = ClassId(rng.random_range(0..2));
             let class_data = data.class(class).unwrap();
             let mut f = Fighter::new(FighterId(id), class, class_data, STATS, Vec2::new(0.0, 0.0));
-            f.condition.personality = Personality::random(&mut rng);
+            f.condition.personality = Personality::random(&mut rng, &data.fighter.personality);
             f
         })
         .collect();
@@ -187,8 +187,9 @@ proptest! {
     ) {
         let (mut arena, mut ais) = duel(setup, stats, seed);
         let mut rng = ChaCha8Rng::seed_from_u64(seed);
+        let rules = DesignData::load().unwrap().fighter.personality;
         for f in &mut arena.fighters {
-            f.condition.personality = Personality::random(&mut rng);
+            f.condition.personality = Personality::random(&mut rng, &rules);
         }
         while !arena.is_over() && arena.tick < MAX_TICKS {
             tick(&mut arena, &mut ais);
@@ -215,14 +216,14 @@ proptest! {
     #[test]
     fn a_fighter_down_is_never_hit_and_never_acts(
         setup in setup(),
-        determination in [0..=100u32, 0..=100u32],
+        boldness in [0..=100u32, 0..=100u32],
         seed: u64,
     ) {
         let (mut arena, mut ais) = duel(setup, [STATS; 2], seed);
         // Stuns at every blunt hit, to see many of them.
         arena.stun.blunt_hundredths = 1_000_000;
-        for (f, d) in arena.fighters.iter_mut().zip(determination) {
-            f.condition.personality.determination = TraitValue::new(d);
+        for (f, b) in arena.fighters.iter_mut().zip(boldness) {
+            f.condition.personality.boldness = TraitValue::new(b);
         }
         while !arena.is_over() && arena.tick < MAX_TICKS {
             let before = arena.fighters.clone();

@@ -91,14 +91,15 @@ impl Injury {
 }
 
 /// Draws whether a fight injures a fighter in form `form`, and if so where and how badly.
-/// The chance is `rules.chance_per_fight` raised by the form risk formula.
+/// The chance is `percent` % of `rules.chance_per_fight`, raised by the form risk formula.
 pub fn roll_injury<R: Rng + ?Sized>(
     rng: &mut R,
-    form: Form,
+    (form, percent): (Form, u32),
     rules: &InjuryRules,
     form_rules: &FormRules,
 ) -> Option<Injury> {
-    if !rng.random_bool(form.risk(rules.chance_per_fight, form_rules)) {
+    let base = rules.chance_per_fight * f64::from(percent) / 100.0;
+    if !rng.random_bool(form.risk(base, form_rules)) {
         return None;
     }
     let location = roll_location(rng, &rules.location_weights);
@@ -535,7 +536,7 @@ mod tests {
         let count = |form| {
             let mut rng = ChaCha8Rng::seed_from_u64(1);
             (0..10_000)
-                .filter(|_| roll_injury(&mut rng, form, &rules(), &FORM_RULES).is_some())
+                .filter(|_| roll_injury(&mut rng, (form, 100), &rules(), &FORM_RULES).is_some())
                 .count()
         };
         let (fresh, exhausted) = (count(Form::full()), count(Form::new(0)));
@@ -555,7 +556,7 @@ mod tests {
         rules.severity_weights.permanent = 0;
         let mut rng = ChaCha8Rng::seed_from_u64(2);
         for _ in 0..1_000 {
-            if let Some(injury) = roll_injury(&mut rng, Form::new(0), &rules, &FORM_RULES) {
+            if let Some(injury) = roll_injury(&mut rng, (Form::new(0), 100), &rules, &FORM_RULES) {
                 assert!(matches!(injury.location, Location::Arm(_)));
                 assert!(!injury.is_permanent());
             }
@@ -567,7 +568,7 @@ mod tests {
         fn drawn_injuries_heal_in_their_severity_range(seed: u64) {
             let mut rng = ChaCha8Rng::seed_from_u64(seed);
             let rules = rules();
-            if let Some(injury) = roll_injury(&mut rng, Form::new(0), &rules, &FORM_RULES) {
+            if let Some(injury) = roll_injury(&mut rng, (Form::new(0), 100), &rules, &FORM_RULES) {
                 let (min, max) = match injury.severity {
                     Severity::Light => rules.healing_weeks.light,
                     Severity::Medium => rules.healing_weeks.medium,
@@ -582,7 +583,7 @@ mod tests {
         fn injuries_never_raise_a_stat(seed: u64, count in 0..6usize) {
             let mut rng = ChaCha8Rng::seed_from_u64(seed);
             let injuries: Vec<Injury> = (0..count)
-                .filter_map(|_| roll_injury(&mut rng, Form::new(0), &rules(), &FORM_RULES))
+                .filter_map(|_| roll_injury(&mut rng, (Form::new(0), 100), &rules(), &FORM_RULES))
                 .collect();
             let stats = injured_stats(STATS, &injuries, Side::Left, &rules());
             prop_assert!(stats.hp <= STATS.hp && stats.hp >= STATS.hp / 5);

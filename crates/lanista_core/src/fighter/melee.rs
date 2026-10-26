@@ -361,10 +361,12 @@ mod tests {
             if !side.died {
                 assert!(f.form.value() < old.form.value() || old.form.value() == 0);
             }
-            // The place alone, whatever the fight showed.
+            // The place alone, whatever the fight showed, as its temperament takes it.
             let paid = (20, data.combat.melee.paid_places);
-            let place = place_fame(melee.places[i], paid, &data.fighter.fame);
-            assert_eq!(side.fame_change, i32::try_from(place).unwrap());
+            let place = i64::from(place_fame(melee.places[i], paid, &data.fighter.fame));
+            let temperaments = &data.fighter.personality.temperaments;
+            let percent = i64::from(temperaments.get(old.personality.temperament).fame_percent);
+            assert_eq!(i64::from(side.fame_change), place * percent / 100);
             let fame = i64::from(old.fame.value()) + i64::from(side.fame_change);
             assert_eq!(i64::from(f.fame.value()), fame.clamp(0, 100));
         }

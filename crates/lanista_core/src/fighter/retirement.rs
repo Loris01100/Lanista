@@ -10,8 +10,8 @@ use crate::fighter::personality::Personality;
 
 /// Chance, in percent, that a fighter retires at this year's check (once a year, off-season).
 /// None before `rules.from_age`; then `rules.per_year` per year since, plus
-/// `rules.per_permanent_injury` per permanent injury, scaled by determination:
-/// ± `rules.determination_percent` at determination 0 and 100, the determined staying longer.
+/// `rules.per_permanent_injury` per permanent injury, scaled by ego:
+/// ± `rules.ego_percent` at ego 0 and 100, the crowd holding the vain in the arena.
 #[must_use]
 pub fn retirement_chance(
     age: u32,
@@ -26,8 +26,8 @@ pub fn retirement_chance(
     let base = years * i64::from(rules.per_year)
         + i64::from(permanent_injuries) * i64::from(rules.per_permanent_injury);
     let half = i64::from(Personality::MAX / 2);
-    let offset = half - i64::from(personality.determination.value());
-    let scaled = base * (100 + offset * i64::from(rules.determination_percent) / half) / 100;
+    let offset = half - i64::from(personality.ego.value());
+    let scaled = base * (100 + offset * i64::from(rules.ego_percent) / half) / 100;
     u32::try_from(scaled.clamp(0, 100)).unwrap_or(0)
 }
 
@@ -67,8 +67,8 @@ pub struct RetirementRules {
     pub per_year: u32,
     /// Chance added per permanent injury, in percent.
     pub per_permanent_injury: u32,
-    /// How much determination moves the chance, in percent of it.
-    pub determination_percent: u32,
+    /// How much ego moves the chance, in percent of it.
+    pub ego_percent: u32,
     /// Most arms, then legs, a fighter fights on without; one more and it retires.
     pub max_lost_arms: u32,
     pub max_lost_legs: u32,
@@ -86,7 +86,7 @@ mod tests {
         from_age: 30,
         per_year: 5,
         per_permanent_injury: 15,
-        determination_percent: 50,
+        ego_percent: 50,
         max_lost_arms: 1,
         max_lost_legs: 1,
     };
@@ -110,9 +110,9 @@ mod tests {
         assert!(!too_maimed(&[arm, crippled], &RULES));
     }
 
-    fn determined(determination: u32) -> Personality {
+    fn determined(ego: u32) -> Personality {
         Personality {
-            determination: TraitValue::new(determination),
+            ego: TraitValue::new(ego),
             ..Personality::neutral()
         }
     }

@@ -199,9 +199,9 @@ pub struct StunRules {
     pub head_injury_percent: u32,
     /// Ticks a stunned fighter stays down; its opponents wait for it.
     pub ticks: u32,
-    /// Chance to get back up, in percent, from determination 0 to determination 100.
-    pub rise_percent_least_determined: u32,
-    pub rise_percent_most_determined: u32,
+    /// Chance to get back up, in percent, from boldness 0 to boldness 100.
+    pub rise_percent_most_timid: u32,
+    pub rise_percent_boldest: u32,
     /// Taken off that chance for every stun after the first in the same fight.
     pub rise_percent_lost_per_stun: u32,
 }
@@ -213,8 +213,8 @@ impl StunRules {
         cutting_hundredths: 0,
         head_injury_percent: 0,
         ticks: 0,
-        rise_percent_least_determined: 100,
-        rise_percent_most_determined: 100,
+        rise_percent_most_timid: 100,
+        rise_percent_boldest: 100,
         rise_percent_lost_per_stun: 0,
     };
 }
@@ -658,14 +658,14 @@ pub fn severed_limb<R: rand::Rng + ?Sized>(rng: &mut R, weights: &LocationWeight
 }
 
 /// Chance, in percent, that `fighter`, down after its latest stun, gets back up: from
-/// `rise_percent_least_determined` at determination 0 to `rise_percent_most_determined`
+/// `rise_percent_most_timid` at boldness 0 to `rise_percent_boldest`
 /// at 100, less `rise_percent_lost_per_stun` for each of its stuns after the first.
 #[must_use]
 pub fn rise_percent(fighter: &Fighter, rules: &StunRules) -> u32 {
-    let low = i64::from(rules.rise_percent_least_determined);
-    let high = i64::from(rules.rise_percent_most_determined);
-    let determination = i64::from(fighter.condition.personality.determination.value());
-    let percent = low + (high - low) * determination / i64::from(Personality::MAX);
+    let low = i64::from(rules.rise_percent_most_timid);
+    let high = i64::from(rules.rise_percent_boldest);
+    let boldness = i64::from(fighter.condition.personality.boldness.value());
+    let percent = low + (high - low) * boldness / i64::from(Personality::MAX);
     let lost =
         i64::from(rules.rise_percent_lost_per_stun) * i64::from(fighter.stuns.saturating_sub(1));
     u32::try_from((percent - lost).clamp(0, 100)).unwrap_or(0)
@@ -1675,8 +1675,8 @@ mod tests {
         cutting_hundredths: 167,
         head_injury_percent: 50,
         ticks: 60,
-        rise_percent_least_determined: 30,
-        rise_percent_most_determined: 90,
+        rise_percent_most_timid: 30,
+        rise_percent_boldest: 90,
         rise_percent_lost_per_stun: 20,
     };
 
@@ -1705,13 +1705,13 @@ mod tests {
     }
 
     #[test]
-    fn the_determined_get_up_more_often_and_every_stun_makes_it_harder() {
+    fn the_bold_get_up_more_often_and_every_stun_makes_it_harder() {
         use crate::fighter::personality::TraitValue;
 
         let mut f = fighter(0, 0.0, 0.0);
-        let rise = |f: &Fighter, determination| {
+        let rise = |f: &Fighter, boldness| {
             let mut f = f.clone();
-            f.condition.personality.determination = TraitValue::new(determination);
+            f.condition.personality.boldness = TraitValue::new(boldness);
             rise_percent(&f, &STUN)
         };
         f.stuns = 1;
@@ -1726,8 +1726,8 @@ mod tests {
         let mut arena = duel(0.5);
         arena.stun = StunRules {
             blunt_hundredths: 10_000,
-            rise_percent_least_determined: rise_percent,
-            rise_percent_most_determined: rise_percent,
+            rise_percent_most_timid: rise_percent,
+            rise_percent_boldest: rise_percent,
             ..STUN
         };
         arena

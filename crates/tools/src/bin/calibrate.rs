@@ -111,6 +111,6 @@ fn report(samples: &[Sample], model: &StatModel, fights: u64) {
     );
     println!("  lost limb by the winner's class: {:?}", model.lost_limb);
     println!("  beheaded by the winner's class: {:?}", model.beheaded);
-    println!("  death by determination: {:?}", model.death);
+    println!("  death by boldness: {:?}", model.death);
     println!("  stunned by the opponent's class: {:?}", model.stunned);
 }

@@ -31,7 +31,6 @@ use lanista_core::fighter::form::Form;
 use lanista_core::fighter::illness::IllnessLevel;
 use lanista_core::fighter::injury::{Injury, Severity, Side};
 use lanista_core::fighter::morale::Morale;
-use lanista_core::fighter::personality::Personality;
 use lanista_core::fighter::retirement::too_maimed;
 use lanista_core::journal::FightLine;
 use lanista_core::market::Target;
@@ -51,9 +50,9 @@ use crate::texts::{
     Article, activity_name, against_text, challenger_text, change, class_name, club_name,
     colosseum_name, colosseum_rules_name, contender_name, continent_name, date_in_sentence,
     date_text, fight_text, fighter_name, illness_text, injury_text, loadout_name, market_news_text,
-    money_line, move_text, named_club, origin_place, personality_traits, priced, result_text,
-    rival_fighter_name, staff_move_text, staff_news_text, stat_names, title_article, title_changed,
-    wealth_name, wealth_text, week_lines, world_article, year_text,
+    money_line, move_text, named_club, origin_place, priced, result_text, rival_fighter_name,
+    staff_move_text, staff_news_text, stat_names, temperament_name, temperament_text,
+    title_article, title_changed, wealth_name, wealth_text, week_lines, world_article, year_text,
 };
 use crate::theme;
 use crate::title_screen::{Slot, read_slots, slot_text};
@@ -1397,14 +1396,9 @@ fn sheet(ui: &mut egui::Ui, index: usize, f: &CareerFighter, data: &DesignData) 
                 }
             });
             section(ui, &tr!("personality-title"));
-            egui::Grid::new("personality").show(ui, |ui| {
-                for (name, value) in personality_traits(&f.personality) {
-                    ui.label(name);
-                    meter(ui, value, Personality::MAX, theme::SEA, None);
-                    ui.label(value.to_string());
-                    ui.end_row();
-                }
-            });
+            let temperament = f.personality.temperament;
+            ui.label(egui::RichText::new(temperament_name(temperament)).strong());
+            ui.label(temperament_text(temperament));
             section(ui, &tr!("sheet-health"));
             health(ui, f);
         });
@@ -2070,7 +2064,10 @@ mod tests {
         let observed = state.rival_fighter(id).unwrap();
         assert_eq!(observed.observed_weeks, 1);
         assert_ne!(potential_text(observed, &scouting), "?");
-        assert!(outside_personality_text(observed, &scouting).starts_with("Agr "));
+        assert_eq!(
+            outside_personality_text(observed, &scouting),
+            temperament_name(observed.personality.temperament)
+        );
         let data = &screen.data;
         let ease = outside_ease_text(observed, &scouting, data);
         assert_eq!(ease, ease_text(observed, data));
@@ -2393,25 +2390,25 @@ mod tests {
             cells,
             [
                 (
-                    "Palestre d'Arrhichion",
-                    "Grèce",
-                    "agressif",
+                    "Familia Maximus",
+                    "Rome",
+                    "spectacle",
                     "pauvre",
                     10,
                     "+0, neutre"
                 ),
                 (
-                    "Dar Zénobie",
-                    "Monde arabe",
-                    "vétéran",
-                    "pauvre",
+                    "École Guan Yu",
+                    "Asie de l'Est",
+                    "formateur",
+                    "modeste",
                     10,
                     "+0, neutre"
                 ),
                 (
-                    "Clan de Cochise",
+                    "Clan de Tashunka",
                     "Tribus amérindiennes",
-                    "agressif",
+                    "vétéran",
                     "pauvre",
                     10,
                     "+0, neutre"
@@ -2471,10 +2468,9 @@ mod tests {
                 what: WorldNews::Title(1, TitleNews::Vacated { to: None }),
             },
         ];
-        let founded =
-            "Un nouveau ludus ouvre ses portes : Palestre d'Arrhichion (Grèce), en Europe";
+        let founded = "Un nouveau ludus ouvre ses portes : Familia Maximus (Rome), en Europe";
         let vacated = "Le champion de Rome n'est plus, son trône reste vide";
-        let closed = "Faillite : Dar Zénobie ferme ses portes, ses combattants partent au marché";
+        let closed = "Faillite : École Guan Yu ferme ses portes, ses combattants partent au marché";
         assert_eq!(
             headlines(&screen),
             [
@@ -2507,11 +2503,11 @@ mod tests {
             headlines(&screen),
             [(
                 4,
-                vec!["Dar Zénobie se déclare votre rival : vos combats contre lui attireront les foules".to_owned()]
+                vec!["École Guan Yu se déclare votre rival : vos combats contre lui attireront les foules".to_owned()]
             )]
         );
         assert!(screen.alerts().contains(
-            &"Dar Zénobie est votre rival depuis saison 1, semaine 4 : recettes à 150 %, renommée +3 par combat"
+            &"École Guan Yu est votre rival depuis saison 1, semaine 4 : recettes à 150 %, renommée +3 par combat"
                 .to_owned()
         ));
         assert_eq!(screen.rival_rows()[1].standing, Standing::Rival);

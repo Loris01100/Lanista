@@ -6,7 +6,7 @@ use crate::design_data::SpellData;
 use crate::fighter::form::Form;
 use crate::fighter::illness::IllnessLevel;
 use crate::fighter::morale::Morale;
-use crate::fighter::personality::Personality;
+use crate::fighter::personality::{Personality, Temperament};
 use crate::fighter::{Condition, Fighter, FighterId};
 use crate::melee::{in_danger, in_final};
 
@@ -37,11 +37,11 @@ const RETREAT_WEIGHT: f64 = 2.0;
 const RETREAT_MIN: f64 = 0.1;
 /// An enemy threatens a fighter within its longest reach plus this margin, in meters.
 const THREAT_MARGIN: f64 = 1.0;
-/// Score of stepping in on an enemy in reach while no spell is ready, at aggression 100.
+/// Score of stepping in on an enemy in reach while no spell is ready, at boldness 100.
 const PRESS_SCORE: f64 = 0.05;
 /// Closer than this, in meters, there is nothing left to press.
 const PRESS_MIN_DISTANCE: f64 = 0.1;
-/// Ticks a showman at showmanship 100 waits for its strongest spell instead of a weaker hit.
+/// Ticks a showman at ego 100 waits for its strongest spell instead of a weaker hit.
 const SHOW_WAIT_TICKS: f64 = 60.0;
 /// Share of the strongest spell's value a showman gives to waiting for it.
 const SHOW_WAIT_VALUE: f64 = 0.9;
@@ -68,20 +68,21 @@ fn offset(value: u32, neutral: u32) -> f64 {
 }
 
 /// How much a fighter wants out of the fight once hurt, from 0 (neutral or bolder) to 1.
-/// Up with caution, injuries, illness, low form and low morale; down with aggression
-/// and determination.
+/// Up with timidity, injuries, illness, low form and low morale; down with boldness.
+/// Always 0 for a berserker.
 #[must_use]
 pub fn fear(condition: &Condition) -> f64 {
     let p = &condition.personality;
+    if p.temperament == Temperament::Berserker {
+        return 0.0;
+    }
     let illness = condition.illness.map_or(0.0, |ill| match ill.level {
         IllnessLevel::Mild => 0.1,
         IllnessLevel::Moderate => 0.2,
         IllnessLevel::Severe => 0.3,
     });
     let injuries = u32::try_from(condition.injuries.len()).unwrap_or(u32::MAX);
-    let fear = 0.5 * offset(p.caution.value(), Personality::NEUTRAL)
-        - 0.25 * offset(p.aggression.value(), Personality::NEUTRAL)
-        - 0.25 * offset(p.determination.value(), Personality::NEUTRAL)
+    let fear = -0.75 * offset(p.boldness.value(), Personality::NEUTRAL)
         - 0.2 * offset(condition.morale.value(), Morale::NEUTRAL)
         + 0.2 * (1.0 - f64::from(condition.form.value()) / f64::from(Form::MAX))
         + 0.15 * f64::from(injuries)
@@ -160,10 +161,14 @@ pub fn score_actions(arena: &Arena, me: FighterId) -> Vec<(Action, f64)> {
         let press = if endangered {
             1.0
         } else {
-            offset(
-                me.condition.personality.aggression.value(),
-                Personality::NEUTRAL,
-            )
+            let personality = &me.condition.personality;
+            // A berserker presses harder the more it is hurt.
+            let rage = if personality.temperament == Temperament::Berserker {
+                1.0 - share(me.hp, me.stats.hp)
+            } else {
+                0.0
+            };
+            offset(personality.boldness.value(), Personality::NEUTRAL).max(rage)
         };
         if press > 0.0 {
             scored.push((Action::Move(toward), press * PRESS_SCORE));
@@ -233,10 +238,7 @@ fn gather_value(me: &Fighter, target: &Fighter, rules: &AccuracyRules) -> f64 {
 /// What waiting is worth to a showman: a share of its strongest spell's value when
 /// that spell reaches the target, is affordable and will be ready soon; 0 otherwise.
 fn show_wait_value(me: &Fighter, target: &Fighter, distance: f64, rules: &AccuracyRules) -> f64 {
-    let flair = offset(
-        me.condition.personality.showmanship.value(),
-        Personality::NEUTRAL,
-    );
+    let flair = offset(me.condition.personality.ego.value(), Personality::NEUTRAL);
     if flair <= 0.0 {
         return 0.0;
     }
@@ -578,8 +580,7 @@ mod tests {
     fn fearful() -> Condition {
         Condition {
             personality: Personality {
-                caution: TraitValue::new(100),
-                determination: TraitValue::new(0),
+                boldness: TraitValue::new(0),
                 ..Personality::neutral()
             },
             ..Condition::default()
@@ -594,15 +595,14 @@ mod tests {
     }
 
     #[test]
-    fn fear_is_zero_when_neutral_and_grows_with_caution_injuries_illness_and_fatigue() {
+    fn fear_is_zero_when_neutral_and_grows_with_timidity_injuries_illness_and_fatigue() {
         use crate::fighter::illness::Illness;
         use crate::fighter::injury::{Injury, Location, Severity, Side};
 
         assert!(fear(&Condition::default()).abs() < f64::EPSILON);
         assert!((fear(&fearful()) - 0.75).abs() < 1e-9);
         let bold = Personality {
-            aggression: TraitValue::new(100),
-            determination: TraitValue::new(100),
+            boldness: TraitValue::new(80),
             ..Personality::neutral()
         };
         let worn = Condition {
@@ -619,8 +619,8 @@ mod tests {
             }),
             ..Condition::default()
         };
-        // 0.2 (form 0) + 0.15 (one injury) + 0.2 (moderate illness) - 0.5 (boldness).
-        assert!((fear(&worn) - 0.05).abs() < 1e-9);
+        // 0.2 (form 0) + 0.15 (one injury) + 0.2 (moderate illness) - 0.45 (boldness).
+        assert!((fear(&worn) - 0.1).abs() < 1e-9);
         assert!(
             fear(&Condition {
                 morale: Morale::new(0),
@@ -709,16 +709,38 @@ mod tests {
     }
 
     #[test]
-    fn an_aggressive_fighter_steps_in_while_its_spells_cool_down() {
+    fn a_bold_fighter_steps_in_while_its_spells_cool_down() {
         let aggressive = Condition {
             personality: Personality {
-                aggression: TraitValue::new(100),
+                boldness: TraitValue::new(100),
                 ..Personality::neutral()
             },
             ..Condition::default()
         };
         let mut arena = face_to_face(5.0, 100, aggressive);
         arena.fighters[0].cooldowns[0] = 10;
+        assert_eq!(
+            UtilityAi.decide(&arena, FighterId(0)),
+            Action::Move(Vec2::new(1.5, 0.0))
+        );
+    }
+
+    #[test]
+    fn a_berserker_fears_nothing_and_steps_in_once_hurt() {
+        let berserker = Condition {
+            personality: Personality {
+                temperament: Temperament::Berserker,
+                boldness: TraitValue::new(0),
+                ..Personality::neutral()
+            },
+            ..Condition::default()
+        };
+        assert!(fear(&berserker).abs() < f64::EPSILON);
+        // As timid as can be: unhurt it waits for its spell, hurt it steps in.
+        let mut arena = face_to_face(5.0, 100, berserker.clone());
+        arena.fighters[0].cooldowns[0] = 10;
+        assert_eq!(UtilityAi.decide(&arena, FighterId(0)), Action::Wait);
+        arena.fighters[0].hp = 10;
         assert_eq!(
             UtilityAi.decide(&arena, FighterId(0)),
             Action::Move(Vec2::new(1.5, 0.0))
@@ -745,7 +767,7 @@ mod tests {
             target: FighterId(1),
         };
         assert_eq!(UtilityAi.decide(&arena, FighterId(0)), cast(1));
-        arena.fighters[0].condition.personality.showmanship = TraitValue::new(100);
+        arena.fighters[0].condition.personality.ego = TraitValue::new(100);
         assert_eq!(UtilityAi.decide(&arena, FighterId(0)), Action::Wait);
         // Too long to wait for: the showman hits now.
         arena.fighters[0].cooldowns[2] = 100;

@@ -123,7 +123,18 @@ Les soins sont une décision du joueur, jamais automatique. Il peut soigner tout
 
 ### Personnalité, moral et mort
 
-La personnalité est fixe (native) et définit le caractère en combat : agressivité, prudence, goût du spectacle, détermination. La détermination fixe le seuil d'abandon : un peureux abandonne tôt et meurt rarement, un déterminé continue à PV critiques et peut recevoir un coup fatal. Le joueur n'a aucun contrôle sur ce seuil.
+La personnalité est fixe (native) : un tempérament, que le joueur voit, et deux axes cachés, l'audace et l'ego. Chaque tempérament est un compromis, jamais un malus pur :
+
+| Tempérament | En combat | Hors combat |
+| --- | --- | --- |
+| Téméraire | Presse sans relâche, n'abandonne presque jamais | Renommée accrue, se blesse et meurt plus souvent |
+| Cabotin | Garde son coup le plus spectaculaire pour le public | Renommée qui monte et descend plus vite, moral fragile après une défaite |
+| Méthodique | Se bat sans chercher à plaire | Renommée lente, moral stable |
+| Survivant | Abandonne tôt, meurt rarement | Se blesse moins, mais chaque abandon coûte de la renommée |
+| Enragé | Sans peur, s'acharne d'autant plus qu'il est blessé | Se blesse plus, trahit ses alliés de mêlée |
+| Orgueilleux | N'abandonne jamais face à plus faible | Renommée accrue, moral qui chute fort à chaque revers |
+
+L'audace fixe le seuil d'abandon : un timide abandonne tôt et meurt rarement, un audacieux continue à PV critiques et peut recevoir un coup fatal. Le joueur n'a aucun contrôle sur ce seuil. L'ego dit le goût du public : il retient le combattant dans l'arène et le rend plus difficile à recruter pour un petit club.
 
 Le moral monte avec les victoires et la renommée, baisse avec les défaites, les blessures et les maladies. Il donne un petit bonus ou malus en combat et module la progression. Il n'y a pas de loyauté.
 

@@ -13,7 +13,7 @@ use lanista_core::fighter::career::{Activity, CareerFighter, Record, Status};
 use lanista_core::fighter::fame::FightResult;
 use lanista_core::fighter::illness::{Illness, IllnessLevel};
 use lanista_core::fighter::injury::{Injury, Location, Severity, Side};
-use lanista_core::fighter::personality::Personality;
+use lanista_core::fighter::personality::Temperament;
 use lanista_core::journal::{FightLine, FighterWeek, Retired};
 use lanista_core::market::{
     MarketNews, Move, Target, ease_seen, personality_seen, potential_range, stat_ranges,
@@ -204,30 +204,37 @@ pub fn potential_text(fighter: &CareerFighter, scouting: &Scouting) -> String {
     range_text(potential_range(fighter, scouting))
 }
 
-/// Each trait of a personality with its name: ("Agressivité", 60)…
-pub fn personality_traits(p: &Personality) -> [(String, u32); 4] {
-    [
-        (tr!("trait-aggression"), p.aggression.value()),
-        (tr!("trait-caution"), p.caution.value()),
-        (tr!("trait-showmanship"), p.showmanship.value()),
-        (tr!("trait-determination"), p.determination.value()),
-    ]
+fn temperament_key(temperament: Temperament) -> &'static str {
+    match temperament {
+        Temperament::Balanced => "balanced",
+        Temperament::Reckless => "reckless",
+        Temperament::Showman => "showman",
+        Temperament::Methodical => "methodical",
+        Temperament::Survivor => "survivor",
+        Temperament::Berserker => "berserker",
+        Temperament::Proud => "proud",
+    }
 }
 
-/// The personality of a fighter out of the club, in short, if the recruiter sees it:
-/// "Agr 60, Pru 40, Spe 50, Dét 70", or "?".
+/// A temperament's name: "Téméraire".
+pub fn temperament_name(temperament: Temperament) -> String {
+    tr!(&format!("temperament-{}", temperament_key(temperament)))
+}
+
+/// What a temperament does, in a sentence or two.
+pub fn temperament_text(temperament: Temperament) -> String {
+    tr!(&format!(
+        "temperament-{}-text",
+        temperament_key(temperament)
+    ))
+}
+
+/// The temperament of a fighter out of the club, if the recruiter sees it, or "?".
 pub fn outside_personality_text(fighter: &CareerFighter, scouting: &Scouting) -> String {
     if !personality_seen(fighter, scouting) {
         return "?".into();
     }
-    let p = &fighter.personality;
-    tr!(
-        "personality-short",
-        aggression = p.aggression.value(),
-        caution = p.caution.value(),
-        showmanship = p.showmanship.value(),
-        determination = p.determination.value()
-    )
+    temperament_name(fighter.personality.temperament)
 }
 
 /// "3 V, 1 D, 2 N".

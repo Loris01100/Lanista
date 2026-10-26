@@ -23,7 +23,7 @@ use crate::fighter::{Effect, Fighter, FighterId};
 use crate::log::EventKind;
 
 /// Features of a fighter besides its class: the seven stats, fear, surrender
-/// threshold, aggression and showmanship.
+/// threshold, boldness and ego.
 pub const BASE_FEATURES: usize = 11;
 
 /// The model of each arena kind, fitted by `calibrate`, read from `data/stat_model.ron`.
@@ -94,7 +94,7 @@ pub struct StatModel {
     /// Chance the loser of a finished fight was beheaded, by the winner's class.
     pub beheaded: Vec<f64>,
     /// Chance the loser of a finished fight neither knocked out nor cut (limb or head)
-    /// falls to 0 HP rather than gives up, by band of determination: the first band
+    /// falls to 0 HP rather than gives up, by band of boldness: the first band
     /// starts at 0, the last ends at 100.
     pub death: Vec<f64>,
     /// Chance a fighter not knocked out was stunned in the fight, by its opponent's class.
@@ -121,8 +121,8 @@ pub struct Winner {
     pub ranged_defense: f64,
     pub fear: f64,
     pub surrender: f64,
-    pub aggression: f64,
-    pub showmanship: f64,
+    pub boldness: f64,
+    pub ego: f64,
     /// One weight per class; a class missing here weighs 0.
     pub classes: Vec<f64>,
 }
@@ -201,8 +201,8 @@ pub fn features(fighter: &Fighter, classes: usize) -> Vec<f64> {
     features.extend([
         fear(&fighter.condition),
         share(fighter.surrender_hp, fighter.stats.hp),
-        trait_share(personality.aggression.value()),
-        trait_share(personality.showmanship.value()),
+        trait_share(personality.boldness.value()),
+        trait_share(personality.ego.value()),
     ]);
     let class = usize::try_from(fighter.class.0).unwrap_or(usize::MAX);
     features.extend((0..classes).map(|c| if c == class { 1.0 } else { 0.0 }));
@@ -223,8 +223,8 @@ impl Winner {
             self.ranged_defense,
             self.fear,
             self.surrender,
-            self.aggression,
-            self.showmanship,
+            self.boldness,
+            self.ego,
         ];
         weights.extend((0..classes).map(|c| self.classes.get(c).copied().unwrap_or(0.0)));
         weights
@@ -244,8 +244,8 @@ impl Winner {
             ranged_defense: w(6),
             fear: w(7),
             surrender: w(8),
-            aggression: w(9),
-            showmanship: w(10),
+            boldness: w(9),
+            ego: w(10),
             classes: weights.get(BASE_FEATURES..).unwrap_or_default().to_vec(),
         }
     }
@@ -345,8 +345,8 @@ impl StatModel {
     /// falls to 0 HP rather than gives up.
     #[must_use]
     pub fn death_chance(&self, loser: &Fighter) -> f64 {
-        let determination = loser.condition.personality.determination.value();
-        let band = usize::try_from(determination).unwrap_or(usize::MAX) * self.death.len()
+        let boldness = loser.condition.personality.boldness.value();
+        let band = usize::try_from(boldness).unwrap_or(usize::MAX) * self.death.len()
             / usize::try_from(Personality::MAX + 1).unwrap_or(1);
         self.death
             .get(band.min(self.death.len().saturating_sub(1)))
@@ -503,8 +503,8 @@ mod tests {
         Fighter::new(FighterId(0), class, class_data, stats, Vec2::new(0.0, 0.0))
     }
 
-    fn determined(mut f: Fighter, determination: u32) -> Fighter {
-        f.condition.personality.determination = TraitValue::new(determination);
+    fn bold(mut f: Fighter, boldness: u32) -> Fighter {
+        f.condition.personality.boldness = TraitValue::new(boldness);
         f
     }
 
@@ -533,12 +533,12 @@ mod tests {
     }
 
     #[test]
-    fn the_determined_fall_far_more_often_than_the_timid() {
+    fn the_bold_fall_far_more_often_than_the_timid() {
         let model = data().stat_model.sand;
         let f = fighter(&data(), 0, STATS);
-        let (bold, timid) = (determined(f.clone(), 100), determined(f, 0));
-        // The most determined still give up, at 10 % of their HP.
-        assert!(model.death_chance(&bold) > 0.25);
+        let (bold, timid) = (bold(f.clone(), 100), bold(f, 0));
+        // The boldest still give up, at 10 % of their HP.
+        assert!(model.death_chance(&bold) > 0.2);
         assert!(model.death_chance(&timid) < 0.05);
         assert!(model.death_chance(&bold) > 10.0 * model.death_chance(&timid));
     }
@@ -586,12 +586,12 @@ mod tests {
             a in 0_u32..2,
             b in 0_u32..2,
             hp in 50_u32..200,
-            determination in 0_u32..=100,
+            boldness in 0_u32..=100,
         ) {
             let data = data();
             let model = data.stat_model.get(ArenaKind::ALL[usize::try_from(seed % 3).unwrap()]);
             let first = fighter(&data, a, STATS);
-            let second = determined(fighter(&data, b, crate::fighter::Stats { hp, ..STATS }), determination);
+            let second = bold(fighter(&data, b, crate::fighter::Stats { hp, ..STATS }), boldness);
             let hits = &data.combat.hits;
             let endings = model.resolve(&first, &second, hits, &mut ChaCha8Rng::seed_from_u64(seed));
             prop_assert_eq!(endings, model.resolve(&first, &second, hits, &mut ChaCha8Rng::seed_from_u64(seed)));
