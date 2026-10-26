@@ -116,7 +116,7 @@ pub fn next_week(state: &mut GameState, decisions: &Decisions, data: &DesignData
                 activity => opponent(
                     &mut state.rng,
                     (&state.colosseums, &state.rivals, &state.free_agents),
-                    activity,
+                    (activity, &*fighter),
                     &plans,
                     &fought,
                 ),

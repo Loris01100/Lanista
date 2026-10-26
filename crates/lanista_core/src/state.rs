@@ -2996,6 +2996,8 @@ mod tests {
             &state.rivals[..],
             &state.free_agents[..],
         );
+        let me = &state.fighters[0];
+        let capua = (capua, me);
         assert_eq!(
             opponent(&mut rng, world, capua, &only, &fought),
             Some((0, one))
@@ -3006,12 +3008,23 @@ mod tests {
         };
         let challenge = Activity::Challenge(ColosseumId(0), four);
         assert_eq!(
-            opponent(&mut rng, world, challenge, &only, &fought),
+            opponent(&mut rng, world, (challenge, me), &only, &fought),
             Some((0, Contender::Rival(four)))
         );
         // A free agent registered there is met too.
         let agent = Contender::FreeAgent(2);
-        only.set_activity(agent, capua);
+        only.set_activity(agent, capua.0);
+        // A spiteful fighter meets first the one it bears a grudge against.
+        let mut spiteful = me.clone();
+        spiteful.traits = vec![Trait::Spiteful];
+        let theirs = &state.free_agents[2];
+        spiteful.grudges = vec![(theirs.id, theirs.name.clone())];
+        for _ in 0..8 {
+            assert_eq!(
+                opponent(&mut rng, world, (capua.0, &spiteful), &only, &fought),
+                Some((0, agent))
+            );
+        }
         fought.push(one);
         assert_eq!(
             opponent(&mut rng, world, capua, &only, &fought),

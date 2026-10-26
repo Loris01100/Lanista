@@ -709,7 +709,8 @@ impl CareerFighter {
     }
 
     /// Whether it bears a grudge against the fighter `id`.
-    pub(crate) fn bears_grudge(&self, id: u64) -> bool {
+    #[must_use]
+    pub fn bears_grudge(&self, id: u64) -> bool {
         self.grudges.iter().any(|&(g, _)| g == id)
     }
 

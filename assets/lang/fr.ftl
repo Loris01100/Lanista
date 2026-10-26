@@ -131,6 +131,8 @@ week-healed = Guéri : { $location }
 week-ill = Tombe malade : { $illness }
 week-illness-healed = Maladie guérie
 week-trait = Devient { $name }
+week-revenge = Prend sa revanche sur { $name }
+week-grudge = Garde rancune à { $name }
 week-birthday = Un an de plus : { $age } ans
 week-season-gains = Bilan de la saison : { $gains } progrès
 week-stats = Stats : { $stats }
@@ -482,7 +484,10 @@ plan-no-armour = Sans armure
 plan-no-armour-effect = Défenses très réduites, renommée +{ $fame }
 plan-fight-ill-advised = Combat déconseillé
 plan-challenge = Défier :
-plan-challenge-rival = { $name }, Elo { $elo }{ $accepts ->
+plan-challenge-rival = { $name }, Elo { $elo }{ $grudge ->
+        [true] , revanche à prendre
+       *[false] {""}
+    }{ $accepts ->
         [false] {" "}: refuse
        *[true] {""}
     }

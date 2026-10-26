@@ -393,7 +393,8 @@ pub struct Venue {
 /// training are at the prices of the club's `staff`. The manager minds its traits:
 /// among the colosseums at home, or abroad, it prefers one where it may take its
 /// revenge, then its lucky floor; a workaholic rests only below `rest_form_percent` of
-/// `rest_form`; a superstitious one keeps its loadout.
+/// `rest_form`; a nonchalant one rests rather than trains; a superstitious one keeps
+/// its loadout.
 #[must_use]
 pub fn plan(
     fighter: &CareerFighter,
@@ -437,6 +438,8 @@ pub fn plan(
     } else if let Some((venue, id)) = chosen {
         *money -= i64::from(venue.fee);
         Activity::Fight(ColosseumId(id))
+    } else if fighter.has(Trait::Nonchalant) && training <= *money {
+        Activity::Rest
     } else if training <= *money {
         *money -= training;
         Activity::Train
@@ -773,6 +776,13 @@ mod tests {
             assert_eq!(week(&fighter, &fair).activity, plain);
             assert_eq!(week(&workaholic, &fair).activity, worker);
         }
+        // Nothing worth fighting for: a nonchalant one rests rather than trains.
+        fighter.form = Form::new(100);
+        let poor = [venue(0.1, false, false), venue(0.1, false, false)];
+        assert_eq!(week(&fighter, &poor).activity, Activity::Train);
+        let mut nonchalant = fighter.clone();
+        nonchalant.traits = vec![Trait::Nonchalant];
+        assert_eq!(week(&nonchalant, &poor).activity, Activity::Rest);
         // A superstitious one keeps its loadout, the one it is least at ease with.
         fighter.ease = vec![0, 100];
         fighter.loadout = 0;

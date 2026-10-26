@@ -301,14 +301,15 @@ pub(super) fn pay_rival(rivals: &mut [Rival], club: usize, amount: i64) {
     }
 }
 
-/// The colosseum and the outsider met in a fight (`activity`): the rival fighter
-/// challenged while still fighting (someone may have killed it earlier in the week),
-/// otherwise one at random among those registered there (in `plans`) who have not
-/// `fought` yet, or else among those ranked there, or else among anyone.
+/// The colosseum and the outsider met in a fight (`activity`) by the club's fighter
+/// `me`: the rival fighter challenged while still fighting (someone may have killed it
+/// earlier in the week), otherwise one at random among those registered there (in
+/// `plans`) who have not `fought` yet, those `me` bears a grudge against first, or else
+/// among those ranked there, or else among anyone.
 pub(super) fn opponent(
     rng: &mut ChaCha8Rng,
     (colosseums, rivals, free_agents): (&[Colosseum], &[Rival], &[CareerFighter]),
-    activity: Activity,
+    (activity, me): (Activity, &CareerFighter),
     plans: &OutsiderPlans,
     fought: &[Contender],
 ) -> Option<(usize, Contender)> {
@@ -337,13 +338,18 @@ pub(super) fn opponent(
                 .is_some_and(|p| p.activity == Activity::Fight(id))
         })
         .collect();
+    let foes: Vec<Contender> = registered
+        .iter()
+        .copied()
+        .filter(|&o| outsider(rivals, free_agents, o).is_some_and(|f| me.bears_grudge(f.id)))
+        .collect();
     let ranked: Vec<Contender> = colosseum
         .ranking
         .iter()
         .map(|r| r.contender)
         .filter(|o| everyone.contains(o))
         .collect();
-    let candidates = [registered, ranked, everyone]
+    let candidates = [foes, registered, ranked, everyone]
         .into_iter()
         .find(|c| !c.is_empty())?;
     Some((c, pick_opponent(rng, &candidates)?))

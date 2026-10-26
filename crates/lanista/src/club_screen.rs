@@ -1322,10 +1322,17 @@ fn challenge_picker(
                             };
                             let name = contender_name(rating.contender, state, data);
                             let accepts = state.may_challenge(i, id, r, data);
+                            let grudge = state.rival_fighter(r).is_some_and(|o| {
+                                state
+                                    .fighters
+                                    .get(i)
+                                    .is_some_and(|me| me.bears_grudge(o.id))
+                            });
                             let text = tr!(
                                 "plan-challenge-rival",
                                 name = name,
                                 elo = rating.elo,
+                                grudge = if grudge { "true" } else { "false" },
                                 accepts = if accepts { "true" } else { "false" }
                             );
                             ui.add_enabled_ui(accepts, |ui| {

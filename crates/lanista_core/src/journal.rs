@@ -14,6 +14,7 @@ use crate::fighter::retirement::too_maimed;
 use crate::fighter::traits::Trait;
 use crate::fighter::{ClassId, Stats};
 use crate::log::FighterReport;
+use crate::names::FighterName;
 use crate::state::WeekSummary;
 
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
@@ -48,6 +49,12 @@ pub struct FighterWeek {
     /// The traits it earned.
     #[serde(default)]
     pub new_traits: Vec<Trait>,
+    /// Those it now bears a grudge against.
+    #[serde(default)]
+    pub new_grudges: Vec<FighterName>,
+    /// Those it bore a grudge against and beat.
+    #[serde(default)]
+    pub revenges: Vec<FighterName>,
     /// A year went by: the fighter is now `age`.
     pub birthday: bool,
     pub season_gains: u32,
@@ -114,6 +121,18 @@ impl FightLine {
     }
 }
 
+/// The names of `grudges` whose fighter is not in `others`.
+fn grudges_missing(
+    grudges: &[(u64, FighterName)],
+    others: &[(u64, FighterName)],
+) -> Vec<FighterName> {
+    grudges
+        .iter()
+        .filter(|(id, _)| others.iter().all(|(o, _)| o != id))
+        .map(|(_, name)| name.clone())
+        .collect()
+}
+
 impl FighterWeek {
     /// The week `report` of a fighter, `before` it and `after`.
     #[must_use]
@@ -138,6 +157,8 @@ impl FighterWeek {
                 .filter(|t| !before.traits.contains(t))
                 .copied()
                 .collect(),
+            new_grudges: grudges_missing(&after.grudges, &before.grudges),
+            revenges: grudges_missing(&before.grudges, &after.grudges),
             birthday: report.birthday,
             season_gains: report.season_gains,
             form: (before.form.value(), after.form.value()),

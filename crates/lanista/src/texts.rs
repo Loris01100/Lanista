@@ -1109,6 +1109,12 @@ pub fn week_lines(week: &FighterWeek, dominant: Side, data: &DesignData) -> Vec<
     for &t in &week.new_traits {
         lines.push(tr!("week-trait", name = trait_name(t)));
     }
+    for name in &week.revenges {
+        lines.push(tr!("week-revenge", name = stage_name(name)));
+    }
+    for name in &week.new_grudges {
+        lines.push(tr!("week-grudge", name = stage_name(name)));
+    }
     if week.birthday {
         lines.push(tr!("week-birthday", age = week.age));
         if week.season_gains > 0 {
@@ -1162,6 +1168,46 @@ mod tests {
         assert!(text.starts_with(&format!("Mêlée à 5, {place}")), "{text}");
         assert_eq!(place_name(1), "1er");
         assert_eq!(place_name(3), "3e");
+    }
+
+    #[test]
+    fn a_week_tells_grudges_kept_and_revenges_taken() {
+        use lanista_core::fighter::career::WeekPlan;
+        use lanista_core::fighter::equipment::Refused;
+        use lanista_core::staff::StaffEffects;
+        use rand_chacha::ChaCha8Rng;
+        use rand_chacha::rand_core::SeedableRng;
+
+        let data = DesignData::load().unwrap();
+        let mut rng = ChaCha8Rng::seed_from_u64(1);
+        let name = |name: &str| FighterName {
+            name: name.into(),
+            number: 0,
+        };
+        let mut before = CareerFighter::random(&mut rng, &data);
+        before.grudges = vec![(2, name("Flamma")), (4, name("Spiculus"))];
+        let mut after = before.clone();
+        let rest = WeekPlan {
+            activity: Activity::Rest,
+            care: false,
+            refused: Refused::NONE,
+            loadout: 0,
+        };
+        let report = after
+            .play_week(rest, None, StaffEffects::default(), &mut rng, &data)
+            .unwrap();
+        after.grudges = vec![(4, name("Spiculus")), (3, name("Crixus"))];
+        let week = FighterWeek::new(1, (&before, &after), &report, &data);
+        let lines = week_lines(&week, Side::Right, &data);
+        assert!(
+            lines.contains(&"Prend sa revanche sur Flamma".to_owned()),
+            "{lines:?}"
+        );
+        assert!(
+            lines.contains(&"Garde rancune à Crixus".to_owned()),
+            "{lines:?}"
+        );
+        assert!(!lines.iter().any(|l| l.contains("Spiculus")), "{lines:?}");
     }
 
     #[test]
