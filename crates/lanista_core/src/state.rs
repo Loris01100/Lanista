@@ -1434,6 +1434,8 @@ mod tests {
     fn a_trainer_spares_form_at_training() {
         let data = data();
         let mut alone = game(7, &data);
+        // A nonchalant would lose more form, and spare more of it.
+        alone.fighters[0].traits.clear();
         let mut coached = alone.clone();
         coached.staff = Staff::of_levels(&[(Role::Trainer, 5)], &data.economy.staff);
         next_week(&mut alone, &plan(Activity::Train, false), &data);

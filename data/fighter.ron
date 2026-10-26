@@ -112,6 +112,14 @@
         // A duel for a title, or in a colosseum of at least great_prestige, is a great
         // stage; one of at most small_prestige, a small one.
         vain: (great_prestige: 3, small_prestige: 1, great_morale: 5, small_morale: 5),
+        // In percent of every stat, in a duel against a fighter that beat it and it has
+        // not beaten since.
+        spiteful: (grudge_percent: 105),
+        // lucky_percent of every stat in a duel on the floor of its first win; morale
+        // lost in a week its plan changes its loadout.
+        superstitious: (lucky_percent: 105, loadout_morale: 5),
+        // Morale gained every week by the other active fighters of its club.
+        pack_leader: (weekly_morale: 1),
     ),
     morale: (
         // Morale goes from 0 to 100, neutral at 50.

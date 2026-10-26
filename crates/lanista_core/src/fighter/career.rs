@@ -97,6 +97,12 @@ pub struct CareerFighter {
     /// Its traits, 0 to 2, for life.
     #[serde(default)]
     pub traits: Vec<Trait>,
+    /// The fighters that beat a spiteful one in a duel and it has not beaten since.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub grudges: Vec<FighterName>,
+    /// The floor of a superstitious fighter's first duel won.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub lucky_floor: Option<ArenaKind>,
     pub morale: Morale,
     pub fame: Fame,
     pub form: Form,
@@ -171,6 +177,8 @@ impl CareerFighter {
             age,
             personality,
             traits,
+            grudges: Vec::new(),
+            lucky_floor: None,
             morale: Morale::neutral(),
             fame: Fame::default(),
             form: Form::full(),
@@ -227,6 +235,8 @@ impl CareerFighter {
             age: 0,
             personality: Personality::neutral(),
             traits: Vec::new(),
+            grudges: Vec::new(),
+            lucky_floor: None,
             morale: Morale::neutral(),
             fame: Fame::default(),
             form: Form::full(),
@@ -278,6 +288,17 @@ impl CareerFighter {
         data: &DesignData,
         position: Vec2,
     ) -> Fighter {
+        self.combat_fighter_at(id, (refused, 100), data, position)
+    }
+
+    /// As [`CareerFighter::combat_fighter`], with `percent` of every stat.
+    fn combat_fighter_at(
+        &self,
+        id: FighterId,
+        (refused, percent): (Refused, u32),
+        data: &DesignData,
+        position: Vec2,
+    ) -> Fighter {
         let class_data = data.class(self.class).expect("a class of the design data");
         let rules = &data.fighter;
         let equipment = &rules.equipment;
@@ -286,7 +307,9 @@ impl CareerFighter {
             stats = loadout.off_hand.stats(stats, self.ambidextrous, equipment);
         }
         let stats = rules.ease.stats(stats, self.ease_with(self.loadout));
-        let stats = refused.stats(stats, equipment);
+        let stats = refused
+            .stats(stats, equipment)
+            .map(|v| percent_of(v, percent));
         let class = (class_data, self.loadout);
         let mut fighter = Fighter::in_loadout(id, self.class, class, stats, position);
         fighter.surrender_hp = self.personality.surrender_hp(stats.hp, &rules.personality);
@@ -407,6 +430,10 @@ impl CareerFighter {
         if self.status != Status::Active {
             return None;
         }
+        if plan.loadout != self.loadout && self.has(Trait::Superstitious) {
+            let lost = data.fighter.traits.superstitious.loadout_morale;
+            self.feel(MoraleEvent::Lowered(lost), &data.fighter);
+        }
         self.loadout = plan.loadout;
         let care = staff.medicine.care_rules(&data.fighter.care);
         let care_cost = if plan.care { self.care(&care) } else { 0 };
@@ -505,26 +532,36 @@ impl CareerFighter {
             Vec2::new(width * 0.85, middle),
         );
         let fighters = vec![
-            self.duel_fighter(opponent, (FighterId(0), refused), data, left),
-            opponent.duel_fighter(self, (FighterId(1), Refused::NONE), data, right),
+            self.duel_fighter(opponent, (FighterId(0), refused, kind), data, left),
+            opponent.duel_fighter(self, (FighterId(1), Refused::NONE, kind), data, right),
         ];
         Arena::new(width, layout.height, fighters, seed)
             .with_rules(&data.combat)
             .with_layout(layout)
     }
 
-    /// This fighter ready for a duel against `opponent`, as fighter `id` without the
-    /// `refused` pieces of equipment, at `position`: as [`CareerFighter::combat_fighter`],
-    /// but a proud one keeps only `proud_surrender_percent` of its surrender threshold
-    /// against a weaker opponent.
+    /// This fighter ready for a duel against `opponent` on the floor of `kind`, as fighter
+    /// `id` without the `refused` pieces of equipment, at `position`: as
+    /// [`CareerFighter::combat_fighter`], but a proud one keeps only
+    /// `proud_surrender_percent` of its surrender threshold against a weaker opponent, a
+    /// spiteful one is stronger against a fighter it bears a grudge against, and a
+    /// superstitious one on its lucky floor.
     fn duel_fighter(
         &self,
         opponent: &Self,
-        (id, refused): (FighterId, Refused),
+        (id, refused, kind): (FighterId, Refused, ArenaKind),
         data: &DesignData,
         position: Vec2,
     ) -> Fighter {
-        let mut fighter = self.combat_fighter(id, refused, data, position);
+        let traits = &data.fighter.traits;
+        let mut percent = 100;
+        if self.has(Trait::Spiteful) && self.grudges.contains(&opponent.name) {
+            percent = percent_of(percent, traits.spiteful.grudge_percent);
+        }
+        if self.has(Trait::Superstitious) && self.lucky_floor == Some(kind) {
+            percent = percent_of(percent, traits.superstitious.lucky_percent);
+        }
+        let mut fighter = self.combat_fighter_at(id, (refused, percent), data, position);
         if self.personality.temperament == Temperament::Proud
             && self.stronger_than(opponent, &data.fighter)
         {
@@ -567,6 +604,41 @@ impl CareerFighter {
             self.feel(MoraleEvent::Lifted(vain.great_morale), rules);
         } else if prestige <= vain.small_prestige {
             self.feel(MoraleEvent::Lowered(vain.small_morale), rules);
+        }
+    }
+
+    /// What a duel against `opponent` on the floor of `kind`, ended with `result`, leaves
+    /// a spiteful fighter, a grudge or one settled, and a superstitious one, its lucky
+    /// floor at its first win.
+    fn remember(&mut self, opponent: &Self, kind: ArenaKind, result: FightResult) {
+        // ponytail: by name, which a later fighter may bear once this one is gone.
+        let name = &opponent.name;
+        if self.has(Trait::Spiteful) && !name.is_empty() {
+            match result {
+                FightResult::Won => self.grudges.retain(|g| g != name),
+                FightResult::Lost | FightResult::GaveUp if !self.grudges.contains(name) => {
+                    self.grudges.push(name.clone());
+                }
+                _ => {}
+            }
+        }
+        if self.has(Trait::Superstitious) && result == FightResult::Won {
+            self.lucky_floor.get_or_insert(kind);
+        }
+    }
+
+    /// A week in a club whose `fighters` may have a pack leader: every active fighter
+    /// but it is lifted.
+    pub fn follow_pack_leaders(fighters: &mut [Self], rules: &FighterRules) {
+        let leaders: Vec<usize> = (0..fighters.len())
+            .filter(|&i| fighters[i].status == Status::Active)
+            .filter(|&i| fighters[i].has(Trait::PackLeader))
+            .collect();
+        let lift = MoraleEvent::Lifted(rules.traits.pack_leader.weekly_morale);
+        for (i, f) in fighters.iter_mut().enumerate() {
+            if f.status == Status::Active && leaders.iter().any(|&l| l != i) {
+                f.feel(lift, rules);
+            }
         }
     }
 
@@ -727,17 +799,20 @@ impl CareerFighter {
         let rules = &data.fighter;
         let origin = Vec2::new(0.0, 0.0);
         let [mine, theirs] = data.stat_model.get(kind).resolve(
-            &self.duel_fighter(opponent, (FighterId(0), Refused::NONE), data, origin),
-            &opponent.duel_fighter(self, (FighterId(1), Refused::NONE), data, origin),
+            &self.duel_fighter(opponent, (FighterId(0), Refused::NONE, kind), data, origin),
+            &opponent.duel_fighter(self, (FighterId(1), Refused::NONE, kind), data, origin),
             &data.combat.hits,
             rng,
         );
         let stronger = opponent.stronger_than(self, rules);
         let weaker = self.stronger_than(opponent, rules);
-        [
+        let taken = [
             self.take_side(mine, stronger, 0, rng, rules),
             opponent.take_side(theirs, weaker, 0, rng, rules),
-        ]
+        ];
+        self.remember(opponent, kind, taken[0].outcome.result);
+        opponent.remember(self, kind, taken[1].outcome.result);
+        taken
     }
 
     /// A fight between rival fighters against `opponent` in an arena of `kind`, resolved
@@ -809,6 +884,8 @@ impl CareerFighter {
         let equipped = (FighterId(1), Refused::NONE);
         let theirs = opponent.take_fame_and_death(&arena, equipped, weaker, rng, rules);
         let mine = self.take_fame_and_death(&arena, (FighterId(0), refused), stronger, rng, rules);
+        self.remember(opponent, kind, mine.outcome.result);
+        opponent.remember(self, kind, theirs.outcome.result);
         let died = self.status == Status::Dead;
         // Fallen at 0 HP in the arena, yet alive after the fight.
         let survived = |id: usize, fighter: &Self| {
@@ -1283,8 +1360,12 @@ mod tests {
         DesignData::load().unwrap()
     }
 
+    /// A random fighter, without traits: they would change what its weeks do.
     fn fighter(seed: u64) -> CareerFighter {
-        CareerFighter::random(&mut ChaCha8Rng::seed_from_u64(seed), &data())
+        CareerFighter {
+            traits: Vec::new(),
+            ..CareerFighter::random(&mut ChaCha8Rng::seed_from_u64(seed), &data())
+        }
     }
 
     fn plan(activity: Activity) -> WeekPlan {
@@ -1440,6 +1521,81 @@ mod tests {
         let mut plain = with_traits(&[]);
         plain.on_stage(vain.small_prestige, false, rules);
         assert_eq!(plain.morale.value(), neutral);
+    }
+
+    fn named(traits: &[Trait], name: &str) -> CareerFighter {
+        CareerFighter {
+            name: FighterName {
+                name: name.into(),
+                number: 0,
+            },
+            ..with_traits(traits)
+        }
+    }
+
+    /// Its HP in a duel against `opponent` on `kind`'s floor.
+    fn hp_against(f: &CareerFighter, opponent: &CareerFighter, kind: ArenaKind) -> u32 {
+        let at = (FighterId(0), Refused::NONE, kind);
+        f.duel_fighter(opponent, at, &data(), Vec2::new(0.0, 0.0))
+            .stats
+            .hp
+    }
+
+    #[test]
+    fn the_spiteful_fights_harder_against_who_beat_it_until_it_wins() {
+        let mut spiteful = named(&[Trait::Spiteful], "Flamma");
+        let (winner, other) = (named(&[], "Spiculus"), named(&[], "Crixus"));
+        let sand = ArenaKind::Sand;
+        let before = hp_against(&spiteful, &winner, sand);
+        spiteful.remember(&winner, sand, FightResult::Lost);
+        spiteful.remember(&winner, sand, FightResult::GaveUp);
+        assert_eq!(spiteful.grudges, vec![winner.name.clone()]);
+        assert!(hp_against(&spiteful, &winner, sand) > before);
+        assert_eq!(hp_against(&spiteful, &other, sand), before);
+        spiteful.remember(&winner, sand, FightResult::Won);
+        assert_eq!(spiteful.grudges, []);
+        let mut plain = named(&[], "Flamma");
+        plain.remember(&winner, sand, FightResult::Lost);
+        assert_eq!(plain.grudges, []);
+    }
+
+    #[test]
+    fn the_superstitious_keeps_the_floor_of_its_first_win_and_hates_new_loadouts() {
+        let mut f = named(&[Trait::Superstitious], "Flamma");
+        let opponent = named(&[], "Spiculus");
+        let (pillars, sand) = (ArenaKind::Pillars, ArenaKind::Sand);
+        f.remember(&opponent, sand, FightResult::Lost);
+        assert_eq!(f.lucky_floor, None);
+        f.remember(&opponent, pillars, FightResult::Won);
+        f.remember(&opponent, sand, FightResult::Won);
+        assert_eq!(f.lucky_floor, Some(pillars));
+        assert!(hp_against(&f, &opponent, pillars) > hp_against(&f, &opponent, sand));
+        let data = data();
+        let changed = |traits: &[Trait]| {
+            let mut f = with_traits(traits);
+            f.loadout = 1;
+            f.begin_melee_week(plan(Activity::Rest), StaffEffects::default(), &data);
+            f.morale.value()
+        };
+        let lost = data.fighter.traits.superstitious.loadout_morale;
+        assert_eq!(changed(&[Trait::Superstitious]), Morale::NEUTRAL - lost);
+        assert_eq!(changed(&[]), Morale::NEUTRAL);
+    }
+
+    #[test]
+    fn a_pack_leader_lifts_the_others_of_its_club() {
+        let rules = &data().fighter;
+        let lift = rules.traits.pack_leader.weekly_morale;
+        let neutral = Morale::NEUTRAL;
+        let mut gone = with_traits(&[Trait::PackLeader]);
+        gone.status = Status::Dead;
+        let mut club = vec![with_traits(&[Trait::PackLeader]), with_traits(&[])];
+        CareerFighter::follow_pack_leaders(&mut club, rules);
+        let morale: Vec<u32> = club.iter().map(|f| f.morale.value()).collect();
+        assert_eq!(morale, [neutral, neutral + lift]);
+        let mut leaderless = vec![gone, with_traits(&[])];
+        CareerFighter::follow_pack_leaders(&mut leaderless, rules);
+        assert_eq!(leaderless[1].morale.value(), neutral);
     }
 
     #[test]

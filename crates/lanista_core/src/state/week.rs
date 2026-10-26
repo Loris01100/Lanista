@@ -4,7 +4,7 @@
 use crate::colosseum::{ColosseumId, Contender, Rating, TitleNews, title_kept};
 use crate::design_data::DesignData;
 use crate::economy::{Flow, Transaction, Wealth};
-use crate::fighter::career::{Activity, Status, WeekPlan, WeekReport};
+use crate::fighter::career::{Activity, CareerFighter, Status, WeekPlan, WeekReport};
 use crate::fighter::fame::{Fame, FightResult};
 use crate::fighter::percent_of;
 use crate::market::{MarketNews, Move};
@@ -333,16 +333,21 @@ fn reserved(wanted: &[WeekPlan], title_meetings: &[Option<(usize, Contender)>]) 
         .collect()
 }
 
-/// The world's end of the week, once everyone fought: each club's new wealth at the
-/// start of the off-season, the rival clubs' market, the colosseums' titles, told in
-/// `titles`, the market topped up and trimmed, and the next week opens. Returns the
-/// club's new wealth if it changed.
+/// The world's end of the week, once everyone fought: pack leaders lift their clubs'
+/// morale, each club's new wealth at the start of the off-season, the rival clubs'
+/// market, the colosseums' titles, told in `titles`, the market topped up and trimmed,
+/// and the next week opens. Returns the club's new wealth if it changed.
 fn end_week(
     state: &mut GameState,
     titles: &mut Vec<(usize, TitleNews)>,
     data: &DesignData,
 ) -> Option<Wealth> {
     let week = state.week;
+    let rules = &data.fighter;
+    CareerFighter::follow_pack_leaders(&mut state.fighters, rules);
+    for rival in &mut state.rivals {
+        CareerFighter::follow_pack_leaders(&mut rival.fighters, rules);
+    }
     for (&club, relation) in &mut state.relations {
         relation.fade(&data.world.relations);
         if let Some(declared) = relation.declare(week, &data.world.relations) {

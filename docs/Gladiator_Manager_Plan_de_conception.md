@@ -141,8 +141,11 @@ Un combattant a aussi de 0 à 2 traits, fixes eux aussi et visibles, chacun lié
 | Bourreau de travail | Entraîner ou reposer | Progresse plus vite à l'entraînement, perd du moral au repos |
 | Nonchalant | Entraîner ou reposer | Gagne du moral au repos ; l'entraînement lui coûte du moral et plus de forme |
 | Vaniteux | Où combattre | Gagne du moral dans un grand colisée ou un combat pour le titre, en perd dans un petit |
+| Rancunier | Défis | Plus fort en duel contre qui l'a battu, jusqu'à ce qu'il le batte à son tour |
+| Superstitieux | Où combattre, avec quelles armes | Plus fort sur le sol de sa première victoire ; perd du moral quand sa configuration d'armes change |
+| Chef de meute | Composition du club | Remonte chaque semaine le moral des autres combattants du club |
 
-Le bourreau de travail et le nonchalant s'excluent.
+Le bourreau de travail et le nonchalant s'excluent. D'autres traits pourront s'acquérir au fil de la carrière (par exemple rancunier après plusieurs défaites contre le même adversaire) : ils restent alors à vie, et le joueur les découvre quand ils apparaissent, par une nouvelle de la semaine, sans jauge qui les annonce.
 
 L'audace fixe le seuil d'abandon : un timide abandonne tôt et meurt rarement, un audacieux continue à PV critiques et peut recevoir un coup fatal. Le joueur n'a aucun contrôle sur ce seuil. L'ego dit le goût du public : il retient le combattant dans l'arène et le rend plus difficile à recruter pour un petit club.
 

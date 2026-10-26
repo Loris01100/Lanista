@@ -72,8 +72,11 @@ impl Tally {
     }
 }
 
+/// Every trait, then none.
+const TRAITS: usize = Trait::ALL.len() + 1;
+
 /// A world's tallies: by temperament, by trait then without one; and its closed clubs.
-type World = ([Tally; 7], [Tally; 4], u64);
+type World = ([Tally; 7], [Tally; TRAITS], u64);
 
 fn main() -> ExitCode {
     let [worlds, seasons] = match options(
@@ -106,7 +109,7 @@ fn main() -> ExitCode {
                 next_week(&mut state, &Decisions::default(), &data);
             }
             let mut tally = [Tally::default(); 7];
-            let mut by_trait = [Tally::default(); 4];
+            let mut by_trait = [Tally::default(); TRAITS];
             // A fighter who moved left a blank entry behind: its career is where it went.
             let careers = state.rivals.iter().flat_map(|r| &r.fighters);
             for f in careers

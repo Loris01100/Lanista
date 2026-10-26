@@ -1,6 +1,7 @@
 //! Traits: 0 to 2 per fighter, drawn for life beside its temperament, each tied to a
 //! decision of its club: the workaholic and the nonchalant to training and rest, the
-//! vain to the colosseums it fights in.
+//! vain to the colosseums it fights in, the spiteful to the challenges, the
+//! superstitious to the arenas and loadouts, the pack leader to the club's roster.
 
 use rand::{Rng, RngExt};
 use serde::{Deserialize, Serialize};
@@ -15,10 +16,23 @@ pub enum Trait {
     Nonchalant,
     /// Glad in a great colosseum or a title fight, sulking in a small one.
     Vain,
+    /// Fights harder against whoever beat it, until it wins one back.
+    Spiteful,
+    /// Fights better on the floor of its first win, sulks when its loadout changes.
+    Superstitious,
+    /// Lifts the morale of the club's other fighters every week.
+    PackLeader,
 }
 
 impl Trait {
-    pub const ALL: [Self; 3] = [Self::Workaholic, Self::Nonchalant, Self::Vain];
+    pub const ALL: [Self; 6] = [
+        Self::Workaholic,
+        Self::Nonchalant,
+        Self::Vain,
+        Self::Spiteful,
+        Self::Superstitious,
+        Self::PackLeader,
+    ];
 
     /// Whether a fighter with `self` may not also have `other`.
     #[must_use]
@@ -62,6 +76,9 @@ pub struct TraitRules {
     pub workaholic: WorkaholicRules,
     pub nonchalant: NonchalantRules,
     pub vain: VainRules,
+    pub spiteful: SpitefulRules,
+    pub superstitious: SuperstitiousRules,
+    pub pack_leader: PackLeaderRules,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
@@ -95,6 +112,29 @@ pub struct VainRules {
     pub great_morale: u32,
     /// Morale lost after a duel on a small stage.
     pub small_morale: u32,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct SpitefulRules {
+    /// Of every stat in a duel against a fighter it bears a grudge against.
+    pub grudge_percent: u32,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct SuperstitiousRules {
+    /// Of every stat in a duel on the floor of its first win.
+    pub lucky_percent: u32,
+    /// Morale lost in a week its loadout changes.
+    pub loadout_morale: u32,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct PackLeaderRules {
+    /// Morale gained every week by the other active fighters of its club.
+    pub weekly_morale: u32,
 }
 
 #[cfg(test)]

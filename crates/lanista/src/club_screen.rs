@@ -52,8 +52,8 @@ use crate::texts::{
     date_text, fight_text, fighter_name, illness_text, injury_text, loadout_name, market_news_text,
     money_line, move_text, named_club, origin_place, priced, result_text, rival_fighter_name,
     staff_move_text, staff_news_text, stat_names, temperament_name, temperament_text,
-    title_article, title_changed, trait_name, trait_text, wealth_name, wealth_text, week_lines,
-    world_article, year_text,
+    title_article, title_changed, trait_memory, trait_name, trait_text, wealth_name, wealth_text,
+    week_lines, world_article, year_text,
 };
 use crate::theme;
 use crate::title_screen::{Slot, read_slots, slot_text};
@@ -1403,6 +1403,9 @@ fn sheet(ui: &mut egui::Ui, index: usize, f: &CareerFighter, data: &DesignData) 
             for &t in &f.traits {
                 ui.label(egui::RichText::new(trait_name(t)).strong());
                 ui.label(trait_text(t));
+                if let Some(memory) = trait_memory(f, t) {
+                    ui.label(memory);
+                }
             }
             section(ui, &tr!("sheet-health"));
             health(ui, f);

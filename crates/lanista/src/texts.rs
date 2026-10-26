@@ -235,6 +235,9 @@ fn trait_key(t: Trait) -> &'static str {
         Trait::Workaholic => "workaholic",
         Trait::Nonchalant => "nonchalant",
         Trait::Vain => "vain",
+        Trait::Spiteful => "spiteful",
+        Trait::Superstitious => "superstitious",
+        Trait::PackLeader => "pack-leader",
     }
 }
 
@@ -246,6 +249,20 @@ pub fn trait_name(t: Trait) -> String {
 /// What a trait does, in a sentence or two.
 pub fn trait_text(t: Trait) -> String {
     tr!(&format!("trait-{}-text", trait_key(t)))
+}
+
+/// What a trait of `fighter` remembers: "Rancune contre Flamma", "Sol fétiche : sable".
+pub fn trait_memory(fighter: &CareerFighter, t: Trait) -> Option<String> {
+    match t {
+        Trait::Spiteful if !fighter.grudges.is_empty() => {
+            let names: Vec<String> = fighter.grudges.iter().map(stage_name).collect();
+            Some(tr!("trait-grudges", names = names.join(", ")))
+        }
+        Trait::Superstitious => fighter
+            .lucky_floor
+            .map(|floor| tr!("trait-lucky-floor", floor = arena_name(floor))),
+        _ => None,
+    }
 }
 
 /// Its temperament and traits: "Téméraire, vaniteux".
