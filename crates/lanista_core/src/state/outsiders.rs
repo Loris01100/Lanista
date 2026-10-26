@@ -125,7 +125,8 @@ pub(super) fn outsiders<'a>(
 
 /// The week of the rival clubs and the free agents, after the club's fights. In each
 /// colosseum, the outsiders registered there and not met by the club's fighters are
-/// paired in Elo order, each pair fighting a fight the statistical model resolves,
+/// paired in Elo order, but a spiteful one with a fighter it bears a grudge against
+/// registered there too ([`pairs`]), each pair fighting a fight the statistical model resolves,
 /// which moves both Elo; one left without an opponent trains instead, or rests if it
 /// is a free agent, who cannot pay for training. The others rest or train as planned,
 /// those met by the club's fighters end their week, and each rival club pays its
@@ -169,16 +170,26 @@ pub(super) fn outsider_weeks(
             .map(|o| (colosseum.elo(o, world), o))
             .collect();
         waiting.sort_by_key(|&(elo, o)| (Reverse(elo), o));
-        for pair in waiting.chunks(2) {
-            let &[(_, a), (_, b)] = pair else {
-                let (_, alone) = pair[0];
-                let instead = match alone {
-                    Contender::Rival(_) => Activity::Train,
-                    _ => Activity::Rest,
-                };
-                plans.set_activity(alone, instead);
-                continue;
+        let waiting: Vec<Contender> = waiting.into_iter().map(|(_, o)| o).collect();
+        let (pairs, alone) = pairs(waiting, |a, b| {
+            let (rivals, free_agents) = (&state.rivals, &state.free_agents);
+            let fighters = (
+                outsider(rivals, free_agents, a),
+                outsider(rivals, free_agents, b),
+            );
+            fighters
+                .0
+                .zip(fighters.1)
+                .is_some_and(|(a, b)| a.bears_grudge(b.id) || b.bears_grudge(a.id))
+        });
+        if let Some(alone) = alone {
+            let instead = match alone {
+                Contender::Rival(_) => Activity::Train,
+                _ => Activity::Rest,
             };
+            plans.set_activity(alone, instead);
+        }
+        for (a, b) in pairs {
             let (rivals, free_agents) = (&state.rivals, &state.free_agents);
             let (Some(mut first), Some(mut second)) = (
                 outsider(rivals, free_agents, a).cloned(),
@@ -226,6 +237,27 @@ pub(super) fn outsider_weeks(
         }
     }
     planned_weeks(state, &plans, &done, data);
+}
+
+/// `waiting`, in Elo order, paired: each with the next one, unless one further on is its
+/// `foe`; and the one left alone, if any.
+fn pairs(
+    mut waiting: Vec<Contender>,
+    foe: impl Fn(Contender, Contender) -> bool,
+) -> (Vec<(Contender, Contender)>, Option<Contender>) {
+    let mut pairs = Vec::new();
+    while !waiting.is_empty() {
+        let a = waiting.remove(0);
+        let Some(k) = waiting
+            .iter()
+            .position(|&b| foe(a, b))
+            .or_else(|| (!waiting.is_empty()).then_some(0))
+        else {
+            return (pairs, Some(a));
+        };
+        pairs.push((a, waiting.remove(k)));
+    }
+    (pairs, None)
 }
 
 /// The planned weeks of the outsiders not in `done`, each rival club paying its
@@ -315,4 +347,24 @@ pub(super) fn opponent(
         .into_iter()
         .find(|c| !c.is_empty())?;
     Some((c, pick_opponent(rng, &candidates)?))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn foes_are_paired_before_the_elo_order() {
+        let o = Contender::FreeAgent;
+        let none = |_, _| false;
+        assert_eq!(
+            pairs(vec![o(0), o(1), o(2)], none),
+            (vec![(o(0), o(1))], Some(o(2)))
+        );
+        let foes = |a, b| [a, b] == [o(0), o(2)];
+        assert_eq!(
+            pairs(vec![o(0), o(1), o(2), o(3)], foes),
+            (vec![(o(0), o(2)), (o(1), o(3))], None)
+        );
+    }
 }

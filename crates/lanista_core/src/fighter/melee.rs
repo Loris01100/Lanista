@@ -130,7 +130,10 @@ impl MeleeFight {
 /// The melee between `fighters` (as `entrants` go in, one each, missing ones fully
 /// equipped without doctor) on the floor of `kind`, before its first tick, seeded with
 /// `seed`: a declared rival club's fighters go for the player's first, and each club's
-/// standing adds its points to their chance of a pact with them.
+/// standing adds its points to their chance of a pact with them; a spiteful fighter
+/// goes first for those it bears a grudge against, stronger if one is there (see
+/// `CareerFighter::trait_percent`), and a superstitious one is stronger on its lucky
+/// floor.
 pub(crate) fn melee_start(
     fighters: &[CareerFighter],
     entrants: &[Entrant],
@@ -145,10 +148,19 @@ pub(crate) fn melee_start(
         .map(|(i, f)| {
             let id = FighterId(u32::try_from(i).unwrap_or(u32::MAX));
             let refused = entrants.get(i).map_or(Refused::NONE, |e| e.refused);
-            f.combat_fighter(id, refused, data, origin)
+            let grudge = fighters.iter().any(|o| f.bears_grudge(o.id));
+            let percent = f.trait_percent(kind, grudge, &data.fighter);
+            f.combat_fighter_at(id, (refused, percent), data, origin)
         })
         .collect();
     let mut start = melee_arena(combat, kind, seed, &data.combat);
+    for (hunter, h) in (0..).map(FighterId).zip(fighters) {
+        for (prey, p) in (0..).map(FighterId).zip(fighters) {
+            if h.bears_grudge(p.id) {
+                start.hunts.push((hunter, prey));
+            }
+        }
+    }
     for (hunter, h) in (0..).map(FighterId).zip(entrants) {
         for (prey, p) in (0..).map(FighterId).zip(entrants) {
             if h.hunts_club && p.of_club {
@@ -190,7 +202,8 @@ pub fn place_fame(place: u32, (count, paid): (usize, u32), rules: &FameRules) ->
 /// Fame is the place's share (see [`place_fame`]) and the refused equipment's bonus
 /// alone, whatever the fighter won, gave up or showed;
 /// a fighter is against stronger when the others' strength is above its own on average.
-/// Nobody ends its week.
+/// Each remembers the melee as duels are remembered, the winner having beaten all the
+/// others (`CareerFighter::remember_melee`). Nobody ends its week.
 pub fn play_melee<R: Rng + ?Sized>(
     fighters: &mut [CareerFighter],
     entrants: &[Entrant],
@@ -236,6 +249,8 @@ pub fn play_melee<R: Rng + ?Sized>(
             )
         })
         .collect();
+    let results: Vec<FightResult> = taken.iter().map(|(_, t)| t.outcome.result).collect();
+    CareerFighter::remember_melee(fighters, &results, kind, rules);
     let survived_fatal_blow = fighters
         .iter()
         .zip(&arena.fighters)

@@ -309,7 +309,7 @@ impl CareerFighter {
     }
 
     /// As [`CareerFighter::combat_fighter`], with `percent` of every stat.
-    fn combat_fighter_at(
+    pub(crate) fn combat_fighter_at(
         &self,
         id: FighterId,
         (refused, percent): (Refused, u32),
@@ -570,14 +570,8 @@ impl CareerFighter {
         data: &DesignData,
         position: Vec2,
     ) -> Fighter {
-        let traits = &data.fighter.traits;
-        let mut percent = 100;
-        if self.has(Trait::Spiteful) && self.bears_grudge(opponent) {
-            percent = percent_of(percent, traits.spiteful.grudge_percent);
-        }
-        if self.has(Trait::Superstitious) && self.lucky_floor == Some(kind) {
-            percent = percent_of(percent, traits.superstitious.lucky_percent);
-        }
+        let grudge = self.bears_grudge(opponent.id);
+        let percent = self.trait_percent(kind, grudge, &data.fighter);
         let mut fighter = self.combat_fighter_at(id, (refused, percent), data, position);
         if self.personality.temperament == Temperament::Proud
             && self.stronger_than(opponent, &data.fighter)
@@ -586,6 +580,21 @@ impl CareerFighter {
             fighter.surrender_hp = percent_of(fighter.surrender_hp, percent);
         }
         fighter
+    }
+
+    /// Its percent of every stat in a fight on the floor of `kind`, facing a fighter it
+    /// bears a grudge against or not (`grudge`): more for a spiteful one facing one, and
+    /// for a superstitious one on its lucky floor.
+    pub(crate) fn trait_percent(&self, kind: ArenaKind, grudge: bool, rules: &FighterRules) -> u32 {
+        let traits = &rules.traits;
+        let mut percent = 100;
+        if self.has(Trait::Spiteful) && grudge {
+            percent = percent_of(percent, traits.spiteful.grudge_percent);
+        }
+        if self.has(Trait::Superstitious) && self.lucky_floor == Some(kind) {
+            percent = percent_of(percent, traits.superstitious.lucky_percent);
+        }
+        percent
     }
 
     #[must_use]
@@ -637,10 +646,21 @@ impl CareerFighter {
         result: FightResult,
         rules: &FighterRules,
     ) {
+        self.remember_all(&[(opponent.id, &opponent.name)], kind, result, rules);
+    }
+
+    /// As [`CareerFighter::remember`], against all of `opponents` at once, by `id` and
+    /// name: those it beat, or those it lost to.
+    fn remember_all(
+        &mut self,
+        opponents: &[(u64, &FighterName)],
+        kind: ArenaKind,
+        result: FightResult,
+        rules: &FighterRules,
+    ) {
         let traits = &rules.traits;
-        let id = opponent.id;
         let won = result == FightResult::Won;
-        if id != 0 {
+        for &(id, name) in opponents.iter().filter(|&&(id, _)| id != 0) {
             if won {
                 self.grudges.retain(|&(g, _)| g != id);
             } else if matches!(result, FightResult::Lost | FightResult::GaveUp) {
@@ -653,8 +673,8 @@ impl CareerFighter {
                         self.defeats_by.clear();
                     }
                 }
-                if self.has(Trait::Spiteful) && !self.bears_grudge(opponent) {
-                    self.grudges.push((id, opponent.name.clone()));
+                if self.has(Trait::Spiteful) && !self.bears_grudge(id) {
+                    self.grudges.push((id, name.clone()));
                 }
             }
         }
@@ -688,8 +708,39 @@ impl CareerFighter {
         open
     }
 
-    fn bears_grudge(&self, opponent: &Self) -> bool {
-        self.grudges.iter().any(|&(g, _)| g == opponent.id)
+    /// Whether it bears a grudge against the fighter `id`.
+    pub(crate) fn bears_grudge(&self, id: u64) -> bool {
+        self.grudges.iter().any(|&(g, _)| g == id)
+    }
+
+    /// What a melee on the floor of `kind`, ended with `results`, one per fighter in
+    /// order, leaves `fighters` (see [`CareerFighter::remember`]): its winner beat all
+    /// the others, who lost to it.
+    pub(crate) fn remember_melee(
+        fighters: &mut [Self],
+        results: &[FightResult],
+        kind: ArenaKind,
+        rules: &FighterRules,
+    ) {
+        let names: Vec<(u64, FighterName)> =
+            fighters.iter().map(|f| (f.id, f.name.clone())).collect();
+        let winner = results.iter().position(|&r| r == FightResult::Won);
+        for (i, f) in fighters.iter_mut().enumerate() {
+            let result = results.get(i).copied().unwrap_or(FightResult::Unfinished);
+            let opponents: Vec<(u64, &FighterName)> = names
+                .iter()
+                .enumerate()
+                .filter(|&(k, _)| {
+                    if result == FightResult::Won {
+                        k != i
+                    } else {
+                        Some(k) == winner
+                    }
+                })
+                .map(|(_, (id, name))| (*id, name))
+                .collect();
+            f.remember_all(&opponents, kind, result, rules);
+        }
     }
 
     /// A week in a club whose `fighters` may have a pack leader: every active fighter
@@ -1684,6 +1735,33 @@ mod tests {
         assert_eq!(f.traits, []);
         f.remember(&other, sand, FightResult::Won, rules);
         assert_eq!(f.traits, [Trait::PackLeader]);
+    }
+
+    #[test]
+    fn a_melee_is_remembered_as_its_winner_beating_all_the_others() {
+        let rules = &data().fighter;
+        let sand = ArenaKind::Sand;
+        let (lost, won) = (FightResult::Lost, FightResult::Won);
+        let mut melee = vec![
+            named(&[Trait::Spiteful], 1, "Flamma"),
+            named(&[Trait::Spiteful, Trait::Superstitious], 2, "Spiculus"),
+            named(&[], 3, "Crixus"),
+        ];
+        CareerFighter::remember_melee(&mut melee, &[lost, won, lost], sand, rules);
+        // Lost to the winner, not to the other loser.
+        assert_eq!(melee[0].grudges, [(2, melee[1].name.clone())]);
+        assert_eq!(melee[1].lucky_floor, Some(sand));
+        melee[1].grudges = vec![(1, melee[0].name.clone()), (3, melee[2].name.clone())];
+        CareerFighter::remember_melee(&mut melee, &[lost, won, FightResult::GaveUp], sand, rules);
+        assert_eq!(melee[1].grudges, []);
+        assert_eq!(melee[1].win_streak, Some((sand, 2)));
+        assert_eq!(melee[0].win_streak, None);
+        // A spiteful one goes for its grudges first, stronger with one there.
+        let start = melee_start(&melee, &[], sand, 0, &data());
+        assert_eq!(start.hunts, [(FighterId(0), FighterId(1))]);
+        let without = [melee[0].clone(), melee[2].clone()];
+        let without = melee_start(&without, &[], sand, 0, &data());
+        assert!(start.fighters[0].stats.hp > without.fighters[0].stats.hp);
     }
 
     #[test]

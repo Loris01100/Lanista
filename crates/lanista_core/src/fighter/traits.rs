@@ -88,6 +88,8 @@ pub struct WorkaholicRules {
     pub training_percent: u32,
     /// Morale lost in a week of rest.
     pub rest_morale: u32,
+    /// A rival manager rests it only below this percent of its profile's `rest_form`.
+    pub rest_form_percent: u32,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Deserialize)]

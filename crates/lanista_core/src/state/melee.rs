@@ -17,7 +17,7 @@ use crate::relations::Reason;
 use crate::staff::{Medicine, StaffEffects};
 
 use super::outsiders::{
-    OutsiderPlans, outsider, outsider_effects, outsiders, pay_rival, put_outsider,
+    OutsiderPlans, outsider, outsider_effects, outsider_mut, outsiders, pay_rival, put_outsider,
 };
 use super::{GameState, affordable, entry_fee, relate};
 
@@ -145,7 +145,8 @@ fn melee_lineup(
 }
 
 /// What colosseum `c`'s melee of `entries` pays and leaves, `played` as
-/// [`melee_entries`] returns it: everyone's Elo by place (`Colosseum::record_places`);
+/// [`melee_entries`] returns it: what the stage does to the vain
+/// (`CareerFighter::on_stage`); everyone's Elo by place (`Colosseum::record_places`);
 /// each fighter's club pays the fee and takes its place's share of the melee prize (the
 /// same for everyone, whatever its fame or relations), a free agent paying and earning
 /// nothing; the
@@ -163,9 +164,18 @@ fn settle_melee(
     data: &DesignData,
 ) {
     let world = &data.world;
-    let Some(purses) = world.colosseums.get(c).map(|r| &r.purses) else {
+    let Some((purses, prestige)) = world.colosseums.get(c).map(|r| (&r.purses, r.prestige)) else {
         return;
     };
+    for &entry in entries {
+        let fighter = match entry {
+            Contender::Club(i) => state.fighters.get_mut(i),
+            outsider => outsider_mut(&mut state.rivals, &mut state.free_agents, outsider),
+        };
+        if let Some(f) = fighter {
+            f.on_stage(prestige, false, &data.fighter);
+        }
+    }
     let places: Vec<(Contender, u32)> = entries
         .iter()
         .copied()

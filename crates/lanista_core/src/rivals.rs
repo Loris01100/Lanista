@@ -12,6 +12,7 @@ use crate::design_data::DesignData;
 use crate::economy::Wealth;
 use crate::fighter::career::{Activity, CareerFighter, Status, WeekPlan, badly_hurt_or_ill};
 use crate::fighter::equipment::Refused;
+use crate::fighter::traits::Trait;
 use crate::fighter::{percent_of, pick};
 use crate::market::{MarketRules, value};
 use crate::names;
@@ -375,6 +376,10 @@ pub struct Venue {
     pub fee: u32,
     /// Whether it is on the club's continent.
     pub home: bool,
+    /// Whether its floor is the lucky one of a superstitious fighter.
+    pub lucky: bool,
+    /// Whether a fighter a spiteful one bears a grudge against is ranked there.
+    pub revenge: bool,
 }
 
 /// A rival manager's week for one fighter, with `money` left to spend this week, which
@@ -385,7 +390,10 @@ pub struct Venue {
 /// `fight_percent`, at home if one is, abroad only otherwise; else training if it can
 /// pay for it; else, if it `earns` its receipts, a fight in the best free colosseum at
 /// home whatever its chance, as receipts are a club's only income; else rest. Care and
-/// training are at the prices of the club's `staff`.
+/// training are at the prices of the club's `staff`. The manager minds its traits:
+/// among the colosseums at home, or abroad, it prefers one where it may take its
+/// revenge, then its lucky floor; a workaholic rests only below `rest_form_percent` of
+/// `rest_form`; a superstitious one keeps its loadout.
 #[must_use]
 pub fn plan(
     fighter: &CareerFighter,
@@ -395,6 +403,14 @@ pub fn plan(
     data: &DesignData,
 ) -> WeekPlan {
     let hurt = badly_hurt_or_ill(fighter);
+    let rest_form = if fighter.has(Trait::Workaholic) {
+        percent_of(
+            rules.rest_form,
+            data.fighter.traits.workaholic.rest_form_percent,
+        )
+    } else {
+        rules.rest_form
+    };
     let care = staff.effects().medicine.care_rules(&data.fighter.care);
     let care_cost = i64::from(fighter.care_cost(&care));
     let care = hurt && care_cost > 0 && *money - care_cost >= i64::from(rules.care_reserve);
@@ -407,7 +423,8 @@ pub fn plan(
             .zip(0..)
             .filter(|(v, _)| chosen(v))
             .reduce(|best, next| {
-                let better = (next.0.home, next.0.chance) > (best.0.home, best.0.chance);
+                let rank = |v: &Venue| (v.home, v.revenge, v.lucky, v.chance);
+                let better = rank(next.0) > rank(best.0);
                 if better { next } else { best }
             })
     };
@@ -415,7 +432,7 @@ pub fn plan(
         best(&|v| i64::from(v.fee) <= *money && v.chance * 100.0 >= f64::from(rules.fight_percent));
     let free = best(&|v| v.home && v.fee == 0);
     let training = i64::from(staff.training_cost(data.economy.training_cost));
-    let activity = if hurt || fighter.form.value() < rules.rest_form {
+    let activity = if hurt || fighter.form.value() < rest_form {
         Activity::Rest
     } else if let Some((venue, id)) = chosen {
         *money -= i64::from(venue.fee);
@@ -432,7 +449,11 @@ pub fn plan(
         activity,
         care,
         refused: Refused::NONE,
-        loadout: fighter.preferred_loadout(),
+        loadout: if fighter.has(Trait::Superstitious) {
+            fighter.loadout
+        } else {
+            fighter.preferred_loadout()
+        },
     }
 }
 
@@ -454,6 +475,8 @@ mod tests {
                 chance,
                 fee: c.purses.entry_fee,
                 home: true,
+                lucky: false,
+                revenge: false,
             })
             .collect()
     }
@@ -606,7 +629,13 @@ mod tests {
         let data = DesignData::load().unwrap();
         let fighter = CareerFighter::random(&mut ChaCha8Rng::seed_from_u64(1), &data);
         let rules = (&data.world.profiles.cautious, &Staff::default(), true);
-        let venue = |chance, fee, home| Venue { chance, fee, home };
+        let venue = |chance, fee, home| Venue {
+            chance,
+            fee,
+            home,
+            lucky: false,
+            revenge: false,
+        };
         // Better off abroad, but a fight at home suits it: at home.
         let mut money = 1000;
         let venues = [venue(0.5, 0, true), venue(0.9, 60, false)];
@@ -702,6 +731,54 @@ mod tests {
         let week = plan(&fighter, &at(&[0.1, 0.1], &data), &mut money, rules, &data);
         assert_eq!(week.activity, Activity::Train);
         assert_eq!(money, 1000 - price);
+    }
+
+    #[test]
+    fn a_manager_minds_its_fighters_traits() {
+        let data = DesignData::load().unwrap();
+        let rules = (&data.world.profiles.cautious, &Staff::default(), true);
+        let mut fighter = CareerFighter::random(&mut ChaCha8Rng::seed_from_u64(1), &data);
+        fighter.traits.clear();
+        let mut money = 1000;
+        let mut week =
+            |f: &CareerFighter, venues: &[Venue]| plan(f, venues, &mut money, rules, &data);
+        let venue = |chance, lucky, revenge| Venue {
+            chance,
+            fee: 0,
+            home: true,
+            lucky,
+            revenge,
+        };
+        // Revenge first, then the lucky floor, then the odds.
+        let fair = [venue(0.6, false, false), venue(0.5, true, false)];
+        assert_eq!(
+            week(&fighter, &fair).activity,
+            Activity::Fight(ColosseumId(1))
+        );
+        let fair = [venue(0.5, true, false), venue(0.5, false, true)];
+        assert_eq!(
+            week(&fighter, &fair).activity,
+            Activity::Fight(ColosseumId(1))
+        );
+        // Rested below the cautious club's 70, a workaholic only below 35.
+        let mut workaholic = fighter.clone();
+        workaholic.traits = vec![Trait::Workaholic];
+        let rome = Activity::Fight(ColosseumId(1));
+        for (form, plain, worker) in [
+            (50, Activity::Rest, rome),
+            (30, Activity::Rest, Activity::Rest),
+        ] {
+            fighter.form = Form::new(form);
+            workaholic.form = Form::new(form);
+            assert_eq!(week(&fighter, &fair).activity, plain);
+            assert_eq!(week(&workaholic, &fair).activity, worker);
+        }
+        // A superstitious one keeps its loadout, the one it is least at ease with.
+        fighter.ease = vec![0, 100];
+        fighter.loadout = 0;
+        assert_eq!(week(&fighter, &fair).loadout, 1);
+        fighter.traits = vec![Trait::Superstitious];
+        assert_eq!(week(&fighter, &fair).loadout, 0);
     }
 
     #[test]

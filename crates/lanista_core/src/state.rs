@@ -17,6 +17,7 @@ use crate::fighter::career::{Activity, CareerFighter, Status, WeekPlan, suggeste
 use crate::fighter::equipment::Refused;
 use crate::fighter::fame::{Fame, FightResult};
 use crate::fighter::percent_of;
+use crate::fighter::traits::Trait;
 use crate::journal::Journal;
 use crate::market::{self, Move, SaleOffer, Target, value};
 use crate::names::{self, ClubName, FighterName};
@@ -405,23 +406,34 @@ impl GameState {
     /// Each colosseum as `contender` sees it, in their order: the chance Elo gives it
     /// there (`odds`, see `Colosseum::chance`), and the fee from `home`, its club's continent, the
     /// journey included; a free agent, `None`, travels for nothing and is at home
-    /// everywhere.
+    /// everywhere; whether `fighter`, the contender, finds its lucky floor there, or a
+    /// fighter it bears a grudge against in the ranking.
     fn venues(
+        &self,
         odds: &[Odds],
-        contender: Contender,
+        (contender, fighter): (Contender, &CareerFighter),
         home: Option<Continent>,
         data: &DesignData,
     ) -> Vec<Venue> {
         let world = &data.world;
+        let rosters = self.rosters();
         odds.iter()
             .zip(&world.colosseums)
+            .zip(&self.colosseums)
             .zip(0..)
-            .map(|((odds, rules), id)| Venue {
+            .map(|(((odds, rules), colosseum), id)| Venue {
                 chance: odds.chance(contender),
                 fee: home
                     .and_then(|home| world.entry_fee(ColosseumId(id), home))
                     .unwrap_or(rules.purses.entry_fee),
                 home: home.is_none_or(|home| home == rules.continent),
+                lucky: fighter.has(Trait::Superstitious)
+                    && fighter.lucky_floor == Some(rules.arena),
+                revenge: colosseum.ranking.iter().any(|r| {
+                    rosters
+                        .fighter(r.contender)
+                        .is_some_and(|o| fighter.bears_grudge(o.id))
+                }),
             })
             .collect()
     }
@@ -457,7 +469,7 @@ impl GameState {
                     .map(|(fighter, f)| match profile {
                         Some(profile) if f.status == Status::Active => {
                             let me = Contender::Rival(RivalId { club, fighter });
-                            let venues = Self::venues(&odds, me, Some(rival.continent), data);
+                            let venues = self.venues(&odds, (me, f), Some(rival.continent), data);
                             let rules = (profile, &rival.staff, true);
                             rivals::plan(f, &venues, &mut left, rules, data)
                         }
@@ -482,7 +494,7 @@ impl GameState {
                 if f.status != Status::Active {
                     return REST;
                 }
-                let venues = Self::venues(&odds, Contender::FreeAgent(a), None, data);
+                let venues = self.venues(&odds, (Contender::FreeAgent(a), f), None, data);
                 rivals::plan(
                     f,
                     &venues,

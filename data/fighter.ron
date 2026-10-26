@@ -106,7 +106,9 @@
         // each other). Morale changes go through the temperament's morale_percent.
         count_weights: (2, 2, 1),
         // training_percent is added to the trainer's coaching percentage.
-        workaholic: (training_percent: 50, rest_morale: 1),
+        // A rival manager rests one only below rest_form_percent of its profile's
+        // rest_form.
+        workaholic: (training_percent: 50, rest_morale: 1, rest_form_percent: 50),
         // training_form_percent of the form a session costs.
         nonchalant: (rest_morale: 1, training_morale: 3, training_form_percent: 150),
         // A duel for a title, or in a colosseum of at least great_prestige, is a great
