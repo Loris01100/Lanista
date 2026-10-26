@@ -2748,6 +2748,22 @@ mod tests {
             rows.iter()
                 .all(|r| r.gap == (r.rank > 0 && rows.iter().all(|o| o.rank != r.rank - 1)))
         );
+        // One signed during the week was a free agent before it: not new to the ranking.
+        let signed = rows
+            .iter()
+            .find(|r| r.contender != Contender::Club(0))
+            .unwrap();
+        screen.state.free_agents[0].moved_to = Some(signed.contender);
+        let mut before = before.clone();
+        for r in before
+            .iter_mut()
+            .filter(|r| r.contender == signed.contender)
+        {
+            r.contender = Contender::FreeAgent(0);
+        }
+        let again = colosseums::recap_rows(*id, &before, &screen.state, &screen.data);
+        let row = again.iter().find(|r| r.contender == signed.contender);
+        assert_eq!(row, Some(signed));
     }
 
     #[test]

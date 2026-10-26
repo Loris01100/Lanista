@@ -665,9 +665,17 @@ pub(super) fn recap_rows(
     };
     let rosters = state.rosters();
     let counted =
-        |r: &&Rating| matches!(r.contender, Contender::Club(_)) || rosters.active(r.contender);
-    let now: Vec<&Rating> = colosseum.ranking.iter().filter(counted).collect();
-    let was: Vec<&Rating> = before.iter().filter(counted).collect();
+        |r: &Rating| matches!(r.contender, Contender::Club(_)) || rosters.active(r.contender);
+    let now: Vec<&Rating> = colosseum.ranking.iter().filter(|r| counted(r)).collect();
+    // A fighter signed or let go during the week is found where it fights now.
+    let was: Vec<Rating> = before
+        .iter()
+        .map(|r| Rating {
+            contender: state.whereabouts(r.contender),
+            elo: r.elo,
+        })
+        .filter(counted)
+        .collect();
     let ours: Vec<usize> = (0..now.len())
         .filter(|&rank| matches!(now[rank].contender, Contender::Club(_)))
         .collect();
