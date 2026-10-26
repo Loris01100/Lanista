@@ -1229,7 +1229,6 @@ dependencies = [
  "macroquad",
  "rand_chacha",
  "reesch",
- "unic-langid",
 ]
 
 [[package]]
