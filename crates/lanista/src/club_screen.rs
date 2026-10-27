@@ -76,7 +76,7 @@ const PHASES: [SeasonPhase; 3] = [
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum View {
-    /// The general menu: the season's calendar, alerts, « Semaine suivante ».
+    /// The general menu: the season's calendar, alerts, the last week's paper.
     Menu,
     /// The fighter list, each fighter's week decided in one click.
     Roster,
@@ -367,7 +367,9 @@ impl ClubScreen {
         self.save(saves::AUTO, false);
     }
 
-    fn top_bar(&mut self, ui: &mut egui::Ui) {
+    /// The bar over every view; returns whether to play the week.
+    fn top_bar(&mut self, ui: &mut egui::Ui) -> bool {
+        let mut play = false;
         let date = self.state.date(&self.data);
         let phase = phase_key(date.phase(&self.data.calendar));
         // Wrapped: a narrow window or a large interface puts the end on a second row
@@ -396,15 +398,22 @@ impl ClubScreen {
             ui.separator();
             ui.toggle_value(&mut self.game_open, tr!("game"));
             ui.toggle_value(&mut self.options_open, tr!("options"));
+            ui.separator();
+            // On every view, as the game's main action, so the week is played from where
+            // its decisions are taken.
+            let next = egui::Button::new(egui::RichText::new(tr!("menu-next-week")).strong())
+                .fill(theme::BRONZE.gamma_multiply(0.5));
+            play = ui.add(next).clicked();
         });
         // On its own line: a long message would push the views out of the bar.
         if let Some(message) = &self.message {
             ui.label(message);
         }
+        play
     }
 
-    /// The general menu; returns whether to play the week.
-    fn menu(&mut self, ui: &mut egui::Ui) -> bool {
+    /// The general menu.
+    fn menu(&mut self, ui: &mut egui::Ui) {
         ui.heading(tr!("menu-title"));
         ui.label(tr!(
             "menu-club",
@@ -432,15 +441,10 @@ impl ClubScreen {
         for line in self.pending_lines() {
             ui.label(line);
         }
-        let mut play = false;
-        ui.horizontal(|ui| {
-            play = ui.button(tr!("menu-next-week")).clicked();
-            if self.last_week.is_some() && ui.button(tr!("menu-read-paper")).clicked() {
-                self.shown_issue = None;
-                self.view = View::Paper;
-            }
-        });
-        play
+        if self.last_week.is_some() && ui.button(tr!("menu-read-paper")).clicked() {
+            self.shown_issue = None;
+            self.view = View::Paper;
+        }
     }
 
     /// The season as a Roman calendar: its year since the founding of Rome in Roman
@@ -953,9 +957,9 @@ impl Screen for ClubScreen {
         }
         let mut play = keys && self.bindings.pressed(ui, &Action::NextWeek);
         let mut again = None;
-        egui::TopBottomPanel::top("club").show(ui, |ui| self.top_bar(ui));
+        egui::TopBottomPanel::top("club").show(ui, |ui| play |= self.top_bar(ui));
         egui::CentralPanel::default().show(ui, |ui| match self.view {
-            View::Menu => play |= self.menu(ui),
+            View::Menu => self.menu(ui),
             View::Roster => self.roster(ui),
             View::Sheet(i) => self.sheet(ui, i),
             View::Fights => again = self.fight_summary(ui),
