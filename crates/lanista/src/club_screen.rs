@@ -99,6 +99,8 @@ enum View {
     Outside(Target),
     /// The rival club at this index: profile, money, titles and fighters.
     Rival(usize),
+    /// The game's encyclopedia, empty for now.
+    Wiki,
 }
 
 /// One of the club's fights, as the fight summary shows it.
@@ -435,6 +437,10 @@ impl ClubScreen {
                 }
             }
             ui.separator();
+            let wiki = egui::SelectableLabel::new(self.view == View::Wiki, tr!("view-wiki"));
+            if ui.add(wiki).on_hover_text(tr!("view-wiki-hint")).clicked() {
+                self.go_to(View::Wiki);
+            }
             ui.toggle_value(&mut self.game_open, tr!("game"));
             ui.toggle_value(&mut self.options_open, tr!("options"));
             ui.separator();
@@ -1046,6 +1052,7 @@ impl Screen for ClubScreen {
             View::Staff => self.staff(ui),
             View::Outside(target) => self.outside(ui, target),
             View::Rival(club) => self.rival_club(ui, club),
+            View::Wiki => {}
         });
         if let Some(failed) =
             options::window(ui, audio, self.saves.as_deref(), &mut self.options_open)

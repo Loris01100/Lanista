@@ -401,6 +401,8 @@ view-paper = Acta Diurna
 view-colosseums = Colisées
 view-market = Marché
 view-staff = Personnel
+view-wiki = 📖
+view-wiki-hint = Encyclopédie
 
 menu-title = Menu général
 menu-club = { $club } : { $wealth }, en { $continent }
