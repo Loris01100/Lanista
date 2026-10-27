@@ -31,6 +31,7 @@ from stable_baselines3.common.vec_env import SubprocVecEnv
 from lanista_env import FightEnv, utility_ai
 
 MODELS = Path(__file__).parent / "models"
+DUEL_MODEL = "duel.zip"
 
 
 class Opponents:
@@ -112,8 +113,8 @@ def main():
     envs.seed(0)
     logs = models / "logs"
     if melee:
-        shutil.copy(models / "duel.zip", snapshots / "duel.zip")
-        model = PPO.load(models / "duel.zip", envs, device="cpu", tensorboard_log=logs)
+        shutil.copy(models / DUEL_MODEL, snapshots / DUEL_MODEL)
+        model = PPO.load(models / DUEL_MODEL, envs, device="cpu", tensorboard_log=logs)
     else:
         model = PPO("MlpPolicy", envs, device="cpu", verbose=1, tensorboard_log=logs)
     every = max(args.snapshot_every // args.envs, 1)
