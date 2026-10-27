@@ -63,61 +63,9 @@ pub fn window(
         });
         ui.separator();
         match tab {
-            Tab::Graphics => {
-                ui.checkbox(&mut display.fullscreen, tr!("fullscreen"));
-                ui.horizontal(|ui| {
-                    ui.label(tr!("interface-size"));
-                    egui::ComboBox::from_id_salt("interface-size")
-                        .selected_text(format!("{} %", display.interface))
-                        .show_ui(ui, |ui| {
-                            for size in INTERFACE_SIZES {
-                                ui.selectable_value(
-                                    &mut display.interface,
-                                    size,
-                                    format!("{size} %"),
-                                );
-                            }
-                        });
-                });
-            }
-            Tab::Audio => {
-                // Set when changed or let go: a slider dragged changes at every frame.
-                let mut slide = |ui: &mut egui::Ui, volume: &mut f32, text: String| {
-                    let slider = volume_slider(ui, volume, text);
-                    set |= slider.drag_stopped() || (slider.changed() && !slider.dragged());
-                    slider.changed()
-                };
-                let mut music = audio.music_volume();
-                if slide(ui, &mut music, tr!("music")) {
-                    audio.set_music_volume(music);
-                }
-                let mut effects = audio.effects_volume();
-                if slide(ui, &mut effects, tr!("effects")) {
-                    audio.set_effects_volume(effects);
-                }
-            }
-            Tab::Language => {
-                ui.horizontal(|ui| {
-                    ui.label(tr!("menu-language"));
-                    let current = lang::language();
-                    let mut chosen = current;
-                    egui::ComboBox::from_id_salt("language")
-                        .selected_text(
-                            lang::LANGUAGES
-                                .iter()
-                                .find(|l| l.code == current)
-                                .map_or(current, |l| l.name),
-                        )
-                        .show_ui(ui, |ui| {
-                            for language in lang::LANGUAGES {
-                                ui.selectable_value(&mut chosen, language.code, language.name);
-                            }
-                        });
-                    if chosen != current {
-                        language = Some(chosen);
-                    }
-                });
-            }
+            Tab::Graphics => graphics_tab(ui, &mut display),
+            Tab::Audio => set |= audio_tab(ui, audio),
+            Tab::Language => language = language_tab(ui),
         }
         ui.separator();
         close = ui.button(tr!("close")).clicked();
@@ -139,6 +87,64 @@ pub fn window(
         failed = Some(e);
     }
     failed.map(|e| tr!("save-failed", error = e.to_string()))
+}
+
+/// Full screen and the interface's size, changed in `display`.
+fn graphics_tab(ui: &mut egui::Ui, display: &mut Display) {
+    ui.checkbox(&mut display.fullscreen, tr!("fullscreen"));
+    ui.horizontal(|ui| {
+        ui.label(tr!("interface-size"));
+        egui::ComboBox::from_id_salt("interface-size")
+            .selected_text(format!("{} %", display.interface))
+            .show_ui(ui, |ui| {
+                for size in INTERFACE_SIZES {
+                    ui.selectable_value(&mut display.interface, size, format!("{size} %"));
+                }
+            });
+    });
+}
+
+/// The music and effects volumes, applied at once; whether a volume is to be kept.
+fn audio_tab(ui: &mut egui::Ui, audio: &mut Audio) -> bool {
+    let mut set = false;
+    // Set when changed or let go: a slider dragged changes at every frame.
+    let mut slide = |ui: &mut egui::Ui, volume: &mut f32, text: String| {
+        let slider = volume_slider(ui, volume, text);
+        set |= slider.drag_stopped() || (slider.changed() && !slider.dragged());
+        slider.changed()
+    };
+    let mut music = audio.music_volume();
+    if slide(ui, &mut music, tr!("music")) {
+        audio.set_music_volume(music);
+    }
+    let mut effects = audio.effects_volume();
+    if slide(ui, &mut effects, tr!("effects")) {
+        audio.set_effects_volume(effects);
+    }
+    set
+}
+
+/// The language picker; the code of the language chosen, if it changed.
+fn language_tab(ui: &mut egui::Ui) -> Option<&'static str> {
+    ui.horizontal(|ui| {
+        ui.label(tr!("menu-language"));
+        let current = lang::language();
+        let mut chosen = current;
+        egui::ComboBox::from_id_salt("language")
+            .selected_text(
+                lang::LANGUAGES
+                    .iter()
+                    .find(|l| l.code == current)
+                    .map_or(current, |l| l.name),
+            )
+            .show_ui(ui, |ui| {
+                for language in lang::LANGUAGES {
+                    ui.selectable_value(&mut chosen, language.code, language.name);
+                }
+            });
+        (chosen != current).then_some(chosen)
+    })
+    .inner
 }
 
 /// A volume between 0 and 1, shown and typed in whole percents.
