@@ -51,11 +51,11 @@ use crate::saves;
 use crate::texts::{
     Article, activity_name, against_text, challenger_text, change, class_name, club_name,
     colosseum_name, colosseum_rules_name, contender_name, continent_name, date_in_sentence,
-    date_text, fight_text, fighter_name, illness_text, injury_text, loadout_name, market_news_text,
-    money_line, move_text, named_club, origin_place, priced, result_text, rival_fighter_name,
-    staff_move_text, staff_news_text, stage_name, stat_names, temperament_name, temperament_text,
-    title_article, title_changed, trait_memory, trait_name, trait_text, wealth_name, wealth_text,
-    week_lines, world_article, year_text,
+    date_text, fight_text, fighter_name, illness_effect, illness_text, injury_effect, injury_text,
+    loadout_name, market_news_text, money_line, move_text, named_club, origin_place, priced,
+    result_text, rival_fighter_name, staff_move_text, staff_news_text, stage_name, stat_names,
+    temperament_name, temperament_text, title_article, title_changed, trait_memory, trait_name,
+    trait_text, wealth_name, wealth_text, week_lines, world_article, year_text,
 };
 use crate::theme;
 use crate::title_screen::{Slot, read_slots, slot_text};
@@ -1548,7 +1548,7 @@ fn sheet(ui: &mut egui::Ui, index: usize, f: &CareerFighter, best: Stats, data: 
                 }
             }
             section(ui, &tr!("sheet-health"));
-            health(ui, f);
+            health(ui, f, data);
         });
 }
 
@@ -1656,17 +1656,19 @@ fn record_chips(ui: &mut egui::Ui, record: Record) {
 }
 
 /// A green « En bonne santé », or a red tag for each injury and a bronze one for an
-/// illness.
-fn health(ui: &mut egui::Ui, f: &CareerFighter) {
+/// illness, what each takes off the stats on hover.
+fn health(ui: &mut egui::Ui, f: &CareerFighter, data: &DesignData) {
     ui.horizontal_wrapped(|ui| {
         if f.injuries.is_empty() && f.illness.is_none() {
             chip(ui, tr!("sheet-healthy"), theme::LAUREL);
         }
-        for injury in &f.injuries {
-            chip(ui, injury_text(*injury, f.dominant_hand), theme::BLOOD);
+        for &injury in &f.injuries {
+            chip(ui, injury_text(injury, f.dominant_hand), theme::BLOOD)
+                .on_hover_text(injury_effect(injury, f.dominant_hand, data));
         }
         if let Some(illness) = f.illness {
-            chip(ui, illness_text(illness), theme::BRONZE.gamma_multiply(0.6));
+            chip(ui, illness_text(illness), theme::BRONZE.gamma_multiply(0.6))
+                .on_hover_text(illness_effect(illness, data));
         }
     });
 }

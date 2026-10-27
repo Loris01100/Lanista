@@ -970,6 +970,46 @@ pub fn illness_text(illness: Illness) -> String {
     tr!("illness", level = level, weeks = weeks(illness.weeks_left))
 }
 
+/// What an injury does, for a hover: « AC -12 %, VIT -5 %, à vie », and the cap all
+/// injuries together share.
+pub fn injury_effect(injury: Injury, dominant: Side, data: &DesignData) -> String {
+    let maluses: Vec<String> = stat_names()
+        .into_iter()
+        .zip(injury.malus(dominant, &data.fighter.injury).to_array())
+        .filter(|&(_, percent)| percent > 0)
+        .map(|(stat, percent)| tr!("health-malus", stat = stat, percent = percent))
+        .collect();
+    if maluses.is_empty() {
+        return tr!("injury-no-effect");
+    }
+    tr!(
+        "injury-effect",
+        maluses = maluses.join(", "),
+        permanent = if injury.is_permanent() {
+            "true"
+        } else {
+            "false"
+        },
+        max = data.fighter.injury.max_malus
+    )
+}
+
+/// What an illness does, for a hover: its malus on every stat, the slower rest, and for a
+/// severe one the risk of fighting.
+pub fn illness_effect(illness: Illness, data: &DesignData) -> String {
+    let rules = &data.fighter.illness;
+    let effect = tr!(
+        "illness-effect",
+        malus = rules.malus.get(illness.level),
+        rest = rules.rest_percent.get(illness.level)
+    );
+    if illness.fight_advised() {
+        effect
+    } else {
+        format!("{effect}\n{}", tr!("illness-severe-effect"))
+    }
+}
+
 /// A severed limb in a sentence: "bras gauche tranché", "jambe droite tranchée".
 fn limb_cut(location: Location) -> String {
     match location {
@@ -1230,6 +1270,30 @@ mod tests {
             "{lines:?}"
         );
         assert!(!lines.iter().any(|l| l.contains("Spiculus")), "{lines:?}");
+    }
+
+    #[test]
+    fn health_effects_name_the_stats_they_lower() {
+        let data = DesignData::load().unwrap();
+        let limp = Injury {
+            location: Location::Leg(Side::Right),
+            severity: Severity::Permanent,
+            weeks_left: 0,
+        };
+        assert_eq!(
+            injury_effect(limp, Side::Right, &data),
+            "VIT -25 %, à vie.\nToutes blessures cumulées, une stat ne perd pas plus de 80 %."
+        );
+        let severe = Illness {
+            level: IllnessLevel::Severe,
+            weeks_left: 2,
+        };
+        assert_eq!(
+            illness_effect(severe, &data),
+            "Toutes les stats -30 % jusqu'à la guérison, et une semaine de repos ne rend que \
+             25 % de la forme habituelle.\nCombattre est déconseillé : cela peut prolonger la \
+             maladie."
+        );
     }
 
     #[test]

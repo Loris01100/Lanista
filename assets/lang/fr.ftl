@@ -106,6 +106,16 @@ illness = Maladie { $level ->
        *[severe] sévère
     }, { $weeks }
 
+health-malus = { $stat } -{ $percent } %
+injury-effect = { $maluses }, { $permanent ->
+        [true] à vie
+       *[false] jusqu'à la guérison
+    }.
+    Toutes blessures cumulées, une stat ne perd pas plus de { $max } %.
+injury-no-effect = Sans effet sur les stats.
+illness-effect = Toutes les stats -{ $malus } % jusqu'à la guérison, et une semaine de repos ne rend que { $rest } % de la forme habituelle.
+illness-severe-effect = Combattre est déconseillé : cela peut prolonger la maladie.
+
 cut-head = tête tranchée
 cut-body = corps tranché
 cut-arm = bras { $side ->

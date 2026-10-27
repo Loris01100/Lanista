@@ -10,8 +10,8 @@ use reesch::egui;
 use super::{ClubScreen, View, chip, fraction, meter, settle_plan, wrapped_chip};
 use crate::lang::tr;
 use crate::texts::{
-    activity_name, class_name, condition_text, illness_text, injury_text, loadout_name,
-    record_text, stage_name, unsellable_text,
+    activity_name, class_name, condition_text, illness_effect, illness_text, injury_effect,
+    injury_text, loadout_name, record_text, stage_name, unsellable_text,
 };
 use crate::theme;
 
@@ -170,16 +170,22 @@ fn health_chips(ui: &mut egui::Ui, fighter: &CareerFighter, state: &GameState, d
         let mut fit = true;
         for &injury in &fighter.injuries {
             let text = injury_text(injury, fighter.dominant_hand);
-            if injury.is_permanent() {
-                wrapped_chip(ui, text, plain);
+            let fill = if injury.is_permanent() {
+                plain
             } else {
                 fit = false;
-                wrapped_chip(ui, text, theme::BLOOD);
-            }
+                theme::BLOOD
+            };
+            wrapped_chip(ui, text, fill).on_hover_text(injury_effect(
+                injury,
+                fighter.dominant_hand,
+                data,
+            ));
         }
         if let Some(illness) = fighter.illness {
             fit = false;
-            wrapped_chip(ui, illness_text(illness), theme::BRONZE.gamma_multiply(0.6));
+            wrapped_chip(ui, illness_text(illness), theme::BRONZE.gamma_multiply(0.6))
+                .on_hover_text(illness_effect(illness, data));
         }
         if fit {
             wrapped_chip(ui, tr!("roster-fit"), theme::LAUREL);
