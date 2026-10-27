@@ -2580,25 +2580,25 @@ mod tests {
             cells,
             [
                 (
-                    "Familia Marcellus",
+                    "Familia Maximus",
                     "Rome",
-                    "marchand",
+                    "spectacle",
                     "pauvre",
                     10,
                     "+0, neutre"
                 ),
                 (
-                    "Horde de Batu",
-                    "Steppe",
-                    "agressif",
-                    "riche",
+                    "École Guan Yu",
+                    "Asie de l'Est",
+                    "formateur",
+                    "modeste",
                     10,
                     "+0, neutre"
                 ),
                 (
-                    "Loge de Tashunka",
+                    "Clan de Tashunka",
                     "Tribus amérindiennes",
-                    "prudent",
+                    "vétéran",
                     "pauvre",
                     10,
                     "+0, neutre"
@@ -2658,9 +2658,9 @@ mod tests {
                 what: WorldNews::Title(1, TitleNews::Vacated { to: None }),
             },
         ];
-        let founded = "Un nouveau ludus ouvre ses portes : Familia Marcellus (Rome), en Europe";
+        let founded = "Un nouveau ludus ouvre ses portes : Familia Maximus (Rome), en Europe";
         let vacated = "Le champion de Rome n'est plus, son trône reste vide";
-        let closed = "Faillite : Horde de Batu ferme ses portes, ses combattants partent au marché";
+        let closed = "Faillite : École Guan Yu ferme ses portes, ses combattants partent au marché";
         assert_eq!(
             headlines(&screen),
             [
@@ -2697,11 +2697,11 @@ mod tests {
             headlines(&screen),
             [(
                 4,
-                vec!["Horde de Batu se déclare votre rival : vos combats contre lui attireront les foules".to_owned()]
+                vec!["École Guan Yu se déclare votre rival : vos combats contre lui attireront les foules".to_owned()]
             )]
         );
         assert!(alert_texts(&screen).contains(
-            &"Horde de Batu est votre rival depuis saison 1, semaine 4 : recettes à 150 %, renommée +3 par combat"
+            &"École Guan Yu est votre rival depuis saison 1, semaine 4 : recettes à 150 %, renommée +3 par combat"
                 .to_owned()
         ));
         assert_eq!(screen.rival_rows()[1].standing, Standing::Rival);

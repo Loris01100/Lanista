@@ -1,12 +1,9 @@
-//! Traits: 0 to 2 per fighter, drawn for life beside its temperament, each tied to a
-//! decision of its club: the workaholic and the nonchalant to training and rest, the
+//! Traits: none at first, each earned in a fighter's career for life beside its
+//! temperament, and tied to a decision of its club: the workaholic and the nonchalant to training and rest, the
 //! vain to the colosseums it fights in, the spiteful to the challenges, the
 //! superstitious to the arenas and loadouts, the pack leader to the club's roster.
 
-use rand::{Rng, RngExt};
 use serde::{Deserialize, Serialize};
-
-use crate::fighter::pick;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
 pub enum Trait {
@@ -45,34 +42,10 @@ impl Trait {
     }
 }
 
-/// A new fighter's traits: their count drawn by `rules.count_weights`, each one drawn
-/// evenly among those its earlier ones don't exclude.
-pub fn random_traits<R: Rng + ?Sized>(rng: &mut R, rules: &TraitRules) -> Vec<Trait> {
-    let counts: Vec<(u32, usize)> = (0..)
-        .zip(rules.count_weights)
-        .map(|(n, w)| (w, n))
-        .collect();
-    let count = pick(rng, &counts);
-    let mut traits = Vec::new();
-    for _ in 0..count {
-        let open: Vec<Trait> = Trait::ALL
-            .into_iter()
-            .filter(|t| !traits.iter().any(|&had: &Trait| had.excludes(*t)))
-            .collect();
-        if open.is_empty() {
-            break;
-        }
-        traits.push(open[rng.random_range(0..open.len())]);
-    }
-    traits
-}
-
 /// Read from `data/fighter.ron`.
 #[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct TraitRules {
-    /// Chances of a new fighter having 0, 1 and 2 traits, against each other.
-    pub count_weights: [u32; 3],
     pub workaholic: WorkaholicRules,
     pub nonchalant: NonchalantRules,
     pub vain: VainRules,
@@ -90,6 +63,8 @@ pub struct WorkaholicRules {
     pub rest_morale: u32,
     /// A rival manager rests it only below this percent of its profile's `rest_form`.
     pub rest_form_percent: u32,
+    /// Weeks of training in a row that make a fighter a workaholic.
+    pub earned_trainings: u32,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
@@ -101,6 +76,8 @@ pub struct NonchalantRules {
     pub training_morale: u32,
     /// Of the form a training session costs.
     pub training_form_percent: u32,
+    /// Weeks of rest in a row that make a fighter nonchalant.
+    pub earned_rests: u32,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
@@ -114,6 +91,8 @@ pub struct VainRules {
     pub great_morale: u32,
     /// Morale lost after a duel on a small stage.
     pub small_morale: u32,
+    /// Fights on a great stage in its career that make a fighter vain.
+    pub earned_stages: u32,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
@@ -143,31 +122,4 @@ pub struct PackLeaderRules {
     pub weekly_morale: u32,
     /// Wins in its career that make a fighter a pack leader.
     pub earned_wins: u32,
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use crate::design_data::DesignData;
-    use rand::SeedableRng;
-    use rand_chacha::ChaCha8Rng;
-
-    #[test]
-    fn traits_number_zero_to_two_and_never_clash() {
-        let rules = DesignData::load().unwrap().fighter.traits;
-        let mut rng = ChaCha8Rng::seed_from_u64(1);
-        let drawn: Vec<Vec<Trait>> = (0..500).map(|_| random_traits(&mut rng, &rules)).collect();
-        for traits in &drawn {
-            assert!(traits.len() <= 2);
-            if let [a, b] = traits[..] {
-                assert!(!a.excludes(b), "{traits:?}");
-            }
-        }
-        for n in 0..=2 {
-            assert!(drawn.iter().any(|t| t.len() == n), "{n}");
-        }
-        for t in Trait::ALL {
-            assert!(drawn.iter().any(|d| d.contains(&t)), "{t:?}");
-        }
-    }
 }

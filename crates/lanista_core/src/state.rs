@@ -2817,6 +2817,20 @@ mod tests {
             .collect()
     }
 
+    /// Whether rival club `club` has someone on its staff, or could hire no one on the
+    /// staff market as it is.
+    fn staffed(state: &GameState, club: usize, data: &DesignData) -> bool {
+        let rival = &state.rivals[club];
+        let staff = &rival.staff;
+        let shares = i64::from(data.economy.staff.salary_shares(rival.active()));
+        let rules = (rival.rules(data), rivals::staff_posts(rival.wealth));
+        let money = rival.money / shares;
+        staff.trainer.is_some()
+            || staff.doctor.is_some()
+            || staff.recruiter.is_some()
+            || rivals::staff_moves(staff, money, rules, &state.staff_market).is_empty()
+    }
+
     /// Every fighter in activity has a name, and no two share it.
     fn assert_names_apart(state: &GameState, week: u64) {
         let rivals = state.rivals.iter().flat_map(|r| &r.fighters);
@@ -2917,13 +2931,12 @@ mod tests {
         // not afford a trainer besides, nor find one when forty clubs share the
         // market); their salaries, paid for every three fighters, keep their money
         // within bounds (up to 26 000 without them).
-        // A club founded at the last off-season may not have found one yet.
+        // A club founded at the last off-season may not have found one yet, and one
+        // near ruin can pay none of the candidates left.
         let founded = founded_within(&state, season);
         for (club, rival) in state.rivals.iter().enumerate().filter(|(_, r)| r.is_open()) {
-            let staff = &rival.staff;
-            let hired = staff.trainer.is_some() || staff.doctor.is_some();
             let new = founded.contains(&club);
-            assert!(hired || staff.recruiter.is_some() || new, "{staff:?}");
+            assert!(new || staffed(&state, club, &data), "{:?}", rival.staff);
             assert!(rival.money < 25_000, "{}", rival.money);
         }
         assert!(

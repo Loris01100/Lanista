@@ -101,19 +101,22 @@
         ),
     ),
     traits: (
-        // Chances of a new fighter having 0, 1 and 2 traits, each drawn evenly among
-        // those its first does not exclude (the workaholic and the nonchalant exclude
-        // each other). Morale changes go through the temperament's morale_percent.
-        count_weights: (2, 2, 1),
+        // A new fighter has none: each is earned in its career, the workaholic and the
+        // nonchalant excluding each other. Morale changes go through the temperament's
+        // morale_percent.
         // training_percent is added to the trainer's coaching percentage.
         // A rival manager rests one only below rest_form_percent of its profile's
-        // rest_form.
-        workaholic: (training_percent: 50, rest_morale: 1, rest_form_percent: 50),
-        // training_form_percent of the form a session costs.
-        nonchalant: (rest_morale: 1, training_morale: 3, training_form_percent: 150),
-        // A duel for a title, or in a colosseum of at least great_prestige, is a great
-        // stage; one of at most small_prestige, a small one.
-        vain: (great_prestige: 3, small_prestige: 1, great_morale: 5, small_morale: 5),
+        // rest_form. A fighter turns workaholic at earned_trainings weeks of training
+        // in a row.
+        workaholic: (training_percent: 50, rest_morale: 1, rest_form_percent: 50, earned_trainings: 6),
+        // training_form_percent of the form a session costs. A fighter turns
+        // nonchalant at earned_rests weeks in a row of rest it did not need (in full
+        // form, with no injury healing nor illness).
+        nonchalant: (rest_morale: 1, training_morale: 3, training_form_percent: 150, earned_rests: 4),
+        // A fight for a title, or in a colosseum of at least great_prestige, is a great
+        // stage; one of at most small_prestige, a small one. A fighter turns vain at
+        // earned_stages fights on a great stage.
+        vain: (great_prestige: 3, small_prestige: 1, great_morale: 5, small_morale: 5, earned_stages: 20),
         // In percent of every stat, in a duel against a fighter that beat it and it has
         // not beaten since. A fighter turns spiteful at earned_defeats duels lost to the
         // same one.

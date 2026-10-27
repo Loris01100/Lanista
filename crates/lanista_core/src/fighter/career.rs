@@ -26,7 +26,7 @@ use crate::fighter::progression::{
     ProgressEvent, age_decline, progress, random_potential, season_gains, season_progress,
 };
 use crate::fighter::retirement::{decides_to_retire, too_maimed};
-use crate::fighter::traits::{Trait, random_traits};
+use crate::fighter::traits::{Trait, TraitRules};
 use crate::fighter::{ClassId, Condition, Fighter, FighterId, Stats, percent_of};
 use crate::log::{Report, places};
 use crate::names::FighterName;
@@ -99,7 +99,7 @@ pub struct CareerFighter {
     /// In years.
     pub age: u32,
     pub personality: Personality,
-    /// Its traits, 0 to 2, for life.
+    /// Its traits, none at first, each earned in its career for life.
     #[serde(default)]
     pub traits: Vec<Trait>,
     /// The fighters that beat a spiteful one in a duel and it has not beaten since, by
@@ -115,6 +115,12 @@ pub struct CareerFighter {
     /// The floor of its last duels, all won, and how many.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub win_streak: Option<(ArenaKind, u32)>,
+    /// Its last weeks, all of rest or all of training, and how many.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub routine: Option<(Activity, u32)>,
+    /// Its fights on a great stage (`VainRules::great_prestige`, or for a title).
+    #[serde(default)]
+    pub great_stages: u32,
     pub morale: Morale,
     pub fame: Fame,
     pub form: Form,
@@ -150,7 +156,7 @@ impl CareerFighter {
     /// A new fighter: random class, stats within `rules.career.stats_spread_percent` of the
     /// standard duel's, hidden potential, dominant hand, age, personality, look and ease
     /// with each loadout, in the one it is most at ease with;
-    /// neutral morale, no fame, full form, healthy.
+    /// no trait, neutral morale, no fame, full form, healthy.
     ///
     /// # Panics
     /// If `data` has no class, which [`DesignData::from_ron`] rejects: a bug, not a data error.
@@ -175,7 +181,6 @@ impl CareerFighter {
         let (youngest, oldest) = rules.career.start_age;
         let age = rng.random_range(youngest..=oldest);
         let personality = Personality::random(rng, &rules.personality);
-        let traits = random_traits(rng, &rules.traits);
         let appearance = Appearance::random(rng, &rules.appearance);
         let loadouts = data.class(class).map_or(0, |c| c.loadouts.len());
         let ease = rules.ease.random(rng, loadouts);
@@ -192,11 +197,13 @@ impl CareerFighter {
             ease,
             age,
             personality,
-            traits,
+            traits: Vec::new(),
             grudges: Vec::new(),
             lucky_floor: None,
             defeats_by: Vec::new(),
             win_streak: None,
+            routine: None,
+            great_stages: 0,
             morale: Morale::neutral(),
             fame: Fame::default(),
             form: Form::full(),
@@ -259,6 +266,8 @@ impl CareerFighter {
             lucky_floor: None,
             defeats_by: Vec::new(),
             win_streak: None,
+            routine: None,
+            great_stages: 0,
             morale: Morale::neutral(),
             fame: Fame::default(),
             form: Form::full(),
@@ -453,6 +462,7 @@ impl CareerFighter {
         if self.status != Status::Active {
             return None;
         }
+        self.keep_routine(plan.activity, &data.fighter.traits);
         if plan.loadout != self.loadout && self.has(Trait::Superstitious) {
             let lost = data.fighter.traits.superstitious.loadout_morale;
             self.feel(MoraleEvent::Lowered(lost), &data.fighter);
@@ -625,14 +635,47 @@ impl CareerFighter {
         }
     }
 
-    /// What a duel in a colosseum of `prestige`, for a title or not, does to the morale
-    /// of a vain survivor: lifted on a great stage, lowered on a small one.
+    /// Its weeks of training, or of rest it did not need (in full form, healthy), in a
+    /// row after one of `activity`, anything else ending them: a workaholic at
+    /// `earned_trainings` trainings in a row, a nonchalant at `earned_rests` rests.
+    fn keep_routine(&mut self, activity: Activity, traits: &TraitRules) {
+        let healthy = self.illness.is_none() && self.injuries.iter().all(Injury::is_permanent);
+        let idle = activity == Activity::Rest && self.form == Form::full() && healthy;
+        self.routine = match self.routine {
+            _ if activity != Activity::Train && !idle => None,
+            Some((last, n)) if last == activity => Some((activity, n + 1)),
+            _ => Some((activity, 1)),
+        };
+        match self.routine {
+            Some((Activity::Train, n)) if n >= traits.workaholic.earned_trainings => {
+                self.earn(Trait::Workaholic);
+            }
+            Some((Activity::Rest, n)) if n >= traits.nonchalant.earned_rests => {
+                self.earn(Trait::Nonchalant);
+            }
+            _ => {}
+        }
+    }
+
+    /// What a fight in a colosseum of `prestige`, for a title or not, does to a
+    /// survivor: on a great stage, one more toward turning vain at `earned_stages`; and
+    /// to a vain one's morale: lifted on a great stage, lowered on a small one.
     pub fn on_stage(&mut self, prestige: u32, title: bool, rules: &FighterRules) {
-        if self.status == Status::Dead || !self.has(Trait::Vain) {
+        if self.status == Status::Dead {
             return;
         }
         let vain = &rules.traits.vain;
-        if title || prestige >= vain.great_prestige {
+        let great = title || prestige >= vain.great_prestige;
+        if great {
+            self.great_stages += 1;
+            if self.great_stages >= vain.earned_stages {
+                self.earn(Trait::Vain);
+            }
+        }
+        if !self.has(Trait::Vain) {
+            return;
+        }
+        if great {
             self.feel(MoraleEvent::Lifted(vain.great_morale), rules);
         } else if prestige <= vain.small_prestige {
             self.feel(MoraleEvent::Lowered(vain.small_morale), rules);
@@ -1610,6 +1653,8 @@ mod tests {
             for _ in 0..100 {
                 f.form = Form::full();
                 f.morale = Morale::neutral();
+                // Never long enough in a row to turn workaholic.
+                f.routine = None;
                 let staff = StaffEffects::default();
                 f.play_week(plan(Activity::Train), None, staff, &mut rng, &data);
             }
@@ -1742,6 +1787,50 @@ mod tests {
         assert_eq!(f.traits, []);
         f.remember(&other, sand, FightResult::Won, rules);
         assert_eq!(f.traits, [Trait::PackLeader]);
+        let mut f = named(&[], 1, "Flamma");
+        for _ in 1..traits.vain.earned_stages {
+            f.on_stage(traits.vain.great_prestige, false, rules);
+            f.on_stage(traits.vain.small_prestige, false, rules);
+        }
+        assert_eq!(f.traits, []);
+        f.on_stage(traits.vain.small_prestige, true, rules);
+        assert_eq!(f.traits, [Trait::Vain]);
+    }
+
+    #[test]
+    fn weeks_in_a_row_of_training_or_rest_earn_a_trait() {
+        let data = data();
+        let traits = &data.fighter.traits;
+        let routine = |f: &mut CareerFighter, activity, weeks| {
+            for _ in 0..weeks {
+                f.begin_melee_week(plan(activity), StaffEffects::default(), &data);
+            }
+        };
+        let mut f = with_traits(&[]);
+        routine(
+            &mut f,
+            Activity::Train,
+            traits.workaholic.earned_trainings - 1,
+        );
+        routine(&mut f, Activity::Melee(ColosseumId(0)), 1);
+        routine(
+            &mut f,
+            Activity::Train,
+            traits.workaholic.earned_trainings - 1,
+        );
+        assert_eq!(f.traits, []);
+        routine(&mut f, Activity::Train, 1);
+        assert_eq!(f.traits, [Trait::Workaholic]);
+        f.form = Form::full();
+        routine(&mut f, Activity::Rest, traits.nonchalant.earned_rests);
+        assert_eq!(f.traits, [Trait::Workaholic]);
+        // Rest it needed does not count.
+        let mut f = with_traits(&[]);
+        routine(&mut f, Activity::Rest, traits.nonchalant.earned_rests);
+        assert_eq!(f.traits, []);
+        f.form = Form::full();
+        routine(&mut f, Activity::Rest, traits.nonchalant.earned_rests);
+        assert_eq!(f.traits, [Trait::Nonchalant]);
     }
 
     #[test]
