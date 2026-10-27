@@ -13,7 +13,9 @@ mod staff;
 use std::path::PathBuf;
 
 use colosseums::{ContinentPart, arrow, contender_view, ranking_recap};
-use market::{MarketFilter, MarketTab};
+#[cfg(test)]
+use market::SortBy;
+use market::{MarketFilter, MarketSort, MarketTab};
 use std::rc::Rc;
 
 use lanista_core::calendar::{CalendarRules, Date, SeasonPhase};
@@ -150,6 +152,8 @@ pub struct ClubScreen {
     offer_draft: Option<(RivalId, u32)>,
     /// Which fighters out of the club the market lists.
     market_filter: MarketFilter,
+    /// How the market's lists are sorted.
+    market_sort: MarketSort,
     /// The market's tab shown.
     market_tab: MarketTab,
     /// The post the staff view shows.
@@ -198,6 +202,7 @@ impl ClubScreen {
             confirm: None,
             offer_draft: None,
             market_filter: MarketFilter::default(),
+            market_sort: MarketSort::default(),
             market_tab: MarketTab::FreeAgents,
             shown_role: Role::Trainer,
             shown_issue: None,
@@ -2988,6 +2993,22 @@ mod tests {
         assert!(shows(MarketFilter::new((25, 25), 0, 3, 75)));
         assert!(!shows(MarketFilter::new((0, 99), 0, 4, 0)));
         assert!(!shows(MarketFilter::new((0, 99), 0, 0, 76)));
+    }
+
+    #[test]
+    fn the_market_sorts_by_the_column_clicked() {
+        let screen = screen(7);
+        let data = &screen.data;
+        let ages = |sort: MarketSort| {
+            let mut rows: Vec<_> = screen.state.free_agents.iter().collect();
+            sort.apply(&mut rows, |f| f, data);
+            rows.iter().map(|f| f.age).collect::<Vec<_>>()
+        };
+        let down = ages(MarketSort::new(SortBy::Age, false));
+        assert!(down.is_sorted_by(|a, b| a >= b), "{down:?}");
+        let up = ages(MarketSort::new(SortBy::Age, true));
+        assert!(up.is_sorted(), "{up:?}");
+        assert_ne!(up.first(), up.last(), "the free agents are all of one age");
     }
 
     #[test]
