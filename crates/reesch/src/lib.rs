@@ -39,14 +39,14 @@ pub fn set_ui_scale(scale: f32) {
 /// Runs the game from its first screen until the last one is popped.
 /// Load every asset before, then call it from the `#[macroquad::main]` function.
 /// `audio` starts at the volumes the game kept; `setup_ui` runs once to set the egui
-/// theme and fonts.
+/// theme and fonts, those loaded with `Assets::load_font` read with `Assets::font`.
 pub async fn run(
     assets: Assets,
     mut audio: Audio,
-    setup_ui: impl FnOnce(&egui::Context),
+    setup_ui: impl FnOnce(&egui::Context, &Assets),
     first: Box<dyn Screen>,
 ) {
-    egui_macroquad::cfg(setup_ui);
+    egui_macroquad::cfg(|ui| setup_ui(ui, &assets));
     let mut stack = ScreenStack::new(first);
     while !stack.is_empty() {
         // One egui pass per frame: the top screen builds its UI there.

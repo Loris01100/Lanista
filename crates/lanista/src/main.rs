@@ -94,7 +94,7 @@ async fn main() {
     reesch::run(
         assets,
         audio,
-        |ui| {
+        |ui, _assets| {
             theme::apply(ui);
             options::apply(display);
         },
