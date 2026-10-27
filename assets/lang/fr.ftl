@@ -823,8 +823,10 @@ colosseum-cahokia = Cahokia
 colosseum-cuzco = Cuzco
 colosseum-tenochtitlan = Tenochtitlan
 colosseum-mbanza_kongo = Mbanza Kongo
+colosseum-grand_zimbabwe = Grand Zimbabwe
 colosseum-musumba = Musumba
 colosseum-nan_madol = Nan Madol
+colosseum-rapa_nui = Rapa Nui
 colosseum-ngapuhi = Ngāpuhi
 
 culture-rome = Rome

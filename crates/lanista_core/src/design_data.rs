@@ -979,21 +979,19 @@ mod tests {
         // Oceania's clubs with no culture of their own, or no free colosseum.
         let uprooted = NAMES.replacen("continent: Oceania", "continent: Europe", 1);
         assert_eq!(world_field(WORLD, &uprooted), "clubs.cultures");
-        let dear = WORLD.replacen(
-            r#"key: "nan_madol",
+        let dear = ["nan_madol", "rapa_nui"]
+            .iter()
+            .fold(WORLD.to_owned(), |world, key| {
+                let free = format!(
+                    r#"key: "{key}",
             continent: Oceania,
             arena: Sand,
             prestige: 1,
             residents: 8,
-            purses: (entry_fee: 0"#,
-            r#"key: "nan_madol",
-            continent: Oceania,
-            arena: Sand,
-            prestige: 1,
-            residents: 8,
-            purses: (entry_fee: 5"#,
-            1,
-        );
+            purses: (entry_fee: 0"#
+                );
+                world.replacen(&free, &free.replace("entry_fee: 0", "entry_fee: 5"), 1)
+            });
         assert_ne!(dear, WORLD);
         assert_eq!(world_field(&dear, NAMES), "colosseums");
         let nowhere = WORLD.replacen("(1, Oceania)", "(0, Oceania)", 1);

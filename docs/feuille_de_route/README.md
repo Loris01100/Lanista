@@ -230,7 +230,7 @@ Chaque phase a son fichier : ce qu'elle contient, comment elle est faite, son ja
 
 ## Points encore ouverts
 
-- [ ] Taille du monde : nombre de colisées et de clubs (13 colisées sur cinq continents et 40 clubs générés au départ, au plus 100 ouverts à la fois, dans `data/world.ron`). Décidé pour la phase 6 bis : un colisée majeur par continent (Rome, Karakorum, Tenochtitlan, Musumba, Ngāpuhi), un ou deux colisées mineurs autour, une quarantaine de clubs générés de toutes cultures ; les nombres exacts restent à caler.
+- [ ] Taille du monde : nombre de colisées et de clubs (15 colisées sur cinq continents et 40 clubs générés au départ, au plus 100 ouverts à la fois, dans `data/world.ron`). Décidé pour la phase 6 bis : un colisée majeur par continent (Rome, Karakorum, Tenochtitlan, Musumba, Ngāpuhi), un ou deux colisées mineurs autour, une quarantaine de clubs générés de toutes cultures ; les nombres exacts restent à caler.
 - [ ] Liste des classes et de leurs sorts.
 - [ ] Calendrier des grands événements : confirmer l'Inter-Coliseum aux saisons impaires.
 - [x] `ort` ou `tract` pour l'inférence : `tract`, tranché en phase 0.

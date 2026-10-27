@@ -220,6 +220,14 @@
             purses: (entry_fee: 0, win_prize: 50, receipts_base: 20, receipts_per_fame: 1, champion_bonus: 30, melee_prize: 150),
         ),
         (
+            key: "grand_zimbabwe",
+            continent: Africa,
+            arena: Sand,
+            prestige: 1,
+            residents: 8,
+            purses: (entry_fee: 0, win_prize: 50, receipts_base: 20, receipts_per_fame: 1, champion_bonus: 30, melee_prize: 150),
+        ),
+        (
             key: "musumba",
             continent: Africa,
             arena: Pillars,
@@ -229,6 +237,14 @@
         ),
         (
             key: "nan_madol",
+            continent: Oceania,
+            arena: Sand,
+            prestige: 1,
+            residents: 8,
+            purses: (entry_fee: 0, win_prize: 50, receipts_base: 20, receipts_per_fame: 1, champion_bonus: 30, melee_prize: 150),
+        ),
+        (
+            key: "rapa_nui",
             continent: Oceania,
             arena: Sand,
             prestige: 1,

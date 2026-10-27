@@ -276,7 +276,7 @@ Le personnel s'engage au marché parmi des candidats, les mêmes pour le joueur 
 
 Chaque colisée a son type d'arène, son prestige, son classement et son champion. Un même combattant peut figurer dans plusieurs classements et détenir plusieurs titres, au prix de défenses plus fréquentes et donc de plus de fatigue.
 
-Les colisées sont répartis sur cinq continents. Chacun a un colisée majeur, au prestige le plus haut : Rome (Europe), Karakorum (Asie), Tenochtitlan (Amériques), Musumba (Afrique) et Ngāpuhi (Océanie). Autour de lui, un ou deux colisées mineurs, dont un à entrée gratuite : Capoue et Pompéi en Europe, Samarcande et Chang'an en Asie, Cahokia et Cuzco dans les Amériques, Mbanza Kongo en Afrique, Nan Madol en Océanie. Le joueur choisit son continent en commençant une partie ; chaque club rival a le sien, celui de sa culture. Un club combat surtout chez lui : s'inscrire sur un autre continent coûte en plus le voyage. Un club rival ne part à l'étranger que si aucun colisée de chez lui ne lui convient.
+Les colisées sont répartis sur cinq continents. Chacun a un colisée majeur, au prestige le plus haut : Rome (Europe), Karakorum (Asie), Tenochtitlan (Amériques), Musumba (Afrique) et Ngāpuhi (Océanie). Autour de lui, un ou deux colisées mineurs, dont un à entrée gratuite : Capoue et Pompéi en Europe, Samarcande et Chang'an en Asie, Cahokia et Cuzco dans les Amériques, Mbanza Kongo et Grand Zimbabwe en Afrique, Nan Madol et Rapa Nui en Océanie. Le joueur choisit son continent en commençant une partie ; chaque club rival a le sien, celui de sa culture. Un club combat surtout chez lui : s'inscrire sur un autre continent coûte en plus le voyage. Un club rival ne part à l'étranger que si aucun colisée de chez lui ne lui convient.
 
 ### Classement
 
