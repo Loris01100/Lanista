@@ -422,6 +422,29 @@ mod tests {
     }
 
     #[test]
+    fn a_bleeding_heals_in_the_weeks_of_its_severity() {
+        let rules = rules();
+        let mut seen = (false, false);
+        for seed in 0..50 {
+            let mut rng = ChaCha8Rng::seed_from_u64(seed);
+            let wound = bleeding_wound(&mut rng, Location::Body, &rules);
+            let (low, high) = match wound.severity {
+                Severity::Light => {
+                    seen.0 = true;
+                    rules.healing_weeks.light
+                }
+                Severity::Medium => {
+                    seen.1 = true;
+                    rules.healing_weeks.medium
+                }
+                other => panic!("a bleeding left a {other:?} wound"),
+            };
+            assert!((low..=high).contains(&wound.weeks_left), "{wound:?}");
+        }
+        assert_eq!(seen, (true, true));
+    }
+
+    #[test]
     fn dominant_arm_hurts_more_than_the_other() {
         let left_arm = injury(Location::Arm(Side::Left), Severity::Medium, 3);
         assert_eq!(left_arm.malus(Side::Left, &rules()).melee_attack, 30);

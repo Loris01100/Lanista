@@ -264,6 +264,42 @@ pub struct Transaction {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::design_data::DesignData;
+    use crate::fighter::career::Record;
+    use crate::fighter::personality::TraitValue;
+    use rand::SeedableRng;
+    use rand_chacha::ChaCha8Rng;
+
+    /// A wage of its whole value, moved by half at an ego of 0 or 100; a fifth off at a
+    /// morale of 100; half the win bonus counted at a perfect record.
+    const CONTRACTS: ContractRules = ContractRules {
+        wage_percent: 100,
+        ego_percent: 50,
+        seasons: 2,
+        max_seasons: 4,
+        renewal_morale: 35,
+        bonus_percent: 50,
+        haggle_percent: 20,
+        refused_morale: 5,
+    };
+
+    /// A fighter of middling ego and no morale: it asks its value and gives nothing off.
+    fn fighter() -> (CareerFighter, MarketRules) {
+        let data = DesignData::load().unwrap();
+        let mut fighter = CareerFighter::random(&mut ChaCha8Rng::seed_from_u64(3), &data);
+        fighter.personality.ego = TraitValue::new(50);
+        fighter.morale = Morale::new(0);
+        fighter.record = Record::default();
+        (fighter, data.economy.market)
+    }
+
+    fn terms(wage: u32, win_bonus: u32) -> Terms {
+        Terms {
+            wage,
+            win_bonus,
+            seasons: 2,
+        }
+    }
 
     #[test]
     fn receipts_grow_with_both_fighters_fame() {
@@ -305,5 +341,74 @@ mod tests {
         assert_eq!(next(Wealth::Modest, 5000), Wealth::Rich);
         assert_eq!(next(Wealth::Rich, 2500), Wealth::Rich);
         assert_eq!(next(Wealth::Rich, 2499), Wealth::Modest);
+    }
+
+    #[test]
+    fn ego_moves_the_wage_asked() {
+        let (mut fighter, market) = fighter();
+        let base = value(&fighter, &market);
+        assert!(base > 100);
+        let asked = |fighter: &mut CareerFighter, ego| {
+            fighter.personality.ego = TraitValue::new(ego);
+            CONTRACTS.asked_wage(fighter, &market)
+        };
+        assert_eq!(asked(&mut fighter, 50), base);
+        assert_eq!(asked(&mut fighter, 100), percent_of(base, 150));
+        assert_eq!(asked(&mut fighter, 75), percent_of(base, 125));
+        assert_eq!(asked(&mut fighter, 0), percent_of(base, 50));
+    }
+
+    #[test]
+    fn morale_lowers_the_wage_accepted_and_a_good_record_counts_the_win_bonus() {
+        let (mut fighter, market) = fighter();
+        let asked = CONTRACTS.asked_wage(&fighter, &market);
+        let accepts = |fighter: &CareerFighter, terms| CONTRACTS.accepts(fighter, terms, &market);
+        assert!(accepts(&fighter, terms(asked, 0)));
+        assert!(!accepts(&fighter, terms(asked - 1, 0)));
+        for seasons in [0, 5] {
+            let terms = Terms {
+                seasons,
+                ..terms(asked, 0)
+            };
+            assert!(!accepts(&fighter, terms));
+        }
+        assert!(accepts(
+            &fighter,
+            Terms {
+                seasons: 4,
+                ..terms(asked, 0)
+            }
+        ));
+
+        fighter.morale = Morale::new(Morale::MAX);
+        assert!(accepts(&fighter, terms(percent_of(asked, 80), 0)));
+        assert!(!accepts(&fighter, terms(percent_of(asked, 80) - 1, 0)));
+        fighter.morale = Morale::new(Morale::MAX / 2);
+        assert!(accepts(&fighter, terms(percent_of(asked, 90), 0)));
+        assert!(!accepts(&fighter, terms(percent_of(asked, 90) - 1, 0)));
+
+        // 100 short of its wage, made up by half a bonus of 200 at a perfect record.
+        fighter.morale = Morale::new(0);
+        let short = |fighter: &mut CareerFighter, (wins, losses, draws), win_bonus| {
+            fighter.record = Record {
+                wins,
+                losses,
+                draws,
+            };
+            let asked = CONTRACTS.asked_wage(fighter, &market);
+            accepts(fighter, terms(asked - 100, win_bonus))
+        };
+        assert!(short(&mut fighter, (10, 0, 0), 200));
+        assert!(!short(&mut fighter, (10, 0, 0), 199));
+        assert!(!short(&mut fighter, (0, 10, 0), 10_000));
+        // Without a fight, as with half of them won, it counts a quarter of the bonus.
+        for record in [(0, 0, 0), (5, 5, 0)] {
+            assert!(!short(&mut fighter, record, 200));
+            assert!(short(&mut fighter, record, 400));
+            assert!(!short(&mut fighter, record, 399));
+        }
+        // Draws are fights not won: a quarter of them won, an eighth of the bonus.
+        assert!(!short(&mut fighter, (5, 5, 10), 799));
+        assert!(short(&mut fighter, (5, 5, 10), 800));
     }
 }
