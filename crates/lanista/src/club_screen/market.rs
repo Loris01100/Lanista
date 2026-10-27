@@ -3,7 +3,7 @@
 use lanista_core::colosseum::{ColosseumId, Contender};
 use lanista_core::design_data::DesignData;
 use lanista_core::fighter::career::{CareerFighter, Status};
-use lanista_core::market::{Move, Target, value};
+use lanista_core::market::{Move, SaleOffer, Target, value};
 use lanista_core::rivals::RivalId;
 use lanista_core::state::GameState;
 use reesch::egui;
@@ -187,6 +187,8 @@ enum Pick {
     Negotiate(RivalId, u32),
     /// Open the page of this rival club.
     Club(usize),
+    /// Turn down this rival club's offer for one of the club's fighters.
+    Refuse(SaleOffer),
 }
 
 impl ClubScreen {
@@ -241,15 +243,20 @@ impl ClubScreen {
         let pick = egui::ScrollArea::vertical().show(ui, |ui| match tab {
             MarketTab::FreeAgents => free_agent_grid(ui, state, moves, (filter, sort), data),
             MarketTab::Rivals => rival_grid(ui, state, moves, (filter, sort), data),
-            MarketTab::Yours => {
-                sale_grid(ui, state, moves, data);
-                None
-            }
+            MarketTab::Yours => sale_grid(ui, state, moves, data),
         });
         match pick.inner {
             Some(Pick::Open(target)) => self.go_to(View::Outside(target)),
             Some(Pick::Negotiate(id, price)) => self.offer_draft = Some((id, price)),
             Some(Pick::Club(club)) => self.go_to(View::Rival(club)),
+            Some(Pick::Refuse(offer)) => {
+                let accept = Move::AcceptOffer {
+                    fighter: offer.fighter,
+                    rival: offer.rival,
+                };
+                self.decisions.moves.retain(|m| *m != accept);
+                self.state.sale_offers.retain(|o| *o != offer);
+            }
             None => {}
         }
     }
@@ -725,9 +732,15 @@ fn rival_grid(
 
 /// The club's fighters in activity, each with its contract and whether it is for sale,
 /// to put on the transfer list or take off it, to make not for sale or for sale again,
-/// with the rival clubs' offers to accept, to renew in its contract's last season on
-/// terms to offer, or to release.
-fn sale_grid(ui: &mut egui::Ui, state: &GameState, moves: &mut Vec<Move>, data: &DesignData) {
+/// with the rival clubs' offers to accept or refuse, to renew in its contract's last
+/// season on terms to offer, or to release.
+fn sale_grid(
+    ui: &mut egui::Ui,
+    state: &GameState,
+    moves: &mut Vec<Move>,
+    data: &DesignData,
+) -> Option<Pick> {
+    let mut pick = None;
     market_grid("club market").show(ui, |ui| {
         ui.strong(tr!("roster-fighter"));
         for title in [tr!("roster-age"), tr!("roster-fame"), tr!("record-title")] {
@@ -796,6 +809,9 @@ fn sale_grid(ui: &mut egui::Ui, state: &GameState, moves: &mut Vec<Move>, data: 
                         price = offer.price
                     );
                     toggle(ui, moves, accept, &label, state.may_move(accept, data));
+                    if ui.button(tr!("refuse-offer")).clicked() {
+                        pick = Some(Pick::Refuse(*offer));
+                    }
                 }
                 let asked = GameState::asked_terms(f, data);
                 let renew = Move::Renew(i, asked);
@@ -808,4 +824,5 @@ fn sale_grid(ui: &mut egui::Ui, state: &GameState, moves: &mut Vec<Move>, data: 
             ui.end_row();
         }
     });
+    pick
 }

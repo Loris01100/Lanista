@@ -623,6 +623,7 @@ unkeep = Rendre vendable
 keep = Invendable
 list = Mettre en vente
 accept-offer = Accepter { $club } : { $price }
+refuse-offer = Refuser
 release = Libérer
 
 ## Personnel (vue)
