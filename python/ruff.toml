@@ -1,0 +1,11 @@
+# Lint and format of the training scripts (ruff check / ruff format), as CI runs them.
+line-length = 100
+extend-exclude = [".venv"]
+
+[lint]
+# Ruff's defaults, plus likely bugs (B), sorted imports (I) and outdated syntax (UP).
+extend-select = ["B", "I", "UP"]
+
+[lint.isort]
+# Built from crates/lanista_py by maturin.
+known-first-party = ["lanista_py"]

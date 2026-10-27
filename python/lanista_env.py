@@ -29,9 +29,7 @@ class FightEnv(gym.Env):
         self.melee = melee
         assert fighter_class in [None, *self.env.class_keys], fighter_class
         self.fighter_class = fighter_class
-        self.observation_space = gym.spaces.Box(
-            -1.0, 1.0, (self.env.observation_size,), np.float32
-        )
+        self.observation_space = gym.spaces.Box(-1.0, 1.0, (self.env.observation_size,), np.float32)
         self.action_space = gym.spaces.Discrete(self.env.action_count)
         self.opponent = opponent or (
             lambda observations: [self.action_space.sample() for _ in observations]
@@ -102,4 +100,6 @@ if __name__ == "__main__":
     random_agent = FightEnv().action_space.sample
     assert "agent's total reward" in review(lambda _: random_agent(), 7)
     assert "agent's total reward" in review(lambda _: random_agent(), 7, utility_ai, True)
-    print("ok: check_env passed for a duel and a melee, the agent's class kept, 8 duels played on 4 processes, two reviewed")
+    print(
+        "ok: check_env passed for a duel and a melee, the agent's class kept, 8 duels played on 4 processes, two reviewed"
+    )

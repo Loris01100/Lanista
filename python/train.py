@@ -128,7 +128,9 @@ def main():
     model.save(models / args.stage)
     envs.close()
     rate = win_rate(model, args.check, args.fighter_class)
-    print(f"{args.fighter_class} {args.stage}: {rate:.1%} of {args.check} duels won against the utility AI")
+    print(
+        f"{args.fighter_class} {args.stage}: {rate:.1%} of {args.check} duels won against the utility AI"
+    )
 
 
 if __name__ == "__main__":

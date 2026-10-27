@@ -19,3 +19,6 @@ lcov.info
 # Agent skills, restored from skills-lock.json with `npx skills experimental_install`.
 .agents/
 .claude/skills/
+
+# cargo mutants reports.
+mutants.out*/

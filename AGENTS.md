@@ -34,10 +34,12 @@ cargo run --release -p tools --bin compare -- --fights 20000      # real duels a
 cargo test                           # all crates
 cargo test -p lanista_core <name>    # single test (substring filter)
 cargo bench -p lanista_core          # melee timings (criterion, benches/melee.rs)
+cargo mutants -p lanista_core -f <file>  # mutation testing: changes no test catches (slow, one file at a time; on Windows, run from a git worktree)
 cargo fmt --all --check
 cargo clippy --workspace --all-targets -- -D warnings
 cargo machete                        # unused dependencies
 cargo deny check                     # advisories, licenses, sources (deny.toml)
+uvx ruff check python && uvx ruff format --check python  # the Python scripts (python/ruff.toml)
 cargo llvm-cov --workspace --lcov --output-path lcov.info  # coverage for SonarQube Cloud, before a local scan
 ```
 

@@ -5,6 +5,14 @@
 # Longest function allowed, in lines (clippy's default, stated here on purpose).
 too-many-lines-threshold = 100
 
+# Logic is headless and silent: what it has to tell goes in its results or logs.
+disallowed-macros = [
+    { path = "std::println", reason = "logic doesn't print: return it to the caller" },
+    { path = "std::print", reason = "logic doesn't print: return it to the caller" },
+    { path = "std::eprintln", reason = "logic doesn't print: return it to the caller" },
+    { path = "std::eprint", reason = "logic doesn't print: return it to the caller" },
+]
+
 # Determinism: the same seed must replay the same combat on Windows and Linux.
 disallowed-types = [
     { path = "std::collections::HashMap", reason = "random iteration order: use BTreeMap or a sorted Vec" },
