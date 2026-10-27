@@ -351,6 +351,7 @@ this-week = Cette semaine : { $what }
 confirm = Confirmer
 cancel = Annuler
 back = Retour
+next = Suivant
 back-to-list = Retour à la liste
 potential = Potentiel
 personality-title = Personnalité

@@ -12,7 +12,7 @@ mod staff;
 
 use std::path::PathBuf;
 
-use colosseums::{ContinentPart, contender_view, ranking_recap};
+use colosseums::{ContinentPart, arrow, contender_view, ranking_recap};
 use market::{MarketFilter, MarketTab};
 use std::rc::Rc;
 
@@ -124,6 +124,8 @@ pub struct ClubScreen {
     /// The views opened before the current one, the last the first « Retour » comes
     /// back to.
     history: Vec<View>,
+    /// The views « Retour » left, the last the first « Suivant » opens again.
+    forward: Vec<View>,
     /// Each fighter's weeks, newest first, in club order.
     histories: Vec<Vec<(u64, Vec<String>)>>,
     /// The last week played: its number, the money line, then one line per fighter.
@@ -186,6 +188,7 @@ impl ClubScreen {
             state,
             view: View::Menu,
             history: Vec::new(),
+            forward: Vec::new(),
             last_week: None,
             week_titles: Vec::new(),
             fights: Vec::new(),
@@ -356,13 +359,17 @@ impl ClubScreen {
         // Free agents are new each week: the one on screen or in the history may be gone
         // or replaced. A rival club's fighter sold or let go is followed.
         let free_agent = |v: &View| matches!(v, View::Outside(Target::FreeAgent(_)));
-        let history = std::mem::take(&mut self.history);
-        self.history = history
-            .iter()
-            .filter(|v| !free_agent(v))
-            .map(|&v| self.followed(v))
-            .collect();
+        for views in [&mut self.history, &mut self.forward] {
+            views.retain(|v| !free_agent(v));
+        }
+        for i in 0..self.history.len() {
+            self.history[i] = self.followed(self.history[i]);
+        }
+        for i in 0..self.forward.len() {
+            self.forward[i] = self.followed(self.forward[i]);
+        }
         self.history.dedup();
+        self.forward.dedup();
         if free_agent(&before) && self.view == before {
             self.view = View::Market;
         }
@@ -396,10 +403,13 @@ impl ClubScreen {
             ui.separator();
             ui.strong(tr!("top-money", money = self.state.money));
             ui.separator();
-            let back = egui::Button::new(tr!("back"));
-            if ui.add_enabled(!self.history.is_empty(), back).clicked() {
+            if arrow_link(ui, !self.history.is_empty(), egui::Vec2::LEFT, tr!("back")) {
                 self.back();
             }
+            if arrow_link(ui, !self.forward.is_empty(), egui::Vec2::RIGHT, tr!("next")) {
+                self.next();
+            }
+            ui.separator();
             let views = [
                 (View::Menu, "view-menu"),
                 (View::Roster, "view-roster"),
@@ -889,6 +899,7 @@ impl ClubScreen {
         if ui.button(tr!("back-to-list")).clicked() {
             // As `go_to`, which the borrowed fighter keeps from being called.
             self.history.push(self.view);
+            self.forward.clear();
             self.view = View::Roster;
         }
         ui.columns(2, |columns| {
@@ -943,11 +954,13 @@ impl ClubScreen {
         again
     }
 
-    /// Opens `view` from the current one, which « Retour » comes back to.
+    /// Opens `view` from the current one, which « Retour » comes back to; « Suivant »
+    /// has nothing left to open again, as in a browser.
     fn go_to(&mut self, view: View) {
         let view = self.followed(view);
         if view != self.view {
             self.history.push(self.view);
+            self.forward.clear();
             self.view = view;
         }
     }
@@ -968,6 +981,15 @@ impl ClubScreen {
     /// Back to the view the current one was opened from.
     fn back(&mut self) {
         if let Some(view) = self.history.pop() {
+            self.forward.push(self.view);
+            self.view = view;
+        }
+    }
+
+    /// Opens again the view « Retour » left.
+    fn next(&mut self) {
+        if let Some(view) = self.forward.pop() {
+            self.history.push(self.view);
             self.view = view;
         }
     }
@@ -995,9 +1017,12 @@ impl Screen for ClubScreen {
             }
             self.go_to(View::Menu);
         }
-        // The mouse's back button, as in a browser.
+        // The mouse's back and forward buttons, as in a browser.
         if ui.input(|i| i.pointer.button_pressed(egui::PointerButton::Extra1)) {
             self.back();
+        }
+        if ui.input(|i| i.pointer.button_pressed(egui::PointerButton::Extra2)) {
+            self.next();
         }
         let mut play = keys && self.bindings.pressed(ui, &Action::NextWeek);
         let mut again = None;
@@ -1036,6 +1061,18 @@ impl Screen for ClubScreen {
     fn draw(&self, _assets: &Assets) {
         clear_background(BACKGROUND);
     }
+}
+
+/// An arrow along `dir` to click, `text` shown on hover, faded when not `enabled`.
+fn arrow_link(ui: &mut egui::Ui, enabled: bool, dir: egui::Vec2, text: String) -> bool {
+    ui.add_enabled_ui(enabled, |ui| {
+        let color = ui.visuals().text_color();
+        arrow(ui, dir, color)
+            .on_hover_text(text)
+            .on_hover_cursor(egui::CursorIcon::PointingHand)
+            .clicked()
+    })
+    .inner
 }
 
 /// One week of a fighter's history in a frame: the week in bronze beside what it did,
@@ -2855,6 +2892,12 @@ mod tests {
         screen.back();
         screen.back();
         assert_eq!(screen.view, View::Colosseums);
+        // « Suivant » opens them again, until another view is opened.
+        screen.next();
+        assert_eq!(screen.view, View::Outside(Target::Rival(id)));
+        screen.go_to(View::Staff);
+        screen.next();
+        assert_eq!(screen.view, View::Staff);
         // A free agent's sheet does not outlive the week: the list changes.
         screen.view = View::Market;
         screen.go_to(View::Outside(Target::FreeAgent(0)));

@@ -769,7 +769,12 @@ fn recap_row(ui: &mut egui::Ui, row: RecapRow, state: &GameState, data: &DesignD
         Some(n) => {
             let color = if n > 0 { theme::LAUREL } else { theme::BLOOD };
             ui.horizontal(|ui| {
-                arrow(ui, n > 0, color);
+                let dir = if n > 0 {
+                    egui::Vec2::UP
+                } else {
+                    egui::Vec2::DOWN
+                };
+                arrow(ui, dir, color);
                 ui.label(egui::RichText::new(n.unsigned_abs().to_string()).color(color));
             });
         }
@@ -795,25 +800,21 @@ fn recap_row(ui: &mut egui::Ui, row: RecapRow, state: &GameState, data: &DesignD
     ui.end_row();
 }
 
-/// An arrow pointing up if `up`, else down, painted: the game's font has no arrow.
-fn arrow(ui: &mut egui::Ui, up: bool, color: egui::Color32) {
+/// An arrow pointing along `dir` (`egui::Vec2::UP`, `LEFT`…), painted: the game's font
+/// has no arrow.
+pub(super) fn arrow(ui: &mut egui::Ui, dir: egui::Vec2, color: egui::Color32) -> egui::Response {
     let size = ui.text_style_height(&egui::TextStyle::Body);
-    let (rect, _) = ui.allocate_exact_size(egui::vec2(size * 0.6, size), egui::Sense::hover());
-    let (c, w, h) = (rect.center(), rect.width() / 2.0, rect.height() / 2.0);
-    let (tip, base) = if up { (-h, h * 0.1) } else { (h, -h * 0.1) };
-    // The head, then the shaft below or above it.
-    let head = vec![
-        egui::pos2(c.x, c.y + tip * 0.8),
-        egui::pos2(c.x + w, c.y + base),
-        egui::pos2(c.x - w, c.y + base),
-    ];
+    let across = egui::vec2(-dir.y, dir.x);
+    let extent = (dir * size + across * size * 0.6).abs();
+    let (rect, response) = ui.allocate_exact_size(extent, egui::Sense::click());
+    let (c, w, h) = (rect.center(), size * 0.3, size / 2.0);
+    let base = c - dir * h * 0.1;
+    // The head, then the shaft behind it.
+    let head = vec![c + dir * h * 0.8, base + across * w, base - across * w];
     let painter = ui.painter();
     painter.add(egui::Shape::convex_polygon(head, color, egui::Stroke::NONE));
-    let shaft = [
-        egui::pos2(c.x, c.y + base),
-        egui::pos2(c.x, c.y - tip * 0.7),
-    ];
-    painter.line_segment(shaft, egui::Stroke::new(w * 0.7, color));
+    painter.line_segment([base, c - dir * h * 0.7], egui::Stroke::new(w * 0.7, color));
+    response
 }
 
 pub(super) fn contender_view(contender: Contender) -> View {
