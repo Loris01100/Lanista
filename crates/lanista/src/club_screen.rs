@@ -3044,4 +3044,61 @@ mod tests {
         // The alert leads to the fighter's sheet.
         assert_eq!(screen.alerts()[0].1, View::Sheet(0));
     }
+
+    /// Every view drawn once, headless, on a screen wide enough for three cards a row,
+    /// in a world a few weeks on: none panics.
+    #[test]
+    fn every_view_is_drawn() {
+        let mut screen = screen(7);
+        for _ in 0..12 {
+            screen.next_week();
+        }
+        screen.to_watch.clear();
+        let ui = egui::Context::default();
+        crate::theme::apply(&ui);
+        let input = || egui::RawInput {
+            screen_rect: Some(egui::Rect::from_min_size(
+                egui::Pos2::ZERO,
+                egui::vec2(1600.0, 900.0),
+            )),
+            ..Default::default()
+        };
+        let draw = |screen: &mut ClubScreen| {
+            let _ = ui.run(input(), |ui| {
+                egui::TopBottomPanel::top("club").show(ui, |ui| screen.top_bar(ui));
+                egui::CentralPanel::default().show(ui, |ui| match screen.view {
+                    View::Menu => screen.menu(ui),
+                    View::Roster => screen.roster(ui),
+                    View::Sheet(i) => screen.sheet(ui, i),
+                    View::Fights => drop(screen.fight_summary(ui)),
+                    View::Paper => screen.paper(ui),
+                    View::Colosseums => screen.colosseums(ui),
+                    View::Market => screen.market(ui),
+                    View::Staff => screen.staff(ui),
+                    View::Outside(target) => screen.outside(ui, target),
+                    View::Rival(club) => screen.rival_club(ui, club),
+                    View::Wiki => {}
+                });
+            });
+        };
+        let views = [
+            View::Menu,
+            View::Roster,
+            View::Sheet(0),
+            View::Fights,
+            View::Paper,
+            View::Colosseums,
+            View::Market,
+            View::Rival(0),
+        ];
+        for view in views {
+            screen.view = view;
+            draw(&mut screen);
+        }
+        screen.view = View::Staff;
+        for role in Role::ALL {
+            screen.shown_role = role;
+            draw(&mut screen);
+        }
+    }
 }
