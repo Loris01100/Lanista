@@ -138,50 +138,10 @@ pub(super) fn outsider_weeks(
     fought: &[Contender],
     data: &DesignData,
 ) {
-    let world = &data.world;
-    let upkeep = i64::from(data.economy.upkeep);
-    for (club, rival) in state.rivals.iter_mut().enumerate() {
-        for (fighter, f) in rival.fighters.iter_mut().enumerate() {
-            if f.status == Status::Active {
-                rival.money -= upkeep;
-                if fought.contains(&Contender::Rival(RivalId { club, fighter })) {
-                    f.end_fought_week(&mut state.rng, data);
-                }
-            }
-        }
-    }
-    for (a, f) in state.free_agents.iter_mut().enumerate() {
-        if f.status == Status::Active && fought.contains(&Contender::FreeAgent(a)) {
-            f.end_fought_week(&mut state.rng, data);
-        }
-    }
+    end_fought_weeks(state, fought, data);
     let mut done = fought.to_vec();
-    for (c, (purses, arena, prestige)) in world
-        .colosseums
-        .iter()
-        .map(|r| (&r.purses, r.arena, r.prestige))
-        .enumerate()
-        .take(state.colosseums.len())
-    {
-        let here = Activity::Fight(ColosseumId(u32::try_from(c).unwrap_or(u32::MAX)));
-        let colosseum = &state.colosseums[c];
-        let mut waiting: Vec<(i32, Contender)> = outsiders(&state.rivals, &state.free_agents)
-            .filter(|o| !done.contains(o) && plans.of(*o).is_some_and(|p| p.activity == here))
-            .map(|o| (colosseum.elo(o, world), o))
-            .collect();
-        waiting.sort_by_key(|&(elo, o)| (Reverse(elo), o));
-        let waiting: Vec<Contender> = waiting.into_iter().map(|(_, o)| o).collect();
-        let (pairs, alone) = pairs(waiting, |a, b| {
-            let (rivals, free_agents) = (&state.rivals, &state.free_agents);
-            let fighters = (
-                outsider(rivals, free_agents, a),
-                outsider(rivals, free_agents, b),
-            );
-            fighters
-                .0
-                .zip(fighters.1)
-                .is_some_and(|(a, b)| a.bears_grudge(b.id) || b.bears_grudge(a.id))
-        });
+    for c in 0..state.colosseums.len().min(data.world.colosseums.len()) {
+        let (pairs, alone) = colosseum_pairs(state, &plans, &done, c, data);
         if let Some(alone) = alone {
             let instead = match alone {
                 Contender::Rival(_) => Activity::Train,
@@ -189,54 +149,118 @@ pub(super) fn outsider_weeks(
             };
             plans.set_activity(alone, instead);
         }
-        for (a, b) in pairs {
-            let (rivals, free_agents) = (&state.rivals, &state.free_agents);
-            let (Some(mut first), Some(mut second)) = (
-                outsider(rivals, free_agents, a).cloned(),
-                outsider(rivals, free_agents, b).cloned(),
-            ) else {
-                continue;
-            };
-            let receipts = i64::from(purses.receipts(first.fame, second.fame));
-            let medicine = [a, b].map(|o| outsider_effects(&state.rivals, o).medicine);
-            let result = first.modelled_fight(
-                &mut second,
-                arena,
-                FormEvent::Fight,
-                medicine,
-                &mut state.rng,
-                data,
-            );
-            for f in [&mut first, &mut second] {
-                f.on_stage(prestige, false, &data.fighter);
-                f.end_fought_week(&mut state.rng, data);
-            }
-            put_outsider(state, a, first);
-            put_outsider(state, b, second);
-            done.extend([a, b]);
-            state.colosseums[c].record(a, b, result, world);
-            for (them, result) in [(a, result), (b, opposite(result))] {
-                let Contender::Rival(id) = them else {
-                    continue;
-                };
-                let prize = if result == FightResult::Won {
-                    purses.win_prize
-                } else {
-                    0
-                };
-                let Some(home) = state.rivals.get(id.club).map(|r| r.continent) else {
-                    continue;
-                };
-                let fee = i64::from(entry_fee(c, home, data));
-                pay_rival(
-                    &mut state.rivals,
-                    id.club,
-                    receipts + i64::from(prize) - fee,
-                );
+        for pair in pairs {
+            if outsider_fight(state, pair, c, data) {
+                done.extend([pair.0, pair.1]);
             }
         }
     }
     planned_weeks(state, &plans, &done, data);
+}
+
+/// Each rival club pays its active fighters' upkeep, and the outsiders met by the club's
+/// fighters end their week.
+fn end_fought_weeks(state: &mut GameState, fought: &[Contender], data: &DesignData) {
+    let upkeep = i64::from(data.economy.upkeep);
+    for rival in &mut state.rivals {
+        rival.money -= rival
+            .fighters
+            .iter()
+            .filter(|f| f.status == Status::Active)
+            .map(|_| upkeep)
+            .sum::<i64>();
+    }
+    let met: Vec<Contender> = outsiders(&state.rivals, &state.free_agents)
+        .filter(|o| fought.contains(o))
+        .collect();
+    for o in met {
+        if let Some(f) = outsider_mut(&mut state.rivals, &mut state.free_agents, o) {
+            f.end_fought_week(&mut state.rng, data);
+        }
+    }
+}
+
+/// The outsiders registered in colosseum `c` and not in `done`, in Elo order, paired
+/// ([`pairs`]) with grudges as foes.
+fn colosseum_pairs(
+    state: &GameState,
+    plans: &OutsiderPlans,
+    done: &[Contender],
+    c: usize,
+    data: &DesignData,
+) -> (Vec<(Contender, Contender)>, Option<Contender>) {
+    let (rivals, free_agents) = (&state.rivals, &state.free_agents);
+    let here = Activity::Fight(ColosseumId(u32::try_from(c).unwrap_or(u32::MAX)));
+    let colosseum = &state.colosseums[c];
+    let mut waiting: Vec<(i32, Contender)> = outsiders(rivals, free_agents)
+        .filter(|o| !done.contains(o) && plans.of(*o).is_some_and(|p| p.activity == here))
+        .map(|o| (colosseum.elo(o, &data.world), o))
+        .collect();
+    waiting.sort_by_key(|&(elo, o)| (Reverse(elo), o));
+    pairs(waiting.into_iter().map(|(_, o)| o).collect(), |a, b| {
+        outsider(rivals, free_agents, a)
+            .zip(outsider(rivals, free_agents, b))
+            .is_some_and(|(a, b)| a.bears_grudge(b.id) || b.bears_grudge(a.id))
+    })
+}
+
+/// The fight of `a` and `b` in colosseum `c`, resolved by the statistical model, with
+/// its receipts and prize; `false` if one of them is gone.
+fn outsider_fight(
+    state: &mut GameState,
+    (a, b): (Contender, Contender),
+    c: usize,
+    data: &DesignData,
+) -> bool {
+    let (rivals, free_agents) = (&state.rivals, &state.free_agents);
+    let (Some(mut first), Some(mut second)) = (
+        outsider(rivals, free_agents, a).cloned(),
+        outsider(rivals, free_agents, b).cloned(),
+    ) else {
+        return false;
+    };
+    let colosseum = &data.world.colosseums[c];
+    let receipts = i64::from(colosseum.purses.receipts(first.fame, second.fame));
+    let medicine = [a, b].map(|o| outsider_effects(&state.rivals, o).medicine);
+    let result = first.modelled_fight(
+        &mut second,
+        colosseum.arena,
+        FormEvent::Fight,
+        medicine,
+        &mut state.rng,
+        data,
+    );
+    for f in [&mut first, &mut second] {
+        f.on_stage(colosseum.prestige, false, &data.fighter);
+        f.end_fought_week(&mut state.rng, data);
+    }
+    put_outsider(state, a, first);
+    put_outsider(state, b, second);
+    state.colosseums[c].record(a, b, result, &data.world);
+    for (them, result) in [(a, result), (b, opposite(result))] {
+        if let Contender::Rival(id) = them {
+            pay_fight(state, id.club, c, receipts + prize(c, result, data), data);
+        }
+    }
+    true
+}
+
+/// The prize of a fight in colosseum `c` ending in `result`.
+fn prize(c: usize, result: FightResult, data: &DesignData) -> i64 {
+    if result == FightResult::Won {
+        i64::from(data.world.colosseums[c].purses.win_prize)
+    } else {
+        0
+    }
+}
+
+/// Pays rival club `club` what it `earned` in colosseum `c`, less the entry fee.
+fn pay_fight(state: &mut GameState, club: usize, c: usize, earned: i64, data: &DesignData) {
+    let Some(home) = state.rivals.get(club).map(|r| r.continent) else {
+        return;
+    };
+    let fee = i64::from(entry_fee(c, home, data));
+    pay_rival(&mut state.rivals, club, earned - fee);
 }
 
 /// `waiting`, in Elo order, paired: each with the next one, unless one further on is its
