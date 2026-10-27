@@ -427,8 +427,22 @@ impl ClubScreen {
         if !alerts.is_empty() {
             ui.add_space(6.0);
             ui.strong(tr!("menu-alerts"));
-            for alert in alerts {
-                ui.colored_label(egui::Color32::LIGHT_RED, alert);
+            for (alert, view) in alerts {
+                // A link to where the player acts on it.
+                if ui
+                    .link(egui::RichText::new(alert).color(egui::Color32::LIGHT_RED))
+                    .clicked()
+                {
+                    if view == View::Market {
+                        // To sell, or to recruit when the club has nobody left.
+                        self.market_tab = if self.state.active_fighters() == 0 {
+                            MarketTab::FreeAgents
+                        } else {
+                            MarketTab::Yours
+                        };
+                    }
+                    self.go_to(view);
+                }
             }
         }
         ui.add_space(6.0);
@@ -735,11 +749,12 @@ impl ClubScreen {
         pages
     }
 
-    /// What needs the player's attention before the week.
-    fn alerts(&self) -> Vec<String> {
+    /// What needs the player's attention before the week, each with the view where
+    /// the player acts on it.
+    fn alerts(&self) -> Vec<(String, View)> {
         let mut alerts = Vec::new();
         if self.state.money < 0 {
-            alerts.push(tr!("alert-debts", money = self.state.money));
+            alerts.push((tr!("alert-debts", money = self.state.money), View::Market));
         }
         for (i, f) in self.state.fighters.iter().enumerate() {
             if f.status != Status::Active {
@@ -749,26 +764,25 @@ impl ClubScreen {
             for injury in &f.injuries {
                 if matches!(injury.severity, Severity::Medium | Severity::Severe) {
                     let injury = injury_text(*injury, f.dominant_hand);
-                    alerts.push(tr!(
-                        "alert-injury",
-                        fighter = name.as_str(),
-                        injury = injury
-                    ));
+                    let text = tr!("alert-injury", fighter = name.as_str(), injury = injury);
+                    alerts.push((text, View::Sheet(i)));
                 }
             }
             if let Some(illness) = f.illness.filter(|i| i.level != IllnessLevel::Mild) {
-                alerts.push(tr!(
+                let text = tr!(
                     "labelled",
                     label = name.as_str(),
                     text = illness_text(illness)
-                ));
+                );
+                alerts.push((text, View::Sheet(i)));
             }
             if f.form.value() < lanista_core::fighter::career::REST_BELOW_FORM {
-                alerts.push(tr!(
+                let text = tr!(
                     "alert-tired",
                     fighter = name.as_str(),
                     form = f.form.value()
-                ));
+                );
+                alerts.push((text, View::Sheet(i)));
             }
         }
         for (colosseum, rules) in self
@@ -780,39 +794,42 @@ impl ClubScreen {
             if let Some(Contender::Club(i)) = colosseum.champion
                 && let Some(f) = self.state.fighters.get(i)
             {
-                alerts.push(tr!(
+                let text = tr!(
                     "alert-title-defense",
                     fighter = fighter_name(i, f, &self.data),
                     place = colosseum_rules_name(rules),
                     week =
                         date_in_sentence(colosseum.defense_deadline(&self.data.world), &self.data)
-                ));
+                );
+                alerts.push((text, View::Sheet(i)));
             }
         }
         for offer in &self.state.sale_offers {
             if let Some(f) = self.state.fighters.get(offer.fighter) {
-                alerts.push(tr!(
+                let text = tr!(
                     "alert-sale-offer",
                     club = club_name(offer.rival, &self.state),
                     fighter = fighter_name(offer.fighter, f, &self.data),
                     price = offer.price
-                ));
+                );
+                alerts.push((text, View::Market));
             }
         }
         let rivalry = &self.data.world.relations.rivalry;
         for (&club, relation) in &self.state.relations {
             if let Some(week) = relation.rival_since {
-                alerts.push(tr!(
+                let text = tr!(
                     "alert-rival",
                     club = club_name(club, &self.state),
                     since = date_in_sentence(week, &self.data),
                     receipts = rivalry.receipts_percent,
                     fame = rivalry.fame
-                ));
+                );
+                alerts.push((text, View::Rival(club)));
             }
         }
         if self.state.active_fighters() == 0 {
-            alerts.push(tr!("alert-no-fighter"));
+            alerts.push((tr!("alert-no-fighter"), View::Market));
         }
         alerts
     }
@@ -2191,7 +2208,7 @@ mod tests {
         let mut screen = screen(7);
         screen.state.fighters[0].status = Status::Retired;
         assert_eq!(
-            screen.alerts(),
+            alert_texts(&screen),
             ["Plus aucun combattant : recrutez un free agent au marché"]
         );
         screen.next_week();
@@ -2255,7 +2272,7 @@ mod tests {
         let offer = screen.state.sale_offers[0];
         let club = club_name(offer.rival, &screen.state);
         let name = fighter_name(0, &screen.state.fighters[0], &data);
-        assert!(screen.alerts().contains(&format!(
+        assert!(alert_texts(&screen).contains(&format!(
             "{club} veut acheter {name} pour {} (à accepter au marché cette semaine)",
             offer.price
         )));
@@ -2442,7 +2459,7 @@ mod tests {
         screen.state.colosseums[1].champion = Some(Contender::Club(0));
         let name = fighter_name(0, &screen.state.fighters[0], &screen.data);
         assert_eq!(
-            screen.alerts(),
+            alert_texts(&screen),
             [format!(
                 "{name} : titre de Rome à défendre au plus tard en saison 1, semaine 5"
             )]
@@ -2583,6 +2600,10 @@ mod tests {
     }
 
     /// Each week of the world's news with its headlines.
+    fn alert_texts(screen: &ClubScreen) -> Vec<String> {
+        screen.alerts().into_iter().map(|(text, _)| text).collect()
+    }
+
     fn headlines(screen: &ClubScreen) -> Vec<(u64, Vec<String>)> {
         let pages = screen.news_pages().into_iter();
         pages
@@ -2605,7 +2626,7 @@ mod tests {
                 vec!["Horde de Batu se déclare votre rival : vos combats contre lui attireront les foules".to_owned()]
             )]
         );
-        assert!(screen.alerts().contains(
+        assert!(alert_texts(&screen).contains(
             &"Horde de Batu est votre rival depuis saison 1, semaine 4 : recettes à 150 %, renommée +3 par combat"
                 .to_owned()
         ));
@@ -2909,12 +2930,14 @@ mod tests {
         let hand = screen.state.fighters[0].dominant_hand;
         let arm = injury_text(screen.state.fighters[0].injuries[0], hand);
         assert_eq!(
-            screen.alerts(),
+            alert_texts(&screen),
             [format!(
                 "{} : blessure, {arm}",
                 fighter_name(0, &screen.state.fighters[0], &screen.data)
             )]
         );
         assert!(arm.starts_with("Bras droit"), "{arm}");
+        // The alert leads to the fighter's sheet.
+        assert_eq!(screen.alerts()[0].1, View::Sheet(0));
     }
 }
