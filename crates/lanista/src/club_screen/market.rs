@@ -250,7 +250,6 @@ impl ClubScreen {
     /// the stats seen, the potential and personality the recruiter sees, its standing in
     /// each colosseum, and the market moves it allows.
     pub(super) fn outside(&mut self, ui: &mut egui::Ui, target: Target) {
-        self.back_button(ui);
         let data = &self.data;
         let state = &self.state;
         let (fighter, name) = match target {
@@ -341,7 +340,7 @@ impl ClubScreen {
         }
         if let Some(draft) = draft {
             self.offer_draft = Some(draft);
-            self.view = View::Market;
+            self.go_to(View::Market);
         } else if let Some(view) = goto {
             self.go_to(view);
         }

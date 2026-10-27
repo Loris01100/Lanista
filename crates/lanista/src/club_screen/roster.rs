@@ -65,7 +65,7 @@ impl ClubScreen {
             }
         });
         if let Some(view) = goto {
-            self.view = view;
+            self.go_to(view);
         }
     }
 }

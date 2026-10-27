@@ -243,7 +243,6 @@ impl ClubScreen {
     /// why, then its fighters in activity with their standing in each colosseum of its
     /// continent and their estimated value, each to negotiate for on the market.
     pub(super) fn rival_club(&mut self, ui: &mut egui::Ui, club: usize) {
-        self.back_button(ui);
         if club >= self.state.rivals.len() {
             return;
         }
@@ -251,7 +250,7 @@ impl ClubScreen {
         let (goto, draft) = self.rival_fighters(ui, club);
         if let Some(draft) = draft {
             self.offer_draft = Some(draft);
-            self.view = View::Market;
+            self.go_to(View::Market);
         } else if let Some(view) = goto {
             self.go_to(view);
         }
