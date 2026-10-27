@@ -2201,7 +2201,10 @@ mod tests {
             .position(|f| f.status == Status::Active)
             .unwrap();
         let signed = free_agent_name(a, &agents[a], &screen.data);
-        screen.decisions.moves = vec![Move::Sign(a)];
+        screen.decisions.moves = vec![Move::Sign(
+            a,
+            GameState::asked_terms(&agents[a], &screen.data),
+        )];
         screen.next_week();
         assert_eq!(screen.state.fighters.len(), 2);
         assert_eq!(screen.decisions.plans.len(), 2);
@@ -2623,7 +2626,8 @@ mod tests {
                     .iter()
                     .position(|f| f.status == Status::Active)
             {
-                screen.decisions.moves.push(Move::Sign(a));
+                let terms = GameState::asked_terms(&state.free_agents[a], &data);
+                screen.decisions.moves.push(Move::Sign(a, terms));
             }
             for (i, plan) in screen.decisions.plans.iter_mut().enumerate() {
                 let Activity::Fight(id) = plan.activity else {

@@ -59,7 +59,7 @@ pub struct WeekSummary {
 
 /// Plays one week for the whole club: the market moves and the change of staff before
 /// the week, the staff's salaries, then each fighter's week in
-/// club order, paid for with its upkeep and wage, then the week of the rival clubs and
+/// club order, paid for (`pay_fighter`), then the week of the rival clubs and
 /// the free agents, the answer to the player's offer, the contracts ending and
 /// everyone a year older at the start of the off-season,
 /// each club's new wealth at the start of the off-season
@@ -144,17 +144,8 @@ pub fn next_week(state: &mut GameState, decisions: &Decisions, data: &DesignData
             }
             report
         };
-        if report.is_some() {
-            let wage = state.fighters[i].contract.map_or(0, |c| c.wage);
-            for (flow, amount) in [(Flow::Upkeep, data.economy.upkeep), (Flow::Wage, wage)] {
-                let amount = -i64::from(amount);
-                state.money += amount;
-                ledger.push(Transaction {
-                    fighter: Some(i),
-                    flow,
-                    amount,
-                });
-            }
+        if let Some(report) = &report {
+            pay_fighter(state, i, report, &mut ledger, data);
         }
         reports.push(report);
     }
@@ -177,6 +168,36 @@ pub fn next_week(state: &mut GameState, decisions: &Decisions, data: &DesignData
     let money = (money, state.money);
     state.journal.record(week, played, money, &summary, data);
     summary
+}
+
+/// What the club's fighter `i` costs for its week `report`, into `ledger`: the upkeep,
+/// its wage, and its win bonus for a duel won.
+fn pay_fighter(
+    state: &mut GameState,
+    i: usize,
+    report: &WeekReport,
+    ledger: &mut Vec<Transaction>,
+    data: &DesignData,
+) {
+    let contract = state.fighters[i].contract.unwrap_or_default();
+    let won = report
+        .fight
+        .as_ref()
+        .is_some_and(|f| f.result == FightResult::Won);
+    let owed = [
+        (Flow::Upkeep, data.economy.upkeep),
+        (Flow::Wage, contract.wage),
+        (Flow::WinBonus, if won { contract.win_bonus } else { 0 }),
+    ];
+    for (flow, amount) in owed.into_iter().filter(|&(_, amount)| amount > 0) {
+        let amount = -i64::from(amount);
+        state.money += amount;
+        ledger.push(Transaction {
+            fighter: Some(i),
+            flow,
+            amount,
+        });
+    }
 }
 
 /// The rankings, as they were before the week, of the colosseums where the club's

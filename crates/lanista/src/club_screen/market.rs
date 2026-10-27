@@ -325,8 +325,9 @@ impl ClubScreen {
                 toggle(ui, moves, Move::Observe(target), &observe_label(f), true);
                 match target {
                     Target::FreeAgent(a) => {
-                        let sign = Move::Sign(a);
-                        toggle(ui, moves, sign, &tr!("sign"), state.may_move(sign, data));
+                        let sign = Move::Sign(a, GameState::asked_terms(f, data));
+                        let allowed = state.may_move(sign, data);
+                        terms_toggle(ui, moves, sign, &tr!("sign"), allowed, data);
                     }
                     Target::Rival(id) => {
                         let estimate = estimate(f, data);
@@ -425,6 +426,47 @@ fn toggle(
             }
             moves.push(m);
         }
+    }
+    response
+}
+
+/// A button adding `m`, a signing or a renewal on the fighter's asked terms, to the
+/// week's moves, or taking it out when chosen already; chosen, the terms offered are
+/// changed beside it. Only a chosen one may be clicked when not `enabled`.
+fn terms_toggle(
+    ui: &mut egui::Ui,
+    moves: &mut Vec<Move>,
+    m: Move,
+    label: &str,
+    enabled: bool,
+    data: &DesignData,
+) -> egui::Response {
+    let same = |other: &Move| match (*other, m) {
+        (Move::Sign(a, _), Move::Sign(b, _)) | (Move::Renew(a, _), Move::Renew(b, _)) => a == b,
+        _ => false,
+    };
+    let chosen = moves.iter().position(same);
+    let button = egui::SelectableLabel::new(chosen.is_some(), label);
+    let response = ui
+        .add_enabled(enabled || chosen.is_some(), button)
+        .on_hover_text(tr!("terms-hint"));
+    match chosen {
+        Some(k) if response.clicked() => {
+            moves.remove(k);
+        }
+        None if response.clicked() => moves.push(m),
+        Some(k) => {
+            if let Move::Sign(_, terms) | Move::Renew(_, terms) = &mut moves[k] {
+                let max_seasons = data.economy.contracts.max_seasons;
+                ui.label(tr!("terms-wage"));
+                ui.add(egui::DragValue::new(&mut terms.wage).range(1..=99_999));
+                ui.label(tr!("terms-bonus"));
+                ui.add(egui::DragValue::new(&mut terms.win_bonus).range(0..=99_999));
+                ui.label(tr!("terms-seasons"));
+                ui.add(egui::DragValue::new(&mut terms.seasons).range(1..=max_seasons));
+            }
+        }
+        None => {}
     }
     response
 }
@@ -530,8 +572,9 @@ fn free_agent_grid(
             ui.horizontal(|ui| {
                 let observe = Move::Observe(Target::FreeAgent(a));
                 toggle(ui, moves, observe, &observe_label(f), true);
-                let sign = Move::Sign(a);
-                let button = toggle(ui, moves, sign, &tr!("sign"), state.may_move(sign, data));
+                let sign = Move::Sign(a, GameState::asked_terms(f, data));
+                let allowed = state.may_move(sign, data);
+                let button = terms_toggle(ui, moves, sign, &tr!("sign"), allowed, data);
                 if !room {
                     button.on_disabled_hover_text(tr!("market-full"));
                 }
@@ -592,8 +635,8 @@ fn rival_grid(
 
 /// The club's fighters in activity, each with its contract and whether it is for sale,
 /// to put on the transfer list or take off it, to make not for sale or for sale again,
-/// with the rival clubs' offers to accept, to renew in its contract's last season at its
-/// asked wage, or to release.
+/// with the rival clubs' offers to accept, to renew in its contract's last season on
+/// terms to offer, or to release.
 fn sale_grid(ui: &mut egui::Ui, state: &GameState, moves: &mut Vec<Move>, data: &DesignData) {
     market_grid("club market").show(ui, |ui| {
         ui.strong(tr!("roster-fighter"));
@@ -617,10 +660,15 @@ fn sale_grid(ui: &mut egui::Ui, state: &GameState, moves: &mut Vec<Move>, data: 
             record_cells(ui, f);
             match f.contract {
                 Some(c) if c.ends <= season => {
-                    let text = tr!("contract-last-season", wage = c.wage);
+                    let text = tr!("contract-last-season", wage = c.wage, bonus = c.win_bonus);
                     ui.colored_label(theme::BLOOD, text)
                 }
-                Some(c) => ui.label(tr!("contract-until", wage = c.wage, season = c.ends)),
+                Some(c) => ui.label(tr!(
+                    "contract-until",
+                    wage = c.wage,
+                    bonus = c.win_bonus,
+                    season = c.ends
+                )),
                 None => ui.label(""),
             };
             let plain = ui.visuals().widgets.inactive.bg_fill;
@@ -659,10 +707,11 @@ fn sale_grid(ui: &mut egui::Ui, state: &GameState, moves: &mut Vec<Move>, data: 
                     );
                     toggle(ui, moves, accept, &label, state.may_move(accept, data));
                 }
-                let renew = Move::Renew(i);
+                let asked = GameState::asked_terms(f, data);
+                let renew = Move::Renew(i, asked);
                 if state.may_move(renew, data) {
-                    let wage = state.contract_for(f, data).wage;
-                    toggle(ui, moves, renew, &tr!("renew", wage = wage), true);
+                    let label = tr!("renew", wage = asked.wage);
+                    terms_toggle(ui, moves, renew, &label, true, data);
                 }
                 toggle(ui, moves, Move::Release(i), &tr!("release"), true);
             });

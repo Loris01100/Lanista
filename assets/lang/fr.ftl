@@ -193,6 +193,7 @@ flow-purchase = achat
 flow-sale = vente
 flow-salary = salaires
 flow-wage = gages
+flow-win-bonus = primes de victoire
 
 wealth = Club { $wealth }
 wealth-poor = pauvre
@@ -202,13 +203,13 @@ wealth-rich = riche
 ## Marché
 
 move-observe = Observer { $fighter }
-move-sign = Recruter { $fighter }
+move-sign = Recruter { $fighter } : { $terms }
 move-release = Libérer { $fighter }
 move-list = Mettre en vente { $fighter }
 move-unlist = Retirer { $fighter } de la vente
 move-keep = Rendre { $fighter } invendable
 move-unkeep = Rendre { $fighter } vendable
-move-renew = Prolonger le contrat de { $fighter }
+move-renew = Prolonger le contrat de { $fighter } : { $terms }
 move-accept-offer = Vendre { $fighter } à { $club } pour { $price }
 move-offer = Offrir { $price } pour { $fighter }
 
@@ -221,6 +222,8 @@ market-club-refused = { $club } refuse l'offre pour { $fighter }
 market-fighter-refused = { $fighter } refuse de rejoindre le club
 market-renewed = { $fighter } prolonge son contrat
 market-renewal-refused = { $fighter } refuse de prolonger : moral trop bas
+market-terms-refused = { $fighter } refuse vos conditions de prolongation et le prend mal
+market-sign-refused = { $fighter } refuse vos conditions et reste libre
 market-contract-ended = { $fighter } quitte le club en fin de contrat, libre
 market-failed = Transfert { club-de }{ $fighter } impossible : pas de place, pas assez d'argent ou combattant parti
 
@@ -576,8 +579,22 @@ market-sale-status = Vente
 market-contract = Contrat
 market-asked-wage = Gages demandés
 wage = { $wage } / sem.
-contract-until = { $wage } / sem. jusqu'à la saison { $season }
-contract-last-season = { $wage } / sem., dernière saison : part à l'intersaison sauf prolongation
+contract-until = { $wage } / sem.{ $bonus ->
+    [0] {""}
+   *[other] , prime { $bonus }
+} jusqu'à la saison { $season }
+contract-last-season = { $wage } / sem.{ $bonus ->
+    [0] {""}
+   *[other] , prime { $bonus }
+}, dernière saison : part à l'intersaison sauf prolongation
+terms = { $wage } / sem., prime de victoire { $bonus }, { $seasons ->
+    [1] 1 saison
+   *[other] { $seasons } saisons
+} de plus
+terms-wage = Gages
+terms-bonus = Prime
+terms-seasons = Saisons
+terms-hint = Gages par semaine, prime par duel gagné, saisons après celle-ci. Un combattant compte une part de la prime dans ses gages ; de bon moral, il accepte moins que ce qu'il demande.
 renew = Prolonger ({ $wage } / sem.)
 market-actions = Décisions de la semaine
 market-listed = En vente

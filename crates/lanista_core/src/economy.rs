@@ -1,5 +1,5 @@
 //! Money: what comes in (prizes, receipts, sales: only the fighters bring it) and goes
-//! out (upkeep, the fighters' wages, care, training, entry fees, staff salaries), the
+//! out (upkeep, the fighters' wages and win bonuses, care, training, entry fees, staff salaries), the
 //! contracts of the club's fighters, and a club's wealth: poor, modest or rich, which
 //! sets its starting money and changes with its money at each off-season.
 
@@ -8,6 +8,7 @@ use serde::{Deserialize, Serialize};
 use crate::fighter::career::CareerFighter;
 use crate::fighter::fame::Fame;
 use crate::fighter::melee::place_share;
+use crate::fighter::morale::Morale;
 use crate::fighter::percent_of;
 use crate::market::{MarketRules, value};
 use crate::staff::StaffRules;
@@ -107,10 +108,21 @@ pub struct ContractRules {
     /// How much its ego moves it: by this percentage at an ego of 100 or 0, linear
     /// in between.
     pub ego_percent: u32,
-    /// Seasons a contract signed or renewed runs, the current one apart.
+    /// Seasons a contract runs, the current one apart, when the fighter's terms are
+    /// asked for (`asked_terms`); the player may offer from 1 to `max_seasons`.
     pub seasons: u64,
+    pub max_seasons: u64,
     /// Least morale at which a fighter agrees to renew.
     pub renewal_morale: u32,
+    /// The share of weeks a fighter counts on fighting, in percent, when it weighs a
+    /// win bonus: it counts that share of the bonus times its share of fights won
+    /// (half without any fight).
+    pub bonus_percent: u32,
+    /// How far below its asked wage a fighter accepts an offer, in percent of it: by
+    /// this much at a morale of 100, not at all at 0, linear in between.
+    pub haggle_percent: u32,
+    /// Morale a fighter loses when it refuses the club's terms to renew.
+    pub refused_morale: u32,
 }
 
 impl ContractRules {
@@ -123,21 +135,60 @@ impl ContractRules {
         percent_of(wage, u32::try_from(percent.max(0)).unwrap_or(0)).max(1)
     }
 
-    /// The contract `fighter` signs in `season`: its asked wage until the start of the
-    /// off-season `seasons` later.
+    /// The terms `fighter` asks for: its asked wage, no win bonus, for `seasons`.
     #[must_use]
-    pub fn signed(&self, fighter: &CareerFighter, season: u64, market: &MarketRules) -> Contract {
-        Contract {
+    pub fn asked_terms(&self, fighter: &CareerFighter, market: &MarketRules) -> Terms {
+        Terms {
             wage: self.asked_wage(fighter, market),
+            win_bonus: 0,
+            seasons: self.seasons,
+        }
+    }
+
+    /// Whether `fighter` accepts `terms`: for 1 to `max_seasons`, its wage plus the win
+    /// bonus it expects each week (`bonus_percent`) at least its asked wage, less its
+    /// `haggle_percent` of it at a morale of 100.
+    #[must_use]
+    pub fn accepts(&self, fighter: &CareerFighter, terms: Terms, market: &MarketRules) -> bool {
+        let haggle = self.haggle_percent * fighter.morale.value() / Morale::MAX;
+        let least = percent_of(self.asked_wage(fighter, market), 100 - haggle.min(100));
+        let r = fighter.record;
+        let won = (r.wins * 100).checked_div(r.wins + r.losses + r.draws);
+        let expected = u64::from(self.bonus_percent) * u64::from(won.unwrap_or(50));
+        let worth = u64::from(terms.wage) + u64::from(terms.win_bonus) * expected / 10_000;
+        (1..=self.max_seasons).contains(&terms.seasons) && worth >= u64::from(least)
+    }
+}
+
+/// What the club offers a fighter it signs or renews: its weekly wage, what it is paid
+/// for each duel won, and for how many seasons beyond the current one.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub struct Terms {
+    pub wage: u32,
+    pub win_bonus: u32,
+    pub seasons: u64,
+}
+
+impl Terms {
+    /// The contract of these terms signed in `season`.
+    #[must_use]
+    pub fn signed(self, season: u64) -> Contract {
+        Contract {
+            wage: self.wage,
+            win_bonus: self.win_bonus,
             ends: season.saturating_add(self.seasons),
         }
     }
 }
 
-/// What a fighter of the player's club is paid each week, and until when.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+/// What a fighter of the player's club is paid, and until when.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Contract {
+    /// Paid each week.
     pub wage: u32,
+    /// Paid for each duel it wins.
+    #[serde(default)]
+    pub win_bonus: u32,
     /// The season at whose off-season start the fighter leaves, a free agent, unless
     /// renewed during it.
     pub ends: u64,
@@ -197,6 +248,8 @@ pub enum Flow {
     Salary,
     /// A fighter's weekly wage, by its contract.
     Wage,
+    /// A fighter's bonus for a duel won, by its contract.
+    WinBonus,
 }
 
 /// Money in (positive) or out (negative) for one of the club's fighters, or for the club.

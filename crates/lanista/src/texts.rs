@@ -7,7 +7,7 @@ use lanista_core::colosseum::{
 };
 use lanista_core::combat::ArenaKind;
 use lanista_core::design_data::DesignData;
-use lanista_core::economy::{Flow, Transaction, Wealth};
+use lanista_core::economy::{Flow, Terms, Transaction, Wealth};
 use lanista_core::fighter::STAT_COUNT;
 use lanista_core::fighter::career::{Activity, CareerFighter, Record, Status};
 use lanista_core::fighter::fame::FightResult;
@@ -312,21 +312,32 @@ fn club_fighter(i: usize, state: &GameState, data: &DesignData) -> String {
         .map_or_else(|| "?".into(), |f| fighter_name(i, f, data))
 }
 
+/// "8 / sem., prime de victoire 5, 2 saisons de plus".
+pub fn terms_text(terms: Terms) -> String {
+    tr!(
+        "terms",
+        wage = terms.wage,
+        bonus = terms.win_bonus,
+        seasons = terms.seasons
+    )
+}
+
 /// A market move chosen for the week, in one line.
 pub fn move_text(m: Move, state: &GameState, data: &DesignData) -> String {
     let club = |i| club_fighter(i, state, data);
     match m {
         Move::Observe(target) => tr!("move-observe", fighter = target_name(target, state, data)),
-        Move::Sign(a) => tr!(
+        Move::Sign(a, terms) => tr!(
             "move-sign",
-            fighter = target_name(Target::FreeAgent(a), state, data)
+            fighter = target_name(Target::FreeAgent(a), state, data),
+            terms = terms_text(terms)
         ),
         Move::Release(i) => tr!("move-release", fighter = club(i)),
         Move::List(i) => tr!("move-list", fighter = club(i)),
         Move::Unlist(i) => tr!("move-unlist", fighter = club(i)),
         Move::Keep(i) => tr!("move-keep", fighter = club(i)),
         Move::Unkeep(i) => tr!("move-unkeep", fighter = club(i)),
-        Move::Renew(i) => tr!("move-renew", fighter = club(i)),
+        Move::Renew(i, terms) => tr!("move-renew", fighter = club(i), terms = terms_text(terms)),
         Move::AcceptOffer { fighter, rival } => {
             let price = state
                 .sale_offers
@@ -453,6 +464,11 @@ pub fn market_news_text(news: MarketNews, state: &GameState, data: &DesignData) 
         }
         MarketNews::Renewed(i) => tr!("market-renewed", fighter = club(i)),
         MarketNews::RenewalRefused(i) => tr!("market-renewal-refused", fighter = club(i)),
+        MarketNews::TermsRefused(i) => tr!("market-terms-refused", fighter = club(i)),
+        MarketNews::SignRefused(a) => tr!(
+            "market-sign-refused",
+            fighter = target_name(Target::FreeAgent(a), state, data)
+        ),
         MarketNews::ContractEnded(i) => tr!("market-contract-ended", fighter = club(i)),
     }
 }
@@ -1075,6 +1091,7 @@ pub fn money_line(before: i64, after: i64, ledger: &[Transaction]) -> String {
                 Flow::Sale => tr!("flow-sale"),
                 Flow::Salary => tr!("flow-salary"),
                 Flow::Wage => tr!("flow-wage"),
+                Flow::WinBonus => tr!("flow-win-bonus"),
             };
             format!("{name} {amount:+}")
         })

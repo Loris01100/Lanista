@@ -6,6 +6,7 @@ use rand::{Rng, RngExt};
 use serde::{Deserialize, Serialize};
 
 use crate::design_data::DesignData;
+use crate::economy::Terms;
 use crate::fighter::career::CareerFighter;
 use crate::fighter::fame::Fame;
 use crate::fighter::{STAT_COUNT, percent_of};
@@ -72,8 +73,9 @@ pub enum Target {
 pub enum Move {
     /// Observe a fighter out of the club this week.
     Observe(Target),
-    /// Sign the free agent at this index, for nothing.
-    Sign(usize),
+    /// Sign the free agent at this index, for nothing, on these terms, if it accepts
+    /// them (`ContractRules::accepts`).
+    Sign(usize, Terms),
     /// Let the club's fighter at this index go, for nothing: a free agent.
     Release(usize),
     /// Put the club's fighter at this index on the transfer list, or take it off: the
@@ -84,9 +86,9 @@ pub enum Move {
     /// club offers for it unasked (see `MarketRules::unsolicited_percent`).
     Keep(usize),
     Unkeep(usize),
-    /// Renew the contract of the club's fighter at this index, in its last season, at
-    /// its asked wage (`ContractRules`).
-    Renew(usize),
+    /// Renew the contract of the club's fighter at this index, in its last season, on
+    /// these terms, if it accepts them (`ContractRules`).
+    Renew(usize, Terms),
     /// Accept a rival club's offer (`SaleOffer`) for the club's fighter.
     AcceptOffer {
         fighter: usize,
@@ -132,6 +134,10 @@ pub enum MarketNews {
     Renewed(usize),
     /// It refused to renew, its morale too low.
     RenewalRefused(usize),
+    /// It refused to renew on the terms offered, and lost morale.
+    TermsRefused(usize),
+    /// The free agent at this index refused to sign on the terms offered.
+    SignRefused(usize),
     /// Its contract ended unrenewed: it left, a free agent.
     ContractEnded(usize),
 }

@@ -7,8 +7,9 @@ use rand::RngExt;
 
 use crate::colosseum::Contender;
 use crate::design_data::DesignData;
-use crate::economy::{Flow, Transaction, Wealth};
+use crate::economy::{Flow, Terms, Transaction, Wealth};
 use crate::fighter::career::{CareerFighter, Status};
+use crate::fighter::morale::MoraleEvent;
 use crate::fighter::percent_of;
 use crate::market::{self, MarketNews, Move, SaleOffer, estimated_potential, value};
 use crate::relations::Reason;
@@ -38,8 +39,8 @@ pub(super) fn market_moves(
     let order = |m: &Move| match *m {
         Move::AcceptOffer { .. } => 0,
         Move::Release(_) => 1,
-        Move::List(_) | Move::Unlist(_) | Move::Keep(_) | Move::Unkeep(_) | Move::Renew(_) => 2,
-        Move::Sign(_) => 3,
+        Move::List(_) | Move::Unlist(_) | Move::Keep(_) | Move::Unkeep(_) | Move::Renew(..) => 2,
+        Move::Sign(..) => 3,
         Move::Observe(_) | Move::Offer(..) => u8::MAX,
     };
     let mut moves: Vec<Move> = moves.to_vec();
@@ -87,20 +88,19 @@ pub(super) fn market_moves(
             Move::Unlist(i) => state.transfer_list.retain(|&l| l != i),
             Move::Keep(i) => state.kept.push(i),
             Move::Unkeep(i) => state.kept.retain(|&k| k != i),
-            Move::Renew(i) => {
-                let fighter = &state.fighters[i];
-                if fighter.morale.value() < data.economy.contracts.renewal_morale {
-                    news.push(MarketNews::RenewalRefused(i));
-                } else {
-                    let contract = state.contract_for(fighter, data);
-                    state.fighters[i].contract = Some(contract);
-                    news.push(MarketNews::Renewed(i));
+            Move::Renew(i, terms) => news.push(renew(state, i, terms, data)),
+            Move::Sign(a, terms) => {
+                let economy = &data.economy;
+                if !economy
+                    .contracts
+                    .accepts(&state.free_agents[a], terms, &economy.market)
+                {
+                    news.push(MarketNews::SignRefused(a));
+                    continue;
                 }
-            }
-            Move::Sign(a) => {
                 let mut agent = state.free_agents[a].clone();
                 agent.joined = Some(state.week);
-                agent.contract = Some(state.contract_for(&agent, data));
+                agent.contract = Some(terms.signed(state.date(data).season));
                 state.free_agents[a].status = Status::Sold;
                 state.fighters.push(agent);
                 let i = state.fighters.len() - 1;
@@ -114,6 +114,26 @@ pub(super) fn market_moves(
     state.transfer_list.retain(active);
     state.kept.retain(active);
     news
+}
+
+/// The club's fighter `i`'s answer to the offer to renew on `terms`: refused below
+/// `renewal_morale`; refused, at a cost in morale, terms it does not accept
+/// (`ContractRules::accepts`); else renewed from this season.
+fn renew(state: &mut GameState, i: usize, terms: Terms, data: &DesignData) -> MarketNews {
+    let economy = &data.economy;
+    let rules = &economy.contracts;
+    let season = state.date(data).season;
+    let fighter = &mut state.fighters[i];
+    if fighter.morale.value() < rules.renewal_morale {
+        MarketNews::RenewalRefused(i)
+    } else if rules.accepts(fighter, terms, &economy.market) {
+        fighter.contract = Some(terms.signed(season));
+        MarketNews::Renewed(i)
+    } else {
+        let lowered = MoraleEvent::Lowered(rules.refused_morale);
+        fighter.morale = fighter.morale.after(lowered, &data.fighter.morale);
+        MarketNews::TermsRefused(i)
+    }
 }
 
 /// Lets the club's fighter `i` go, for nothing: a free agent.
@@ -508,7 +528,6 @@ pub(super) fn buy_from_rival(
     }
     let mut bought = fighter.clone();
     bought.joined = Some(state.week);
-    bought.contract = Some(state.contract_for(&bought, data));
     let held: Vec<usize> = (0..state.colosseums.len())
         .filter(|&c| state.colosseums[c].champion == Some(Contender::Rival(id)))
         .collect();

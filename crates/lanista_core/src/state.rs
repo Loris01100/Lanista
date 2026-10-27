@@ -11,7 +11,7 @@ use serde::{Deserialize, Serialize};
 use crate::calendar::Date;
 use crate::colosseum::{Colosseum, ColosseumId, Contender, Continent, Odds, Rosters, TitleNews};
 use crate::design_data::DesignData;
-use crate::economy::{Contract, Wealth};
+use crate::economy::{Contract, Terms, Wealth};
 use crate::fighter::care::CareRules;
 use crate::fighter::career::{Activity, CareerFighter, Status, WeekPlan, suggested_plan};
 use crate::fighter::equipment::Refused;
@@ -234,12 +234,17 @@ impl GameState {
         }
     }
 
-    /// The contract `fighter` signs with the club this week (`ContractRules::signed`).
+    /// The terms `fighter` asks for (`ContractRules::asked_terms`).
+    #[must_use]
+    pub fn asked_terms(fighter: &CareerFighter, data: &DesignData) -> Terms {
+        let economy = &data.economy;
+        economy.contracts.asked_terms(fighter, &economy.market)
+    }
+
+    /// The contract `fighter` signs with the club this week on its asked terms.
     #[must_use]
     pub fn contract_for(&self, fighter: &CareerFighter, data: &DesignData) -> Contract {
-        let economy = &data.economy;
-        let season = self.date(data).season;
-        economy.contracts.signed(fighter, season, &economy.market)
+        Self::asked_terms(fighter, data).signed(self.date(data).season)
     }
 
     /// Names the player's club if it has no name: a culture of its continent, then a
@@ -729,7 +734,7 @@ impl GameState {
         match m {
             Move::Observe(Target::FreeAgent(a)) => active(self.free_agents.get(a)),
             Move::Observe(Target::Rival(id)) => active(self.rival_fighter(id)),
-            Move::Sign(a) => active(self.free_agents.get(a)) && self.can_hire(data),
+            Move::Sign(a, _) => active(self.free_agents.get(a)) && self.can_hire(data),
             Move::Release(i) => ours(i),
             Move::List(i) => {
                 ours(i)
@@ -740,7 +745,7 @@ impl GameState {
             Move::Unlist(i) => self.transfer_list.contains(&i),
             Move::Keep(i) => ours(i) && !self.kept.contains(&i) && !self.transfer_list.contains(&i),
             Move::Unkeep(i) => self.kept.contains(&i),
-            Move::Renew(i) => {
+            Move::Renew(i, _) => {
                 let season = self.date(data).season;
                 ours(i) && self.fighters[i].contract.is_some_and(|c| c.ends <= season)
             }
@@ -1018,6 +1023,11 @@ mod tests {
             }],
             ..Decisions::default()
         }
+    }
+
+    /// Signing free agent `a` on the terms it asks for.
+    fn sign(state: &GameState, a: usize, data: &DesignData) -> Move {
+        Move::Sign(a, GameState::asked_terms(&state.free_agents[a], data))
     }
 
     fn moves(moves: &[Move]) -> Decisions {
@@ -1387,35 +1397,53 @@ mod tests {
 
     #[test]
     fn a_contract_is_renewed_in_its_last_season_or_ends_at_the_off_season() {
+        use crate::fighter::morale::Morale;
         let data = data();
+        let rules = &data.economy.contracts;
         let mut state = game(7, &data);
+        // Worth enough for its wage not to round.
+        state.fighters[0].stats = state.fighters[0].stats.map(|v| v * 10);
+        let asked = GameState::asked_terms(&state.fighters[0], &data);
         // Not in its last season yet.
-        assert!(!state.may_move(Move::Renew(0), &data));
+        assert!(!state.may_move(Move::Renew(0, asked), &data));
         let calendar = &data.calendar;
         // The great event's last week: the off-season starts next week.
         state.week = u64::from(calendar.competition_weeks + calendar.great_event_weeks);
         state.fighters[0].contract.as_mut().unwrap().ends = 1;
-        let renew = Decisions {
-            moves: vec![Move::Renew(0)],
+        let renew = |terms| Decisions {
+            moves: vec![Move::Renew(0, terms)],
             ..plan(Activity::Rest, false)
         };
+        // A happy fighter takes less than it asks, a bonus making up for it.
+        let haggled = Terms {
+            wage: percent_of(asked.wage, 100 - rules.haggle_percent),
+            win_bonus: asked.wage,
+            seasons: 1,
+        };
         let mut happy = state.clone();
-        happy.fighters[0].morale = crate::fighter::morale::Morale::new(100);
-        let asked = happy.contract_for(&happy.fighters[0], &data);
-        let summary = next_week(&mut happy, &renew, &data);
+        happy.fighters[0].morale = Morale::new(100);
+        let summary = next_week(&mut happy, &renew(haggled), &data);
         assert_eq!(summary.market, [MarketNews::Renewed(0)]);
-        assert_eq!(happy.fighters[0].contract, Some(asked));
-        assert_eq!(asked.ends, 1 + data.economy.contracts.seasons);
+        assert_eq!(happy.fighters[0].contract, Some(haggled.signed(1)));
         next_week(&mut happy, &plan(Activity::Rest, false), &data);
         assert_eq!(happy.fighters[0].status, Status::Active);
-        // Too unhappy to renew: it leaves as the off-season starts.
-        state.fighters[0].morale = crate::fighter::morale::Morale::new(0);
-        let summary = next_week(&mut state, &renew, &data);
-        assert_eq!(summary.market, [MarketNews::RenewalRefused(0)]);
-        let summary = next_week(&mut state, &plan(Activity::Rest, false), &data);
-        assert!(summary.market.contains(&MarketNews::ContractEnded(0)));
+        // Unhappy, it wants all it asks, and resents being offered less.
+        state.fighters[0].morale = Morale::new(rules.renewal_morale);
+        let low = Terms {
+            win_bonus: 0,
+            ..haggled
+        };
+        let summary = next_week(&mut state, &renew(low), &data);
+        assert_eq!(summary.market, [MarketNews::TermsRefused(0)]);
+        assert!(state.fighters[0].morale.value() < rules.renewal_morale);
+        // Now too unhappy to renew at all: it leaves as the off-season starts.
+        let summary = next_week(&mut state, &renew(asked), &data);
+        assert_eq!(
+            summary.market[..2],
+            [MarketNews::RenewalRefused(0), MarketNews::ContractEnded(0)]
+        );
         assert_eq!(state.fighters[0].status, Status::Released);
-        assert!(!state.may_move(Move::Renew(0), &data));
+        assert!(!state.may_move(Move::Renew(0, asked), &data));
     }
 
     #[test]
@@ -1626,7 +1654,7 @@ mod tests {
     }
 
     #[test]
-    fn a_fight_brings_receipts_and_the_winner_s_prize() {
+    fn a_fight_brings_receipts_and_the_winner_s_prize_and_costs_the_win_bonus() {
         let data = data();
         let colosseum = &data.world.colosseums[0].purses;
         // Even a broke club can fight: the first colosseum is free.
@@ -1634,6 +1662,7 @@ mod tests {
         state.money = 0;
         // Twice as strong as a generated fighter, so that it wins some.
         state.fighters[0].stats = state.fighters[0].stats.map(|v| v * 2);
+        state.fighters[0].contract.as_mut().unwrap().win_bonus = 7;
         let mut won = false;
         for _ in 0..20 {
             let summary = next_week(
@@ -1649,6 +1678,8 @@ mod tests {
                 && amount >= i64::from(colosseum.receipts_base)));
             let prize = (Flow::WinPrize, i64::from(colosseum.win_prize));
             assert_eq!(flows.contains(&prize), fight.result == FightResult::Won);
+            let bonus = (Flow::WinBonus, -7);
+            assert_eq!(flows.contains(&bonus), fight.result == FightResult::Won);
             won |= fight.result == FightResult::Won;
         }
         assert!(won, "a strong fighter wins a fight in 20 weeks");
@@ -1919,7 +1950,8 @@ mod tests {
         state.fighters[0].status = Status::Dead;
         state.money = -100;
         let agent = state.free_agents[2].clone();
-        let summary = next_week(&mut state, &moves(&[Move::Sign(2)]), &data);
+        let signing = moves(&[sign(&state, 2, &data)]);
+        let summary = next_week(&mut state, &signing, &data);
         assert_eq!(summary.market, [MarketNews::Signed(1)]);
         assert_eq!(state.fighters.len(), 2);
         assert!(summary.reports[1].is_some());
@@ -1927,7 +1959,7 @@ mod tests {
         assert_eq!(state.fighters[1].potential, agent.potential);
         // Off the market, its entry kept.
         assert_eq!(state.free_agents[2].status, Status::Sold);
-        assert!(!state.may_move(Move::Sign(2), &data));
+        assert!(!state.may_move(sign(&state, 2, &data), &data));
     }
 
     #[test]
@@ -1939,7 +1971,7 @@ mod tests {
             let a = (0..state.free_agents.len())
                 .find(|&a| state.free_agents[a].status == Status::Active)
                 .unwrap();
-            moves(&[Move::Sign(a)])
+            moves(&[sign(state, a, &data)])
         };
         let max = usize::try_from(data.economy.max_fighters).unwrap();
         for _ in 0..max + 2 {
@@ -1957,7 +1989,8 @@ mod tests {
         // Several signings in a week sign the free agents chosen, in order.
         let mut state = game(7, &data);
         let (first, third) = (state.free_agents[0].clone(), state.free_agents[2].clone());
-        next_week(&mut state, &moves(&[Move::Sign(2), Move::Sign(0)]), &data);
+        let signings = moves(&[sign(&state, 2, &data), sign(&state, 0, &data)]);
+        next_week(&mut state, &signings, &data);
         assert_eq!(state.fighters[1].potential, third.potential);
         assert_eq!(state.fighters[2].potential, first.potential);
     }
@@ -2603,7 +2636,8 @@ mod tests {
     fn a_fighter_who_joined_the_club_is_sold_only_after_half_a_season() {
         let data = data();
         let mut state = game(7, &data);
-        market_moves(&mut state, &[Move::Sign(0)], &data, &mut Vec::new());
+        let signing = sign(&state, 0, &data);
+        market_moves(&mut state, &[signing], &data, &mut Vec::new());
         let signed = state.fighters.len() - 1;
         assert_eq!(state.fighters[signed].joined, Some(1));
         // The fighter there from the start may be listed, not the one just signed.
@@ -2997,7 +3031,7 @@ mod tests {
         state.fighters[0].status = Status::Active;
         let stay = Decisions {
             plans: vec![REST, REST],
-            ..moves(&[Move::Sign(a)])
+            ..moves(&[sign(&state, a, &data)])
         };
         next_week(&mut state, &stay, &data);
         assert_eq!(state.free_agents[a].status, Status::Sold);

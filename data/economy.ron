@@ -14,16 +14,25 @@
     // Each training session without a trainer.
     training_cost: 5,
     // The contracts of the player's club's fighters (the rival clubs pay the upkeep
-    // alone). A fighter signed, bought or renewed asks each week, on top of the upkeep,
-    // wage_percent of its value, give or take up to ego_percent at an ego of 100 or 0;
-    // its contract ends at the start of the off-season seasons later, when it leaves,
-    // a free agent, unless renewed during that season at its new asked wage; it agrees
-    // to renew from renewal_morale.
+    // alone). A fighter asks each week, on top of the upkeep, wage_percent of its
+    // value, give or take up to ego_percent at an ego of 100 or 0, for seasons beyond
+    // the current one (a bought fighter gets just that). Signing or renewing, the
+    // player offers a wage, a bonus for each duel won and 1 to max_seasons; the
+    // fighter counts the bonus at the share of weeks it expects to fight
+    // (bonus_percent) times its share of fights won (half without any), and accepts
+    // down to haggle_percent below its asked wage at a morale of 100, not below it at
+    // 0. The contract ends at the start of the off-season of its last season, when the
+    // fighter leaves, a free agent, unless renewed during that season; it agrees to
+    // renew only from renewal_morale, and loses refused_morale when it refuses terms.
     contracts: (
-        wage_percent: 2,
+        wage_percent: 1,
         ego_percent: 25,
         seasons: 2,
+        max_seasons: 4,
         renewal_morale: 35,
+        bonus_percent: 30,
+        haggle_percent: 30,
+        refused_morale: 5,
     ),
     staff: (
         // Every salary is paid every week, even into debt, once for every so many
