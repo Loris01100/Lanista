@@ -3,18 +3,19 @@
 use lanista_core::colosseum::{ColosseumId, Contender};
 use lanista_core::design_data::DesignData;
 use lanista_core::fighter::career::{CareerFighter, Status};
-use lanista_core::market::{Move, SaleOffer, Target, value};
+use lanista_core::market::{Move, SaleOffer, Target, stat_ranges, value};
 use lanista_core::rivals::RivalId;
+use lanista_core::staff::Scouting;
 use lanista_core::state::GameState;
 use reesch::egui;
 
 use super::colosseums::{arrow, not_ranked, ranked_name};
-use super::{ClubScreen, View, chip};
+use super::{ClubScreen, View, chip, face_row, half_bar};
 use crate::lang::tr;
 use crate::texts::{
-    club_name, colosseum_name, condition_text, free_agent_name, move_text, origin_text,
-    outside_ease_text, outside_personality_text, potential_text, range_texts, record_text,
-    rival_fighter_name, stat_names, unsellable_text, weeks,
+    club_name, colosseum_name, condition_text, fighter_name, free_agent_name, move_text,
+    origin_text, outside_ease_text, outside_personality_text, potential_text, range_texts,
+    record_text, rival_fighter_name, stat_names, unsellable_text, weeks,
 };
 use crate::theme;
 
@@ -402,6 +403,8 @@ impl ClubScreen {
                 ui.label(outside_ease_text(f, &scouting, data));
                 ui.end_row();
             });
+        ui.add_space(8.0);
+        comparison(ui, &mut self.compared, f, (state, &scouting), data);
         let contender = match target {
             Target::FreeAgent(a) => Contender::FreeAgent(a),
             Target::Rival(id) => Contender::Rival(id),
@@ -466,6 +469,63 @@ impl ClubScreen {
         if !ranked {
             ui.label(not_ranked);
         }
+    }
+}
+
+/// A list to pick one of the club's fighters in activity, then its trained stats face to
+/// face with what the recruiter sees of `outsider`: a bar to the middle of each range.
+fn comparison(
+    ui: &mut egui::Ui,
+    compared: &mut Option<usize>,
+    outsider: &CareerFighter,
+    (state, scouting): (&GameState, &Scouting),
+    data: &DesignData,
+) {
+    let names: Vec<_> = (0..)
+        .zip(&state.fighters)
+        .filter(|(_, f)| f.status == Status::Active)
+        .map(|(i, f)| (i, fighter_name(i, f, data)))
+        .collect();
+    let shown = names
+        .iter()
+        .find(|(i, _)| Some(*i) == *compared)
+        .map_or_else(|| tr!("compare-none"), |(_, name)| name.clone());
+    egui::ComboBox::from_label(tr!("compare-with"))
+        .selected_text(shown)
+        .show_ui(ui, |ui| {
+            ui.selectable_value(compared, None, tr!("compare-none"));
+            for (i, name) in &names {
+                ui.selectable_value(compared, Some(*i), name.as_str());
+            }
+        });
+    let Some(mine) = compared
+        .and_then(|i| state.fighters.get(i))
+        .filter(|f| f.status == Status::Active)
+    else {
+        return;
+    };
+    let middles = stat_ranges(outsider, &data.economy.market, scouting)
+        .map(|seen| seen.map_or(0, |(low, high)| low.midpoint(high)));
+    let plain = ui.visuals().widgets.active.bg_fill;
+    for (((name, mine), theirs), seen) in stat_names()
+        .iter()
+        .zip(mine.stats.to_array())
+        .zip(middles)
+        .zip(range_texts(outsider, scouting, data))
+    {
+        let max = mine.max(theirs);
+        face_row(
+            ui,
+            |ui| {
+                ui.label(mine.to_string());
+                half_bar(ui, mine, max, theme::BRONZE, true);
+            },
+            name,
+            |ui| {
+                half_bar(ui, theirs, max, plain, false);
+                ui.label(seen);
+            },
+        );
     }
 }
 

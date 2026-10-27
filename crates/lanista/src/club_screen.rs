@@ -150,6 +150,8 @@ pub struct ClubScreen {
     confirm: Option<usize>,
     /// The offer being written on the market: the rival fighter and the price.
     offer_draft: Option<(RivalId, u32)>,
+    /// The club's fighter the sheet of a fighter out of the club is compared with.
+    compared: Option<usize>,
     /// Which fighters out of the club the market lists.
     market_filter: MarketFilter,
     /// How the market's lists are sorted.
@@ -201,6 +203,7 @@ impl ClubScreen {
             message: None,
             confirm: None,
             offer_draft: None,
+            compared: None,
             market_filter: MarketFilter::default(),
             market_sort: MarketSort::default(),
             market_tab: MarketTab::FreeAgents,
