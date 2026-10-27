@@ -821,68 +821,95 @@ fn sale_grid(
                 ui.label(egui::RichText::new(class).small().weak());
             });
             record_cells(ui, f);
-            match f.contract {
-                Some(c) if c.ends <= season => {
-                    let text = tr!("contract-last-season", wage = c.wage, bonus = c.win_bonus);
-                    ui.colored_label(theme::BLOOD, text)
-                }
-                Some(c) => ui.label(tr!(
-                    "contract-until",
-                    wage = c.wage,
-                    bonus = c.win_bonus,
-                    season = c.ends
-                )),
-                None => ui.label(""),
-            };
-            let plain = ui.visuals().widgets.inactive.bg_fill;
+            contract_cell(ui, f, season);
             let unsellable = unsellable_text(f, state, data);
-            if state.transfer_list.contains(&i) {
-                chip(ui, tr!("market-listed"), theme::BRONZE.gamma_multiply(0.6));
-            } else if state.kept.contains(&i) {
-                chip(ui, tr!("keep"), plain);
-            } else if let Some(text) = &unsellable {
-                chip(ui, text, plain);
-            } else {
-                ui.label("");
-            }
+            sale_status_cell(ui, i, unsellable.as_deref(), state);
             // Not wrapped: a grid's cell starts with no width, a wrapped row there would
             // break after each letter.
-            ui.horizontal(|ui| {
-                if state.transfer_list.contains(&i) {
-                    toggle(ui, moves, Move::Unlist(i), &tr!("unlist"), true);
-                } else if state.kept.contains(&i) {
-                    toggle(ui, moves, Move::Unkeep(i), &tr!("unkeep"), true);
-                } else if unsellable.is_none() {
-                    let keep = Move::Keep(i);
-                    toggle(ui, moves, keep, &tr!("keep"), state.may_move(keep, data));
-                    let list = Move::List(i);
-                    toggle(ui, moves, list, &tr!("list"), state.may_move(list, data));
-                }
-                for offer in state.sale_offers.iter().filter(|o| o.fighter == i) {
-                    let accept = Move::AcceptOffer {
-                        fighter: i,
-                        rival: offer.rival,
-                    };
-                    let label = tr!(
-                        "accept-offer",
-                        club = club_name(offer.rival, state),
-                        price = offer.price
-                    );
-                    toggle(ui, moves, accept, &label, state.may_move(accept, data));
-                    if ui.button(tr!("refuse-offer")).clicked() {
-                        pick = Some(Pick::Refuse(*offer));
-                    }
-                }
-                let asked = GameState::asked_terms(f, data);
-                let renew = Move::Renew(i, asked);
-                if state.may_move(renew, data) {
-                    let label = tr!("renew", wage = asked.wage);
-                    terms_toggle(ui, moves, renew, &label, true, data);
-                }
-                toggle(ui, moves, Move::Release(i), &tr!("release"), true);
+            let row = ui.horizontal(|ui| {
+                sale_actions(ui, (i, f), unsellable.is_none(), state, moves, data)
             });
+            if row.inner.is_some() {
+                pick = row.inner;
+            }
             ui.end_row();
         }
     });
+    pick
+}
+
+/// A fighter's contract, in blood in its last season.
+fn contract_cell(ui: &mut egui::Ui, f: &CareerFighter, season: u64) {
+    match f.contract {
+        Some(c) if c.ends <= season => {
+            let text = tr!("contract-last-season", wage = c.wage, bonus = c.win_bonus);
+            ui.colored_label(theme::BLOOD, text)
+        }
+        Some(c) => ui.label(tr!(
+            "contract-until",
+            wage = c.wage,
+            bonus = c.win_bonus,
+            season = c.ends
+        )),
+        None => ui.label(""),
+    };
+}
+
+/// Whether the club's fighter `i` is listed, kept or not for sale.
+fn sale_status_cell(ui: &mut egui::Ui, i: usize, unsellable: Option<&str>, state: &GameState) {
+    let plain = ui.visuals().widgets.inactive.bg_fill;
+    if state.transfer_list.contains(&i) {
+        chip(ui, tr!("market-listed"), theme::BRONZE.gamma_multiply(0.6));
+    } else if state.kept.contains(&i) {
+        chip(ui, tr!("keep"), plain);
+    } else if let Some(text) = unsellable {
+        chip(ui, text, plain);
+    } else {
+        ui.label("");
+    }
+}
+
+/// The moves on the club's fighter `i`, and the offer refused if any.
+fn sale_actions(
+    ui: &mut egui::Ui,
+    (i, f): (usize, &CareerFighter),
+    sellable: bool,
+    state: &GameState,
+    moves: &mut Vec<Move>,
+    data: &DesignData,
+) -> Option<Pick> {
+    let mut pick = None;
+    if state.transfer_list.contains(&i) {
+        toggle(ui, moves, Move::Unlist(i), &tr!("unlist"), true);
+    } else if state.kept.contains(&i) {
+        toggle(ui, moves, Move::Unkeep(i), &tr!("unkeep"), true);
+    } else if sellable {
+        let keep = Move::Keep(i);
+        toggle(ui, moves, keep, &tr!("keep"), state.may_move(keep, data));
+        let list = Move::List(i);
+        toggle(ui, moves, list, &tr!("list"), state.may_move(list, data));
+    }
+    for offer in state.sale_offers.iter().filter(|o| o.fighter == i) {
+        let accept = Move::AcceptOffer {
+            fighter: i,
+            rival: offer.rival,
+        };
+        let label = tr!(
+            "accept-offer",
+            club = club_name(offer.rival, state),
+            price = offer.price
+        );
+        toggle(ui, moves, accept, &label, state.may_move(accept, data));
+        if ui.button(tr!("refuse-offer")).clicked() {
+            pick = Some(Pick::Refuse(*offer));
+        }
+    }
+    let asked = GameState::asked_terms(f, data);
+    let renew = Move::Renew(i, asked);
+    if state.may_move(renew, data) {
+        let label = tr!("renew", wage = asked.wage);
+        terms_toggle(ui, moves, renew, &label, true, data);
+    }
+    toggle(ui, moves, Move::Release(i), &tr!("release"), true);
     pick
 }
