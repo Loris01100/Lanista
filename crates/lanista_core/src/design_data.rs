@@ -95,16 +95,19 @@ impl ClassData {
     }
 
     /// A fighter's spell slots in loadout `i` (see [`ClassData::loadout`]): the class's
-    /// spells, the loadout's in the second slot, its mine spells laying its
-    /// `mines_per_cast`.
+    /// spells, the loadout's in the second slot if it brings one, its mine spells laying
+    /// its `mines_per_cast`, its shots as its weapon fires them (`LoadoutData::shot`).
     #[must_use]
     pub fn spells_in(&self, i: usize) -> Vec<SpellData> {
         let mut spells = self.spells.clone();
         if let Some(loadout) = self.loadout(i) {
-            spells.insert(spells.len().min(1), loadout.spell.clone());
+            if let Some(spell) = &loadout.spell {
+                spells.insert(spells.len().min(1), spell.clone());
+            }
             for spell in spells.iter_mut().filter(|s| s.mine) {
                 spell.blows = loadout.mines_per_cast;
             }
+            spells = spells.into_iter().map(|s| loadout.shot(s)).collect();
         }
         spells
     }
@@ -119,16 +122,48 @@ pub struct LoadoutData {
     /// Its weapon type, a key of `weapons` in `data/combat.ron`.
     pub weapon: String,
     pub off_hand: OffHand,
-    /// The spell of the second slot.
-    pub spell: SpellData,
+    /// The spell of the second slot; none if left out, for a class whose loadouts share
+    /// all its spells.
+    #[serde(default)]
+    pub spell: Option<SpellData>,
     /// Mines each of the fighter's mine spells lays per cast (`SpellData::blows`); 1 if
     /// left out.
     #[serde(default = "one")]
     pub mines_per_cast: u32,
-    /// Its weapon's auto attack, set at loading from [`CombatRules::weapons`]; none for a
-    /// loadout built by hand.
+    /// Percentage of its speed the fighter keeps in it (a heavy bow slows it down); 100
+    /// if left out.
+    #[serde(default = "full")]
+    pub speed_percent: u32,
+    /// Percentages of the power and the cooldown of its shots, the ranged spells that
+    /// hit, auto attack included (`LoadoutData::shot`); 100 if left out.
+    #[serde(default = "full")]
+    pub shot_power_percent: u32,
+    #[serde(default = "full")]
+    pub shot_cooldown_percent: u32,
+    /// Its weapon's auto attack, set at loading from [`CombatRules::weapons`] (through
+    /// [`LoadoutData::shot`]); none for a loadout built by hand.
     #[serde(skip)]
     pub auto_attack: Option<SpellData>,
+}
+
+impl LoadoutData {
+    /// `spell` as this loadout fires it: a shot, a ranged spell that hits (neither
+    /// gathering nor laying a mine), with `shot_power_percent` of its power and
+    /// `shot_cooldown_percent` of its cooldown, rounded up; any other spell unchanged.
+    #[must_use]
+    pub fn shot(&self, spell: SpellData) -> SpellData {
+        if spell.range != Range::Ranged || spell.mine || spell.gathers > 0 {
+            return spell;
+        }
+        let scale = |value: u32, percent: u32| {
+            u32::try_from((u64::from(value) * u64::from(percent)).div_ceil(100)).unwrap_or(u32::MAX)
+        };
+        SpellData {
+            power: scale(spell.power, self.shot_power_percent),
+            cooldown: scale(spell.cooldown, self.shot_cooldown_percent),
+            ..spell
+        }
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Deserialize)]
@@ -181,6 +216,35 @@ pub struct SpellData {
     /// its loadout (`LoadoutData::mines_per_cast`). 1 if left out.
     #[serde(default = "one")]
     pub blows: u32,
+    /// Never misses, whatever the target's speed or the caster's lost accuracy
+    /// (`combat::spell_hit_percent`); false if left out.
+    #[serde(default)]
+    pub sure_hit: bool,
+    /// A ranged spell that falls from above: pillars do not block it
+    /// (`combat::shot_blocked`); false if left out.
+    #[serde(default)]
+    pub over_obstacles: bool,
+    /// In meters: it also hits every other fighter standing this close to its target's
+    /// center, but its caster and its caster's ally, each on its own hit roll; 0, its
+    /// target alone, if left out.
+    #[serde(default)]
+    pub area: f64,
+    /// For a mine spell: its mine is a trap, unseen by the caster's opponents, that
+    /// catches the first fighter touching it instead of blasting (`combat::Trap`); none,
+    /// a mine that blasts, if left out.
+    #[serde(default)]
+    pub trap: Option<TrapData>,
+}
+
+/// What a trap does to the fighter it catches (`SpellData::trap`): it holds it, neither
+/// acting nor moving but still hit, for `ticks`, its hits taking `damage_percent` more;
+/// the first hit that takes HP frees it.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct TrapData {
+    /// 30 per second.
+    pub ticks: u32,
+    pub damage_percent: u32,
 }
 
 /// How a spell hits with an element of the floor (`SpellData::thrown`).
@@ -208,6 +272,10 @@ const fn full_accuracy() -> u32 {
 
 const fn one() -> u32 {
     1
+}
+
+const fn full() -> u32 {
+    100
 }
 
 /// What casting a spell spends, all of it needed; what is left out costs nothing.
@@ -334,11 +402,12 @@ impl DesignData {
         };
         for loadout in data.classes.iter_mut().flat_map(|c| &mut c.loadouts) {
             let attack = data.combat.weapons.get(&loadout.weapon);
-            loadout.auto_attack = Some(attack.cloned().ok_or(LoadError::Invalid {
+            let attack = attack.cloned().ok_or(LoadError::Invalid {
                 file: CLASSES_FILE,
                 field: "weapon",
                 problem: "a weapon not in the weapons of data/combat.ron",
-            })?);
+            })?;
+            loadout.auto_attack = Some(loadout.shot(attack));
         }
         data.validate()?;
         if let Some(field) = data.stat_model.invalid_field() {
@@ -707,6 +776,13 @@ impl DesignData {
                 problem,
             });
         }
+        if let Some((field, problem)) = self.classes.iter().find_map(class_problem) {
+            return Err(LoadError::Invalid {
+                file: CLASSES_FILE,
+                field,
+                problem,
+            });
+        }
         for kind in ArenaKind::ALL {
             if let Some(problem) = layout_problem(self.combat.arenas.get(kind)) {
                 return Err(LoadError::Invalid {
@@ -762,6 +838,27 @@ fn melee_problem(rules: &MeleeRules) -> Option<(&'static str, &'static str)> {
     } else {
         None
     }
+}
+
+/// The field and the problem of a class that would break fights: a loadout of no speed,
+/// a spell's area not a number or below 0, or a trap on a spell that lays no mine.
+fn class_problem(class: &ClassData) -> Option<(&'static str, &'static str)> {
+    let spells = class
+        .spells
+        .iter()
+        .chain(class.loadouts.iter().filter_map(|l| l.spell.as_ref()));
+    if class.loadouts.iter().any(|l| l.speed_percent == 0) {
+        return Some(("speed_percent", "0"));
+    }
+    for spell in spells {
+        if spell.area.is_nan() || spell.area < 0.0 {
+            return Some(("area", "not a number or below 0"));
+        }
+        if spell.trap.is_some() && !spell.mine {
+            return Some(("trap", "on a spell that lays no mine"));
+        }
+    }
+    None
 }
 
 /// What would break fights on `layout`: a floor too small for two fighters, no speed,
@@ -821,15 +918,18 @@ mod tests {
             CLASSES, COMBAT, FIGHTER, CALENDAR, ECONOMY, WORLD, NAMES, STAT_MODEL,
         )
         .unwrap();
-        assert_eq!(data.classes.len(), 4);
+        assert_eq!(data.classes.len(), 5);
         for class in &data.classes {
             assert_eq!(class.loadouts.len(), 2, "{}", class.key);
             for (i, loadout) in class.loadouts.iter().enumerate() {
                 assert_eq!(class.spells_in(i).len(), 3, "{}", class.key);
-                assert_eq!(class.spells_in(i)[1], loadout.spell, "{}", loadout.key);
+                if let Some(spell) = &loadout.spell {
+                    assert_eq!(&class.spells_in(i)[1], spell, "{}", loadout.key);
+                }
+                let weapon = data.combat.weapons.get(&loadout.weapon).cloned();
                 assert_eq!(
-                    loadout.auto_attack.as_ref(),
-                    data.combat.weapons.get(&loadout.weapon),
+                    loadout.auto_attack,
+                    weapon.map(|w| loadout.shot(w)),
                     "{}",
                     loadout.key
                 );
@@ -839,6 +939,26 @@ mod tests {
         // The double dague lays two mines a cast, the dague and bouclier one.
         let mines = |loadout| data.classes[3].spells_in(loadout)[2].blows;
         assert_eq!((mines(0), mines(1)), (1, 2));
+        // The hunter's heavy bow shoots harder and slower than the light one, its trap
+        // alike in both, and slows it down.
+        let hunter = &data.classes[4];
+        assert_eq!(hunter.key, "chasseur");
+        let (heavy, light) = (hunter.spells_in(0), hunter.spells_in(1));
+        for (h, l) in heavy.iter().zip(&light) {
+            if h.mine {
+                assert_eq!(h, l);
+            } else {
+                assert!(h.power > l.power && h.cooldown > l.cooldown, "{}", h.name);
+            }
+        }
+        let attacks = hunter
+            .loadouts
+            .iter()
+            .map(|l| l.auto_attack.clone().unwrap());
+        let [heavy_attack, light_attack]: [SpellData; 2] =
+            attacks.collect::<Vec<_>>().try_into().unwrap();
+        assert!(heavy_attack.power > light_attack.power);
+        assert!(hunter.loadouts[0].speed_percent < hunter.loadouts[1].speed_percent);
         assert_eq!(data.calendar.season_weeks(), 30);
         // Five continents, each with its major colosseum and one or two minor ones, one
         // of them free to enter: the safety net; Capoue first, where one starts.
@@ -859,8 +979,8 @@ mod tests {
             CLASSES, COMBAT, FIGHTER, CALENDAR, ECONOMY, WORLD, NAMES, STAT_MODEL,
         )
         .unwrap();
-        assert_eq!(data.class(ClassId(3)), data.classes.get(3));
-        assert_eq!(data.class(ClassId(4)), None);
+        assert_eq!(data.class(ClassId(4)), data.classes.get(4));
+        assert_eq!(data.class(ClassId(5)), None);
     }
 
     #[test]
@@ -888,6 +1008,17 @@ mod tests {
         assert_eq!(field("[]", FIGHTER), "classes");
         let unarmed = CLASSES.replacen("weapon: \"glaive\"", "weapon: \"fork\"", 1);
         assert_eq!(field(&unarmed, FIGHTER), "weapon");
+        let nowhere = CLASSES.replacen("area: 2.0", "area: -1.0", 1);
+        assert_eq!(field(&nowhere, FIGHTER), "area");
+        let unlaid = CLASSES.replacen(
+            "mine: true,
+                trap:",
+            "trap:",
+            1,
+        );
+        assert_eq!(field(&unlaid, FIGHTER), "trap");
+        let rooted = CLASSES.replacen("speed_percent: 85", "speed_percent: 0", 1);
+        assert_eq!(field(&rooted, FIGHTER), "speed_percent");
         let upside_down = FIGHTER.replacen("start_age: (20, 30)", "start_age: (30, 20)", 1);
         assert_eq!(field(CLASSES, &upside_down), "career.start_age");
         let stronger = FIGHTER.replacen(

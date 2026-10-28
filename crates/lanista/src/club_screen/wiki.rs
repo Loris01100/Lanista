@@ -245,7 +245,19 @@ fn page(ui: &mut egui::Ui, entry: Entry, data: &DesignData) {
                     OffHand::Weapon => tr!("wiki-off-hand-weapon"),
                 };
                 ui.label(tr!("wiki-loadout", weapon = weapon, off_hand = off_hand));
-                spell_line(ui, &loadout.spell);
+                if loadout.speed_percent != 100 {
+                    ui.label(tr!("wiki-loadout-speed", percent = loadout.speed_percent));
+                }
+                if (loadout.shot_power_percent, loadout.shot_cooldown_percent) != (100, 100) {
+                    ui.label(tr!(
+                        "wiki-loadout-shots",
+                        power = loadout.shot_power_percent,
+                        cooldown = loadout.shot_cooldown_percent
+                    ));
+                }
+                if let Some(spell) = &loadout.spell {
+                    spell_line(ui, spell);
+                }
             }
         }
         Entry::Weapon(i) => {
@@ -683,8 +695,26 @@ fn spell_line(ui: &mut egui::Ui, spell: &SpellData) {
     if spell.blows > 1 {
         figures.push(tr!("wiki-blows", n = spell.blows));
     }
-    if spell.mine {
-        figures.push(tr!("wiki-mine"));
+    if spell.sure_hit {
+        figures.push(tr!("wiki-sure-hit"));
+    } else if spell.accuracy_percent != 100 {
+        figures.push(tr!("wiki-accuracy", percent = spell.accuracy_percent));
+    }
+    if spell.over_obstacles {
+        figures.push(tr!("wiki-over-obstacles"));
+    }
+    if spell.area > 0.0 {
+        let metres = spell.area.to_string().replace('.', ",");
+        figures.push(tr!("wiki-area", metres = metres));
+    }
+    match spell.trap {
+        Some(trap) => figures.push(tr!(
+            "wiki-trap",
+            seconds = tenths(trap.ticks),
+            percent = trap.damage_percent
+        )),
+        None if spell.mine => figures.push(tr!("wiki-mine")),
+        None => {}
     }
     if spell.gathers > 0 {
         figures.push(tr!("wiki-gathers", n = spell.gathers));

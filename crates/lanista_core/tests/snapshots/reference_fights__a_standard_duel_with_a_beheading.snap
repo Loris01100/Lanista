@@ -1,22 +1,21 @@
 ---
 source: crates/lanista_core/tests/reference_fights.rs
-expression: standard_duel(22)
+expression: standard_duel(97)
 ---
-[   36] fighter 0 casts Mine: a mine is laid
-[   84] fighter 1 casts Guillotine on fighter 0: missed
-[   90] fighter 1 casts Bouclier tranchant on fighter 0: 25 damage to the body
-[   96] fighter 1 casts Slash sanguin on fighter 0: 14 damage to the head
-[  132] fighter 1 casts Slash sanguin on fighter 0: 14 damage to the body
-[  168] fighter 1 casts Slash sanguin on fighter 0: 14 damage to the head
-[  168] fighter 0's head bleeds
-[  198] fighter 0 bleeds 1 from the head
-[  204] fighter 1 casts Slash sanguin on fighter 0: missed
-[  228] fighter 0 bleeds 1 from the head
-[  240] fighter 1 casts Slash sanguin on fighter 0: 14 damage to the head
-[  246] fighter 1 casts Bouclier tranchant on fighter 0: 17 damage to the head
-[  246] fighter 0 is beheaded
-[  246] fighter 0 dies
+[   24] fighter 1 casts Tir précis on fighter 0: 28 damage to the head
+[   30] fighter 1 casts Pluie de flèches on fighter 0: missed
+[   36] fighter 1 casts Piège à ours: a trap is laid
+[   96] fighter 0 casts Guillotine on fighter 1: 48 damage to the body
+[  102] fighter 0 casts Bouclier tranchant on fighter 1: 25 damage to the head
+[  108] fighter 0 casts Slash sanguin on fighter 1: 14 damage to the right arm
+[  108] fighter 1's right arm bleeds
+[  138] fighter 1 bleeds 1 from the right arm
+[  144] fighter 0 casts Slash sanguin on fighter 1: missed
+[  168] fighter 1 bleeds 1 from the right arm
+[  180] fighter 0 casts Slash sanguin on fighter 1: 11 damage to the head
+[  180] fighter 1 is beheaded
+[  180] fighter 1 dies
 
-over after 247 ticks, winner: fighter 1
-fighter 0: 0/100 HP, dealt 0, taken 100, 1 spells cast, 0 missed, beheaded
-fighter 1: 100/100 HP, dealt 100, taken 0, 8 spells cast, 2 missed
+over after 181 ticks, winner: fighter 0
+fighter 0: 72/100 HP, dealt 100, taken 28, 5 spells cast, 1 missed
+fighter 1: 0/100 HP, dealt 28, taken 100, 3 spells cast, 1 missed, beheaded

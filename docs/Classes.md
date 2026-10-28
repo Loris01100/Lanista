@@ -77,6 +77,22 @@ L'élément ramassé dépend de l'arène. La quantité portée au plus sera fix�
 
 Une mine est lancée au sol ; elle s'active après un délai et reste 30 secondes. Tout le monde la voit. Elle explose sous quiconque marche dessus, allié, adversaire ou le poseur lui-même, et blesse tous ceux qui sont dans la zone de l'explosion ; l'explosion peut étourdir et trancher. Le nombre de mines au sol en même temps sera fixé à l'équilibrage. La deuxième mine de la double dague tombe plus loin de la première que le rayon de son explosion.
 
+## Chasseur
+
+Archer qui combat à distance. Ses deux configurations ont les mêmes sorts : l'arc change la puissance et la recharge de tous ses tirs, attaque de base comprise, et sa vitesse.
+
+| Configuration | Équipement | Effet |
+| --- | --- | --- |
+| Arc lourd | un arc, main libre | gros dégâts, recharge lente, vitesse réduite |
+| Arc léger | un arc, main libre | faibles dégâts, recharge rapide, vitesse accrue |
+
+| Emplacement | Sort | Description |
+| --- | --- | --- |
+| 1 | Tir précis | Tir qui ne rate jamais, même aveuglé. |
+| 2 | Pluie de flèches | Tir peu précis qui passe au-dessus des piliers et couvre une zone : chacun de ceux qui s'y trouvent, hors le chasseur et son allié, risque une flèche. |
+| 3 | Piège à ours | Piège posé aux pieds de la cible, que seul le chasseur voit. Armé, il mord le premier qui marche dessus et le retient : il ne bouge ni n'agit plus, mais reste frappable et prend plus de dégâts. Le premier coup qui lui ôte des PV le libère ; sinon, il se libère au bout d'un temps fixe. |
+| Attaque de base | Tir simple | Flèche simple, peu précise, aux dégâts modérés. |
+
 ## Plan de mise en œuvre
 
 Chaque étape laisse le jeu jouable avec mirmillon et augure, qui servent de terrain d'essai, et finit par `cargo test`, clippy et, quand le combat change, `calibrate` puis `compare`. L'IA utilitaire suit à chaque étape ; l'IA apprise ne suit qu'à la fin (étape 11), ses modèles n'étant que des substituts jusqu'à la phase 9.
@@ -126,6 +142,7 @@ Chaque étape laisse le jeu jouable avec mirmillon et augure, qui servent de ter
    - le modèle statistique tire le saignement (`StatModel::bled`) ; `calibrate` et `compare` relancés ;
    - les substituts de l'IA apprise sont réexportés pour les quatre classes (version 2) ;
    - les sprites (bouclier, deuxième arme) viendront plus tard, fournis à part.
+10 bis. **Chasseur** (`data/classes.ron`, `combat.rs`, `design_data.rs`) — fait : voir « Chasseur » dans `docs/feuille_de_route/phase-5-bis.md`.
 11. **Retrait de mirmillon et augure, IA apprise et modèle statistique** :
     - retirer les deux anciennes classes, leurs clés de `fr.ftl`, leurs modèles de `assets/ai/` ; mettre à jour le test qui compte les classes (`design_data.rs`) et les snapshots `insta` ;
     - l'IA apprise (`learning.rs`, `learned.rs`, `lanista_py`, `python/`) : l'observation gagne la configuration, l'aisance, les saignements, la réserve d'éléments et les mines proches ; les actions gagnent l'attaque automatique ; réexporter les substituts (`export.py`) ;

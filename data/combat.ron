@@ -105,6 +105,16 @@
             cost: (endurance: 1),
             damage_kind: Blunt,
         ),
+        "bow": (
+            name: "Tir simple",
+            range: Ranged,
+            reach: 8.0,
+            power: 50,
+            cooldown: 45,
+            cost: (endurance: 1),
+            damage_kind: Cutting,
+            accuracy_percent: 70,
+        ),
     },
     // Each colosseum's arena kind (data/world.ron) sets its floor: a size in meters,
     // the percentage of their speed fighters walk at, the element a spell may gather

@@ -242,6 +242,9 @@ pub enum Effect {
     Bleeding { part: Location, source: FighterId },
     /// Its attacks hit less often: `percent` of its accuracy lost, adding up.
     Blinded { percent: u32 },
+    /// Caught in a trap (`design_data::TrapData`): neither acts nor moves, but is hit,
+    /// taking `damage_percent` more; the first hit taking HP frees it.
+    Trapped { damage_percent: u32 },
 }
 
 /// An effect and the ticks it lasts still.
@@ -383,16 +386,31 @@ impl Fighter {
             .iter()
             .map(|l| match l.effect {
                 Effect::Blinded { percent } => percent,
-                Effect::Bleeding { .. } => 0,
+                Effect::Bleeding { .. } | Effect::Trapped { .. } => 0,
             })
             .sum();
         percent_of(self.stats.accuracy, 100 - lost.min(100))
     }
 
-    /// Fighting and not down: acts, and can be hit.
+    /// Fighting and not down: can be hit, and acts unless caught in a trap.
     #[must_use]
     pub fn is_standing(&self) -> bool {
         self.is_fighting() && self.stunned_ticks == 0
+    }
+
+    /// The percentage of damage it takes more, caught in a trap; `None` when free.
+    #[must_use]
+    pub fn trapped(&self) -> Option<u32> {
+        self.effects.iter().find_map(|l| match l.effect {
+            Effect::Trapped { damage_percent } => Some(damage_percent),
+            Effect::Bleeding { .. } | Effect::Blinded { .. } => None,
+        })
+    }
+
+    /// Standing and not caught in a trap: decides, moves and casts.
+    #[must_use]
+    pub fn is_free(&self) -> bool {
+        self.is_standing() && self.trapped().is_none()
     }
 
     /// Takes `damage` hit points off, stopping at 0: a blow that reaches 0 kills.
@@ -492,6 +510,10 @@ pub(crate) fn test_fighter(id: u32, x: f64, y: f64) -> Fighter {
             thrown: std::collections::BTreeMap::new(),
             mine: false,
             blows: 1,
+            sure_hit: false,
+            over_obstacles: false,
+            area: 0.0,
+            trap: None,
         }],
         loadouts: Vec::new(),
     };

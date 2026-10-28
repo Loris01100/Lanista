@@ -31,6 +31,9 @@ const DOOR: Color = Color::new(0.1, 0.07, 0.05, 1.0);
 /// A mine on the floor, and its heart, red once armed.
 const MINE: Color = Color::new(0.25, 0.22, 0.2, 1.0);
 const MINE_ARMED: Color = Color::new(0.85, 0.15, 0.1, 1.0);
+/// A trap, unseen by its layer's opponents but by the spectator, and its jaws once armed.
+const TRAP: Color = Color::new(0.45, 0.4, 0.3, 0.6);
+const TRAP_ARMED: Color = Color::new(0.75, 0.7, 0.6, 0.9);
 /// Around the floor.
 pub const STANDS: Color = Color::new(0.16, 0.13, 0.11, 1.0);
 /// The ring under the club's fighters.
@@ -535,35 +538,36 @@ impl FightView {
     }
 
     /// The sentence the feed tells `kind` in and the fighters it is about; `None` for
-    /// what it leaves out: each second of bleeding, the floor's elements, a mine laid,
-    /// the death of one just beheaded.
+    /// what it leaves out: each second of bleeding, the floor's elements, a mine or a
+    /// trap laid, the death of one just beheaded.
     fn told(&self, kind: EventKind) -> Option<([FighterId; 2], String)> {
         let part = |p: Location| part_name(p).to_lowercase();
         Some(match kind {
             EventKind::Cast { caster, target, .. } => ([caster, target], self.told_cast(kind)),
             EventKind::Blast {
                 owner,
+                spell,
                 target,
                 damage,
                 ..
-            } => (
-                [owner, target],
-                tr!("feed-blast", target = self.name(target), damage = damage),
-            ),
-            EventKind::Afflicted {
-                fighter,
-                effect: Effect::Bleeding { part: at, .. },
-            } => (
-                [fighter; 2],
-                tr!("feed-bleeding", who = self.name(fighter), part = part(at)),
-            ),
-            EventKind::Afflicted {
-                fighter,
-                effect: Effect::Blinded { percent },
-            } => (
-                [fighter; 2],
-                tr!("feed-blinded", who = self.name(fighter), percent = percent),
-            ),
+            } => {
+                let trap = self
+                    .arena
+                    .fighter(owner)
+                    .and_then(|o| o.spells.get(spell))
+                    .is_some_and(|s| s.trap.is_some());
+                let key = if trap { "feed-trap" } else { "feed-blast" };
+                (
+                    [owner, target],
+                    tr!(key, target = self.name(target), damage = damage),
+                )
+            }
+            EventKind::Afflicted { fighter, effect } => {
+                ([fighter; 2], self.told_effect(fighter, effect))
+            }
+            EventKind::Freed { fighter } => {
+                ([fighter; 2], tr!("feed-freed", who = self.name(fighter)))
+            }
             EventKind::Stun { fighter } => {
                 ([fighter; 2], tr!("feed-stunned", who = self.name(fighter)))
             }
@@ -625,6 +629,24 @@ impl FightView {
                 return None;
             }
         })
+    }
+
+    /// The feed's sentence for `effect` just left on `fighter`.
+    fn told_effect(&self, fighter: FighterId, effect: Effect) -> String {
+        let who = self.name(fighter);
+        match effect {
+            Effect::Bleeding { part, .. } => {
+                tr!(
+                    "feed-bleeding",
+                    who = who,
+                    part = part_name(part).to_lowercase()
+                )
+            }
+            Effect::Blinded { percent } => tr!("feed-blinded", who = who, percent = percent),
+            Effect::Trapped { damage_percent } => {
+                tr!("feed-trapped", who = who, percent = damage_percent)
+            }
+        }
     }
 
     /// The feed's sentence for cast `kind`: who cast what on whom, missed or for how
@@ -744,9 +766,14 @@ impl FightView {
         for mine in &self.arena.mines {
             let (x, y) = (to_f32(mine.position.x), to_f32(mine.position.y));
             let radius = to_f32(self.arena.mine_rules.radius);
-            draw_circle(x, y, radius, MINE);
+            let (body, armed) = if self.arena.trap_of(mine).is_some() {
+                (TRAP, TRAP_ARMED)
+            } else {
+                (MINE, MINE_ARMED)
+            };
+            draw_circle(x, y, radius, body);
             if self.arena.tick >= mine.armed_at {
-                draw_circle(x, y, radius * 0.4, MINE_ARMED);
+                draw_circle(x, y, radius * 0.4, armed);
             }
         }
         // Blood under everyone.
@@ -913,6 +940,7 @@ fn popup(kind: EventKind) -> Option<(FighterId, String, Tone, f32)> {
             let key = match effect {
                 Effect::Bleeding { .. } => "popup-bleeding",
                 Effect::Blinded { .. } => "popup-blinded",
+                Effect::Trapped { .. } => "popup-trapped",
             };
             (fighter, tr!(key), Tone::Wound, IMPACT_DELAY)
         }
@@ -931,6 +959,7 @@ fn popup(kind: EventKind) -> Option<(FighterId, String, Tone, f32)> {
         EventKind::Bled { .. }
         | EventKind::Death { .. }
         | EventKind::Rise { .. }
+        | EventKind::Freed { .. }
         | EventKind::Eliminated { .. }
         | EventKind::Pact { .. }
         | EventKind::PactBroken { .. }

@@ -6,7 +6,7 @@ use rand_chacha::rand_core::SeedableRng;
 use serde::{Deserialize, Serialize};
 
 use crate::ai::{Action, CombatAi};
-use crate::design_data::{AccuracyDrop, SpellData};
+use crate::design_data::{AccuracyDrop, SpellData, TrapData};
 use crate::fighter::injury::{Location, LocationWeights, Side, roll_location};
 use crate::fighter::personality::Personality;
 use crate::fighter::{Effect, Fighter, FighterId, Lasting, Stats, percent_of, pick};
@@ -474,15 +474,35 @@ impl Arena {
         self
     }
 
-    /// What fighters walk around: the pillars, and the mines on the floor, armed or not.
+    /// What `fighter` walks around: the pillars, and the mines on the floor it sees,
+    /// armed or not: all but the traps of others (`Arena::sees`).
     #[must_use]
-    pub fn obstacles(&self) -> Vec<Pillar> {
-        let mines = self.mines.iter().map(|m| Pillar {
-            x: m.position.x,
-            y: m.position.y,
-            radius: self.mine_rules.radius,
-        });
+    pub fn obstacles(&self, fighter: FighterId) -> Vec<Pillar> {
+        let mines = self
+            .mines
+            .iter()
+            .filter(|m| self.sees(fighter, m))
+            .map(|m| Pillar {
+                x: m.position.x,
+                y: m.position.y,
+                radius: self.mine_rules.radius,
+            });
         self.pillars.iter().copied().chain(mines).collect()
+    }
+
+    /// Whether `fighter` sees `mine`: everyone sees a mine, only its layer a trap
+    /// (`SpellData::trap`).
+    #[must_use]
+    pub fn sees(&self, fighter: FighterId, mine: &Mine) -> bool {
+        mine.owner == fighter || self.trap_of(mine).is_none()
+    }
+
+    /// What `mine` does to the fighter it catches, if it is a trap.
+    #[must_use]
+    pub fn trap_of(&self, mine: &Mine) -> Option<TrapData> {
+        self.fighter(mine.owner)
+            .and_then(|o| o.spells.get(mine.spell))
+            .and_then(|s| s.trap)
     }
 
     /// At most one fighter still fighting: the others are dead, gave up, were knocked
@@ -509,7 +529,7 @@ pub fn tick(arena: &mut Arena, ais: &mut [Box<dyn CombatAi>]) {
         update_pacts(arena);
         for (i, ai) in ais.iter_mut().enumerate() {
             let fighter = &arena.fighters[i];
-            if fighter.is_standing() && !fighter.fleeing {
+            if fighter.is_free() && !fighter.fleeing {
                 let action = ai.decide(arena, fighter.id);
                 arena.fighters[i].action = action;
             }
@@ -575,7 +595,8 @@ pub fn hit_percent(attacker: &Stats, defender: &Stats, rules: &AccuracyRules) ->
 }
 
 /// Chance in percent that `spell` hits: `hit_percent` with the accuracy the attacker
-/// has for now (`Fighter::accuracy`), times the spell's `accuracy_percent`.
+/// has for now (`Fighter::accuracy`), times the spell's `accuracy_percent`; 100 for a
+/// spell that never misses (`SpellData::sure_hit`).
 #[must_use]
 pub fn spell_hit_percent(
     attacker: &Fighter,
@@ -583,6 +604,9 @@ pub fn spell_hit_percent(
     spell: &SpellData,
     rules: &AccuracyRules,
 ) -> u32 {
+    if spell.sure_hit {
+        return 100;
+    }
     let aim = Stats {
         accuracy: attacker.accuracy(),
         ..attacker.stats
@@ -712,10 +736,19 @@ pub fn shot_blocked(pillars: &[Pillar], from: Vec2, to: Vec2) -> bool {
         .any(|p| segment_distance(Vec2::new(p.x, p.y), from, to) < p.radius)
 }
 
+/// Whether a pillar stops `spell` from `caster` to `target`: a ranged spell, unless it
+/// flies over them (`SpellData::over_obstacles`), with a pillar across its line.
+#[must_use]
+pub fn spell_blocked(arena: &Arena, caster: &Fighter, spell: &SpellData, target: &Fighter) -> bool {
+    spell.range == Range::Ranged
+        && !spell.over_obstacles
+        && shot_blocked(&arena.pillars, caster.position, target.position)
+}
+
 /// Whether `caster`'s spell `spell` would do anything now against `target`, cooldown
 /// and cost aside: a gathering spell on a floor with an element, its reserve not full;
-/// any other in reach, a ranged one with a clear shot, a mine with the target out of
-/// its own blast.
+/// any other in reach, a ranged one with a clear shot (`spell_blocked`), a mine that
+/// blasts with the target out of its own blast.
 #[must_use]
 pub fn of_use(arena: &Arena, caster: &Fighter, spell: usize, target: &Fighter) -> bool {
     let Some(data) = caster.spells.get(spell) else {
@@ -726,9 +759,10 @@ pub fn of_use(arena: &Arena, caster: &Fighter, spell: usize, target: &Fighter) -
     }
     let distance = edge_distance(caster, target);
     distance <= data.reach
-        && !(data.range == Range::Ranged
-            && shot_blocked(&arena.pillars, caster.position, target.position))
-        && !(data.mine && distance + 2.0 * RADIUS <= arena.mine_rules.blast_radius)
+        && !spell_blocked(arena, caster, data, target)
+        && !(data.mine
+            && data.trap.is_none()
+            && distance + 2.0 * RADIUS <= arena.mine_rules.blast_radius)
 }
 
 /// `Fighter::can_cast` against `target`: the auto attack as soon as none of the other
@@ -870,7 +904,7 @@ fn cool_down(arena: &mut Arena) {
 fn cast_order(arena: &mut Arena) -> Vec<usize> {
     let fighters = &arena.fighters;
     let mut order: Vec<usize> = (0..fighters.len())
-        .filter(|&i| fighters[i].is_standing() && chose_castable(arena, &fighters[i]))
+        .filter(|&i| fighters[i].is_free() && chose_castable(arena, &fighters[i]))
         .collect();
     order.sort_by_key(|&i| std::cmp::Reverse(fighters[i].stats.speed));
     for tie in order.chunk_by_mut(|&a, &b| fighters[a].stats.speed == fighters[b].stats.speed) {
@@ -999,7 +1033,7 @@ fn distance(a: Vec2, b: Vec2) -> f64 {
 }
 
 /// Mines whose time is up are gone; an armed mine touched by a fighter still in the
-/// fight blasts (`blast`).
+/// fight blasts (`blast`), or, a trap, catches the first of them standing (`spring`).
 fn blast_mines(arena: &mut Arena) {
     let tick = arena.tick;
     arena.mines.retain(|m| tick < m.gone_at);
@@ -1007,23 +1041,116 @@ fn blast_mines(arena: &mut Arena) {
     let mut k = 0;
     while k < arena.mines.len() {
         let mine = arena.mines[k];
-        let touched = tick >= mine.armed_at
-            && arena
-                .fighters
-                .iter()
-                .any(|f| f.is_fighting() && distance(f.position, mine.position) < reach);
-        if touched {
-            arena.mines.remove(k);
-            blast(arena, mine);
+        let trap = arena.trap_of(&mine);
+        let touching = |f: &Fighter| {
+            let catchable = if trap.is_some() {
+                f.is_standing()
+            } else {
+                f.is_fighting()
+            };
+            catchable && distance(f.position, mine.position) < reach
+        };
+        let touched = if tick >= mine.armed_at {
+            arena.fighters.iter().position(touching)
         } else {
-            k += 1;
+            None
+        };
+        match (touched, trap) {
+            (Some(t), Some(trap)) => {
+                arena.mines.remove(k);
+                spring(arena, mine, t, trap);
+            }
+            (Some(_), None) => {
+                arena.mines.remove(k);
+                blast(arena, mine);
+            }
+            (None, _) => k += 1,
         }
     }
 }
 
+/// Trap `mine` catches fighter `t`: it bites with its spell's damage, never missed, on
+/// a part drawn by `Arena::hits`, and, if the fighter still fights, holds it for its
+/// `ticks` (`Effect::Trapped`): it stops, and neither acts nor runs for the door until
+/// freed. The damage counts for the trap's layer, unless caught in its own.
+fn spring(arena: &mut Arena, mine: Mine, t: usize, trap: TrapData) {
+    let Some(o) = usize::try_from(mine.owner.0)
+        .ok()
+        .filter(|&o| o < arena.fighters.len())
+    else {
+        return;
+    };
+    let (owner, target) = (&arena.fighters[o], &arena.fighters[t]);
+    let amount = spell_damage(&owner.stats, &target.stats, &owner.spells[mine.spell]);
+    let part = arena.hits.map(|w| roll_location(&mut arena.rng, &w));
+    let target = &mut arena.fighters[t];
+    let hp_before = target.hp;
+    target.take_damage(amount);
+    let (damage, id) = (hp_before - target.hp, target.id);
+    arena.log.push(Event {
+        tick: arena.tick,
+        kind: EventKind::Blast {
+            owner: mine.owner,
+            spell: mine.spell,
+            target: id,
+            damage,
+            part,
+        },
+    });
+    strike(arena, (id, t), (damage, false), DamageKind::Neutral, None);
+    if t != o {
+        let owner = &mut arena.fighters[o];
+        owner.round_damage = owner.round_damage.saturating_add(damage);
+    }
+    let target = &mut arena.fighters[t];
+    if !target.is_fighting() || trap.ticks == 0 {
+        return;
+    }
+    let effect = Effect::Trapped {
+        damage_percent: trap.damage_percent,
+    };
+    target.effects.push(Lasting {
+        effect,
+        ticks_left: trap.ticks,
+    });
+    target.action = Action::Wait;
+    arena.log.push(Event {
+        tick: arena.tick,
+        kind: EventKind::Afflicted {
+            fighter: id,
+            effect,
+        },
+    });
+}
+
+/// `damage`, raised by the share `target` takes more caught in a trap, rounded up.
+fn on_trapped(target: &Fighter, damage: u32) -> u32 {
+    target.trapped().map_or(damage, |percent| {
+        let raised = (u64::from(damage) * (100 + u64::from(percent))).div_ceil(100);
+        u32::try_from(raised).unwrap_or(u32::MAX)
+    })
+}
+
+/// Fighter `t`, just hit for `damage` HP, gets out of the trap holding it, if any and
+/// the hit took HP.
+fn free(arena: &mut Arena, t: usize, damage: u32) {
+    let f = &mut arena.fighters[t];
+    if damage == 0 || f.trapped().is_none() {
+        return;
+    }
+    f.effects
+        .retain(|l| !matches!(l.effect, Effect::Trapped { .. }));
+    let fighter = f.id;
+    arena.log.push(Event {
+        tick: arena.tick,
+        kind: EventKind::Freed { fighter },
+    });
+}
+
 /// `mine` blasts: every fighter still in the fight within `blast_radius`, its owner
-/// included, takes its spell's damage, never missed, on a part drawn by `Arena::hits`,
-/// then the hit's effects (`strike`, `afflict`); the damage to others counts for its owner.
+/// included, takes its spell's damage, never missed, more if caught in a trap, which the
+/// blast frees it from, on a part drawn by `Arena::hits`, then the hit's effects
+/// (`strike`, `afflict`); the damage to others counts for its owner.
 fn blast(arena: &mut Arena, mine: Mine) {
     let Some(o) = usize::try_from(mine.owner.0)
         .ok()
@@ -1043,6 +1170,7 @@ fn blast(arena: &mut Arena, mine: Mine) {
         }
         let owner = &arena.fighters[o];
         let amount = spell_damage(&owner.stats, &target.stats, &owner.spells[mine.spell]);
+        let amount = on_trapped(target, amount);
         let part = arena.hits.map(|w| roll_location(&mut arena.rng, &w));
         let target = &mut arena.fighters[t];
         let hp_before = target.hp;
@@ -1058,6 +1186,7 @@ fn blast(arena: &mut Arena, mine: Mine) {
                 part,
             },
         });
+        free(arena, t, damage);
         let cut = part.filter(|_| kind == DamageKind::Cutting);
         strike(arena, (id, t), (damage, false), kind, cut);
         afflict(arena, (mine.owner, t), (bleed_percent, part), accuracy_drop);
@@ -1068,8 +1197,9 @@ fn blast(arena: &mut Arena, mine: Mine) {
     }
 }
 
-/// The spell, target and target index of fighter `i`'s cast, if it may land: both
-/// standing and not allied, the spell ready, affordable and in reach, a shot's line clear.
+/// The spell, target and target index of fighter `i`'s cast, if it may land: the caster
+/// free, the target standing, not allied, the spell ready, affordable and in reach, a
+/// shot's line clear (`spell_blocked`).
 fn ready_cast(arena: &Arena, i: usize) -> Option<(usize, FighterId, usize)> {
     let caster = &arena.fighters[i];
     let Action::Cast { spell, target } = caster.action else {
@@ -1077,23 +1207,52 @@ fn ready_cast(arena: &Arena, i: usize) -> Option<(usize, FighterId, usize)> {
     };
     let t = usize::try_from(target.0).ok()?;
     let defender = arena.fighters.get(t)?;
-    let ready = caster.is_standing()
+    let data = &caster.spells[spell];
+    let ready = caster.is_free()
         && defender.is_standing()
         && caster.id != target
         && !arena.allied(caster.id, target)
         && can_cast_on(arena, caster, spell, defender)
-        && caster.spells[spell].gathers == 0
-        && edge_distance(caster, defender) <= caster.spells[spell].reach
-        && (caster.spells[spell].range != Range::Ranged
-            || !shot_blocked(&arena.pillars, caster.position, defender.position));
+        && data.gathers == 0
+        && edge_distance(caster, defender) <= data.reach
+        && !spell_blocked(arena, caster, data, defender);
     ready.then_some((spell, target, t))
 }
 
-/// Fighter `i` casts `spell` on the target: one hit roll for all its blows
-/// (`SpellData::blows`), then, for each blow while the target still fights, where it
-/// lands is drawn, the same damage dealt and logged, and its effects on the target
-/// follow (`strike`, `afflict`).
+/// Fighter `i` casts `spell` on the target, and on every other fighter standing within
+/// its `area` of the target, but itself and its ally, in the arena's order (`hit`).
 fn cast(arena: &mut Arena, i: usize, spell: usize, (target, t): (FighterId, usize)) {
+    let caster = &mut arena.fighters[i];
+    caster.spend(spell);
+    caster.action = Action::Wait;
+    let (me, radius) = (caster.id, caster.spells[spell].area);
+    let center = arena.fighters[t].position;
+    let around: Vec<(FighterId, usize)> = arena
+        .fighters
+        .iter()
+        .enumerate()
+        .filter(|&(k, f)| {
+            radius > 0.0
+                && k != t
+                && f.id != me
+                && f.is_standing()
+                && !arena.allied(me, f.id)
+                && distance(f.position, center) <= radius
+        })
+        .map(|(k, f)| (f.id, k))
+        .collect();
+    hit(arena, i, spell, (target, t));
+    for target in around {
+        hit(arena, i, spell, target);
+    }
+}
+
+/// Fighter `i`'s `spell` reaches the target: one hit roll for all its blows
+/// (`SpellData::blows`), then, for each blow while the target still fights, where it
+/// lands is drawn, the same damage dealt, more on a target caught in a trap, which the
+/// first blow taking HP frees, logged, and its effects on the target follow (`strike`,
+/// `afflict`).
+fn hit(arena: &mut Arena, i: usize, spell: usize, (target, t): (FighterId, usize)) {
     let (caster, defender) = (&arena.fighters[i], &arena.fighters[t]);
     let data = &caster.spells[spell];
     let chance = spell_hit_percent(caster, &defender.stats, data, &arena.accuracy);
@@ -1107,9 +1266,6 @@ fn cast(arena: &mut Arena, i: usize, spell: usize, (target, t): (FighterId, usiz
     let kind = data.damage_kind;
     let sure_cut_hits = data.sure_cut_hits.filter(|_| !missed);
     let (bleed_percent, accuracy_drop) = (data.bleed_percent, data.accuracy_drop);
-    let caster = &mut arena.fighters[i];
-    caster.spend(spell);
-    caster.action = Action::Wait;
     let caster = caster.id;
     for blow in 0..blows {
         if blow > 0 && !arena.fighters[t].is_fighting() {
@@ -1121,6 +1277,7 @@ fn cast(arena: &mut Arena, i: usize, spell: usize, (target, t): (FighterId, usiz
         };
         let defender = &mut arena.fighters[t];
         let hp_before = defender.hp;
+        let amount = on_trapped(defender, amount);
         defender.take_damage(amount);
         let damage = hp_before - defender.hp;
         let sure = sure_cut_hits.is_some_and(|hits| {
@@ -1138,6 +1295,7 @@ fn cast(arena: &mut Arena, i: usize, spell: usize, (target, t): (FighterId, usiz
                 part,
             },
         });
+        free(arena, t, damage);
         let cut = part.filter(|_| kind == DamageKind::Cutting);
         strike(arena, (target, t), (damage, sure), kind, cut);
         if !missed {
@@ -1191,8 +1349,8 @@ fn afflict(
     }
 }
 
-/// Counts down the effects on every fighter still in the fight, which wear off at 0. A
-/// bleeding part takes `BleedRules::hp_percent_per_second` of the fighter's max HP, at
+/// Counts down the effects on every fighter still in the fight, which wear off at 0, a
+/// trap letting its fighter go (`EventKind::Freed`). A bleeding part takes `BleedRules::hp_percent_per_second` of the fighter's max HP, at
 /// least 1, at the end of each of its seconds, as damage its source dealt: it may die
 /// or give up.
 fn wear_off(arena: &mut Arena) {
@@ -1203,6 +1361,7 @@ fn wear_off(arena: &mut Arena) {
             continue;
         }
         let mut bled = Vec::new();
+        let mut freed = false;
         for lasting in &mut f.effects {
             lasting.ticks_left = lasting.ticks_left.saturating_sub(1);
             if let Effect::Bleeding { part, source } = lasting.effect
@@ -1210,8 +1369,16 @@ fn wear_off(arena: &mut Arena) {
             {
                 bled.push((part, source));
             }
+            freed |= matches!(lasting.effect, Effect::Trapped { .. }) && lasting.ticks_left == 0;
         }
         f.effects.retain(|l| l.ticks_left > 0);
+        if freed {
+            let fighter = f.id;
+            arena.log.push(Event {
+                tick: arena.tick,
+                kind: EventKind::Freed { fighter },
+            });
+        }
         for (part, source) in bled {
             let f = &mut arena.fighters[t];
             if !f.is_fighting() {
@@ -1315,8 +1482,8 @@ fn give_up(arena: &mut Arena, t: usize) -> Option<EventKind> {
     Some(EventKind::Flee { fighter })
 }
 
-/// Every fighter on the run and standing walks for the door, every tick, around the
-/// pillars, the mines and the other fighters: one standing in the way blocks it.
+/// Every fighter on the run and free walks for the door, every tick, around the
+/// pillars, the mines it sees and the other fighters: one standing in the way blocks it.
 // ponytail: goes round the nearest one in the way, no plan to lure a blocker off the door.
 fn run_for_the_door(arena: &mut Arena) {
     let Some(door) = arena.door else {
@@ -1324,7 +1491,7 @@ fn run_for_the_door(arena: &mut Arena) {
     };
     for i in 0..arena.fighters.len() {
         let f = &arena.fighters[i];
-        if !f.fleeing || !f.is_standing() {
+        if !f.fleeing || !f.is_free() {
             continue;
         }
         let others = arena
@@ -1336,7 +1503,7 @@ fn run_for_the_door(arena: &mut Arena) {
                 y: o.position.y,
                 radius: RADIUS,
             });
-        let obstacles: Vec<Pillar> = arena.obstacles().into_iter().chain(others).collect();
+        let obstacles: Vec<Pillar> = arena.obstacles(f.id).into_iter().chain(others).collect();
         let direction = path_direction(&obstacles, f.position, door);
         arena.fighters[i].action = Action::Move(direction);
     }
@@ -1361,12 +1528,12 @@ fn escape(arena: &mut Arena) {
     }
 }
 
-/// Moves every fighter standing that chose to, at its speed slowed by the ground, and
+/// Moves every fighter free that chose to, at its speed slowed by the ground, and
 /// sped up by fear for one running for the door.
 fn move_fighters(arena: &mut Arena) {
     let ground = f64::from(arena.speed_percent) / 100.0;
     let fear = f64::from(arena.flee_speed_percent) / 100.0;
-    for f in arena.fighters.iter_mut().filter(|f| f.is_standing()) {
+    for f in arena.fighters.iter_mut().filter(|f| f.is_free()) {
         if let Action::Move(direction) = f.action {
             let length = direction.length();
             if length > 0.0 {
@@ -2194,6 +2361,52 @@ mod tests {
     }
 
     #[test]
+    fn a_sure_shot_never_misses_even_blinded() {
+        let mut arena = duel(0.5).with_accuracy(ACCURACY);
+        arena.fighters[1].stats.speed = 300;
+        arena.fighters[0].effects.push(Lasting {
+            effect: Effect::Blinded { percent: 100 },
+            ticks_left: 600,
+        });
+        let chance = |arena: &Arena| {
+            spell_hit_percent(
+                &arena.fighters[0],
+                &arena.fighters[1].stats,
+                &arena.fighters[0].spells[0],
+                &arena.accuracy,
+            )
+        };
+        assert_eq!(chance(&arena), ACCURACY.min_percent);
+        arena.fighters[0].spells[0].sure_hit = true;
+        assert_eq!(chance(&arena), 100);
+        play(&mut arena, &[HIT, Action::Wait], 121);
+        // Ticks 0, 30, 60, 90 and 120: five hits, none missed.
+        assert_eq!(arena.fighters[1].hp, 100 - 5 * HIT_DAMAGE);
+    }
+
+    #[test]
+    fn a_spell_with_an_area_hits_everyone_around_its_target_but_the_caster_s_ally() {
+        let mut fighters = vec![
+            fighter(0, 5.0, 5.0),
+            fighter(1, 10.0, 5.0),
+            fighter(2, 11.5, 5.0),
+            fighter(3, 13.0, 5.0),
+            fighter(4, 10.0, 6.5),
+        ];
+        let spell = &mut fighters[0].spells[0];
+        (spell.range, spell.reach, spell.area) = (Range::Ranged, 10.0, 2.0);
+        let mut arena = Arena::new(20.0, 20.0, fighters, 0);
+        arena.pacts.push((FighterId(0), FighterId(4)));
+        let wait = Action::Wait;
+        play(&mut arena, &[HIT, wait, wait, wait, wait], 1);
+        let hp: Vec<u32> = arena.fighters.iter().map(|f| f.hp).collect();
+        assert_eq!(hp, [100, 90, 90, 100, 100]);
+        let report = crate::log::Report::new(&arena);
+        assert_eq!(report.fighters[0].spells_cast, 1);
+        assert_eq!(report.fighters[0].damage_dealt, 20);
+    }
+
+    #[test]
     fn a_fighter_that_lost_a_limb_is_out_alive_and_never_hit_again() {
         let mut arena = cutting_duel(SURE, landing(0, 0, 1, 1));
         play(&mut arena, &[HIT, HIT_BACK], 1);
@@ -2469,6 +2682,76 @@ mod tests {
         }
     }
 
+    /// [`mining`] with a trap holding for 3 s, taking 50 % more damage.
+    fn trapping() -> Arena {
+        let mut arena = mining(600);
+        arena.fighters[0].spells[0].trap = Some(TrapData {
+            ticks: 90,
+            damage_percent: 50,
+        });
+        arena
+    }
+
+    #[test]
+    fn a_trap_unseen_by_others_holds_who_steps_on_it_until_a_hit_frees_it() {
+        let mut arena = trapping();
+        let wait = Action::Wait;
+        play(&mut arena, &[LAY, wait, wait], 1);
+        assert_eq!(arena.mines.len(), 1);
+        // Its layer walks around it, the others do not see it.
+        assert_eq!(arena.obstacles(FighterId(0)).len(), 1);
+        assert_eq!(arena.obstacles(FighterId(1)), Vec::new());
+        play(&mut arena, &[wait, wait, wait], 29);
+        assert_eq!(arena.fighters[1].trapped(), None, "not armed yet");
+        play(&mut arena, &[wait, wait, wait], 1);
+        // It bites the one on it alone, 1 m away from fighter 2.
+        let hp: Vec<u32> = arena.fighters.iter().map(|f| f.hp).collect();
+        assert_eq!(hp, [100, 90, 100]);
+        assert_eq!(arena.fighters[1].trapped(), Some(50));
+        assert_eq!(arena.mines, Vec::new());
+        // Held: it neither moves nor strikes back.
+        let position = arena.fighters[1].position;
+        let away = Action::Move(Vec2::new(1.0, 0.0));
+        play(&mut arena, &[wait, away, wait], 60);
+        assert_eq!(arena.fighters[1].position, position);
+        // Tick 96: fighter 2 hits it for 10, 50 % more, which frees it.
+        play(&mut arena, &[wait, away, HIT], 6);
+        assert_eq!(arena.fighters[1].hp, 90 - 15);
+        assert_eq!(arena.fighters[1].trapped(), None);
+        assert!(arena.log.iter().any(|e| e.kind
+            == EventKind::Freed {
+                fighter: FighterId(1)
+            }));
+        play(&mut arena, &[wait, away, HIT], 30);
+        assert_eq!(arena.fighters[1].hp, 90 - 15 - 10);
+        assert_ne!(arena.fighters[1].position, position);
+        let text = crate::log::log_text(&arena);
+        assert!(text.contains("fighter 0 casts Coup: a trap is laid"));
+        assert!(text.contains("fighter 0's Coup snaps: fighter 1 takes 10 damage"));
+        assert!(text.contains("fighter 1 is caught in a trap, taking 50 % more damage"));
+        assert!(text.contains("fighter 1 is out of the trap"));
+    }
+
+    #[test]
+    fn a_trap_lets_its_fighter_go_in_time() {
+        let mut arena = trapping();
+        arena.fighters.pop();
+        let wait = Action::Wait;
+        play(&mut arena, &[LAY, wait], 31);
+        assert_eq!(arena.fighters[1].trapped(), Some(50));
+        play(&mut arena, &[wait, wait], 89);
+        assert_eq!(arena.fighters[1].trapped(), Some(50));
+        play(&mut arena, &[wait, wait], 1);
+        assert_eq!(arena.fighters[1].trapped(), None);
+        assert_eq!(arena.fighters[1].effects, Vec::new());
+        assert_eq!(
+            arena.log.last().map(|e| e.kind),
+            Some(EventKind::Freed {
+                fighter: FighterId(1)
+            })
+        );
+    }
+
     fn pillar(x: f64, y: f64, radius: f64) -> Pillar {
         Pillar { x, y, radius }
     }
@@ -2543,6 +2826,17 @@ mod tests {
         play(&mut arena, &[HIT, Action::Wait], 1);
         assert_eq!(arena.fighters[1].hp, 100);
         arena.pillars.clear();
+        play(&mut arena, &[HIT, Action::Wait], 1);
+        assert_eq!(arena.fighters[1].hp, 100 - HIT_DAMAGE);
+    }
+
+    #[test]
+    fn a_spell_over_obstacles_flies_over_a_pillar() {
+        let mut fighters = vec![fighter(0, 5.0, 5.0), fighter(1, 9.0, 5.0)];
+        let spell = &mut fighters[0].spells[0];
+        (spell.range, spell.reach, spell.over_obstacles) = (Range::Ranged, 10.0, true);
+        let mut arena = Arena::new(20.0, 20.0, fighters, 0);
+        arena.pillars = vec![pillar(7.0, 5.0, 0.5)];
         play(&mut arena, &[HIT, Action::Wait], 1);
         assert_eq!(arena.fighters[1].hp, 100 - HIT_DAMAGE);
     }

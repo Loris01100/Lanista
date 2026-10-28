@@ -1,16 +1,12 @@
 ---
 source: crates/lanista_core/tests/reference_fights.rs
-expression: standard_duel(65)
+expression: standard_duel(87)
 ---
-[   42] fighter 1 casts Éclair on fighter 0: 35 damage to the left arm
-[   60] fighter 1 casts Trait de feu on fighter 0: 19 damage to the left leg
-[  108] fighter 1 casts Trait de feu on fighter 0: 19 damage to the right leg
-[  126] fighter 1 casts Coup de bâton on fighter 0: 12 damage to the head
-[  126] fighter 0 casts Guillotine on fighter 1: 48 damage to the right arm
-[  132] fighter 0 casts Bouclier tranchant on fighter 1: 25 damage to the head
-[  138] fighter 0 casts Slash sanguin on fighter 1: 14 damage to the right arm
-[  138] fighter 1 loses its right arm
+[   72] fighter 0 casts Guillotine on fighter 1: missed
+[   72] fighter 1 casts Guillotine on fighter 0: 48 damage to the body
+[   78] fighter 0 casts Bouclier tranchant on fighter 1: 25 damage to the right arm
+[   78] fighter 1 loses its right arm
 
-over after 139 ticks, winner: fighter 0
-fighter 0: 15/100 HP, dealt 87, taken 85, 3 spells cast, 0 missed
-fighter 1: 13/100 HP, dealt 85, taken 87, 4 spells cast, 0 missed, lost its right arm
+over after 79 ticks, winner: fighter 0
+fighter 0: 52/100 HP, dealt 25, taken 48, 2 spells cast, 1 missed
+fighter 1: 75/100 HP, dealt 48, taken 25, 1 spells cast, 0 missed, lost its right arm

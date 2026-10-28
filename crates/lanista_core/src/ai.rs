@@ -1,6 +1,6 @@
 use crate::combat::{
-    AccuracyRules, Arena, Range, Vec2, can_cast_on, edge_distance, of_use, path_direction,
-    shot_blocked, spell_damage, spell_hit_percent,
+    AccuracyRules, Arena, Mine, RADIUS, Range, Vec2, can_cast_on, edge_distance, of_use,
+    path_direction, shot_blocked, spell_damage, spell_hit_percent,
 };
 use crate::design_data::SpellData;
 use crate::fighter::form::Form;
@@ -115,7 +115,8 @@ pub fn score_actions(arena: &Arena, me: FighterId) -> Vec<(Action, f64)> {
     };
     let distance = edge_distance(me, target);
     let blocked = shot_blocked(&arena.pillars, me.position, target.position);
-    let usable = |data: &SpellData| !(blocked && data.range == Range::Ranged);
+    let usable =
+        |data: &SpellData| !(blocked && data.range == Range::Ranged && !data.over_obstacles);
     for (spell, data) in me.spells.iter().enumerate() {
         if !(can_cast_on(arena, me, spell, target) && of_use(arena, me, spell, target)) {
             continue;
@@ -138,7 +139,7 @@ pub fn score_actions(arena: &Arena, me: FighterId) -> Vec<(Action, f64)> {
     } else {
         fear(&me.condition) * (1.0 - share(me.hp, me.stats.hp)) * RETREAT_WEIGHT
     };
-    let toward = path_direction(&arena.obstacles(), me.position, target.position);
+    let toward = path_direction(&arena.obstacles(me.id), me.position, target.position);
     let longest_reach = |f: &Fighter| f.spells.iter().map(|s| s.reach).fold(0.0, f64::max);
     let usable_reach = me
         .spells
@@ -178,16 +179,24 @@ pub fn score_actions(arena: &Arena, me: FighterId) -> Vec<(Action, f64)> {
     scored
 }
 
-/// Stepping away from the mine not yet armed whose blast would hurt `me` most, worth
-/// the share of its HP that blast would take; straight away from `target` when the mine
-/// lies right under it. Nothing without such a mine.
+/// Stepping away from the mine not yet armed, among those `me` sees (`Arena::sees`),
+/// whose blast would hurt it most, or a trap of its own that would catch it, worth the
+/// share of its HP that blast or bite would take; straight away from `target` when the
+/// mine lies right under it. Nothing without such a mine.
 fn escape_mine(arena: &Arena, me: &Fighter, target: &Fighter) -> Option<(Action, f64)> {
     let gap = |from: Vec2| Vec2::new(me.position.x - from.x, me.position.y - from.y);
+    let reach = |m: &Mine| {
+        if arena.trap_of(m).is_some() {
+            RADIUS + arena.mine_rules.radius
+        } else {
+            arena.mine_rules.blast_radius
+        }
+    };
     arena
         .mines
         .iter()
         .filter(|m| {
-            m.armed_at > arena.tick && gap(m.position).length() <= arena.mine_rules.blast_radius
+            arena.sees(me.id, m) && m.armed_at > arena.tick && gap(m.position).length() <= reach(m)
         })
         .filter_map(|m| {
             let owner = arena.fighter(m.owner)?;

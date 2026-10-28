@@ -353,7 +353,7 @@ impl CareerFighter {
     }
 
     /// This fighter ready to fight in an arena, as fighter `id` at `position`, in its
-    /// loadout, with what its off hand brings, and without the `refused` pieces of
+    /// loadout, with what its off hand brings and the speed it keeps, and without the `refused` pieces of
     /// equipment: their maluses on its stats, its cutting hits blunt without weapon.
     ///
     /// # Panics
@@ -383,6 +383,7 @@ impl CareerFighter {
         let mut stats = self.fighting_stats(rules);
         if let Some(loadout) = class_data.loadout(self.loadout) {
             stats = loadout.off_hand.stats(stats, self.ambidextrous, equipment);
+            stats.speed = percent_of(stats.speed, loadout.speed_percent);
         }
         let stats = rules.ease.stats(stats, self.ease_with(self.loadout));
         let stats = refused
@@ -2063,7 +2064,10 @@ mod tests {
         assert_eq!(suggested_plan(&f, 2).loadout, 1);
         let at = Vec2::new(0.0, 0.0);
         let fighter = f.combat_fighter(FighterId(0), Refused::NONE, &data, at);
-        assert_eq!(fighter.spells[1], data.classes[0].loadouts[1].spell);
+        assert_eq!(
+            Some(&fighter.spells[1]),
+            data.classes[0].loadouts[1].spell.as_ref()
+        );
     }
 
     #[test]

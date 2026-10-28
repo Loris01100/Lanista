@@ -1,0 +1,26 @@
+---
+source: crates/lanista_core/tests/reference_fights.rs
+expression: "loadout_duel(ArenaKind::Pillars, [(4, 0), (3, 0)], 42)"
+---
+[   30] fighter 0 casts Pluie de flèches on fighter 1: 18 damage to the left leg
+[   48] fighter 1 casts Mine: a mine is laid
+[   48] fighter 0 casts Tir précis on fighter 1: 28 damage to the head
+[   54] fighter 1 casts Récolte: 2 elements gathered
+[   60] fighter 1 casts Jette on fighter 0: 21 damage to the left leg
+[   78] fighter 0 casts Piège à ours: a trap is laid
+[  120] fighter 1 casts Récolte: 2 elements gathered
+[  123] fighter 0's Piège à ours snaps: fighter 1 takes 6 damage to the head
+[  123] fighter 1 is caught in a trap, taking 50 % more damage
+[  222] fighter 0 casts Tir précis on fighter 1: 42 damage to the body
+[  222] fighter 1 is out of the trap
+[  228] fighter 1 casts Jette on fighter 0: 21 damage to the body
+[  234] fighter 1 casts Récolte: 2 elements gathered
+[  276] fighter 1 casts Jette on fighter 0: 21 damage to the left leg
+[  300] fighter 1 casts Récolte: 2 elements gathered
+[  324] fighter 1 casts Jette on fighter 0: 21 damage to the body
+[  330] fighter 0 casts Pluie de flèches on fighter 1: 6 damage to the left arm
+[  330] fighter 1 dies
+
+over after 331 ticks, winner: fighter 0
+fighter 0: 16/100 HP, dealt 100, taken 84, 5 spells cast, 0 missed
+fighter 1: 0/100 HP, dealt 84, taken 100, 9 spells cast, 0 missed

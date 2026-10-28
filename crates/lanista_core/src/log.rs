@@ -48,6 +48,10 @@ pub enum EventKind {
     Rise {
         fighter: FighterId,
     },
+    /// Got out of the trap holding it (`fighter::Effect::Trapped`), hit or in time.
+    Freed {
+        fighter: FighterId,
+    },
     /// Did not get up after a stun: out of the fight, alive.
     KnockedOut {
         fighter: FighterId,
@@ -86,14 +90,15 @@ pub enum EventKind {
         spell: usize,
         amount: u32,
     },
-    /// `fighter` cast its mine spell `spell`: a mine lies at its target's feet
-    /// (`Arena::mines`).
+    /// `fighter` cast its mine spell `spell`: a mine, or a trap, lies at its target's
+    /// feet (`Arena::mines`).
     Lay {
         fighter: FighterId,
         spell: usize,
     },
     /// `owner`'s mine, laid with its spell `spell`, blasted and took `damage` HP from
     /// `target`, on `part`, drawn only in an arena with rules; `owner` itself may be one.
+    /// For a trap, it caught `target`, its `Afflicted` following if it still fights.
     Blast {
         owner: FighterId,
         spell: usize,
@@ -220,6 +225,7 @@ impl Report {
                 | EventKind::Surrender { .. }
                 | EventKind::Flee { .. }
                 | EventKind::Rise { .. }
+                | EventKind::Freed { .. }
                 | EventKind::KnockedOut { .. }
                 | EventKind::Sever { .. }
                 | EventKind::Pact { .. }
@@ -234,15 +240,12 @@ impl Report {
             }
         }
         let over = arena.is_over();
-        let winner = if over {
-            arena
-                .fighters
-                .iter()
-                .find(|f| f.is_fighting())
-                .map(|f| f.id)
-        } else {
-            None
-        };
+        let winner = arena
+            .fighters
+            .iter()
+            .find(|f| f.is_fighting())
+            .map(|f| f.id)
+            .filter(|_| over);
         Self {
             ticks: arena.tick,
             over,
@@ -334,6 +337,7 @@ pub fn log_text(arena: &Arena) -> String {
             | EventKind::Flee { fighter }
             | EventKind::Stun { fighter }
             | EventKind::Rise { fighter }
+            | EventKind::Freed { fighter }
             | EventKind::KnockedOut { fighter } => {
                 let what = match event.kind {
                     EventKind::Death { .. } => "dies",
@@ -341,6 +345,7 @@ pub fn log_text(arena: &Arena) -> String {
                     EventKind::Flee { .. } => "runs for the door",
                     EventKind::Stun { .. } => "is stunned",
                     EventKind::Rise { .. } => "gets up",
+                    EventKind::Freed { .. } => "is out of the trap",
                     _ => "is knocked out",
                 };
                 writeln!(text, "[{:>5}] fighter {} {what}", event.tick, fighter.0)
@@ -409,6 +414,14 @@ fn spell_name(arena: &Arena, fighter: FighterId, spell: usize) -> &str {
         .map_or("?", |s| s.name.as_str())
 }
 
+/// Whether `fighter`'s spell `spell` lays traps (`SpellData::trap`).
+fn is_trap(arena: &Arena, fighter: FighterId, spell: usize) -> bool {
+    arena
+        .fighter(fighter)
+        .and_then(|f| f.spells.get(spell))
+        .is_some_and(|s| s.trap.is_some())
+}
+
 /// The log's line for elements gathered, or a mine laid or blasting.
 fn ground_line(arena: &Arena, kind: EventKind) -> String {
     match kind {
@@ -422,9 +435,14 @@ fn ground_line(arena: &Arena, kind: EventKind) -> String {
             spell_name(arena, fighter, spell)
         ),
         EventKind::Lay { fighter, spell } => format!(
-            "fighter {} casts {}: a mine is laid",
+            "fighter {} casts {}: a {} is laid",
             fighter.0,
-            spell_name(arena, fighter, spell)
+            spell_name(arena, fighter, spell),
+            if is_trap(arena, fighter, spell) {
+                "trap"
+            } else {
+                "mine"
+            }
         ),
         EventKind::Blast {
             owner,
@@ -433,9 +451,14 @@ fn ground_line(arena: &Arena, kind: EventKind) -> String {
             damage,
             part,
         } => format!(
-            "fighter {}'s {} blasts: fighter {} takes {damage} damage{}",
+            "fighter {}'s {} {}: fighter {} takes {damage} damage{}",
             owner.0,
             spell_name(arena, owner, spell),
+            if is_trap(arena, owner, spell) {
+                "snaps"
+            } else {
+                "blasts"
+            },
             target.0,
             part.map_or(String::new(), |p| format!(" to the {}", limb_name(p)))
         ),
@@ -454,6 +477,13 @@ fn effect_line(kind: EventKind) -> String {
             fighter,
             effect: Effect::Blinded { percent },
         } => format!("fighter {} loses {percent} % accuracy", fighter.0),
+        EventKind::Afflicted {
+            fighter,
+            effect: Effect::Trapped { damage_percent },
+        } => format!(
+            "fighter {} is caught in a trap, taking {damage_percent} % more damage",
+            fighter.0
+        ),
         EventKind::Bled {
             fighter,
             part,
@@ -492,6 +522,7 @@ pub fn places(arena: &Arena) -> Vec<u32> {
                     | EventKind::Stun { .. }
                     | EventKind::Flee { .. }
                     | EventKind::Rise { .. }
+                    | EventKind::Freed { .. }
                     | EventKind::Pact { .. }
                     | EventKind::PactBroken { .. }
                     | EventKind::Afflicted { .. }

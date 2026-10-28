@@ -47,23 +47,24 @@ fn standard_duel(seed: u64) -> String {
     )
 }
 
-/// The standard duel of seed 7: the first fighter is stunned, then knocked out.
+/// The standard duel of seed 128: a hunter's first shot stuns the first fighter, who
+/// does not get up.
 #[test]
 fn a_standard_duel_with_a_knock_out() {
-    insta::assert_snapshot!(standard_duel(7));
+    insta::assert_snapshot!(standard_duel(128));
 }
 
-/// The standard duel of seed 65: a cutting hit takes off the second fighter's arm.
+/// The standard duel of seed 87: a cutting hit takes off the second fighter's arm.
 #[test]
 fn a_standard_duel_with_a_lost_limb() {
-    insta::assert_snapshot!(standard_duel(65));
+    insta::assert_snapshot!(standard_duel(87));
 }
 
-/// The standard duel of seed 22: a gladiator makes its opponent's head bleed, then
-/// takes it off.
+/// The standard duel of seed 97: a gladiator makes a hunter's arm bleed, then takes
+/// its head off.
 #[test]
 fn a_standard_duel_with_a_beheading() {
-    insta::assert_snapshot!(standard_duel(22));
+    insta::assert_snapshot!(standard_duel(97));
 }
 
 /// A murmillo against an augur, both in their first loadout, on the floor of `kind`:
@@ -121,6 +122,13 @@ fn a_duel_in_a_narrow_arena() {
 #[test]
 fn two_swords_against_two_daggers_on_sand() {
     insta::assert_snapshot!(loadout_duel(ArenaKind::Sand, [(2, 1), (3, 1)], 42));
+}
+
+/// A hunter with a heavy bow against a field master with a dagger and a shield among
+/// pillars: its rain of arrows flies over them, its trap catches the thrower.
+#[test]
+fn a_heavy_bow_against_a_dagger_and_shield_among_pillars() {
+    insta::assert_snapshot!(loadout_duel(ArenaKind::Pillars, [(4, 0), (3, 0)], 42));
 }
 
 /// A melee of 8, murmillos and augurs in turn with the standard duel's stats, timid

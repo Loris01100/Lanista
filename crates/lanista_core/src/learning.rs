@@ -506,7 +506,7 @@ mod tests {
     #[test]
     fn a_fight_ends_with_a_winner_rewarded() {
         let mut env = Environment::new(DesignData::load().unwrap());
-        let (steps, arena) = play(&mut env, 3);
+        let (steps, arena) = play(&mut env, 2);
         let last = steps.last().unwrap();
         assert!(arena.is_over(), "the fighters closed in and fought");
         let winner = arena

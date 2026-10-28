@@ -564,6 +564,10 @@ fn states(f: &Fighter) -> Vec<(String, bool)> {
                 tr!("state-blinded", percent = percent, seconds = seconds),
                 false,
             ),
+            Effect::Trapped { damage_percent } => (
+                tr!("state-trapped", percent = damage_percent, seconds = seconds),
+                false,
+            ),
         });
     }
     lines
@@ -816,12 +820,12 @@ mod tests {
         assert!(rects.iter().all(|r| (r.x - MARGIN).abs() < 1e-6));
     }
 
-    /// The loser of seed 13 dies: its stain starts at the death and keeps
+    /// The loser of seed 1 dies: its stain starts at the death and keeps
     /// spreading after the fight, the winner never bleeds.
     #[test]
     fn only_the_dead_bleed_from_their_death_on() {
-        let mut screen = screen(13);
-        // The fight lasts 133 ticks, under 5 s.
+        let mut screen = screen(1);
+        // The fight lasts 91 ticks, under 5 s.
         for _ in 0..60 * 5 {
             if screen
                 .fight()
@@ -848,11 +852,11 @@ mod tests {
         assert!(screen.fight().looks[1 - dead].dead_for.is_none());
     }
 
-    /// In the standard duel of seed 7, fighter 0 is knocked out: it lies down, alive,
+    /// In the standard duel of seed 128, fighter 0 is knocked out: it lies down, alive,
     /// without blood.
     #[test]
     fn a_fighter_knocked_out_lies_down_without_bleeding() {
-        let mut screen = screen(7);
+        let mut screen = screen(128);
         while screen.running() {
             screen.advance(1.0 / 60.0);
         }
@@ -910,10 +914,10 @@ mod tests {
         assert!(view.result().contains(&fell), "{:?}", view.result());
     }
 
-    /// In the standard duel of seed 65, fighter 1 loses an arm: it lies down, alive.
+    /// In the standard duel of seed 87, fighter 1 loses an arm: it lies down, alive.
     #[test]
     fn a_fighter_that_lost_a_limb_lies_down_alive() {
-        let mut screen = screen(65);
+        let mut screen = screen(87);
         while screen.running() {
             screen.advance(1.0 / 60.0);
         }
@@ -934,14 +938,14 @@ mod tests {
         );
     }
 
-    /// In the standard duel of seed 7, fighter 1 knocks fighter 0 out: a defeat for the
+    /// In the standard duel of seed 128, fighter 1 knocks fighter 0 out: a defeat for the
     /// club of fighter 0, its opponent told as such; a victory for the club of fighter 1.
     #[test]
     fn the_result_tells_the_club_whether_it_won() {
         let data = Rc::new(DesignData::load().unwrap());
         let watch = |club: u32| {
             let duel = Watched {
-                arena: random_duel(&data, 7),
+                arena: random_duel(&data, 128),
                 cast: Cast {
                     names: vec!["Datis".into(), "Augure".into()],
                     club: vec![FighterId(club)],
@@ -1073,15 +1077,15 @@ mod tests {
         assert!(bled, "no fight bled");
     }
 
-    /// In the standard duel of seed 7, fighter 1's Guillotine takes 48 HP off fighter
-    /// 0's head at tick 78 and stuns it: its damage and its stun rise over fighter 0
+    /// In the standard duel of seed 128, fighter 1's Tir précis takes 28 HP off fighter
+    /// 0's right leg at tick 18 and stuns it: its damage and its stun rise over fighter 0
     /// once the blow lands, then fade away; the feed tells the blow, the stun and the
     /// knock-out.
     #[test]
     fn a_hit_shows_its_damage_over_its_target_and_in_the_feed() {
         use crate::fight_view::POPUP_SECONDS;
 
-        let mut screen = screen(7);
+        let mut screen = screen(128);
         while screen.fight().arena.log.is_empty() {
             screen.advance(1.0 / 60.0);
         }
@@ -1102,7 +1106,7 @@ mod tests {
         assert_eq!(
             words(&screen),
             [
-                (FighterId(0), "-48".to_owned(), Tone::Damage),
+                (FighterId(0), "-28".to_owned(), Tone::Damage),
                 (FighterId(0), "étourdi".to_owned(), Tone::Out)
             ]
         );
@@ -1112,7 +1116,7 @@ mod tests {
         assert_eq!(
             lines,
             [
-                "combattant 1 : Guillotine sur combattant 0, -48 PV (tête)",
+                "combattant 1 : Tir précis sur combattant 0, -28 PV (jambe droite)",
                 "combattant 0 est étourdi."
             ]
         );
