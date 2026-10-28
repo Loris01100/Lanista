@@ -2999,6 +2999,33 @@ mod tests {
     /// The milestone of phase 5: seasons follow one another where rankings, champions and
     /// markets change without the player.
     #[test]
+    fn everyone_fights_at_most_once_a_week() {
+        let data = DesignData::load().unwrap();
+        let mut state = GameState::new(1, &data);
+        // Each fighter's fights so far, by id; one who moved counts where it is active.
+        let fights = |s: &GameState| {
+            let mut fights = std::collections::BTreeMap::new();
+            let rivals = s.rivals.iter().flat_map(|r| &r.fighters);
+            for f in rivals.chain(&s.free_agents).chain(&s.fighters) {
+                if f.status == Status::Active || !fights.contains_key(&f.id) {
+                    fights.insert(f.id, f.record.wins + f.record.losses + f.record.draws);
+                }
+            }
+            fights
+        };
+        // Outsider title defenses come every few weeks: a season holds many.
+        for week in 1..=u64::from(data.calendar.season_weeks()) {
+            let before = fights(&state);
+            let decisions = state.suggested_decisions(&data);
+            next_week(&mut state, &decisions, &data);
+            for (id, n) in fights(&state) {
+                let had = before.get(&id).copied().unwrap_or(n);
+                assert!(n <= had + 1, "week {week}: fighter {id} fought {}", n - had);
+            }
+        }
+    }
+
+    #[test]
     fn three_seasons_live_without_the_player() {
         let data = DesignData::load().unwrap();
         let mut state = GameState::new(1, &data);

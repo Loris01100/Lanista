@@ -9,14 +9,50 @@ use crate::fighter::fame::FightResult;
 use super::outsiders::{outsider, put_outsider};
 use super::{GameState, opposite};
 
+/// The title defenses between outsiders of the week, with the colosseum's index, the
+/// champion and the challenger, settled before anyone plays from the rankings as they
+/// stand: each outsider champion at its deadline against the best-ranked other
+/// outsider. None of them is `taken` (met by the club's fighters this week) nor in
+/// another defense: a fighter has one fight a week, and a champion taken defends the
+/// week after.
+pub(super) fn outsider_defenses(
+    state: &GameState,
+    taken: &[Contender],
+    data: &DesignData,
+) -> Vec<(usize, Contender, Contender)> {
+    let rosters = state.rosters();
+    let mut taken = taken.to_vec();
+    let mut defenses = Vec::new();
+    for (c, colosseum) in state.colosseums.iter().enumerate() {
+        let Some(champion) = colosseum.champion.filter(|&champion| {
+            !champion.is_club()
+                && !taken.contains(&champion)
+                && rosters.active(champion)
+                && state.week >= colosseum.defense_deadline(&data.world)
+        }) else {
+            continue;
+        };
+        let challenger = colosseum
+            .active_ranking(rosters)
+            .map(|r| r.contender)
+            .find(|&o| !o.is_club() && o != champion && !taken.contains(&o));
+        if let Some(challenger) = challenger {
+            taken.extend([champion, challenger]);
+            defenses.push((c, champion, challenger));
+        }
+    }
+    defenses
+}
+
 /// The colosseums' end of `week`: a title whose holder no longer fights goes to the
-/// best ranked still fighting; an outsider champion at its deadline defends the title
-/// against the best-ranked other outsider, a club champion past it loses the title.
-/// Those who no longer fight leave the rankings. Returns what happened to the titles,
-/// with the colosseum's index.
+/// best ranked still fighting; an outsider champion defends the title in its settled
+/// `defenses` ([`outsider_defenses`]), if both are still there, a club champion past
+/// its deadline loses the title. Those who no longer fight leave the rankings. Returns
+/// what happened to the titles, with the colosseum's index.
 pub(super) fn end_colosseum_weeks(
     state: &mut GameState,
     week: u64,
+    defenses: &[(usize, Contender, Contender)],
     data: &DesignData,
 ) -> Vec<(usize, TitleNews)> {
     let mut titles = Vec::new();
@@ -32,16 +68,14 @@ pub(super) fn end_colosseum_weeks(
             .into_iter()
             .collect();
         news.extend(colosseum.strip(week, rosters, &data.world));
-        let defense = match colosseum.champion {
-            Some(champion)
-                if !champion.is_club() && week >= colosseum.defense_deadline(&data.world) =>
-            {
-                colosseum
-                    .best_outsider(rosters, Some(champion))
-                    .map(|challenger| (champion, challenger))
-            }
-            _ => None,
-        };
+        // Sold, gone or crowned elsewhere in the week: no defense.
+        let defense = defenses
+            .iter()
+            .find(|&&(at, _, _)| at == c)
+            .map(|&(_, champion, challenger)| (champion, challenger))
+            .filter(|&(champion, challenger)| {
+                colosseum.champion == Some(champion) && rosters.active(challenger)
+            });
         if let Some((champion, challenger)) = defense {
             let arena = data
                 .world

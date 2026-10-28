@@ -13,7 +13,7 @@ use crate::staff::{StaffMove, StaffNews};
 use serde::{Deserialize, Serialize};
 
 use super::clubs::{club_lives, off_season_starts, rival_staff, staff_week, wealth_changes};
-use super::colosseums::{end_colosseum_weeks, title_fight};
+use super::colosseums::{end_colosseum_weeks, outsider_defenses, title_fight};
 use super::melee::melees;
 use super::outsiders::{met, opponent, outsider_weeks, pay_rival};
 use super::transfers::{answer_offer, contracts_end, market_moves, rival_market, trim_market};
@@ -86,9 +86,13 @@ pub fn next_week(state: &mut GameState, decisions: &Decisions, data: &DesignData
     let (mut wanted, title_meetings) = week_plans(state, decisions, data);
     rival_staff(state, data);
     let mut plans = state.outsider_plans(data);
-    // The outsiders who had their fight, against the club's fighters or in a melee.
-    let mut fought = Vec::new();
     let reserved = reserved(&wanted, &title_meetings);
+    let defenses = outsider_defenses(state, &reserved, data);
+    // The outsiders who have their fight this week: those the club's fighters meet in a
+    // title fight or a challenge, those in a title defense, then those who meet the
+    // club's fighters or fight in a melee. One fight a week: no one else draws them.
+    let mut fought = reserved.clone();
+    fought.extend(defenses.iter().flat_map(|&(_, a, b)| [a, b]));
     let mut melee_weeks = melees(
         state,
         (&mut wanted, &mut plans),
@@ -153,7 +157,7 @@ pub fn next_week(state: &mut GameState, decisions: &Decisions, data: &DesignData
     market.extend(answer_offer(state, &decisions.moves, data, &mut ledger));
     market.extend(contracts_end(state, data));
     birthdays(state, &mut reports, data);
-    let wealth = end_week(state, &mut titles, data);
+    let wealth = end_week(state, &mut titles, &defenses, data);
     let rankings_before = rankings_before(&reports, &rankings);
     let summary = WeekSummary {
         reports,
@@ -377,11 +381,13 @@ fn reserved(wanted: &[WeekPlan], title_meetings: &[Option<(usize, Contender)>]) 
 
 /// The world's end of the week, once everyone fought: pack leaders lift their clubs'
 /// morale, each club's new wealth at the start of the off-season, the rival clubs'
-/// market, the colosseums' titles, told in `titles`, the market topped up and trimmed,
-/// and the next week opens. Returns the club's new wealth if it changed.
+/// market, the colosseums' titles with the outsiders' `defenses`, told in `titles`, the
+/// market topped up and trimmed, and the next week opens. Returns the club's new wealth
+/// if it changed.
 fn end_week(
     state: &mut GameState,
     titles: &mut Vec<(usize, TitleNews)>,
+    defenses: &[(usize, Contender, Contender)],
     data: &DesignData,
 ) -> Option<Wealth> {
     let week = state.week;
@@ -413,7 +419,7 @@ fn end_week(
     let wealth = wealth_changes(state, data);
     club_lives(state, data);
     rival_market(state, data);
-    titles.extend(end_colosseum_weeks(state, state.week, data));
+    titles.extend(end_colosseum_weeks(state, state.week, defenses, data));
     let changes = titles.iter().filter(|&&(_, news)| match news {
         TitleNews::Fight { result, .. } => !title_kept(result),
         TitleNews::Stripped { .. } | TitleNews::Vacated { .. } => true,
