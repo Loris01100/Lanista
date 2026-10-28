@@ -326,13 +326,31 @@ pub(super) fn pay_rival(rivals: &mut [Rival], club: usize, amount: i64) {
 }
 
 /// The colosseum and the outsider met in a fight (`activity`) by the club's fighter
-/// `me`, the club's `i`th: the rival fighter challenged while still fighting (someone
-/// may have killed it earlier in the week), otherwise the closest in Elo there, at
-/// random between the equally close, among those registered there (in `plans`) who
-/// have not `fought` yet, those `me` bears a grudge against first, or else among those
-/// ranked there, or else among anyone.
+/// `me`, the club's `i`th: one of `likely_opponents`, at random between them; the
+/// rival fighter challenged without a draw.
 pub(super) fn opponent(
     rng: &mut ChaCha8Rng,
+    world: (&[Colosseum], &[Rival], &[CareerFighter], &WorldRules),
+    me: (Activity, usize, &CareerFighter),
+    plans: &OutsiderPlans,
+    fought: &[Contender],
+) -> Option<(usize, Contender)> {
+    let (c, likely) = likely_opponents(world, me, plans, fought)?;
+    match (me.0, likely.as_slice()) {
+        (Activity::Challenge(_, rival), &[only]) if only == Contender::Rival(rival) => {
+            Some((c, only))
+        }
+        _ => Some((c, pick_opponent(rng, &likely)?)),
+    }
+}
+
+/// The colosseum and the outsiders the club's fighter `me`, the club's `i`th, may meet
+/// in a fight (`activity`): the rival fighter challenged while still fighting (someone
+/// may have killed it earlier in the week), otherwise the closest in Elo there, all
+/// those equally close, among those registered there (in `plans`) who have not
+/// `fought` yet, those `me` bears a grudge against first, or else among those ranked
+/// there, or else among anyone.
+pub(super) fn likely_opponents(
     (colosseums, rivals, free_agents, rules): (
         &[Colosseum],
         &[Rival],
@@ -342,7 +360,7 @@ pub(super) fn opponent(
     (activity, i, me): (Activity, usize, &CareerFighter),
     plans: &OutsiderPlans,
     fought: &[Contender],
-) -> Option<(usize, Contender)> {
+) -> Option<(usize, Vec<Contender>)> {
     let (id, chosen) = match activity {
         Activity::Fight(id) => (id, None),
         Activity::Challenge(id, rival) => (id, Some(Contender::Rival(rival))),
@@ -354,7 +372,7 @@ pub(super) fn opponent(
         outsider(rivals, free_agents, *o).is_some_and(|f| f.status == Status::Active)
     };
     if let Some(rival) = chosen.filter(active) {
-        return Some((c, rival));
+        return Some((c, vec![rival]));
     }
     let everyone: Vec<Contender> = outsiders(rivals, free_agents)
         .filter(|o| !fought.contains(o))
@@ -389,7 +407,7 @@ pub(super) fn opponent(
         .into_iter()
         .filter(|o| gap(o) == closest)
         .collect();
-    Some((c, pick_opponent(rng, &nearest)?))
+    Some((c, nearest))
 }
 
 #[cfg(test)]

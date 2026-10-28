@@ -667,6 +667,31 @@ impl GameState {
         Some((c, rival))
     }
 
+    /// The colosseum and the outsiders the club's fighter `i` may meet in a fight, a
+    /// title fight or a challenge (`activity`) if the week were played now, one of them
+    /// at random; `None` for any other activity. The other club fighters' fights of the
+    /// week, and the market, may still change it.
+    #[must_use]
+    pub fn likely_opponents(
+        &self,
+        i: usize,
+        activity: Activity,
+        data: &DesignData,
+    ) -> Option<(usize, Vec<Contender>)> {
+        if let Activity::TitleFight(id) = activity {
+            return self.title_opponent(i, id, data).map(|(c, o)| (c, vec![o]));
+        }
+        let me = self.fighters.get(i)?;
+        let world = (
+            self.colosseums.as_slice(),
+            self.rivals.as_slice(),
+            self.free_agents.as_slice(),
+            &data.world,
+        );
+        let plans = self.outsider_plans(data);
+        outsiders::likely_opponents(world, (activity, i, me), &plans, &[])
+    }
+
     /// The price the club of rival fighter `id` first asks: its value at the club's
     /// `sell_percent`. Hidden from the player, who learns it from a counter-offer.
     #[must_use]
@@ -1731,8 +1756,18 @@ mod tests {
         // Past the season's opening, whose melees keep the rival fighters busy.
         state.week = 2;
         let rome = ColosseumId(1);
+        // Shown before the week: the opponent is one of them.
+        let (c, likely) = state
+            .likely_opponents(0, Activity::Fight(rome), &data)
+            .unwrap();
+        assert_eq!(c, 1);
+        let likely: Vec<_> = (likely.iter())
+            .map(|&o| state.rosters().fighter(o).unwrap().potential)
+            .collect();
+        assert_eq!(state.likely_opponents(0, Activity::Rest, &data), None);
         let summary = next_week(&mut state, &plan(Activity::Fight(rome), false), &data);
         let fight = summary.reports[0].as_ref().unwrap().fight.as_ref().unwrap();
+        assert!(likely.contains(&fight.opponent().unwrap().potential));
         let fee = i64::from(rules.colosseums[1].purses.entry_fee);
         assert_eq!(flows(&summary)[0], (Flow::EntryFee, -fee));
         let rome = &state.colosseums[1];

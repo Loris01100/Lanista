@@ -52,13 +52,14 @@ use crate::lang::tr;
 use crate::options;
 use crate::saves;
 use crate::texts::{
-    Article, activity_name, against_text, challenger_text, change, class_name, club_name,
-    colosseum_name, colosseum_rules_name, contender_name, continent_in, date_in_sentence,
-    date_text, fight_text, fighter_name, illness_effect, illness_text, injury_effect, injury_text,
-    loadout_name, market_news_text, money_line, move_text, named_club, origin_place, priced,
-    result_text, rival_fighter_name, staff_move_text, staff_news_text, stage_name, stat_names,
-    temperament_name, temperament_text, title_article, title_changed, trait_memory, trait_name,
-    trait_text, wealth_name, wealth_text, week_lines, world_article, year_text,
+    Article, activity_name, against_text, arena_effect, arena_name, challenger_text, change,
+    class_name, club_name, colosseum_name, colosseum_rules_name, contender_name, continent_in,
+    date_in_sentence, date_text, fight_text, fighter_name, illness_effect, illness_text,
+    injury_effect, injury_text, loadout_name, market_news_text, money_line, move_text, named_club,
+    origin_place, priced, range_texts, result_text, rival_fighter_name, staff_move_text,
+    staff_news_text, stage_name, stat_names, temperament_name, temperament_text, title_article,
+    title_changed, trait_memory, trait_name, trait_text, wealth_name, wealth_text, week_lines,
+    world_article, year_text,
 };
 use crate::theme;
 use crate::title_screen::{Slot, read_slots, slot_text};
@@ -159,6 +160,9 @@ pub struct ClubScreen {
     terms_draft: Option<Move>,
     /// The club's fighter the sheet of a fighter out of the club is compared with.
     compared: Option<usize>,
+    /// The likely opponents of the club's fighter in its fight (`fight_preview`), for
+    /// the week, the fighter and the activity they were found for.
+    likely: Option<Likely>,
     /// Which fighters out of the club the market lists.
     market_filter: MarketFilter,
     /// How the market's lists are sorted.
@@ -214,6 +218,7 @@ impl ClubScreen {
             offer_draft: None,
             terms_draft: None,
             compared: None,
+            likely: None,
             market_filter: MarketFilter::default(),
             market_sort: MarketSort::default(),
             market_tab: MarketTab::FreeAgents,
@@ -936,6 +941,8 @@ impl ClubScreen {
                 let care = self.state.care_rules(data);
                 plan_editor(ui, plan, f, &special, (&self.state, &care), data);
                 challenge_picker(ui, plan, index, &self.state, data);
+                let key = (self.state.week, index, plan.activity);
+                fight_preview(ui, key, &mut self.likely, &self.state, data);
             } else {
                 ui.label(tr!("sheet-career-over"));
             }
@@ -1443,6 +1450,62 @@ fn plan_editor(
     if ill && fights {
         ui.colored_label(egui::Color32::LIGHT_RED, tr!("plan-fight-ill-advised"));
     }
+}
+
+/// The week, the club's fighter and its activity its likely opponents are found for.
+type LikelyKey = (u64, usize, Activity);
+
+/// The likely opponents found for a key (`GameState::likely_opponents`).
+type Likely = (LikelyKey, Option<(usize, Vec<Contender>)>);
+
+/// What the club's fighter `i` would find in its fight (`activity`) of the week: the
+/// colosseum's arena and, but in a melee, its likely opponent as the recruiter sees
+/// it, found again in `cache` only when the key changes, as it takes a while.
+fn fight_preview(
+    ui: &mut egui::Ui,
+    key: LikelyKey,
+    cache: &mut Option<Likely>,
+    state: &GameState,
+    data: &DesignData,
+) {
+    let (_, i, activity) = key;
+    let Some(id) = activity.colosseum() else {
+        return;
+    };
+    let arena = data.world.arena(id);
+    ui.label(tr!("colosseum-arena-chip", arena = arena_name(arena)))
+        .on_hover_text(arena_effect(arena));
+    if cache.as_ref().is_none_or(|(k, _)| *k != key) {
+        *cache = Some((key, state.likely_opponents(i, activity, data)));
+    }
+    let Some((_, Some((_, likely)))) = cache.as_ref() else {
+        return;
+    };
+    let rosters = state.rosters();
+    let Some((first, f)) = likely
+        .first()
+        .and_then(|&o| rosters.fighter(o).map(|f| (o, f)))
+    else {
+        return;
+    };
+    let others = likely.len() - 1;
+    ui.label(tr!(
+        "plan-likely-opponent",
+        name = contender_name(first, state, data),
+        class = class_name(f, data),
+        others = others
+    ));
+    let scouting = state.scouting();
+    egui::Grid::new("likely opponent").show(ui, |ui| {
+        for (stat, seen) in stat_names()
+            .into_iter()
+            .zip(range_texts(f, &scouting, data))
+        {
+            ui.label(stat);
+            ui.label(seen);
+            ui.end_row();
+        }
+    });
 }
 
 /// The challenges the club's fighter `i` may send, one list per colosseum of the club's
@@ -3143,5 +3206,11 @@ mod tests {
             screen.shown_role = role;
             draw(&mut screen);
         }
+        // A fight on the sheet shows its likely opponent.
+        screen.decisions.plans[0].activity = Activity::Fight(ColosseumId(0));
+        screen.view = View::Sheet(0);
+        draw(&mut screen);
+        let likely = screen.likely.as_ref().and_then(|(_, l)| l.as_ref());
+        assert!(likely.is_some_and(|(_, l)| !l.is_empty()));
     }
 }

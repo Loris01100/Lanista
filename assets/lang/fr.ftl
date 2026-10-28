@@ -611,6 +611,11 @@ plan-focus-all = toutes les stats
 plan-no-armour = Sans armure
 plan-no-armour-effect = Défenses très réduites, renommée +{ $fame }
 plan-fight-ill-advised = Combat déconseillé
+plan-likely-opponent = Adversaire probable : { $name }, { $class }{ $others ->
+    [0] {""}
+    [one] {" "}(ou un autre à la même cote)
+   *[other] {" "}(ou l'un des { $others } autres à la même cote)
+}
 plan-challenge = Défier :
 plan-challenge-rival = { $name }, Elo { $elo }{ $grudge ->
         [true] , revanche à prendre
