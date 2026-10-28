@@ -179,6 +179,9 @@ pub struct ClubScreen {
     options_open: bool,
     /// Whether the game's window (save slots, main menu) is laid over the screen.
     game_open: bool,
+    /// Whether the window telling the player the club has no fighter is laid over the
+    /// screen.
+    no_fighter_open: bool,
     /// The continent the colosseums view shows, the club's at first.
     shown_continent: Continent,
     /// The prestige of the colosseums the colosseums view shows; `None` shows them all.
@@ -227,6 +230,7 @@ impl ClubScreen {
             shown_issue: None,
             options_open: false,
             game_open: false,
+            no_fighter_open: false,
             bindings,
         };
         screen.read_journal();
@@ -727,6 +731,45 @@ impl ClubScreen {
         leave
     }
 
+    /// Whether the week can be played: the club has an active fighter, or signs or buys
+    /// one this week (the market answers at the week's end).
+    fn can_play(&self) -> bool {
+        self.state
+            .fighters
+            .iter()
+            .any(|f| f.status == Status::Active)
+            || self
+                .decisions
+                .moves
+                .iter()
+                .any(|m| matches!(m, Move::Sign(..) | Move::Offer(..)))
+    }
+
+    /// The window over the screen while `no_fighter_open`: the club has no fighter, the
+    /// week waits for one from the market.
+    fn no_fighter_window(&mut self, ui: &egui::Context) {
+        if !self.no_fighter_open {
+            return;
+        }
+        let mut market = false;
+        let mut close = false;
+        let modal = egui::Modal::new(egui::Id::new("no-fighter")).show(ui, |ui| {
+            ui.set_width(GAME_WIDTH);
+            ui.heading(tr!("no-fighter-title"));
+            ui.label(tr!("no-fighter-text"));
+            ui.horizontal(|ui| {
+                market = ui.button(tr!("no-fighter-market")).clicked();
+                close = ui.button(tr!("close")).clicked();
+            });
+        });
+        if market {
+            self.go_to(View::Market);
+        }
+        if market || close || modal.should_close() {
+            self.no_fighter_open = false;
+        }
+    }
+
     /// Each save slot with « Sauvegarder », or the question before saving over one.
     fn save_slots(&mut self, ui: &mut egui::Ui) {
         if let Some(slot) = self.confirm {
@@ -1041,7 +1084,10 @@ impl Screen for ClubScreen {
             return self.watch(fights);
         }
         // Échap and Espace belong to the windows laid over the screen while they are open.
-        let keys = !self.options_open && !self.game_open && self.terms_draft.is_none();
+        let keys = !self.options_open
+            && !self.game_open
+            && !self.no_fighter_open
+            && self.terms_draft.is_none();
         if keys && self.bindings.pressed(ui, &Action::Quit) {
             if self.view == View::Menu {
                 return Transition::Pop;
@@ -1085,8 +1131,13 @@ impl Screen for ClubScreen {
             let fight: Vec<Watched> = all.into_iter().filter(|w| w.arena.seed == seed).collect();
             return self.watch(fight);
         }
+        self.no_fighter_window(ui);
         if play {
-            self.next_week();
+            if self.can_play() {
+                self.next_week();
+            } else {
+                self.no_fighter_open = true;
+            }
         }
         Transition::None
     }
@@ -2999,6 +3050,22 @@ mod tests {
         *gone = gone.moved(Contender::FreeAgent(0));
         screen.go_to(View::Outside(Target::Rival(id)));
         assert_eq!(screen.view, View::Outside(Target::FreeAgent(0)));
+    }
+
+    #[test]
+    fn a_club_without_fighter_plays_no_week_unless_it_buys_one() {
+        let mut screen = screen(7);
+        assert!(screen.can_play());
+        for f in &mut screen.state.fighters {
+            f.status = Status::Released;
+        }
+        assert!(!screen.can_play());
+        let id = RivalId {
+            club: 1,
+            fighter: 0,
+        };
+        screen.decisions.moves.push(Move::Offer(id, 100));
+        assert!(screen.can_play());
     }
 
     #[test]
