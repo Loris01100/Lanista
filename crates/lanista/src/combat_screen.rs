@@ -452,7 +452,7 @@ fn spells(ui: &mut egui::Ui, f: &Fighter) {
 }
 
 /// What a spell costs, its mana, endurance and elements, the free ones left out.
-fn cost_text(cost: &Cost) -> String {
+pub(crate) fn cost_text(cost: &Cost) -> String {
     [
         (cost.mana, "cost-mana"),
         (cost.endurance, "cost-endurance"),
@@ -466,7 +466,7 @@ fn cost_text(cost: &Cost) -> String {
 }
 
 /// `ticks` in seconds with one decimal, rounded up, a comma before it: « 1,4 ».
-fn tenths(ticks: u32) -> String {
+pub(crate) fn tenths(ticks: u32) -> String {
     let tenths = (u64::from(ticks) * 10).div_ceil(u64::from(TICKS_PER_SECOND));
     format!("{},{}", tenths / 10, tenths % 10)
 }

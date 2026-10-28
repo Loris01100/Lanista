@@ -9,6 +9,7 @@ mod colosseums;
 mod market;
 mod roster;
 mod staff;
+mod wiki;
 
 use std::path::PathBuf;
 
@@ -17,6 +18,7 @@ use colosseums::{ContinentPart, arrow, contender_view, ranking_recap};
 use market::SortBy;
 use market::{MarketFilter, MarketSort, MarketTab};
 use std::rc::Rc;
+use wiki::Entry;
 
 use lanista_core::calendar::{CalendarRules, Date, SeasonPhase};
 use lanista_core::colosseum::{ColosseumId, Contender, Continent};
@@ -99,8 +101,8 @@ enum View {
     Outside(Target),
     /// The rival club at this index: profile, money, titles and fighters.
     Rival(usize),
-    /// The game's encyclopedia, empty for now.
-    Wiki,
+    /// The game's encyclopedia, open on this page.
+    Wiki(Entry),
 }
 
 /// One of the club's fights, as the fight summary shows it.
@@ -162,6 +164,8 @@ pub struct ClubScreen {
     market_tab: MarketTab,
     /// The post the staff view shows.
     shown_role: Role,
+    /// What the encyclopedia's search looks for; empty, the pages of the category shown.
+    wiki_search: String,
     /// The week of the newspaper's issue shown; `None` shows the last one.
     shown_issue: Option<u64>,
     /// Whether the options are laid over the screen.
@@ -210,6 +214,7 @@ impl ClubScreen {
             market_sort: MarketSort::default(),
             market_tab: MarketTab::FreeAgents,
             shown_role: Role::Trainer,
+            wiki_search: String::new(),
             shown_issue: None,
             options_open: false,
             game_open: false,
@@ -437,9 +442,10 @@ impl ClubScreen {
                 }
             }
             ui.separator();
-            let wiki = egui::SelectableLabel::new(self.view == View::Wiki, tr!("view-wiki"));
+            let open = matches!(self.view, View::Wiki(_));
+            let wiki = egui::SelectableLabel::new(open, tr!("view-wiki"));
             if ui.add(wiki).on_hover_text(tr!("view-wiki-hint")).clicked() {
-                self.go_to(View::Wiki);
+                self.go_to(View::Wiki(Entry::CATEGORIES[0]));
             }
             ui.toggle_value(&mut self.game_open, tr!("game"));
             ui.toggle_value(&mut self.options_open, tr!("options"));
@@ -1052,7 +1058,7 @@ impl Screen for ClubScreen {
             View::Staff => self.staff(ui),
             View::Outside(target) => self.outside(ui, target),
             View::Rival(club) => self.rival_club(ui, club),
-            View::Wiki => {}
+            View::Wiki(entry) => self.wiki(ui, entry),
         });
         if let Some(failed) =
             options::window(ui, audio, self.saves.as_deref(), &mut self.options_open)
@@ -3077,7 +3083,7 @@ mod tests {
                     View::Staff => screen.staff(ui),
                     View::Outside(target) => screen.outside(ui, target),
                     View::Rival(club) => screen.rival_club(ui, club),
-                    View::Wiki => {}
+                    View::Wiki(entry) => screen.wiki(ui, entry),
                 });
             });
         };
@@ -3091,6 +3097,10 @@ mod tests {
             View::Market,
             View::Rival(0),
         ];
+        let pages = wiki::Entry::CATEGORIES
+            .into_iter()
+            .chain(wiki::entries(&screen.data));
+        let views: Vec<View> = views.into_iter().chain(pages.map(View::Wiki)).collect();
         for view in views {
             screen.view = view;
             draw(&mut screen);
