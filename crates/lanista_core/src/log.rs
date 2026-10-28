@@ -31,8 +31,13 @@ pub enum EventKind {
     Death {
         fighter: FighterId,
     },
-    /// Reached its surrender threshold: out of the fight, alive.
+    /// Gave up: out of the fight, alive. In an arena with a door, once through it.
     Surrender {
+        fighter: FighterId,
+    },
+    /// Reached its surrender threshold in an arena with a door: runs for it, still in
+    /// the fight, until its `Surrender` or its `Death`.
+    Flee {
         fighter: FighterId,
     },
     /// Stunned by the hit just logged: down, neither acting nor hit.
@@ -213,6 +218,7 @@ impl Report {
                 }
                 EventKind::Death { .. }
                 | EventKind::Surrender { .. }
+                | EventKind::Flee { .. }
                 | EventKind::Rise { .. }
                 | EventKind::KnockedOut { .. }
                 | EventKind::Sever { .. }
@@ -323,24 +329,21 @@ pub fn log_text(arena: &Arena) -> String {
                     event.tick, caster.0, name, target.0
                 )
             }
-            EventKind::Death { fighter } => {
-                writeln!(text, "[{:>5}] fighter {} dies", event.tick, fighter.0)
-            }
-            EventKind::Surrender { fighter } => {
-                writeln!(text, "[{:>5}] fighter {} gives up", event.tick, fighter.0)
-            }
-            EventKind::Stun { fighter } => {
-                writeln!(text, "[{:>5}] fighter {} is stunned", event.tick, fighter.0)
-            }
-            EventKind::Rise { fighter } => {
-                writeln!(text, "[{:>5}] fighter {} gets up", event.tick, fighter.0)
-            }
-            EventKind::KnockedOut { fighter } => {
-                writeln!(
-                    text,
-                    "[{:>5}] fighter {} is knocked out",
-                    event.tick, fighter.0
-                )
+            EventKind::Death { fighter }
+            | EventKind::Surrender { fighter }
+            | EventKind::Flee { fighter }
+            | EventKind::Stun { fighter }
+            | EventKind::Rise { fighter }
+            | EventKind::KnockedOut { fighter } => {
+                let what = match event.kind {
+                    EventKind::Death { .. } => "dies",
+                    EventKind::Surrender { .. } => "gives up",
+                    EventKind::Flee { .. } => "runs for the door",
+                    EventKind::Stun { .. } => "is stunned",
+                    EventKind::Rise { .. } => "gets up",
+                    _ => "is knocked out",
+                };
+                writeln!(text, "[{:>5}] fighter {} {what}", event.tick, fighter.0)
             }
             EventKind::Sever {
                 fighter,
@@ -487,6 +490,7 @@ pub fn places(arena: &Arena) -> Vec<u32> {
                     | EventKind::Sever { fighter, .. } => fighter == f.id,
                     EventKind::Cast { .. }
                     | EventKind::Stun { .. }
+                    | EventKind::Flee { .. }
                     | EventKind::Rise { .. }
                     | EventKind::Pact { .. }
                     | EventKind::PactBroken { .. }

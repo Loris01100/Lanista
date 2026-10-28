@@ -552,8 +552,9 @@ mod tests {
         let (bold, timid) = (bold(f.clone(), 100), bold(f, 0));
         // The boldest still give up, at 10 % of their HP.
         assert!(model.death_chance(&bold) > 0.2);
-        assert!(model.death_chance(&timid) < 0.05);
-        assert!(model.death_chance(&bold) > 10.0 * model.death_chance(&timid));
+        // The timid give up early, but may still fall running for the door.
+        assert!(model.death_chance(&timid) < 0.1);
+        assert!(model.death_chance(&bold) > 5.0 * model.death_chance(&timid));
     }
 
     #[test]

@@ -2507,7 +2507,8 @@ mod tests {
             assert_eq!(summary.opponent(), Some(&fighter(seed + 100)));
             let mut replay = summary.start(&data);
             play(&mut replay);
-            let died = !replay.fighters[1].is_alive();
+            // Fallen at 0 HP, it may survive the fatal blow.
+            let died = !replay.fighters[1].is_alive() && !summary.survived_fatal_blow[1];
             assert_eq!(opponent.status == Status::Dead, died, "seed {seed}");
         }
     }

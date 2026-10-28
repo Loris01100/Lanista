@@ -786,11 +786,20 @@ fn layout_problem(layout: &ArenaLayout) -> Option<&'static str> {
             && p.y - p.radius >= gap
             && p.y + p.radius <= layout.height - gap)
     };
-    layout
-        .pillars
-        .iter()
-        .any(walled_in)
-        .then_some("a pillar without radius or less than a fighter's width from a wall")
+    if layout.pillars.iter().any(walled_in) {
+        return Some("a pillar without radius or less than a fighter's width from a wall");
+    }
+    let door = layout.door;
+    let inside = (0.0..=layout.width).contains(&door.x) && (0.0..=layout.height).contains(&door.y);
+    let on_wall = [
+        door.x,
+        layout.width - door.x,
+        door.y,
+        layout.height - door.y,
+    ]
+    .iter()
+    .any(|&d| d.abs() < 1e-9);
+    (!inside || !on_wall).then_some("a door off the walls")
 }
 
 #[cfg(test)]
@@ -938,10 +947,12 @@ mod tests {
         assert_eq!(combat_field(&alone), "melee.max_fighters");
         let stuck = COMBAT.replacen("speed_percent: 70", "speed_percent: 0", 1);
         assert_eq!(combat_field(&stuck), "arenas");
-        let tiny = COMBAT.replacen("width: 8.0, height: 6.0", "width: 8.0, height: 3.0", 1);
+        let tiny = COMBAT.replacen("height: 6.0,", "height: 3.0,", 1);
         assert_eq!(combat_field(&tiny), "arenas");
         let against_the_wall = COMBAT.replacen("(x: 10.0, y: 4.0,", "(x: 10.0, y: 1.5,", 1);
         assert_eq!(combat_field(&against_the_wall), "arenas");
+        let no_way_out = COMBAT.replacen("door: (x: 4.0, y: 0.0)", "door: (x: 4.0, y: 3.0)", 1);
+        assert_eq!(combat_field(&no_way_out), "arenas");
     }
 
     #[test]

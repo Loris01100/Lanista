@@ -24,7 +24,8 @@ pub const RADIUS: f64 = 0.5;
 /// Meters per second per point of speed.
 pub const METERS_PER_SPEED: f64 = 0.1;
 
-#[derive(Debug, Clone, Copy, PartialEq, Default)]
+#[derive(Debug, Clone, Copy, PartialEq, Default, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct Vec2 {
     pub x: f64,
     pub y: f64,
@@ -76,6 +77,13 @@ pub struct Arena {
     /// What the floor offers to gather (`SpellData::gathers`); nothing, unless set with
     /// [`Arena::with_layout`].
     pub element: Option<Element>,
+    /// The way out, on a wall: a fighter giving up must reach it to be out of the fight,
+    /// and runs for it meanwhile (`Fighter::fleeing`). None, unless set with
+    /// [`Arena::with_layout`]: a fighter then gives up on the spot.
+    pub door: Option<Vec2>,
+    /// Percentage of its speed a fighter running for the door walks at: 100, unless set
+    /// with [`Arena::with_rules`].
+    pub flee_speed_percent: u32,
     /// How mines wait, last and blast; laid mines vanish at once, unless set with
     /// [`Arena::with_rules`].
     pub mine_rules: MineRules,
@@ -110,6 +118,8 @@ pub struct CombatRules {
     pub hits: LocationWeights,
     pub bleed: BleedRules,
     pub mines: MineRules,
+    /// Percentage of its speed a fighter running for the door walks at (`Arena::door`).
+    pub flee_speed_percent: u32,
     /// Each weapon type's auto attack, by key: what a fighter strikes with once none of
     /// its spells is both affordable and of use (`can_cast_on`, `ClassData::weapon`).
     pub weapons: BTreeMap<String, SpellData>,
@@ -162,6 +172,8 @@ pub struct ArenaLayout {
     /// What its floor offers to gather.
     pub element: Element,
     pub pillars: Vec<Pillar>,
+    /// The way out, on a wall, in meters.
+    pub door: Vec2,
 }
 
 /// The floor of each arena kind.
@@ -368,6 +380,8 @@ impl Arena {
             speed_percent: 100,
             pillars: Vec::new(),
             element: None,
+            door: None,
+            flee_speed_percent: 100,
             mine_rules: MineRules::NEVER,
             mines: Vec::new(),
             pact_rules: PactRules::NEVER,
@@ -403,6 +417,7 @@ impl Arena {
         self.hits = Some(rules.hits);
         self.bleed = rules.bleed;
         self.mine_rules = rules.mines;
+        self.flee_speed_percent = rules.flee_speed_percent;
         self
     }
 
@@ -438,9 +453,9 @@ impl Arena {
             .any(|&pact| pact == (a, b) || pact == (b, a))
     }
 
-    /// This arena on `layout`'s floor: its size, its pillars, its ground slowing
-    /// fighters down to its speed percentage, and its element, which the fighters'
-    /// throwing spells now hit with (`SpellData::thrown`).
+    /// This arena on `layout`'s floor: its size, its pillars, its door, its ground
+    /// slowing fighters down to its speed percentage, and its element, which the
+    /// fighters' throwing spells now hit with (`SpellData::thrown`).
     #[must_use]
     pub fn with_layout(mut self, layout: &ArenaLayout) -> Self {
         self.width = layout.width;
@@ -448,6 +463,7 @@ impl Arena {
         self.speed_percent = layout.speed_percent;
         self.pillars.clone_from(&layout.pillars);
         self.element = Some(layout.element);
+        self.door = Some(layout.door);
         for spell in self.fighters.iter_mut().flat_map(|f| &mut f.spells) {
             if let Some(thrown) = spell.thrown.get(&layout.element) {
                 spell.power = thrown.power;
@@ -493,18 +509,20 @@ pub fn tick(arena: &mut Arena, ais: &mut [Box<dyn CombatAi>]) {
         update_pacts(arena);
         for (i, ai) in ais.iter_mut().enumerate() {
             let fighter = &arena.fighters[i];
-            if fighter.is_standing() {
+            if fighter.is_standing() && !fighter.fleeing {
                 let action = ai.decide(arena, fighter.id);
                 arena.fighters[i].action = action;
             }
         }
     }
+    run_for_the_door(arena);
     cool_down(arena);
     recover(arena);
     wear_off(arena);
     move_fighters(arena);
     separate(arena);
     keep_inside(arena);
+    escape(arena);
     blast_mines(arena);
     cast_spells(arena);
     eliminate(arena);
@@ -1202,7 +1220,8 @@ fn wear_off(arena: &mut Arena) {
             let hp_before = f.hp;
             f.take_damage(percent_of(f.stats.hp, percent).max(1));
             let damage = hp_before - f.hp;
-            let (fighter, died, surrendered) = (f.id, !f.is_alive(), f.surrendered);
+            let (fighter, died) = (f.id, !f.is_alive());
+            let gave_up = give_up(arena, t);
             if let Some(s) = usize::try_from(source.0)
                 .ok()
                 .and_then(|s| arena.fighters.get_mut(s))
@@ -1219,8 +1238,8 @@ fn wear_off(arena: &mut Arena) {
             });
             if died {
                 log(EventKind::Death { fighter });
-            } else if surrendered {
-                log(EventKind::Surrender { fighter });
+            } else if let Some(kind) = gave_up {
+                log(kind);
             }
         }
     }
@@ -1260,6 +1279,7 @@ fn strike(
         defender.stuns += 1;
         defender.action = Action::Wait;
     }
+    let gave_up = if died { None } else { give_up(arena, t) };
     let tick = arena.tick;
     let mut log = |kind| arena.log.push(Event { tick, kind });
     if let Some(part) = severed {
@@ -1270,20 +1290,87 @@ fn strike(
     }
     if died {
         log(EventKind::Death { fighter: target });
-    } else if surrendered {
-        log(EventKind::Surrender { fighter: target });
+    } else if let Some(kind) = gave_up {
+        log(kind);
     } else if stunned {
         log(EventKind::Stun { fighter: target });
     }
 }
 
-/// Moves every fighter standing that chose to, at its speed slowed by the ground.
+/// What fighter `t` giving up on the hit just taken does, if it just reached its
+/// surrender threshold: out on the spot (`Surrender`), or, in an arena with a door, on
+/// the run for it (`Flee`), still in the fight.
+fn give_up(arena: &mut Arena, t: usize) -> Option<EventKind> {
+    let f = &mut arena.fighters[t];
+    if !f.surrendered || f.fleeing {
+        return None;
+    }
+    let fighter = f.id;
+    if arena.door.is_none() || f.severed.is_some() {
+        return Some(EventKind::Surrender { fighter });
+    }
+    f.surrendered = false;
+    f.fleeing = true;
+    f.action = Action::Wait;
+    Some(EventKind::Flee { fighter })
+}
+
+/// Every fighter on the run and standing walks for the door, every tick, around the
+/// pillars, the mines and the other fighters: one standing in the way blocks it.
+// ponytail: goes round the nearest one in the way, no plan to lure a blocker off the door.
+fn run_for_the_door(arena: &mut Arena) {
+    let Some(door) = arena.door else {
+        return;
+    };
+    for i in 0..arena.fighters.len() {
+        let f = &arena.fighters[i];
+        if !f.fleeing || !f.is_standing() {
+            continue;
+        }
+        let others = arena
+            .fighters
+            .iter()
+            .filter(|o| o.id != f.id && o.is_fighting())
+            .map(|o| Pillar {
+                x: o.position.x,
+                y: o.position.y,
+                radius: RADIUS,
+            });
+        let obstacles: Vec<Pillar> = arena.obstacles().into_iter().chain(others).collect();
+        let direction = path_direction(&obstacles, f.position, door);
+        arena.fighters[i].action = Action::Move(direction);
+    }
+}
+
+/// Every fighter on the run that reached the door, or still running when time is up,
+/// gives up: out of the fight, alive.
+fn escape(arena: &mut Arena) {
+    let Some(door) = arena.door else {
+        return;
+    };
+    let last = arena.tick + 1 >= arena.max_ticks;
+    for f in &mut arena.fighters {
+        if f.fleeing && f.is_fighting() && (last || distance(f.position, door) <= 2.0 * RADIUS) {
+            f.surrendered = true;
+            f.action = Action::Wait;
+            arena.log.push(Event {
+                tick: arena.tick,
+                kind: EventKind::Surrender { fighter: f.id },
+            });
+        }
+    }
+}
+
+/// Moves every fighter standing that chose to, at its speed slowed by the ground, and
+/// sped up by fear for one running for the door.
 fn move_fighters(arena: &mut Arena) {
     let ground = f64::from(arena.speed_percent) / 100.0;
+    let fear = f64::from(arena.flee_speed_percent) / 100.0;
     for f in arena.fighters.iter_mut().filter(|f| f.is_standing()) {
         if let Action::Move(direction) = f.action {
             let length = direction.length();
             if length > 0.0 {
+                let ground = if f.fleeing { ground * fear } else { ground };
                 let step = f64::from(f.stats.speed) * METERS_PER_SPEED * ground * DT / length;
                 f.position.x += direction.x * step;
                 f.position.y += direction.y * step;
@@ -2213,6 +2300,7 @@ mod tests {
             speed_percent: 100,
             element,
             pillars: Vec::new(),
+            door: Vec2::new(10.0, 0.0),
         }
     }
 
@@ -2393,6 +2481,7 @@ mod tests {
             speed_percent: 50,
             element: Element::Sand,
             pillars: Vec::new(),
+            door: Vec2::new(10.0, 0.0),
         };
         let mut arena = Arena::new(1.0, 1.0, vec![fighter(0, 5.0, 5.0)], 0).with_layout(&floor);
         assert_eq!((arena.width, arena.height), (20.0, 20.0));

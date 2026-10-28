@@ -171,6 +171,10 @@ impl Gauge {
 }
 
 #[derive(Debug, Clone, PartialEq)]
+#[expect(
+    clippy::struct_excessive_bools,
+    reason = "independent ways out of a fight: given up, fleeing, knocked out, eliminated"
+)]
 pub struct Fighter {
     pub id: FighterId,
     pub class: ClassId,
@@ -198,6 +202,9 @@ pub struct Fighter {
     pub surrender_hp: u32,
     /// Gave up: out of the fight, alive.
     pub surrendered: bool,
+    /// Gave up in an arena with a door and runs for it: still in the fight, and hit,
+    /// until through it (`Arena::door`).
+    pub fleeing: bool,
     /// Ticks left down, stunned: still in the fight, but neither acting nor hit; 0 standing.
     pub stunned_ticks: u32,
     /// Times stunned in this fight.
@@ -319,6 +326,7 @@ impl Fighter {
             action: Action::Wait,
             surrender_hp: 0,
             surrendered: false,
+            fleeing: false,
             stunned_ticks: 0,
             stuns: 0,
             knocked_out: false,
@@ -388,10 +396,10 @@ impl Fighter {
     }
 
     /// Takes `damage` hit points off, stopping at 0: a blow that reaches 0 kills.
-    /// A survivor left at or below `surrender_hp` gives up.
+    /// A survivor left at or below `surrender_hp` gives up, unless already on the run.
     pub fn take_damage(&mut self, damage: u32) {
         self.hp = self.hp.saturating_sub(damage);
-        if self.is_alive() && self.hp <= self.surrender_hp {
+        if self.is_alive() && !self.fleeing && self.hp <= self.surrender_hp {
             self.surrendered = true;
         }
     }

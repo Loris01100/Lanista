@@ -2109,9 +2109,9 @@ mod tests {
         ClubScreen::new(data, state, None, Bindings::new(Vec::new()))
     }
 
-    /// The game of seed 7, saved in `folder`.
-    fn saved_screen(data: &Rc<DesignData>, folder: &std::path::Path) -> ClubScreen {
-        let state = GameState::new(7, data);
+    /// The game of `seed`, saved in `folder`.
+    fn saved_screen(seed: u64, data: &Rc<DesignData>, folder: &std::path::Path) -> ClubScreen {
+        let state = GameState::new(seed, data);
         let folder = Some(folder.to_path_buf());
         ClubScreen::new(Rc::clone(data), state, folder, Bindings::new(Vec::new()))
     }
@@ -2285,7 +2285,8 @@ mod tests {
 
     #[test]
     fn the_week_is_told_in_the_menu_and_on_the_sheet() {
-        let mut screen = screen(7);
+        // A game whose fighter lives through its first weeks.
+        let mut screen = screen(2);
         for _ in 0..3 {
             screen.next_week();
         }
@@ -2419,7 +2420,9 @@ mod tests {
 
     #[test]
     fn the_market_tells_moves_offers_and_what_is_seen() {
-        let mut screen = screen(7);
+        // A game whose fighter lives through the opening melee, to be sold, and the
+        // wanted rival fighter too.
+        let mut screen = screen(10);
         let data = Rc::clone(&screen.data);
         let target = RivalId {
             club: 2,
@@ -2441,10 +2444,8 @@ mod tests {
         screen.decisions.moves = vec![Move::Offer(target, 10), Move::List(0)];
         screen.next_week();
         let (_, overview) = screen.last_week.as_ref().unwrap();
-        assert_eq!(
-            overview[1],
-            format!("{owner} refuse l'offre pour {shown} ({class}, {owner})")
-        );
+        let refused = format!("{owner} refuse l'offre pour {shown} ({class}, {owner})");
+        assert!(overview.contains(&refused), "{overview:?}");
         assert_eq!(screen.state.transfer_list, [0]);
         // Offers came for the listed fighter.
         let offer = screen.state.sale_offers[0];
@@ -2477,7 +2478,7 @@ mod tests {
     fn each_week_is_saved_and_resumed_at_launch() {
         let data = Rc::new(DesignData::load().unwrap());
         let folder = std::env::temp_dir().join(format!("lanista-club-{}", std::process::id()));
-        let mut screen = saved_screen(&data, &folder);
+        let mut screen = saved_screen(7, &data, &folder);
         assert!(resume(&data, &folder).is_none());
         screen.next_week();
         screen.next_week();
@@ -2495,7 +2496,7 @@ mod tests {
     fn saving_over_a_game_waits_for_confirmation() {
         let data = Rc::new(DesignData::load().unwrap());
         let folder = std::env::temp_dir().join(format!("lanista-slots-{}", std::process::id()));
-        let mut screen = saved_screen(&data, &folder);
+        let mut screen = saved_screen(7, &data, &folder);
         screen.next_week();
         // Saving to an empty slot loses nothing: it is done at once.
         screen.ask(1);
@@ -2532,10 +2533,15 @@ mod tests {
     fn a_whole_season_is_played_saved_and_reloaded() {
         let data = Rc::new(DesignData::load().unwrap());
         let folder = std::env::temp_dir().join(format!("lanista-season-{}", std::process::id()));
-        let mut screen = saved_screen(&data, &folder);
+        // A game whose fighter lives the whole season: most die before its end.
+        let mut screen = saved_screen(2, &data, &folder);
         // Halfway, on a week the club fought, so that there is a fight to watch again.
         let mut half = 0;
         while half < u64::from(data.calendar.season_weeks() / 2) || screen.fights.is_empty() {
+            assert!(
+                half < u64::from(data.calendar.season_weeks()),
+                "never fought"
+            );
             screen.next_week();
             half += 1;
         }
@@ -2558,7 +2564,7 @@ mod tests {
         let next = screen.state.date(&data);
         assert_eq!((next.season, next.week), (2, 1));
         // The rival fighters who lived the whole season took a year.
-        let start = GameState::new(7, &data);
+        let start = GameState::new(2, &data);
         let survivors: Vec<_> = start
             .rivals
             .iter()
@@ -3151,7 +3157,8 @@ mod tests {
     /// in a world a few weeks on: none panics.
     #[test]
     fn every_view_is_drawn() {
-        let mut screen = screen(7);
+        // A game whose fighter lives through its first weeks.
+        let mut screen = screen(2);
         for _ in 0..12 {
             screen.next_week();
         }

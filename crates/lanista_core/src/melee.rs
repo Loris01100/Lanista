@@ -119,6 +119,7 @@ pub fn melee_layout(layout: &ArenaLayout, count: usize, rules: &MeleeRules) -> A
                 radius: p.radius,
             })
             .collect(),
+        door: Vec2::new(layout.door.x * scale, layout.door.y * scale),
     }
 }
 

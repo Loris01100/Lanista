@@ -54,6 +54,9 @@
     // touches it (radius, in meters), its layer too, hitting everyone within
     // blast_radius with the spell's power and damage kind, never missed; gone after
     // life_ticks. Past max_per_fighter, a fighter's oldest mine is gone. Provisional.
+    // A fighter giving up runs for the arena's door (see arenas) at this percentage of
+    // its speed, hit until through it.
+    flee_speed_percent: 300,
     mines: (
         arm_ticks: 45,
         life_ticks: 900,
@@ -110,7 +113,15 @@
     // width from the walls. A duel starts at 15 % and 85 % of the width, mid-height.
     arenas: (
         // Deep sand slows everyone: ranged fighters shoot longer before melee closes in.
-        sand: (width: 20.0, height: 20.0, speed_percent: 70, element: Sand, pillars: []),
+        // A fighter giving up must run out through the door, on a wall, to be out.
+        sand: (
+            width: 20.0,
+            height: 20.0,
+            speed_percent: 70,
+            element: Sand,
+            pillars: [],
+            door: (x: 10.0, y: 0.0),
+        ),
         // A row of pillars across the middle hides the fighters from each other's shots.
         pillars: (
             width: 20.0,
@@ -122,9 +133,17 @@
                 (x: 10.0, y: 10.0, radius: 1.2),
                 (x: 10.0, y: 16.0, radius: 1.2),
             ],
+            door: (x: 10.0, y: 0.0),
         ),
         // A small floor: melee fighters reach their opponent fast.
-        narrow: (width: 8.0, height: 6.0, speed_percent: 100, element: Stone, pillars: []),
+        narrow: (
+            width: 8.0,
+            height: 6.0,
+            speed_percent: 100,
+            element: Stone,
+            pillars: [],
+            door: (x: 4.0, y: 0.0),
+        ),
     ),
     // The melee, or King of the hill: everyone at once in the colosseum's arena, grown
     // so that each fighter has square_meters_per_fighter, starting on a circle, for at

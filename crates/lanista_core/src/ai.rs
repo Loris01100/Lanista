@@ -442,6 +442,7 @@ mod tests {
             speed_percent: 100,
             element: Element::Stone,
             pillars: Vec::new(),
+            door: crate::combat::Vec2::new(10.0, 0.0),
         };
         let mut arena = Arena::new(20.0, 20.0, fighters.clone(), 0).with_layout(&floor);
         let gather = Action::Cast {
