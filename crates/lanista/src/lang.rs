@@ -107,6 +107,9 @@ mod tests {
         };
         assert_eq!(named("palestre", "Achille", 0), "Palestre d'Achille");
         assert_eq!(named("ordu", "Batu", 0), "Ordu de Batu");
+        assert_eq!(named("palestre", "Hector", 0), "Palestre d'Hector");
+        assert_eq!(named("palestre", "Hector", 3), "Palestre d'Hector III");
+        assert_eq!(named("ordu", "Hagen", 0), "Ordu de Hagen");
         assert_eq!(named("ludus", "Magnus", 2), "Ludus Magnus II");
         assert_eq!(named("ludus", "Magnus", 14), "Ludus Magnus XIV");
     }

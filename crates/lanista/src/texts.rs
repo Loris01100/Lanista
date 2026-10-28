@@ -854,10 +854,25 @@ fn is_vowel(c: char) -> bool {
     "AEIOUYÂÄÀÉÈÊËÎÏÔÖÛÜŪĀĒĪŌ".contains(c)
 }
 
-/// "true" when `name` starts with a vowel, for the `$vowel` of the languages that
-/// elide before one ("le défi d'Ursus").
+/// The names of `data/names.ron` whose h is silent ("d'Hector"); the others keep
+/// theirs ("de Hagen").
+const SILENT_H: [&str; 6] = [
+    "Hammourabi",
+    "Hector",
+    "Hermes",
+    "Hilarus",
+    "Hipposthénès",
+    "Hydarnès",
+];
+
+/// "true" when `name` starts with a vowel or a silent h, for the `$vowel` of the
+/// languages that elide before one ("le défi d'Ursus").
 pub fn vowel(name: &str) -> &'static str {
-    if name.starts_with(is_vowel) {
+    let silent_h = SILENT_H.iter().any(|&h| {
+        name.strip_prefix(h)
+            .is_some_and(|rest| rest.is_empty() || rest.starts_with(' '))
+    });
+    if name.starts_with(is_vowel) || silent_h {
         "true"
     } else {
         "false"
