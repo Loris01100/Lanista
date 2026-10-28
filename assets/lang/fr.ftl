@@ -75,10 +75,7 @@ location-arm = Bras { $side ->
         [left] gauche
        *[right] droit
     }
-location-arm-dominant = Bras { $side ->
-        [left] gauche
-       *[right] droit
-    } (dominant)
+location-arm-dominant = { location-arm } (dominant)
 location-leg = Jambe { $side ->
         [left] gauche
        *[right] droite
@@ -111,7 +108,7 @@ injury-effect = { $maluses }, { $permanent ->
         [true] à vie
        *[false] jusqu'à la guérison
     }.
-    Toutes blessures cumulées, une stat ne perd pas plus de { $max } %.
+    { wiki-calc-max-malus }
 injury-no-effect = Sans effet sur les stats.
 illness-effect = Toutes les stats -{ $malus } % jusqu'à la guérison, et une semaine de repos ne rend que { $rest } % de la forme habituelle.
 illness-severe-effect = Combattre est déconseillé : cela peut prolonger la maladie.
@@ -271,7 +268,6 @@ weeks-left = { $n ->
         [1] dernière semaine
        *[other] encore { $n } semaines
     }
-
 
 ## Monde
 
@@ -477,7 +473,7 @@ wiki-calc-stun-chance = Un coup qui ne met pas fin au combat étourdit avec { $b
 wiki-calc-stun-rise = L'étourdi reste à terre { $seconds } s, puis se relève avec { $timid } % de chance s'il est le plus timide, jusqu'à { $bold } % s'il est le plus audacieux, { $lost } points de moins par étourdissement après le premier. Sinon il est mis K.-O. et perd, vivant.
 wiki-calc-cut = Un coup tranchant qui porte peut trancher la partie touchée. Un membre, si la cible combat encore, avec { $limb } % de chance par dixième des PV max qu'il enlève : elle sort vivante, mutilée à vie. La tête, avec { $head } % par dixième, ou { $fatal } % sur le coup qui la met à 0 PV : elle meurt. Le corps, jamais.
 wiki-calc-bleed = Un coup qui porte fait saigner la partie touchée avec la chance de saignement de la capacité, si elle ne saigne pas déjà : { $percent } % des PV max par seconde (au moins 1), pendant { $head } s à la tête, { $body } s au corps, { $arm } s à un bras, { $leg } s à une jambe. Les saignements s'additionnent et peuvent tuer.
-wiki-calc-form-risk = Risque = base × (1 + { $k } × (1 − forme / 100)) : à forme 0, le risque de blessure ou de maladie est multiplié par { $max }.
+wiki-calc-form-risk = Risque = base × (1 + { $k } × (1 - forme / 100)) : à forme 0, le risque de blessure ou de maladie est multiplié par { $max }.
 wiki-calc-form-events = Forme, sur 100 : -{ $fight } par combat, -{ $title } par défense de titre, -{ $melee } par mêlée, -{ $training } par semaine d'entraînement, +{ $rest } par semaine de repos.
 wiki-calc-injury-chance = { $percent } % de risque de blessure par combat en pleine forme, multiplié par le risque de la forme. Un combattant mis à 0 PV survit avec { $survival } % de chance, gravement blessé ; un combattant étourdi a { $stun } % de chance d'en garder une blessure grave à la tête.
 wiki-calc-illness-chance = { $percent } % de risque de tomber malade par semaine en pleine forme, multiplié par le risque de la forme. Combattre avec une maladie sévère a { $chance } % de chance de la prolonger de { $min } à { $max } semaines.
@@ -524,11 +520,11 @@ phase-name = { $phase ->
 week-title = Semaine { $week }
 menu-save = Sauvegarder
 menu-load = Charger
-menu-new-club = club { $wealth }
+menu-new-club = un club { $wealth }
 menu-draw-name = Tirer un nom
 menu-new-game-started = Nouvelle partie, { $club }, club { $wealth } { $continent }, graine { $seed }
-confirm-new-game = Commencer une nouvelle partie avec { $club }, club { $wealth } { $continent } ? La partie à continuer sera perdue si elle n'est pas sauvegardée.
-confirm-load = Charger l'emplacement { $slot } ({ $game }) ? La partie à continuer sera perdue si elle n'est pas sauvegardée.
+confirm-new-game = Commencer une nouvelle partie avec { $club }, club { $wealth } { $continent } ? La partie en cours sera perdue si elle n'est pas sauvegardée.
+confirm-load = Charger l'emplacement { $slot } ({ $game }) ? La partie en cours sera perdue si elle n'est pas sauvegardée.
 confirm-overwrite = Écraser l'emplacement { $slot } ({ $game }) ?
 menu-language = Langue :
 
@@ -705,17 +701,17 @@ market-contract = Contrat
 market-asked-wage = Gages demandés
 wage = { $wage } / sem.
 contract-until = { $wage } / sem.{ $bonus ->
-    [0] {""}
-   *[other] , prime de victoire { $bonus }
-} jusqu'à la saison { $season }
+        [0] {""}
+       *[other] , prime de victoire { $bonus }
+    } jusqu'à la saison { $season }
 contract-last-season = { $wage } / sem.{ $bonus ->
-    [0] {""}
-   *[other] , prime de victoire { $bonus }
-}, dernière saison : part à l'intersaison sauf prolongation
+        [0] {""}
+       *[other] , prime de victoire { $bonus }
+    }, dernière saison : part à l'intersaison sauf prolongation
 terms = { $wage } / sem., prime de victoire { $bonus }, { $seasons ->
-    [1] 1 saison
-   *[other] { $seasons } saisons
-} de plus
+        [1] 1 saison
+       *[other] { $seasons } saisons
+    } de plus
 terms-wage = Gages
 terms-bonus = Prime
 terms-seasons = Saisons
@@ -725,11 +721,11 @@ contract-profile = { $class }, { $age } ans, bilan { $record }, moral { $morale 
 contract-asks = Il demande : { $terms }
 contract-worth = Il compte { $worth } / sem., prime attendue comprise : environ { $season } par saison pour le club.
 contract-mood = { $mood ->
-    [signs] Il devrait signer.
-    [hesitates] Il hésite : encore un effort.
-    [unhappy] Son moral est trop bas : il ne prolongera à aucun prix.
-   *[refuses] Il refusera ces conditions.
-}
+        [signs] Il devrait signer.
+        [hesitates] Il hésite : encore un effort.
+        [unhappy] Son moral est trop bas : il ne prolongera à aucun prix.
+       *[refuses] Il refusera ces conditions.
+    }
 contract-propose = Proposer
 contract-withdraw = Retirer l'offre
 renew = Prolonger ({ $wage } / sem.)
@@ -766,7 +762,7 @@ release = Libérer
 
 ## Personnel (vue)
 
-staff-intro = L'entraîneur rend l'entraînement plus profitable et moins fatigant, le médecin rend les soins plus efficaces et évite des séquelles, le recruteur montre mieux les combattants observés. Les candidats arrivent et partent du marché, chacun avec ses stats et son salaire, et les clubs rivaux y engagent aussi. Chaque salaire est payé chaque semaine, même à crédit ; un changement compte dès la semaine qui se joue.
+staff-intro = L'entraîneur rend l'entraînement plus profitable et moins fatigant, le médecin rend les soins plus efficaces et évite des séquelles, le recruteur montre mieux les combattants observés. Les candidats arrivent et partent du marché, chacun avec ses stats et son salaire, et les clubs rivaux y engagent aussi. Les salaires sont payés chaque semaine, même à crédit ; un changement compte dès la semaine qui se joue.
 staff-candidates = Candidats
 staff-tab-held = { $role } (niveau { $level })
 staff-salary = Salaire { $salary } / sem.
@@ -805,9 +801,9 @@ hire = Engager
 ## Écran de combat
 
 controls = Contrôles
-speed-slow = x0,5
-speed-normal = x1
-speed-fast = x1,5
+speed-slow = ×0,5
+speed-normal = ×1
+speed-fast = ×1,5
 skip-to-result = Passer au résultat
 continue = Continuer
 pause = Pause
@@ -831,23 +827,6 @@ options-graphics = Graphismes
 options-audio = Audio
 options-language = Langue
 close = Fermer
-
-## Menu principal
-
-title-continue = Continuer
-title-load = Charger une partie
-title-new-game = Nouvelle partie
-title-quit = Quitter
-new-continent = Continent
-new-culture = Culture
-new-name = Nom du club
-new-wealth = Commencer avec un :
-game = Partie
-main-menu = Menu principal
-fullscreen = Plein écran
-interface-size = Taille de l'interface :
-music = Musique
-effects = Effets
 
 fighter-number = combattant { $number }
 result-time-up = Temps écoulé : personne ne remporte le combat.
@@ -925,6 +904,23 @@ elimination-standing = { $fighter } : { $damage } dégâts, { $danger ->
         [true] éliminé si rien ne change
        *[false] à l'abri
     }
+
+## Menu principal
+
+title-continue = Continuer
+title-load = Charger une partie
+title-new-game = Nouvelle partie
+title-quit = Quitter
+new-continent = Continent
+new-culture = Culture
+new-name = Nom du club
+new-wealth = Commencer avec :
+game = Partie
+main-menu = Menu principal
+fullscreen = Plein écran
+interface-size = Taille de l'interface :
+music = Musique
+effects = Effets
 
 ## Données de conception
 
