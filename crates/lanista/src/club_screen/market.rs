@@ -2,6 +2,7 @@
 
 use lanista_core::colosseum::{ColosseumId, Contender};
 use lanista_core::design_data::DesignData;
+use lanista_core::economy::Terms;
 use lanista_core::fighter::career::{CareerFighter, Status};
 use lanista_core::market::{Move, SaleOffer, Target, stat_ranges, value};
 use lanista_core::rivals::RivalId;
@@ -13,9 +14,9 @@ use super::colosseums::{arrow, not_ranked, ranked_name};
 use super::{ClubScreen, View, chip, face_row, half_bar};
 use crate::lang::tr;
 use crate::texts::{
-    club_name, colosseum_name, condition_text, fighter_name, free_agent_name, move_text,
-    origin_text, outside_ease_text, outside_personality_text, potential_text, range_texts,
-    record_text, rival_fighter_name, stat_names, unsellable_text, weeks,
+    class_name, club_name, colosseum_name, condition_text, fighter_name, free_agent_name,
+    move_text, origin_text, outside_ease_text, outside_personality_text, potential_text,
+    range_texts, record_text, rival_fighter_name, stat_names, terms_text, unsellable_text, weeks,
 };
 use crate::theme;
 
@@ -190,6 +191,8 @@ enum Pick {
     Club(usize),
     /// Turn down this rival club's offer for one of the club's fighters.
     Refuse(SaleOffer),
+    /// Negotiate this signing or renewal.
+    Terms(Move),
 }
 
 impl ClubScreen {
@@ -250,6 +253,7 @@ impl ClubScreen {
             Some(Pick::Open(target)) => self.go_to(View::Outside(target)),
             Some(Pick::Negotiate(id, price)) => self.offer_draft = Some((id, price)),
             Some(Pick::Club(club)) => self.go_to(View::Rival(club)),
+            Some(Pick::Terms(m)) => self.terms_draft = Some(m),
             Some(Pick::Refuse(offer)) => {
                 let accept = Move::AcceptOffer {
                     fighter: offer.fighter,
@@ -421,7 +425,9 @@ impl ClubScreen {
                     Target::FreeAgent(a) => {
                         let sign = Move::Sign(a, GameState::asked_terms(f, data));
                         let allowed = state.may_move(sign, data);
-                        terms_toggle(ui, moves, sign, &tr!("sign"), allowed, data);
+                        if let Some(m) = terms_button(ui, moves, sign, &tr!("sign"), allowed) {
+                            self.terms_draft = Some(m);
+                        }
                     }
                     Target::Rival(id) => {
                         let estimate = estimate(f, data);
@@ -441,6 +447,121 @@ impl ClubScreen {
         }
     }
 }
+
+impl ClubScreen {
+    /// The window laid over the screen while `terms_draft` is set, to negotiate a
+    /// signing or a renewal: the fighter, what it asks, the terms offered, how it takes
+    /// them and what they cost, then the offer to make, withdraw or leave.
+    pub(super) fn terms_window(&mut self, ctx: &egui::Context) {
+        let Some(draft) = self.terms_draft else {
+            return;
+        };
+        let data = &self.data;
+        let state = &self.state;
+        let (fighter, name) = match draft {
+            Move::Sign(a, _) => {
+                let f = state.free_agents.get(a);
+                (f, f.map(|f| free_agent_name(a, f, data)))
+            }
+            Move::Renew(i, _) => {
+                let f = state.fighters.get(i);
+                (f, f.map(|f| fighter_name(i, f, data)))
+            }
+            _ => (None, None),
+        };
+        let (Some(f), Some(name), Move::Sign(_, mut terms) | Move::Renew(_, mut terms)) =
+            (fighter, name, draft)
+        else {
+            self.terms_draft = None;
+            return;
+        };
+        let rules = &data.economy.contracts;
+        let asked = GameState::asked_terms(f, data);
+        let moves = &mut self.decisions.moves;
+        let chosen = moves.iter().position(|&m| same_fighter(m, draft));
+        let mut close = false;
+        let modal = egui::Modal::new(egui::Id::new("terms")).show(ctx, |ui| {
+            ui.set_width(TERMS_WIDTH);
+            ui.heading(tr!("contract-title", fighter = name));
+            ui.label(tr!(
+                "contract-profile",
+                class = class_name(f, data),
+                age = f.age,
+                record = record_text(f.record),
+                morale = f.morale.value()
+            ));
+            ui.label(tr!("contract-asks", terms = terms_text(asked)));
+            ui.separator();
+            let top = asked.wage.saturating_mul(2).max(terms.wage);
+            egui::Grid::new("terms").num_columns(2).show(ui, |ui| {
+                ui.label(tr!("terms-wage"));
+                ui.add(egui::Slider::new(&mut terms.wage, 1..=top));
+                ui.end_row();
+                ui.label(tr!("terms-bonus"));
+                let top = asked.wage.saturating_mul(4).max(terms.win_bonus);
+                ui.add(egui::Slider::new(&mut terms.win_bonus, 0..=top));
+                ui.end_row();
+                ui.label(tr!("terms-seasons"));
+                ui.add(egui::Slider::new(&mut terms.seasons, 1..=rules.max_seasons));
+                ui.end_row();
+            });
+            ui.label(egui::RichText::new(tr!("terms-hint")).small().weak());
+            ui.separator();
+            let worth = rules.worth(f, terms);
+            let season = u64::from(data.calendar.season_weeks());
+            ui.label(tr!(
+                "contract-worth",
+                worth = worth,
+                season = worth.saturating_mul(season)
+            ));
+            let least = u64::from(rules.least_wage(f, &data.economy.market));
+            // How the fighter takes the terms; below `renewal_morale`, it renews on none.
+            let unhappy =
+                matches!(draft, Move::Renew(..)) && f.morale.value() < rules.renewal_morale;
+            let (key, color) = if unhappy {
+                ("unhappy", theme::BLOOD)
+            } else if worth >= least {
+                ("signs", theme::LAUREL)
+            } else if worth * 10 >= least * 9 {
+                ("hesitates", theme::BRONZE)
+            } else {
+                ("refuses", theme::BLOOD)
+            };
+            ui.colored_label(color, tr!("contract-mood", mood = key));
+            ui.add_space(4.0);
+            ui.horizontal(|ui| {
+                let offer = with_terms(draft, terms);
+                if ui.button(tr!("contract-propose")).clicked() {
+                    match chosen {
+                        Some(k) => moves[k] = offer,
+                        None => moves.push(offer),
+                    }
+                    close = true;
+                }
+                if let Some(k) = chosen
+                    && ui.button(tr!("contract-withdraw")).clicked()
+                {
+                    moves.remove(k);
+                    close = true;
+                }
+                close |= ui.button(tr!("cancel")).clicked();
+            });
+        });
+        self.terms_draft = (!close && !modal.should_close()).then_some(with_terms(draft, terms));
+    }
+}
+
+/// `m`, a signing or a renewal, on `terms`.
+fn with_terms(m: Move, terms: Terms) -> Move {
+    match m {
+        Move::Sign(a, _) => Move::Sign(a, terms),
+        Move::Renew(i, _) => Move::Renew(i, terms),
+        other => other,
+    }
+}
+
+/// The negotiation window's width.
+const TERMS_WIDTH: f32 = 420.0;
 
 impl ClubScreen {
     /// Where `contender`, out of the club, stands in each colosseum of the club's
@@ -581,45 +702,30 @@ fn toggle(
     response
 }
 
-/// A button adding `m`, a signing or a renewal on the fighter's asked terms, to the
-/// week's moves, or taking it out when chosen already; chosen, the terms offered are
-/// changed beside it. Only a chosen one may be clicked when not `enabled`.
-fn terms_toggle(
+/// Whether `a` and `b` sign or renew the same fighter, whatever the terms.
+fn same_fighter(a: Move, b: Move) -> bool {
+    match (a, b) {
+        (Move::Sign(a, _), Move::Sign(b, _)) | (Move::Renew(a, _), Move::Renew(b, _)) => a == b,
+        _ => false,
+    }
+}
+
+/// A button opening the negotiation of `m`, a signing or a renewal on the fighter's
+/// asked terms, or of the one chosen already, shown selected; returns the move to
+/// negotiate. Only a chosen one may be clicked when not `enabled`.
+fn terms_button(
     ui: &mut egui::Ui,
-    moves: &mut Vec<Move>,
+    moves: &[Move],
     m: Move,
     label: &str,
     enabled: bool,
-    data: &DesignData,
-) -> egui::Response {
-    let same = |other: &Move| match (*other, m) {
-        (Move::Sign(a, _), Move::Sign(b, _)) | (Move::Renew(a, _), Move::Renew(b, _)) => a == b,
-        _ => false,
-    };
-    let chosen = moves.iter().position(same);
+) -> Option<Move> {
+    let chosen = moves.iter().copied().find(|&other| same_fighter(other, m));
     let button = egui::SelectableLabel::new(chosen.is_some(), label);
-    let response = ui
+    let clicked = ui
         .add_enabled(enabled || chosen.is_some(), button)
-        .on_hover_text(tr!("terms-hint"));
-    match chosen {
-        Some(k) if response.clicked() => {
-            moves.remove(k);
-        }
-        None if response.clicked() => moves.push(m),
-        Some(k) => {
-            if let Move::Sign(_, terms) | Move::Renew(_, terms) = &mut moves[k] {
-                let max_seasons = data.economy.contracts.max_seasons;
-                ui.label(tr!("terms-wage"));
-                ui.add(egui::DragValue::new(&mut terms.wage).range(1..=99_999));
-                ui.label(tr!("terms-bonus"));
-                ui.add(egui::DragValue::new(&mut terms.win_bonus).range(0..=99_999));
-                ui.label(tr!("terms-seasons"));
-                ui.add(egui::DragValue::new(&mut terms.seasons).range(1..=max_seasons));
-            }
-        }
-        None => {}
-    }
-    response
+        .clicked();
+    clicked.then_some(chosen.unwrap_or(m))
 }
 
 fn observe_label(fighter: &CareerFighter) -> String {
@@ -730,9 +836,8 @@ fn free_agent_grid(
                 toggle(ui, moves, observe, &observe_label(f), true);
                 let sign = Move::Sign(a, GameState::asked_terms(f, data));
                 let allowed = state.may_move(sign, data);
-                let button = terms_toggle(ui, moves, sign, &tr!("sign"), allowed, data);
-                if !room {
-                    button.on_disabled_hover_text(tr!("market-full"));
+                if let Some(m) = terms_button(ui, moves, sign, &tr!("sign"), allowed && room) {
+                    pick = Some(Pick::Terms(m));
                 }
             });
             ui.end_row();
@@ -908,7 +1013,9 @@ fn sale_actions(
     let renew = Move::Renew(i, asked);
     if state.may_move(renew, data) {
         let label = tr!("renew", wage = asked.wage);
-        terms_toggle(ui, moves, renew, &label, true, data);
+        if let Some(m) = terms_button(ui, moves, renew, &label, true) {
+            pick = Some(Pick::Terms(m));
+        }
     }
     toggle(ui, moves, Move::Release(i), &tr!("release"), true);
     pick

@@ -37,7 +37,7 @@ use lanista_core::fighter::morale::Morale;
 use lanista_core::fighter::retirement::too_maimed;
 use lanista_core::fighter::{FighterId, Stats};
 use lanista_core::journal::FightLine;
-use lanista_core::market::Target;
+use lanista_core::market::{Move, Target};
 use lanista_core::rivals::RivalId;
 use lanista_core::staff::Role;
 use lanista_core::state::{Decisions, GameState, WorldNews, next_week};
@@ -154,6 +154,8 @@ pub struct ClubScreen {
     confirm: Option<usize>,
     /// The offer being written on the market: the rival fighter and the price.
     offer_draft: Option<(RivalId, u32)>,
+    /// The signing or renewal being negotiated, in its window, with the terms offered.
+    terms_draft: Option<Move>,
     /// The club's fighter the sheet of a fighter out of the club is compared with.
     compared: Option<usize>,
     /// Which fighters out of the club the market lists.
@@ -209,6 +211,7 @@ impl ClubScreen {
             message: None,
             confirm: None,
             offer_draft: None,
+            terms_draft: None,
             compared: None,
             market_filter: MarketFilter::default(),
             market_sort: MarketSort::default(),
@@ -1030,7 +1033,7 @@ impl Screen for ClubScreen {
             return self.watch(fights);
         }
         // Échap and Espace belong to the windows laid over the screen while they are open.
-        let keys = !self.options_open && !self.game_open;
+        let keys = !self.options_open && !self.game_open && self.terms_draft.is_none();
         if keys && self.bindings.pressed(ui, &Action::Quit) {
             if self.view == View::Menu {
                 return Transition::Pop;
@@ -1065,6 +1068,7 @@ impl Screen for ClubScreen {
         {
             self.message = Some(failed);
         }
+        self.terms_window(ui);
         if self.game_window(ui) {
             return Transition::Pop;
         }

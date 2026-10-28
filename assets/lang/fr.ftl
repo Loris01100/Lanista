@@ -709,6 +709,18 @@ terms-wage = Gages
 terms-bonus = Prime
 terms-seasons = Saisons
 terms-hint = Gages par semaine, prime par duel gagné, saisons après celle-ci. Un combattant compte une part de la prime dans ses gages ; de bon moral, il accepte moins que ce qu'il demande.
+contract-title = Contrat de { $fighter }
+contract-profile = { $class }, { $age } ans, bilan { $record }, moral { $morale }
+contract-asks = Il demande : { $terms }
+contract-worth = Il compte { $worth } / sem., prime attendue comprise : environ { $season } par saison pour le club.
+contract-mood = { $mood ->
+    [signs] Il devrait signer.
+    [hesitates] Il hésite : encore un effort.
+    [unhappy] Son moral est trop bas : il ne prolongera à aucun prix.
+   *[refuses] Il refusera ces conditions.
+}
+contract-propose = Proposer
+contract-withdraw = Retirer l'offre
 renew = Prolonger ({ $wage } / sem.)
 market-actions = Décisions de la semaine
 market-listed = En vente

@@ -150,13 +150,27 @@ impl ContractRules {
     /// `haggle_percent` of it at a morale of 100.
     #[must_use]
     pub fn accepts(&self, fighter: &CareerFighter, terms: Terms, market: &MarketRules) -> bool {
+        (1..=self.max_seasons).contains(&terms.seasons)
+            && self.worth(fighter, terms) >= u64::from(self.least_wage(fighter, market))
+    }
+
+    /// The least weekly worth `fighter` accepts: its asked wage, less its
+    /// `haggle_percent` of it at a morale of 100.
+    #[must_use]
+    pub fn least_wage(&self, fighter: &CareerFighter, market: &MarketRules) -> u32 {
         let haggle = self.haggle_percent * fighter.morale.value() / Morale::MAX;
-        let least = percent_of(self.asked_wage(fighter, market), 100 - haggle.min(100));
+        percent_of(self.asked_wage(fighter, market), 100 - haggle.min(100))
+    }
+
+    /// What `terms` are worth to `fighter` each week: the wage and the share of the win
+    /// bonus it expects (`bonus_percent`, times its share of fights won, half without
+    /// any fight).
+    #[must_use]
+    pub fn worth(&self, fighter: &CareerFighter, terms: Terms) -> u64 {
         let r = fighter.record;
         let won = (r.wins * 100).checked_div(r.wins + r.losses + r.draws);
         let expected = u64::from(self.bonus_percent) * u64::from(won.unwrap_or(50));
-        let worth = u64::from(terms.wage) + u64::from(terms.win_bonus) * expected / 10_000;
-        (1..=self.max_seasons).contains(&terms.seasons) && worth >= u64::from(least)
+        u64::from(terms.wage) + u64::from(terms.win_bonus) * expected / 10_000
     }
 }
 
