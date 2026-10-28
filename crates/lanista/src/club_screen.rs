@@ -38,6 +38,7 @@ use lanista_core::fighter::retirement::too_maimed;
 use lanista_core::fighter::{FighterId, Stats};
 use lanista_core::journal::FightLine;
 use lanista_core::market::{Move, Target};
+use lanista_core::relations::{Club, MAX_SCORE};
 use lanista_core::rivals::RivalId;
 use lanista_core::staff::Role;
 use lanista_core::state::{Decisions, GameState, WorldNews, next_week};
@@ -1528,6 +1529,13 @@ fn sheet(ui: &mut egui::Ui, index: usize, f: &CareerFighter, best: Stats, data: 
                     ui.label(value.to_string());
                     ui.end_row();
                 }
+                let tie = f.tie(Club::Player);
+                ui.label(tr!("sheet-tie"))
+                    .on_hover_text(tr!("sheet-tie-hint"));
+                let filled = u32::try_from(tie + MAX_SCORE).unwrap_or(0);
+                meter(ui, filled, 2 * MAX_SCORE.unsigned_abs(), theme::SEA, None);
+                ui.label(tie.to_string());
+                ui.end_row();
             });
             section(ui, &tr!("record-title"));
             egui::Grid::new("record").show(ui, |ui| {

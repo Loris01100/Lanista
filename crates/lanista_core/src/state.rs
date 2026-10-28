@@ -21,7 +21,7 @@ use crate::fighter::traits::Trait;
 use crate::journal::Journal;
 use crate::market::{self, Move, SaleOffer, Target, value};
 use crate::names::{self, ClubName, FighterName};
-use crate::relations::{Reason, Relation, Standing, StandingRules};
+use crate::relations::{Club, Reason, Relation, Standing, StandingRules, TieRules};
 use crate::rivals::{self, Rival, RivalId, Venue};
 use crate::staff::{
     self, Candidate, DoctorRules, Medicine, RecruiterRules, Scouting, Staff, StaffEffects,
@@ -367,10 +367,32 @@ impl GameState {
 
     /// Gives the Elo and titles of `from` to `to` in every colosseum: the same fighter,
     /// gone to another club or to the market. A rival club's fighter or a free agent
-    /// leaves only a moved entry behind; the player's club keeps its own whole.
-    fn transfer(&mut self, from: Contender, to: Contender) {
+    /// leaves only a moved entry behind; the player's club keeps its own whole. Gone
+    /// from a club, its tie with it moves by `TieRules::released` to the market, by
+    /// `sold` to another club.
+    fn transfer(&mut self, from: Contender, to: Contender, rules: &TieRules) {
         for colosseum in &mut self.colosseums {
             colosseum.transfer(from, to);
+        }
+        let club = match from {
+            Contender::Club(_) => Some(Club::Player),
+            Contender::Rival(id) => Some(Club::Rival(id.club)),
+            Contender::FreeAgent(_) => None,
+        };
+        let arrived = match to {
+            Contender::Club(i) => self.fighters.get_mut(i),
+            Contender::Rival(to) => self
+                .rivals
+                .get_mut(to.club)
+                .and_then(|r| r.fighters.get_mut(to.fighter)),
+            Contender::FreeAgent(a) => self.free_agents.get_mut(a),
+        };
+        if let (Some(club), Some(fighter)) = (club, arrived) {
+            let points = match to {
+                Contender::FreeAgent(_) => rules.released,
+                _ => rules.sold,
+            };
+            fighter.change_tie(club, points);
         }
         let left = match from {
             Contender::Club(_) => None,
@@ -961,7 +983,9 @@ fn affordable(
 mod tests {
     use super::melee::{melee_entries, pact_reason};
     use super::outsiders::opponent;
-    use super::transfers::{buy_from_rival, market_moves, rich_purchases, rival_signings, weakest};
+    use super::transfers::{
+        buy_from_rival, market_moves, release_rival, rich_purchases, rival_signings, weakest,
+    };
     use super::*;
     use crate::colosseum::title_kept;
     use crate::combat::ArenaKind;
@@ -2553,6 +2577,37 @@ mod tests {
             potential
         );
         assert_eq!(state.free_agents[gem].status, Status::Sold);
+    }
+
+    #[test]
+    fn a_fighter_let_go_comes_back_only_once_its_grudge_fades() {
+        let data = data();
+        let mut state = game(7, &data);
+        let modest = 2;
+        // The best free agent there is, once the modest club's own.
+        star(&mut state.rivals[modest].fighters[0]);
+        let id = state.rivals[modest].fighters[0].id;
+        let club = RivalId {
+            club: modest,
+            fighter: 0,
+        };
+        release_rival(&mut state, club, &data);
+        let agent = state.free_agents.len() - 1;
+        let ties = &data.world.ties;
+        assert_eq!(
+            state.free_agents[agent].tie(Club::Rival(modest)),
+            ties.released
+        );
+        let mut soon = state.clone();
+        rival_signings(&mut soon, &data);
+        assert_ne!(soon.rivals[modest].fighters.last().unwrap().id, id);
+        assert_eq!(soon.free_agents[agent].status, Status::Active);
+        // Weeks later, the grudge has faded: the club takes it back.
+        while state.free_agents[agent].tie(Club::Rival(modest)) < ties.refuses_below {
+            state.free_agents[agent].tie_week(None, ties);
+        }
+        rival_signings(&mut state, &data);
+        assert_eq!(state.rivals[modest].fighters.last().unwrap().id, id);
     }
 
     /// Makes `fighter` the one every club wants, and one who never refuses a famous club.

@@ -10,6 +10,7 @@ use crate::economy::Terms;
 use crate::fighter::career::CareerFighter;
 use crate::fighter::fame::Fame;
 use crate::fighter::{STAT_COUNT, percent_of};
+use crate::relations::{Club, TieRules};
 use crate::rivals::RivalId;
 use crate::staff::Scouting;
 
@@ -138,6 +139,8 @@ pub enum MarketNews {
     TermsRefused(usize),
     /// The free agent at this index refused to sign on the terms offered.
     SignRefused(usize),
+    /// The free agent at this index, bearing the club a grudge, refused to sign.
+    GrudgeRefused(usize),
     /// Its contract ended unrenewed: it left, a free agent.
     ContractEnded(usize),
 }
@@ -250,18 +253,27 @@ pub fn ease_seen(fighter: &CareerFighter, scouting: &Scouting) -> bool {
     scouting.ease && fighter.observed_weeks > 0
 }
 
-/// Whether `fighter` refuses to join the player's club, whose best fame is
-/// `club_fame`: `refusal_percent`, plus half its fame above the club's (less below),
-/// plus a fifth of its ego above the middle (less below), between 0 and 90 %.
+/// Whether `fighter` refuses to go from club `from` to club `to`, whose best fame is
+/// `club_fame`: always below `TieRules::refuses_below` of tie with `to`; else
+/// `refusal_percent`, plus half its fame above the club's (less below), plus a fifth
+/// of its ego above the middle (less below), plus `TieRules::refusal_percent` of its
+/// tie with `from` less its tie with `to`, between 0 and 90 %.
 pub fn refuses_to_join<R: Rng + ?Sized>(
     rng: &mut R,
     fighter: &CareerFighter,
     club_fame: Fame,
+    (from, to): (Club, Club),
     rules: &MarketRules,
+    ties: &TieRules,
 ) -> bool {
+    let tie = fighter.tie(to);
+    if tie < ties.refuses_below {
+        return true;
+    }
     let fame = i64::from(fighter.fame.value()) - i64::from(club_fame.value());
     let ego = i64::from(fighter.personality.ego.value()) - 50;
-    let percent = (i64::from(rules.refusal_percent) + fame / 2 + ego / 5).clamp(0, 90);
+    let loyalty = i64::from(fighter.tie(from) - tie) * i64::from(ties.refusal_percent) / 100;
+    let percent = (i64::from(rules.refusal_percent) + fame / 2 + ego / 5 + loyalty).clamp(0, 90);
     i64::from(rng.random_range(0..100_u32)) < percent
 }
 
@@ -419,12 +431,14 @@ mod tests {
     fn famous_and_vain_fighters_refuse_more_often() {
         let data = data();
         let rules = &data.economy.market;
+        let ties = &data.world.ties;
+        let moving = (Club::Rival(0), Club::Player);
         let mut rng = ChaCha8Rng::seed_from_u64(4);
         let mut fighter = CareerFighter::random(&mut rng, &data);
         fighter.personality.ego = 50.into();
         let refusals = |fighter: &CareerFighter, club: Fame, rng: &mut ChaCha8Rng| {
             (0..1000)
-                .filter(|_| refuses_to_join(rng, fighter, club, rules))
+                .filter(|_| refuses_to_join(rng, fighter, club, moving, rules, ties))
                 .count()
         };
         let base = refusals(&fighter, fighter.fame, &mut rng);
@@ -438,6 +452,13 @@ mod tests {
             refusals(&fighter, Fame::default().changed_by(100), &mut rng),
             0
         );
+        // Unless it is loyal to its club, or bears a grudge against the other.
+        let famous = Fame::default().changed_by(100);
+        let mut loyal = fighter.clone();
+        loyal.change_tie(moving.0, 100);
+        assert!(refusals(&loyal, famous, &mut rng) > 0);
+        fighter.change_tie(moving.1, ties.refuses_below - 1);
+        assert_eq!(refusals(&fighter, famous, &mut rng), 1000);
     }
 
     #[test]

@@ -215,6 +215,39 @@ impl RelationRules {
     }
 }
 
+/// A club, as a fighter's tie knows it.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
+pub enum Club {
+    Player,
+    Rival(usize),
+}
+
+/// What a fighter feels for a club it was in, from −100 to +100.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub struct Tie {
+    pub club: Club,
+    pub score: i32,
+}
+
+/// The fighters' ties with clubs, from `data/world.ron`.
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct TieRules {
+    /// Points its tie with its club gains each week there.
+    pub weekly: u32,
+    /// Points its ties with other clubs come back towards 0 each week.
+    pub decay: u32,
+    /// Points of being let go for nothing, released or at the end of a contract.
+    pub released: i32,
+    /// Points of being sold.
+    pub sold: i32,
+    /// Below this tie, a fighter refuses to sign with the club.
+    pub refuses_below: i32,
+    /// The percentage of its tie with the club it leaves, less its tie with the one
+    /// it would join, added to the chance it refuses a move.
+    pub refusal_percent: u32,
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

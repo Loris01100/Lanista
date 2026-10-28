@@ -469,6 +469,10 @@ pub fn market_news_text(news: MarketNews, state: &GameState, data: &DesignData) 
             "market-sign-refused",
             fighter = target_name(Target::FreeAgent(a), state, data)
         ),
+        MarketNews::GrudgeRefused(a) => tr!(
+            "market-grudge-refused",
+            fighter = target_name(Target::FreeAgent(a), state, data)
+        ),
         MarketNews::ContractEnded(i) => tr!("market-contract-ended", fighter = club(i)),
     }
 }

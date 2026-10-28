@@ -234,6 +234,7 @@ market-renewed = { $fighter } prolonge son contrat
 market-renewal-refused = { $fighter } refuse de prolonger : moral trop bas
 market-terms-refused = { $fighter } refuse vos conditions de prolongation et le prend mal
 market-sign-refused = { $fighter } refuse vos conditions et reste libre
+market-grudge-refused = { $fighter } n'a pas oublié son départ de votre club et refuse de signer
 market-contract-ended = { $fighter } quitte le club en fin de contrat, libre
 market-failed = Transfert { club-de }{ $fighter } impossible : pas de place, pas assez d'argent ou combattant parti
 
@@ -569,6 +570,8 @@ sheet-loadout = Configuration du combattant
 sheet-origin = Origine : { $place }
 origin-place = { $culture } ({ $continent })
 sheet-condition = État
+sheet-tie = Attachement
+sheet-tie-hint = Ce qu'il ressent pour le club, de -100 à +100 : il monte chaque semaine passée ici. Attaché, il hésite à partir ; libéré ou vendu, il en garde rancune et peut refuser de revenir.
 sheet-career = Carrière
 sheet-season = Saison
 sheet-stats = Caractéristiques

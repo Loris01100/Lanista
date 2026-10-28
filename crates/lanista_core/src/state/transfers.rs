@@ -8,12 +8,12 @@ use rand::RngExt;
 use crate::colosseum::Contender;
 use crate::design_data::DesignData;
 use crate::economy::{Flow, Terms, Transaction, Wealth};
-use crate::fighter::career::{CareerFighter, Status};
+use crate::fighter::career::Status;
 use crate::fighter::morale::MoraleEvent;
 use crate::fighter::percent_of;
 use crate::market::{self, MarketNews, Move, SaleOffer, estimated_potential, value};
-use crate::relations::Reason;
-use crate::rivals::{Eye, RivalId};
+use crate::relations::{Club, Reason};
+use crate::rivals::RivalId;
 
 use super::clubs::off_season_starts;
 use super::{GameState, News, WorldNews, relate};
@@ -67,7 +67,11 @@ pub(super) fn market_moves(
                     club: rival,
                     fighter: state.rivals[rival].fighters.len() - 1,
                 };
-                state.transfer(Contender::Club(fighter), Contender::Rival(to));
+                state.transfer(
+                    Contender::Club(fighter),
+                    Contender::Rival(to),
+                    &data.world.ties,
+                );
                 let price = i64::from(offer.price);
                 state.rivals[rival].money -= price;
                 state.money += price;
@@ -81,7 +85,7 @@ pub(super) fn market_moves(
                 news.push(MarketNews::Sold(offer));
             }
             Move::Release(i) => {
-                release(state, i);
+                release(state, i, data);
                 news.push(MarketNews::Released(i));
             }
             Move::List(i) => state.transfer_list.push(i),
@@ -91,10 +95,12 @@ pub(super) fn market_moves(
             Move::Renew(i, terms) => news.push(renew(state, i, terms, data)),
             Move::Sign(a, terms) => {
                 let economy = &data.economy;
-                if !economy
-                    .contracts
-                    .accepts(&state.free_agents[a], terms, &economy.market)
-                {
+                let agent = &state.free_agents[a];
+                if agent.tie(Club::Player) < data.world.ties.refuses_below {
+                    news.push(MarketNews::GrudgeRefused(a));
+                    continue;
+                }
+                if !economy.contracts.accepts(agent, terms, &economy.market) {
                     news.push(MarketNews::SignRefused(a));
                     continue;
                 }
@@ -104,7 +110,11 @@ pub(super) fn market_moves(
                 state.free_agents[a].status = Status::Sold;
                 state.fighters.push(agent);
                 let i = state.fighters.len() - 1;
-                state.transfer(Contender::FreeAgent(a), Contender::Club(i));
+                state.transfer(
+                    Contender::FreeAgent(a),
+                    Contender::Club(i),
+                    &data.world.ties,
+                );
                 news.push(MarketNews::Signed(i));
             }
             Move::Observe(_) | Move::Offer(..) => {}
@@ -137,13 +147,13 @@ fn renew(state: &mut GameState, i: usize, terms: Terms, data: &DesignData) -> Ma
 }
 
 /// Lets the club's fighter `i` go, for nothing: a free agent.
-fn release(state: &mut GameState, i: usize) {
+fn release(state: &mut GameState, i: usize, data: &DesignData) {
     let mut released = state.fighters[i].clone();
     released.contract = None;
     state.fighters[i].status = Status::Released;
     state.free_agents.push(released);
     let to = Contender::FreeAgent(state.free_agents.len() - 1);
-    state.transfer(Contender::Club(i), to);
+    state.transfer(Contender::Club(i), to, &data.world.ties);
 }
 
 /// At the start of the off-season, the club's fighters whose contract ends this season
@@ -160,7 +170,7 @@ pub(super) fn contracts_end(state: &mut GameState, data: &DesignData) -> Vec<Mar
         })
         .collect();
     for &i in &ended {
-        release(state, i);
+        release(state, i, data);
     }
     state.transfer_list.retain(|i| !ended.contains(i));
     state.kept.retain(|i| !ended.contains(i));
@@ -196,6 +206,7 @@ fn negotiate(
     ledger: &mut Vec<Transaction>,
 ) -> MarketNews {
     let market = &data.economy.market;
+    let ties = &data.world.ties;
     let Some(asking) = state.price_to_player(id, data) else {
         return MarketNews::Failed(id);
     };
@@ -210,7 +221,8 @@ fn negotiate(
     }
     let club_fame = state.club_fame();
     let fighter = &state.rivals[id.club].fighters[id.fighter];
-    if market::refuses_to_join(&mut state.rng, fighter, club_fame, market) {
+    let moving = (Club::Rival(id.club), Club::Player);
+    if market::refuses_to_join(&mut state.rng, fighter, club_fame, moving, market, ties) {
         return MarketNews::FighterRefused(id);
     }
     if !state.can_hire(data) || i64::from(price) > state.money {
@@ -225,7 +237,11 @@ fn negotiate(
     state.money -= amount;
     state.rivals[id.club].money += amount;
     let fighter = state.fighters.len() - 1;
-    state.transfer(Contender::Rival(id), Contender::Club(fighter));
+    state.transfer(
+        Contender::Rival(id),
+        Contender::Club(fighter),
+        &data.world.ties,
+    );
     ledger.push(Transaction {
         fighter: Some(fighter),
         flow: Flow::Purchase,
@@ -273,7 +289,7 @@ pub(super) fn rival_market(state: &mut GameState, data: &DesignData) {
                 })
                 .collect();
             for fighter in gone {
-                release_rival(state, RivalId { club, fighter });
+                release_rival(state, RivalId { club, fighter }, data);
             }
         }
         for _ in 0..market.rookies {
@@ -341,14 +357,14 @@ fn sale_offers(state: &mut GameState, data: &DesignData) {
 }
 
 /// Rival fighter `id` lets go by its club: a free agent now, with its Elo and titles.
-pub(super) fn release_rival(state: &mut GameState, id: RivalId) {
+pub(super) fn release_rival(state: &mut GameState, id: RivalId, data: &DesignData) {
     let Some(fighter) = state.rivals[id.club].fighters.get_mut(id.fighter) else {
         return;
     };
     state.free_agents.push(fighter.clone());
     fighter.status = Status::Released;
     let to = Contender::FreeAgent(state.free_agents.len() - 1);
-    state.transfer(Contender::Rival(id), to);
+    state.transfer(Contender::Rival(id), to, &data.world.ties);
 }
 
 /// The worth to rival club `club` (its profile's eye) of its weakest fighter in
@@ -367,7 +383,8 @@ pub(super) fn weakest(state: &GameState, club: usize, data: &DesignData) -> Opti
 /// The free agent rival club `club` would sign first: for a poor club, the one of the
 /// best potential its recruiter sees (`market::estimated_potential`), the youngest of
 /// equals; for the others, or a poor club whose recruiter cannot tell, the one worth
-/// most to its profile's eye.
+/// most to its profile's eye. Never one whose tie with the club is below
+/// `TieRules::refuses_below`.
 fn wanted_agent(state: &GameState, club: usize, data: &DesignData) -> Option<usize> {
     let rival = &state.rivals[club];
     let scouting = rival
@@ -376,8 +393,12 @@ fn wanted_agent(state: &GameState, club: usize, data: &DesignData) -> Option<usi
         .map(|r| r.scouting)
         .unwrap_or_default();
     let agents = &state.free_agents;
+    let open = |a: &usize| {
+        agents[*a].status == Status::Active
+            && agents[*a].tie(Club::Rival(club)) >= data.world.ties.refuses_below
+    };
     let promising = (0..agents.len())
-        .filter(|&a| agents[a].status == Status::Active)
+        .filter(open)
         .filter_map(|a| {
             let potential = estimated_potential(&agents[a], &scouting)?;
             Some((potential, Reverse(agents[a].age), Reverse(a)))
@@ -386,7 +407,12 @@ fn wanted_agent(state: &GameState, club: usize, data: &DesignData) -> Option<usi
         .map(|(.., Reverse(a))| a);
     match promising {
         Some(a) if rival.wealth == Wealth::Poor => Some(a),
-        _ => most_valuable(agents, rival.rules(data).recruits, data),
+        _ => {
+            let eye = rival.rules(data).recruits;
+            (0..agents.len())
+                .filter(open)
+                .max_by_key(|&a| (eye.appeal(&agents[a], &data.economy.market), Reverse(a)))
+        }
     }
 }
 
@@ -449,7 +475,11 @@ fn sign_up(
             club: buyer,
             fighter: roster.len() - 1,
         };
-        state.transfer(Contender::FreeAgent(agent), Contender::Rival(to));
+        state.transfer(
+            Contender::FreeAgent(agent),
+            Contender::Rival(to),
+            &data.world.ties,
+        );
     }
 }
 
@@ -477,6 +507,7 @@ pub(super) fn rich_purchases(state: &mut GameState, data: &DesignData) {
                     club: buyer,
                     fighter,
                 },
+                data,
             );
         }
     }
@@ -523,7 +554,9 @@ pub(super) fn buy_from_rival(
         .max_by_key(|f| f.value())
         .unwrap_or_default();
     let fighter = &state.rivals[id.club].fighters[id.fighter];
-    if market::refuses_to_join(&mut state.rng, fighter, fame, market) {
+    let moving = (Club::Rival(id.club), Club::Rival(buyer));
+    let ties = &data.world.ties;
+    if market::refuses_to_join(&mut state.rng, fighter, fame, moving, market, ties) {
         return None;
     }
     let mut bought = fighter.clone();
@@ -550,15 +583,8 @@ pub(super) fn buy_from_rival(
         club: buyer,
         fighter: roster.len() - 1,
     };
-    state.transfer(Contender::Rival(id), Contender::Rival(to));
+    state.transfer(Contender::Rival(id), Contender::Rival(to), &data.world.ties);
     Some(id.club)
-}
-
-/// Index of the one of `fighters` still active worth most to `eye`, the first of equals.
-fn most_valuable(fighters: &[CareerFighter], eye: Eye, data: &DesignData) -> Option<usize> {
-    (0..fighters.len())
-        .filter(|&a| fighters[a].status == Status::Active)
-        .max_by_key(|&a| (eye.appeal(&fighters[a], &data.economy.market), Reverse(a)))
 }
 
 /// Beyond `MarketRules::max_free_agents`, the least valuable free agents give up

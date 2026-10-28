@@ -117,6 +117,14 @@
         // clubs, and `fame` to both fighters, whatever the result.
         rivalry: (ends_from: -19, receipts_percent: 150, fame: 3),
     ),
+    // Each fighter's tie with each club it was in, from -100 to +100, starting at 0:
+    // `weekly` points each week in the club, `decay` back towards 0 each week for the
+    // others; `released` when let go for nothing (released, or a contract not
+    // renewed), `sold` when sold. Below `refuses_below` it refuses to sign with the
+    // club; `refusal_percent` of its tie with the club it leaves, less its tie with
+    // the one it would join, adds to the chance it refuses a move: loyal to its club,
+    // glad to come back to one it liked.
+    ties: (weekly: 1, decay: 1, released: -60, sold: -20, refuses_below: -30, refusal_percent: 50),
     // Each continent has a major colosseum, of the highest prestige, and one or two
     // minor ones around it, where prestige-2 ones ask a small fee; on each continent
     // where clubs live, at least one must be free to enter: the safety net of a club

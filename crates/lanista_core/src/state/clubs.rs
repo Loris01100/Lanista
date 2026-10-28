@@ -47,7 +47,7 @@ pub(super) fn club_lives(state: &mut GameState, data: &DesignData) {
         let ruined = rival.wealth == Wealth::Poor && rival.money < i64::from(rules.ruined_below);
         rival.ruined_seasons = if ruined { rival.ruined_seasons + 1 } else { 0 };
         if rival.ruined_seasons >= rules.ruined_seasons {
-            close_club(state, club);
+            close_club(state, club, data);
             closed += 1;
         }
     }
@@ -68,10 +68,10 @@ pub(super) fn club_lives(state: &mut GameState, data: &DesignData) {
 
 /// Rival club `club` closes: its fighters go to the market with their Elo and titles,
 /// its staff leaves, and it plays no more.
-fn close_club(state: &mut GameState, club: usize) {
+fn close_club(state: &mut GameState, club: usize, data: &DesignData) {
     for fighter in 0..state.rivals[club].fighters.len() {
         if state.rivals[club].fighters[fighter].status == Status::Active {
-            release_rival(state, RivalId { club, fighter });
+            release_rival(state, RivalId { club, fighter }, data);
         }
     }
     let rival = &mut state.rivals[club];

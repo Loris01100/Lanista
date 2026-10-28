@@ -8,7 +8,7 @@ use crate::fighter::career::{Activity, CareerFighter, Status, WeekPlan, WeekRepo
 use crate::fighter::fame::{Fame, FightResult};
 use crate::fighter::percent_of;
 use crate::market::{MarketNews, Move};
-use crate::relations::Reason;
+use crate::relations::{Club, Reason};
 use crate::staff::{StaffMove, StaffNews};
 use serde::{Deserialize, Serialize};
 
@@ -389,6 +389,19 @@ fn end_week(
     CareerFighter::follow_pack_leaders(&mut state.fighters, rules);
     for rival in &mut state.rivals {
         CareerFighter::follow_pack_leaders(&mut rival.fighters, rules);
+    }
+    let ties = &data.world.ties;
+    let active = |f: &&mut CareerFighter| f.status == Status::Active;
+    for fighter in state.fighters.iter_mut().filter(active) {
+        fighter.tie_week(Some(Club::Player), ties);
+    }
+    for (club, rival) in state.rivals.iter_mut().enumerate() {
+        for fighter in rival.fighters.iter_mut().filter(active) {
+            fighter.tie_week(Some(Club::Rival(club)), ties);
+        }
+    }
+    for fighter in state.free_agents.iter_mut().filter(active) {
+        fighter.tie_week(None, ties);
     }
     for (&club, relation) in &mut state.relations {
         relation.fade(&data.world.relations);

@@ -30,6 +30,7 @@ use crate::fighter::traits::{Trait, TraitRules};
 use crate::fighter::{ClassId, Condition, Fighter, FighterId, Stats, percent_of};
 use crate::log::{Report, places};
 use crate::names::FighterName;
+use crate::relations::{Club, MAX_SCORE, Tie, TieRules};
 use crate::rivals::RivalId;
 use crate::staff::{Medicine, StaffEffects};
 use crate::stat_model::Ending;
@@ -150,6 +151,9 @@ pub struct CareerFighter {
     /// (`CareerFighter::moved`).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub moved_to: Option<Contender>,
+    /// What it feels for the clubs it was in (`TieRules`), none at 0.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub ties: Vec<Tie>,
 }
 
 impl CareerFighter {
@@ -217,6 +221,7 @@ impl CareerFighter {
             joined: None,
             contract: None,
             moved_to: None,
+            ties: Vec::new(),
         };
         fighter.loadout = fighter.preferred_loadout();
         fighter
@@ -281,6 +286,41 @@ impl CareerFighter {
             joined: None,
             contract: None,
             moved_to: Some(to),
+            ties: Vec::new(),
+        }
+    }
+
+    /// Its tie with `club`, 0 if it has none.
+    #[must_use]
+    pub fn tie(&self, club: Club) -> i32 {
+        self.ties
+            .iter()
+            .find(|t| t.club == club)
+            .map_or(0, |t| t.score)
+    }
+
+    /// Moves its tie with `club` by `points`, within bounds.
+    pub fn change_tie(&mut self, club: Club, points: i32) {
+        match self.ties.iter_mut().find(|t| t.club == club) {
+            Some(tie) => tie.score = (tie.score + points).clamp(-MAX_SCORE, MAX_SCORE),
+            None => self.ties.push(Tie {
+                club,
+                score: points.clamp(-MAX_SCORE, MAX_SCORE),
+            }),
+        }
+        self.ties.retain(|t| t.score != 0);
+    }
+
+    /// A week goes by in `club` (`None` for a free agent): its tie with it grows
+    /// `weekly` points, the others come back `decay` points towards 0.
+    pub fn tie_week(&mut self, club: Option<Club>, rules: &TieRules) {
+        let decay = i32::try_from(rules.decay).unwrap_or(MAX_SCORE);
+        for tie in self.ties.iter_mut().filter(|t| Some(t.club) != club) {
+            tie.score -= tie.score.signum() * decay.min(tie.score.abs());
+        }
+        self.ties.retain(|t| t.score != 0);
+        if let Some(club) = club {
+            self.change_tie(club, i32::try_from(rules.weekly).unwrap_or(MAX_SCORE));
         }
     }
 
@@ -2501,5 +2541,26 @@ mod tests {
             (f, reports)
         };
         assert_eq!(career(), career());
+    }
+
+    #[test]
+    fn a_tie_grows_in_its_club_and_fades_elsewhere() {
+        let data = data();
+        let rules = &data.world.ties;
+        let mut fighter = CareerFighter::random(&mut ChaCha8Rng::seed_from_u64(1), &data);
+        fighter.change_tie(Club::Rival(0), rules.released);
+        fighter.tie_week(Some(Club::Player), rules);
+        assert_eq!(
+            fighter.tie(Club::Player),
+            i32::try_from(rules.weekly).unwrap()
+        );
+        let faded = rules.released + i32::try_from(rules.decay).unwrap();
+        assert_eq!(fighter.tie(Club::Rival(0)), faded);
+        fighter.change_tie(Club::Player, 1000);
+        assert_eq!(fighter.tie(Club::Player), MAX_SCORE);
+        for _ in 0..200 {
+            fighter.tie_week(None, rules);
+        }
+        assert_eq!(fighter.ties, []);
     }
 }
