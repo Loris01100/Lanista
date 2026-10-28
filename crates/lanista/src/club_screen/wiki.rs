@@ -319,21 +319,25 @@ fn calc_lines(calc: Calc, data: &DesignData) -> Vec<String> {
                 percent = fighter.equipment.shield_defense_percent
             ),
         ],
-        Calc::Hit => vec![
-            tr!(
-                "wiki-calc-hit-formula",
-                even = combat.accuracy.even_percent,
-                min = combat.accuracy.min_percent,
-                max = combat.accuracy.max_percent
-            ),
-            tr!(
-                "wiki-calc-hit-location",
-                head = combat.hits.head,
-                body = combat.hits.body,
-                arm = combat.hits.arm,
-                leg = combat.hits.leg
-            ),
-        ],
+        Calc::Hit => {
+            let hits = &combat.hits;
+            let total = hits.head + hits.body + hits.arm + hits.leg;
+            vec![
+                tr!(
+                    "wiki-calc-hit-formula",
+                    even = combat.accuracy.even_percent,
+                    min = combat.accuracy.min_percent,
+                    max = combat.accuracy.max_percent
+                ),
+                tr!(
+                    "wiki-calc-hit-location",
+                    head = share(hits.head, total),
+                    body = share(hits.body, total),
+                    arm = share(hits.arm, total),
+                    leg = share(hits.leg, total)
+                ),
+            ]
+        }
         Calc::Stun => vec![
             tr!(
                 "wiki-calc-stun-chance",
@@ -436,7 +440,7 @@ fn severity_table(ui: &mut egui::Ui, data: &DesignData) {
                 ui,
                 &[
                     "wiki-level",
-                    "wiki-weight",
+                    "wiki-chance",
                     "wiki-healing",
                     "wiki-maluses",
                     "wiki-care",
@@ -460,9 +464,10 @@ fn severity_table(ui: &mut egui::Ui, data: &DesignData) {
                 ),
                 ("wiki-permanent", weights.permanent, None),
             ];
+            let total = weights.light + weights.medium + weights.severe + weights.permanent;
             for (name, weight, heals) in severities {
                 ui.label(tr!(name));
-                ui.label(weight.to_string());
+                ui.label(format!("{} %", share(weight, total)));
                 if let Some(((min, max), malus, cost)) = heals {
                     ui.label(tr!("wiki-weeks-range", min = min, max = max));
                     ui.label(format!("{malus} %"));
@@ -483,38 +488,41 @@ fn parts_table(ui: &mut egui::Ui, data: &DesignData) {
     section(ui, &tr!("wiki-parts"));
     let (temporary, permanent, lost) = (&rules.temporary, &rules.permanent, &rules.lost);
     let at = &rules.location_weights;
+    let total = at.head + at.body + at.arm + at.leg;
+    // An arm wound falls on either arm, one time in two.
+    let one_arm = |weight: u32| share(weight, total * 2);
     let parts = [
         (
             "location-head",
-            at.head,
+            share(at.head, total),
             temporary.head,
             permanent.head,
             None,
         ),
         (
             "location-body",
-            at.body,
+            share(at.body, total),
             temporary.body,
             permanent.body,
             None,
         ),
         (
             "wiki-dominant-arm",
-            at.arm,
+            one_arm(at.arm),
             temporary.dominant_arm,
             permanent.dominant_arm,
             Some(lost.dominant_arm),
         ),
         (
             "wiki-off-arm",
-            at.arm,
+            one_arm(at.arm),
             temporary.off_arm,
             permanent.off_arm,
             Some(lost.off_arm),
         ),
         (
             "wiki-leg",
-            at.leg,
+            share(at.leg, total),
             temporary.leg,
             permanent.leg,
             Some(lost.leg),
@@ -525,7 +533,7 @@ fn parts_table(ui: &mut egui::Ui, data: &DesignData) {
             ui,
             &[
                 "wiki-part",
-                "wiki-weight",
+                "wiki-chance",
                 "wiki-medium",
                 "wiki-permanent",
                 "wiki-lost",
@@ -533,7 +541,7 @@ fn parts_table(ui: &mut egui::Ui, data: &DesignData) {
         );
         for (name, weight, temporary, permanent, lost) in parts {
             ui.label(tr!(name));
-            ui.label(weight.to_string());
+            ui.label(format!("{weight} %"));
             ui.label(maluses(temporary));
             ui.label(maluses(permanent));
             ui.label(lost.map_or_else(|| "—".into(), maluses));
@@ -551,13 +559,15 @@ fn illness_table(ui: &mut egui::Ui, data: &DesignData) {
         ("wiki-moderate", IllnessLevel::Moderate, cost.moderate),
         ("wiki-severe-illness", IllnessLevel::Severe, cost.severe),
     ];
+    let weights = &rules.level_weights;
+    let total = weights.mild + weights.moderate + weights.severe;
     section(ui, &tr!("wiki-levels"));
     egui::Grid::new("wiki-levels").striped(true).show(ui, |ui| {
         header_row(
             ui,
             &[
                 "wiki-level",
-                "wiki-weight",
+                "wiki-chance",
                 "wiki-healing",
                 "wiki-all-stats",
                 "wiki-rest",
@@ -567,7 +577,7 @@ fn illness_table(ui: &mut egui::Ui, data: &DesignData) {
         for (name, level, cost) in levels {
             let (min, max) = rules.weeks.get(level);
             ui.label(tr!(name));
-            ui.label(rules.level_weights.get(level).to_string());
+            ui.label(format!("{} %", share(weights.get(level), total)));
             ui.label(tr!("wiki-weeks-range", min = min, max = max));
             ui.label(format!("-{} %", rules.malus.get(level)));
             ui.label(format!("{} %", rules.rest_percent.get(level)));
@@ -598,6 +608,13 @@ fn maluses(stats: Stats) -> String {
     } else {
         maluses.join(", ")
     }
+}
+
+/// The chance, in percent, of drawing `weight` out of weights adding up to `total`: « 33,33 ».
+fn share(weight: u32, total: u32) -> String {
+    let hundredths_of_percent =
+        (u64::from(weight) * 10_000 + u64::from(total) / 2) / u64::from(total.max(1));
+    hundredths(u32::try_from(hundredths_of_percent).unwrap_or(u32::MAX))
 }
 
 /// Hundredths of a percent as a percent: « 1,67 » for 167, « 5 » for 500.
@@ -818,6 +835,13 @@ mod tests {
         assert_eq!(hundredths(167), "1,67");
         assert_eq!(hundredths(17), "0,17");
         assert_eq!(hundredths(250), "2,5");
+    }
+
+    #[test]
+    fn weights_read_as_chances() {
+        assert_eq!(share(1, 10), "10");
+        assert_eq!(share(1, 3), "33,33");
+        assert_eq!(share(3, 40), "7,5");
     }
 
     #[test]

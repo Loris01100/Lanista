@@ -468,7 +468,7 @@ wiki-calc-damage-off-hand = Une seconde arme ramène l'AC à { $percent } %, sau
 wiki-calc-defense-formula = Une défense D ne laisse passer que 100 / (100 + D) des dégâts : 100 de défense les divise par deux, 300 par quatre. Elle ne les annule jamais.
 wiki-calc-defense-shield = Un bouclier porte la DC et la DL à { $percent } %.
 wiki-calc-hit-formula = Chance de toucher = { $even } % × 2 × PRÉ / (PRÉ + VIT de la cible), entre { $min } % et { $max } %, puis multipliée par la précision de la capacité. À PRÉ égale à la VIT adverse, on touche à { $even } %.
-wiki-calc-hit-location = Le coup tombe sur la tête, le corps, un bras ou une jambe, avec les poids { $head }, { $body }, { $arm } et { $leg }.
+wiki-calc-hit-location = Le coup tombe sur la tête, le corps, un bras ou une jambe, avec { $head } %, { $body } %, { $arm } % et { $leg } % de chance.
 wiki-calc-stun-chance = Un coup qui ne met pas fin au combat étourdit avec { $blunt } % de chance s'il est contondant, { $cutting } % s'il est tranchant, par dixième des PV max qu'il enlève ; un coup neutre, jamais. Chaque blessure à la tête augmente cette chance de { $head } %.
 wiki-calc-stun-rise = L'étourdi reste à terre { $seconds } s, puis se relève avec { $timid } % de chance s'il est le plus timide, jusqu'à { $bold } % s'il est le plus audacieux, { $lost } points de moins par étourdissement après le premier. Sinon il est mis K.-O. et perd, vivant.
 wiki-calc-cut = Un coup tranchant qui porte peut trancher la partie touchée. Un membre, si la cible combat encore, avec { $limb } % de chance par dixième des PV max qu'il enlève : elle sort vivante, mutilée à vie. La tête, avec { $head } % par dixième, ou { $fatal } % sur le coup qui la met à 0 PV : elle meurt. Le corps, jamais.
@@ -484,7 +484,7 @@ wiki-levels = Niveaux
 wiki-parts = Parties du corps
 wiki-level = Niveau
 wiki-part = Partie
-wiki-weight = Poids
+wiki-chance = Chance
 wiki-healing = Guérison
 wiki-maluses = Part des malus
 wiki-all-stats = Toutes les stats
