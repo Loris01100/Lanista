@@ -409,15 +409,15 @@ impl FightView {
         })
     }
 
-    /// How fighter `f` went out of the fight, the gravest way first; `None` while it
-    /// fights.
+    /// How fighter `f` went out of the fight, the gravest way first, as the club's fight
+    /// lines tell it; `None` while it fights.
     fn way_out(&self, f: &Fighter) -> Option<WayOut> {
         let survived = self.cast.survivors.contains(&f.id);
         Some(match f.severed {
             Some(Location::Head) => WayOut::Beheaded,
+            _ if !f.is_alive() && !survived => WayOut::Dead,
             Some(_) => WayOut::Severed,
-            None if !f.is_alive() && survived => WayOut::LeftForDead,
-            None if !f.is_alive() => WayOut::Dead,
+            None if !f.is_alive() => WayOut::LeftForDead,
             None if f.knocked_out => WayOut::KnockedOut,
             None if f.surrendered => WayOut::GaveUp,
             None if f.eliminated => WayOut::Eliminated,
@@ -982,9 +982,9 @@ mod tests {
         let mut view = FightView::new(arena, cast);
         let lines = view.elimination_lines();
         assert_eq!(lines[0], "Élimination dans 15 s : 3 combattants sortent");
-        assert!(lines[1].starts_with("Pour rester, plus de 0 dégâts"));
+        assert!(lines[1].starts_with("Pour rester, plus de 0 dégât "));
         assert!(
-            lines[2].starts_with("Mirmillon n° 1 : 0 dégâts, "),
+            lines[2].starts_with("Mirmillon n° 1 : 0 dégât, "),
             "{lines:?}"
         );
         view.skip();
@@ -992,6 +992,16 @@ mod tests {
         // A duel tells nothing.
         let duel = FightView::new(random_duel(&data, 1), Cast::default());
         assert_eq!(duel.elimination_lines(), Vec::<String>::new());
+    }
+
+    #[test]
+    fn a_fighter_that_lost_a_limb_and_died_is_told_dead() {
+        let data = DesignData::load().unwrap();
+        let mut arena = random_duel(&data, 65);
+        arena.fighters[1].severed = Some(Location::Arm(lanista_core::fighter::injury::Side::Left));
+        arena.fighters[1].hp = 0;
+        let view = FightView::new(arena, Cast::default());
+        assert_eq!(view.way_out(&view.arena.fighters[1]), Some(WayOut::Dead));
     }
 
     #[test]

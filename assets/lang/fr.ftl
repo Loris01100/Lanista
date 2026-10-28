@@ -226,7 +226,7 @@ market-sold = Vend { $fighter } à { $club } pour { $price }
 market-bought = Achète { $fighter } à { $club } pour { $price }
 market-countered = { $club } demande { $price } pour { $fighter } (offre possible cette semaine)
 market-club-refused = { $club } refuse l'offre pour { $fighter }
-market-fighter-refused = { $fighter } refuse de rejoindre le club
+market-fighter-refused = { $fighter } refuse de rejoindre votre club
 market-renewed = { $fighter } prolonge son contrat
 market-renewal-refused = { $fighter } refuse de prolonger : moral trop bas
 market-terms-refused = { $fighter } refuse vos conditions de prolongation et le prend mal
@@ -901,8 +901,14 @@ elimination-next = Élimination dans { $seconds } s : { $out ->
         [1] 1 combattant sort
        *[other] { $out } combattants sortent
     }
-elimination-threshold = Pour rester, plus de { $threshold } dégâts depuis la dernière élimination
-elimination-standing = { $fighter } : { $damage } dégâts, { $danger ->
+elimination-threshold = Pour rester, plus de { $threshold ->
+        [one] { $threshold } dégât
+       *[other] { $threshold } dégâts
+    } depuis la dernière élimination
+elimination-standing = { $fighter } : { $damage ->
+        [one] { $damage } dégât
+       *[other] { $damage } dégâts
+    }, { $danger ->
         [true] éliminé si rien ne change
        *[false] à l'abri
     }
