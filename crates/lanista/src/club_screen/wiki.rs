@@ -7,7 +7,7 @@
 use std::rc::Rc;
 
 use lanista_core::combat::{DamageKind, Range};
-use lanista_core::design_data::{DesignData, SpellData};
+use lanista_core::design_data::{DesignData, LoadoutData, SpellData};
 use lanista_core::fighter::equipment::OffHand;
 use reesch::egui;
 
@@ -22,6 +22,8 @@ pub(super) enum Entry {
     Class(usize),
     /// The weapon type at this index of `CombatRules::weapons`, in key order.
     Weapon(usize),
+    /// The shield an off hand may hold (`OffHand::Shield`).
+    Shield,
 }
 
 impl Entry {
@@ -32,7 +34,7 @@ impl Entry {
     fn category(self) -> &'static str {
         match self {
             Self::Class(_) => "wiki-classes",
-            Self::Weapon(_) => "wiki-weapons",
+            Self::Weapon(_) | Self::Shield => "wiki-weapons",
         }
     }
 
@@ -47,6 +49,7 @@ impl Entry {
                 .keys()
                 .nth(i)
                 .map(|k| ("weapon", k.as_str())),
+            Self::Shield => Some(("weapon", "shield")),
         }
     }
 
@@ -56,10 +59,11 @@ impl Entry {
     }
 }
 
-/// Every page, the classes then the weapons.
+/// Every page, the classes then the weapons and the shield.
 pub(super) fn entries(data: &DesignData) -> impl Iterator<Item = Entry> {
     let classes = (0..data.classes.len()).map(Entry::Class);
-    classes.chain((0..data.combat.weapons.len()).map(Entry::Weapon))
+    let weapons = (0..data.combat.weapons.len()).map(Entry::Weapon);
+    classes.chain(weapons).chain([Entry::Shield])
 }
 
 /// The pages of `shown`'s category, or of all whose name holds `query`, whatever the case.
@@ -76,12 +80,12 @@ fn listed(data: &DesignData, shown: Entry, query: &str) -> Vec<Entry> {
         .collect()
 }
 
-/// The classes whose loadouts hold weapon `key`: the class's and the loadout's indices.
-fn users(data: &DesignData, key: &str) -> Vec<(usize, usize)> {
+/// The classes with loadouts that `holds`: the class's and the loadout's indices.
+fn users(data: &DesignData, holds: impl Fn(&LoadoutData) -> bool) -> Vec<(usize, usize)> {
     let mut users = Vec::new();
     for (c, class) in data.classes.iter().enumerate() {
         for (l, loadout) in class.loadouts.iter().enumerate() {
-            if loadout.weapon == key {
+            if holds(loadout) {
                 users.push((c, l));
             }
         }
@@ -152,7 +156,7 @@ fn page(ui: &mut egui::Ui, entry: Entry, data: &DesignData) {
             for spell in &class.spells {
                 spell_line(ui, spell);
             }
-            section(ui, &tr!("wiki-loadouts"));
+            section(ui, &tr!("wiki-configurations"));
             for loadout in &class.loadouts {
                 let weapon = tr!(&format!("weapon-{}", loadout.weapon));
                 let off_hand = match loadout.off_hand {
@@ -172,6 +176,11 @@ fn page(ui: &mut egui::Ui, entry: Entry, data: &DesignData) {
                 section(ui, &tr!("wiki-auto-attack"));
                 spell_line(ui, attack);
             }
+        }
+        Entry::Shield => {
+            section(ui, &tr!("wiki-effect"));
+            let percent = data.fighter.equipment.shield_defense_percent;
+            ui.label(tr!("wiki-shield-effect", percent = percent));
         }
     }
     section(ui, &tr!("wiki-history"));
@@ -271,20 +280,44 @@ fn card(ui: &mut egui::Ui, entry: Entry, data: &DesignData, open: &mut Option<En
                     }
                 }
             }
+            let shield = class.loadouts.iter().any(|l| l.off_hand == OffHand::Shield);
+            if shield && ui.link(Entry::Shield.name(data)).clicked() {
+                *open = Some(Entry::Shield);
+            }
         }
         Entry::Weapon(i) => {
             let Some(key) = data.combat.weapons.keys().nth(i) else {
                 return;
             };
-            section(ui, &tr!("wiki-used-by"));
-            for (c, l) in users(data, key) {
-                let class = Entry::Class(c);
-                let loadout = tr!(&format!("loadout-{}", data.classes[c].loadouts[l].key));
-                let text = tr!("wiki-user", class = class.name(data), loadout = loadout);
-                if ui.link(text).clicked() {
-                    *open = Some(class);
-                }
-            }
+            users_links(ui, data, users(data, |l| l.weapon == *key), open);
+        }
+        Entry::Shield => {
+            let percent = data.fighter.equipment.shield_defense_percent;
+            egui::Grid::new("wiki-shield").show(ui, |ui| {
+                ui.label(tr!("wiki-defenses"));
+                ui.label(format!("{percent} %"));
+                ui.end_row();
+            });
+            let users = users(data, |l| l.off_hand == OffHand::Shield);
+            users_links(ui, data, users, open);
+        }
+    }
+}
+
+/// Links to the classes of `users`, each with its loadout's name.
+fn users_links(
+    ui: &mut egui::Ui,
+    data: &DesignData,
+    users: Vec<(usize, usize)>,
+    open: &mut Option<Entry>,
+) {
+    section(ui, &tr!("wiki-used-by"));
+    for (c, l) in users {
+        let class = Entry::Class(c);
+        let loadout = tr!(&format!("loadout-{}", data.classes[c].loadouts[l].key));
+        let text = tr!("wiki-user", class = class.name(data), loadout = loadout);
+        if ui.link(text).clicked() {
+            *open = Some(class);
         }
     }
 }
@@ -310,7 +343,7 @@ mod tests {
     fn every_weapon_is_held_by_a_class() {
         let data = DesignData::load().unwrap();
         for key in data.combat.weapons.keys() {
-            assert!(!users(&data, key).is_empty(), "{key}");
+            assert!(!users(&data, |l| l.weapon == *key).is_empty(), "{key}");
         }
     }
 }
