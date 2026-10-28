@@ -196,7 +196,7 @@ flow-upkeep = entretien
 flow-care = soins
 flow-training = entraînement
 flow-entry-fee = inscription
-flow-win-prize = prime de victoire
+flow-win-prize = gains des victoires
 flow-receipts = recettes
 flow-champion-bonus = bonus champion
 flow-purchase = achat
@@ -293,11 +293,11 @@ profile-aggressive = agressif
 profile-merchant = marchand
 profile-mentor = formateur
 profile-veteran = vétéran
-profile-showman = spectacle
+profile-showman = spectaculaire
 
 arena-sand = sable
 arena-pillars = piliers
-arena-narrow = étroite
+arena-narrow = couloir
 arena-sand-effect = le sable ralentit tout le monde, les tireurs en profitent
 arena-pillars-effect = les piliers arrêtent les tirs et barrent le passage
 arena-narrow-effect = le corps à corps s'engage vite
@@ -541,7 +541,7 @@ alert-injury = { $fighter } : blessure, { $injury }
 alert-tired = { $fighter } : fatigué (forme { $form })
 alert-title-defense = { $fighter } : titre de { $place } à défendre au plus tard en { $week }
 alert-sale-offer = { $club } veut acheter { $fighter } pour { $price } (à accepter au marché cette semaine)
-alert-rival = { $club } est votre rival depuis { $since } : recettes à { $receipts } %, renommée +{ $fame } par combat
+alert-rival = { $club } est votre rival depuis la { $since } : recettes à { $receipts } %, renommée +{ $fame } par combat
 alert-no-fighter = Plus aucun combattant : recrutez un free agent au marché
 
 roster-fighter = Combattant
@@ -600,9 +600,9 @@ summary-yours = Votre combattant
 summary-opponent = { $them }
 summary-damage-dealt = Dégâts infligés
 summary-damage-taken = Dégâts reçus
-summary-spells-cast = Sorts lancés
+summary-spells-cast = Capacités utilisées
 summary-misses = Coups ratés
-summary-stuns = Étourdi
+summary-stuns = Étourdissements
 summary-hp-left = PV restants
 summary-watch-again = Revoir le combat
 
@@ -706,11 +706,11 @@ market-asked-wage = Gages demandés
 wage = { $wage } / sem.
 contract-until = { $wage } / sem.{ $bonus ->
     [0] {""}
-   *[other] , prime { $bonus }
+   *[other] , prime de victoire { $bonus }
 } jusqu'à la saison { $season }
 contract-last-season = { $wage } / sem.{ $bonus ->
     [0] {""}
-   *[other] , prime { $bonus }
+   *[other] , prime de victoire { $bonus }
 }, dernière saison : part à l'intersaison sauf prolongation
 terms = { $wage } / sem., prime de victoire { $bonus }, { $seasons ->
     [1] 1 saison
@@ -740,7 +740,7 @@ market-offer-this-price = Offrir ce prix
 market-offer-for = Offre pour { $fighter } :
 market-rival-refuses = { $club } est votre rival : il refuse de traiter avec vous
 market-make-offer = Faire l'offre
-market-free-agents = Gratuits à recruter ; ils combattent dans les colisées sans droit d'entrée.
+market-free-agents = Gratuits à recruter ; ils combattent dans les colisées sans payer d'inscription.
 filter-age = Âge de
 filter-to = à
 filter-fame = Renommée min.

@@ -2607,7 +2607,7 @@ mod tests {
                 (
                     "Familia Maximus",
                     "Rome",
-                    "spectacle",
+                    "spectaculaire",
                     "pauvre",
                     10,
                     "+0, neutre"
@@ -2726,7 +2726,7 @@ mod tests {
             )]
         );
         assert!(alert_texts(&screen).contains(
-            &"École Guan Yu est votre rival depuis saison 1, semaine 4 : recettes à 150 %, renommée +3 par combat"
+            &"École Guan Yu est votre rival depuis la saison 1, semaine 4 : recettes à 150 %, renommée +3 par combat"
                 .to_owned()
         ));
         assert_eq!(screen.rival_rows()[1].standing, Standing::Rival);
