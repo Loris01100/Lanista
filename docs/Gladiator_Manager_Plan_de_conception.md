@@ -159,7 +159,7 @@ Chaque combattant a une jauge de renommée qui dépend de son style et de son au
 
 ### Progression, âge et retraite
 
-Il n'y a pas de niveaux : les stats évoluent directement après chaque entraînement et chaque combat. Chaque combattant a un potentiel caché qui plafonne sa progression ; le recruteur aide à l'estimer. À la fin de chaque saison, son bilan de l'année (victoires, nuls, défaites) lui apporte un peu de stats en plus, d'autant plus que la saison a été bonne, toujours dans la limite de son potentiel.
+Il n'y a pas de niveaux : les stats évoluent directement après chaque entraînement et chaque combat. Le joueur peut cibler l'entraînement d'un combattant sur une stat : elle progresse bien plus souvent, les autres moins. Il choisit ainsi entre un combattant complet et un spécialiste. Chaque combattant a un potentiel caché qui plafonne sa progression ; le recruteur aide à l'estimer. À la fin de chaque saison, son bilan de l'année (victoires, nuls, défaites) lui apporte un peu de stats en plus, d'autant plus que la saison a été bonne, toujours dans la limite de son potentiel.
 
 | Âge | Effet proposé |
 | --- | --- |

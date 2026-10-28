@@ -93,6 +93,10 @@ pub struct CareerFighter {
     /// (`WeekPlan::loadout`).
     #[serde(default)]
     pub loadout: usize,
+    /// The stat its training aims at, an index of [`Stats::to_array`], or all of them:
+    /// the last one its club chose (`WeekPlan::focus`).
+    #[serde(default)]
+    pub focus: Option<usize>,
     /// Its ease with each loadout of its class, from 0 to 100 (`EaseRules`): drawn as a
     /// recruit, raised by each fight in it.
     #[serde(default)]
@@ -198,6 +202,7 @@ impl CareerFighter {
             dominant_hand,
             ambidextrous,
             loadout: 0,
+            focus: None,
             ease,
             age,
             personality,
@@ -263,6 +268,7 @@ impl CareerFighter {
             dominant_hand: Side::Right,
             ambidextrous: false,
             loadout: 0,
+            focus: None,
             ease: Vec::new(),
             age: 0,
             personality: Personality::neutral(),
@@ -453,7 +459,12 @@ impl CareerFighter {
                     );
                 }
                 self.form = Form::new(self.form.value().saturating_sub(lost));
-                self.progress(ProgressEvent::Training { coaching_percent }, rng, rules);
+                let focus = self.focus;
+                let event = ProgressEvent::Training {
+                    coaching_percent,
+                    focus,
+                };
+                self.progress(event, rng, rules);
             }
             Activity::Fight(id) | Activity::TitleFight(id) | Activity::Challenge(id, _) => {
                 let form = if matches!(plan.activity, Activity::TitleFight(_)) {
@@ -508,6 +519,7 @@ impl CareerFighter {
             self.feel(MoraleEvent::Lowered(lost), &data.fighter);
         }
         self.loadout = plan.loadout;
+        self.focus = plan.focus;
         let care = staff.medicine.care_rules(&data.fighter.care);
         let care_cost = if plan.care { self.care(&care) } else { 0 };
         Some(WeekReport::new(plan, care_cost))
@@ -1183,6 +1195,7 @@ impl CareerFighter {
                 care: false,
                 refused: Refused::NONE,
                 loadout: self.loadout,
+                focus: self.focus,
             };
             self.end_week(&mut WeekReport::new(plan, 0), rng, data);
         }
@@ -1299,6 +1312,7 @@ pub fn suggested_plan(fighter: &CareerFighter, week: u64) -> WeekPlan {
         care: hurt,
         refused: Refused::NONE,
         loadout: fighter.loadout,
+        focus: fighter.focus,
     }
 }
 
@@ -1327,6 +1341,8 @@ pub struct WeekPlan {
     pub refused: Refused,
     /// Its loadout from this week on (`CareerFighter::loadout`).
     pub loadout: usize,
+    /// The stat its training aims at from this week on (`CareerFighter::focus`).
+    pub focus: Option<usize>,
 }
 
 /// What happened in a week.
@@ -1580,6 +1596,7 @@ mod tests {
             care: false,
             refused: Refused::NONE,
             loadout: 0,
+            focus: None,
         }
     }
 
@@ -1971,6 +1988,7 @@ mod tests {
                 care: true,
                 refused: Refused::NONE,
                 loadout: 0,
+                focus: None,
             };
             let report = f.play_week(rest, None, staff, &mut rng, &data).unwrap();
             (report.care_cost, f.injuries[0].weeks_left)
@@ -2517,6 +2535,7 @@ mod tests {
                 care: true,
                 refused: Refused::NONE,
                 loadout: f.loadout,
+                focus: None,
             }
         );
     }

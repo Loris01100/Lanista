@@ -237,6 +237,8 @@
         // No levels: each stat may improve after every training session and fight.
         // Chance in percent, at ages 20 to 27 and neutral morale.
         training_chance: 30,
+        // A session focused on one stat: percent of that chance for it, for the others.
+        training_focus_percent: (300, 50),
         fight_chance: 20,
         // Points gained when a stat improves.
         gain: (hp: 2, melee_attack: 1, ranged_attack: 1, accuracy: 1, speed: 1, melee_defense: 1, ranged_defense: 1),

@@ -457,6 +457,7 @@ pub fn plan(
         } else {
             fighter.preferred_loadout()
         },
+        focus: None,
     }
 }
 
@@ -686,6 +687,7 @@ mod tests {
                 care: true,
                 refused: Refused::NONE,
                 loadout: fighter.loadout,
+                focus: None,
             }
         );
         assert_eq!(money, 100);
@@ -704,6 +706,7 @@ mod tests {
                 care: false,
                 refused: Refused::NONE,
                 loadout: fighter.loadout,
+                focus: None,
             }
         );
         // A doctor's care costs more, at its price.

@@ -727,6 +727,7 @@ mod tests {
             care: false,
             refused: Refused::NONE,
             loadout: 0,
+            focus: None,
         };
         let fight = fighter
             .play_week(plan, None, StaffEffects::default(), &mut rng, &data)

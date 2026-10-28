@@ -13,9 +13,11 @@ use crate::fighter::morale::Morale;
 /// What can make a fighter progress.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ProgressEvent {
-    /// A session whose trainer adds this percentage of the chance to it (0 without one).
+    /// A session whose trainer adds this percentage of the chance to it (0 without one),
+    /// aimed at the stat of this index in [`Stats::to_array`], or at all of them.
     Training {
         coaching_percent: u32,
+        focus: Option<usize>,
     },
     Fight,
 }
@@ -48,7 +50,8 @@ pub fn age_percent(age: u32, rules: &ProgressionRules) -> u32 {
 /// Stats after `event`: each stat below its potential has a chance to gain
 /// its `rules.gain`, never past the potential. The chance is the event's,
 /// scaled by the age bracket, by morale (± `rules.morale_percent` at 100 and 0) and,
-/// for training, raised by the trainer's coaching.
+/// for training, raised by the trainer's coaching, then, for a focused session, by
+/// `rules.training_focus_percent` (the focused stat's, the others').
 pub fn progress<R: Rng + ?Sized>(
     rng: &mut R,
     stats: Stats,
@@ -58,9 +61,12 @@ pub fn progress<R: Rng + ?Sized>(
     morale: Morale,
     rules: &ProgressionRules,
 ) -> Stats {
-    let (base, coaching_percent) = match event {
-        ProgressEvent::Training { coaching_percent } => (rules.training_chance, coaching_percent),
-        ProgressEvent::Fight => (rules.fight_chance, 0),
+    let (base, coaching_percent, focus) = match event {
+        ProgressEvent::Training {
+            coaching_percent,
+            focus,
+        } => (rules.training_chance, coaching_percent, focus),
+        ProgressEvent::Fight => (rules.fight_chance, 0, None),
     };
     let morale_offset = i64::from(morale.value()) - i64::from(Morale::NEUTRAL);
     let morale_percent =
@@ -71,13 +77,17 @@ pub fn progress<R: Rng + ?Sized>(
         * morale_percent.max(0)
         * (100 + i64::from(coaching_percent))
         / 100;
-    let chance = u32::try_from(chance.clamp(0, 1_000_000)).unwrap_or(0);
+    let (focused, others) = rules.training_focus_percent;
+    let chance_of = |i| {
+        let percent = focus.map_or(100, |f| if f == i { focused } else { others });
+        u32::try_from((chance * i64::from(percent) / 100).clamp(0, 1_000_000)).unwrap_or(0)
+    };
     let mut stats = stats.to_array();
     let caps = potential.to_array();
     let gains = rules.gain.to_array();
-    for ((value, cap), gain) in stats.iter_mut().zip(caps).zip(gains) {
+    for (i, ((value, cap), gain)) in stats.iter_mut().zip(caps).zip(gains).enumerate() {
         // Always drawn, so a capped stat doesn't change the draws of the others.
-        let lucky = rng.random_range(0..1_000_000) < chance;
+        let lucky = rng.random_range(0..1_000_000) < chance_of(i);
         if lucky && *value < cap {
             *value = value.saturating_add(gain).min(cap);
         }
@@ -144,6 +154,9 @@ pub struct ProgressionRules {
     /// Chance, in percent, that each stat gains after a training session,
     /// in the first age bracket at neutral morale.
     pub training_chance: u32,
+    /// Percentages of that chance in a session focused on one stat: the focused
+    /// stat's, the others'.
+    pub training_focus_percent: (u32, u32),
     /// Same after a fight.
     pub fight_chance: u32,
     /// Points a stat gains when it progresses.
@@ -189,6 +202,7 @@ mod tests {
     fn rules() -> ProgressionRules {
         ProgressionRules {
             training_chance: 30,
+            training_focus_percent: (300, 50),
             fight_chance: 20,
             gain: Stats {
                 hp: 2,
@@ -243,7 +257,10 @@ mod tests {
         let potential = STATS.map(|v| v * 10);
         let mut stats = STATS;
         for _ in 0..weeks {
-            let event = ProgressEvent::Training { coaching_percent };
+            let event = ProgressEvent::Training {
+                coaching_percent,
+                focus: None,
+            };
             stats = progress(
                 &mut rng,
                 stats,
@@ -271,6 +288,44 @@ mod tests {
         );
         assert!(young > plateau && plateau > old, "{young} {plateau} {old}");
         assert_eq!(gained(41, 50, 100), 0);
+    }
+
+    #[test]
+    fn a_focused_session_trains_its_stat_more_and_the_others_less() {
+        let mut rng = ChaCha8Rng::seed_from_u64(3);
+        let potential = STATS.map(|v| v * 10);
+        let event = |focus| ProgressEvent::Training {
+            coaching_percent: 0,
+            focus,
+        };
+        let (mut broad, mut focused) = (STATS, STATS);
+        for _ in 0..100 {
+            let morale = Morale::new(50);
+            broad = progress(
+                &mut rng,
+                broad,
+                potential,
+                event(None),
+                22,
+                morale,
+                &rules(),
+            );
+            let speed = Some(4);
+            focused = progress(
+                &mut rng,
+                focused,
+                potential,
+                event(speed),
+                22,
+                morale,
+                &rules(),
+            );
+        }
+        assert!(focused.speed > broad.speed, "{focused:?} {broad:?}");
+        assert!(
+            focused.melee_attack < broad.melee_attack,
+            "{focused:?} {broad:?}"
+        );
     }
 
     #[test]
@@ -346,7 +401,7 @@ mod tests {
         fn progress_stays_between_stats_and_potential(seed: u64, age in 18..50u32, morale in 0..=100u32) {
             let mut rng = ChaCha8Rng::seed_from_u64(seed);
             let potential = random_potential(&mut rng, STATS, &rules());
-            let after = progress(&mut rng, STATS, potential, ProgressEvent::Training { coaching_percent: 0 }, age, Morale::new(morale), &rules());
+            let after = progress(&mut rng, STATS, potential, ProgressEvent::Training { coaching_percent: 0, focus: None }, age, Morale::new(morale), &rules());
             for ((before, after), cap) in STATS.to_array().into_iter().zip(after.to_array()).zip(potential.to_array()) {
                 prop_assert!(before <= after && after <= cap);
             }

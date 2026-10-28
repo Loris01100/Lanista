@@ -1284,6 +1284,7 @@ mod tests {
             care: false,
             refused: Refused::NONE,
             loadout: 0,
+            focus: None,
         };
         let report = after
             .play_week(rest, None, StaffEffects::default(), &mut rng, &data)

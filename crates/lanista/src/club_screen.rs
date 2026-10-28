@@ -1377,6 +1377,20 @@ fn plan_editor(
     for activity in [Activity::Rest, Activity::Train] {
         ui.selectable_value(&mut plan.activity, activity, activity_name(activity, data));
     }
+    if plan.activity == Activity::Train {
+        // The stat its training aims at, kept from one week to the next.
+        let names = stat_names();
+        let all = tr!("plan-focus-all");
+        let text = plan.focus.and_then(|i| names.get(i)).unwrap_or(&all);
+        egui::ComboBox::from_id_salt("focus")
+            .selected_text(tr!("plan-focus", stat = text.as_str()))
+            .show_ui(ui, |ui| {
+                ui.selectable_value(&mut plan.focus, None, &all);
+                for (i, name) in names.iter().enumerate() {
+                    ui.selectable_value(&mut plan.focus, Some(i), name);
+                }
+            });
+    }
     let mut abroad = Vec::new();
     for (id, rules) in (0..).map(ColosseumId).zip(&data.world.colosseums) {
         let activity = Activity::Fight(id);
@@ -2167,6 +2181,7 @@ mod tests {
             care: false,
             refused: Refused::NONE,
             loadout: 0,
+            focus: None,
         };
         screen.decisions.plans = vec![melee; 3];
         screen.next_week();
@@ -2295,6 +2310,7 @@ mod tests {
             care: false,
             refused: Refused::NONE,
             loadout: 0,
+            focus: None,
         };
         screen.next_week();
         assert_eq!(screen.to_watch, []);
@@ -2513,6 +2529,7 @@ mod tests {
             care: false,
             refused: Refused::NONE,
             loadout: 0,
+            focus: None,
         };
         let opening = Decisions {
             plans: vec![

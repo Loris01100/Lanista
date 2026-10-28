@@ -44,6 +44,7 @@ const REST: WeekPlan = WeekPlan {
     care: false,
     refused: Refused::NONE,
     loadout: 0,
+    focus: None,
 };
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -1055,6 +1056,7 @@ mod tests {
                 care,
                 refused: Refused::NONE,
                 loadout: 0,
+                focus: None,
             }],
             ..Decisions::default()
         }
@@ -1133,6 +1135,7 @@ mod tests {
             care: false,
             refused: Refused::NONE,
             loadout: 0,
+            focus: None,
         };
         let decisions = Decisions {
             plans: vec![entered; 2],
@@ -2144,6 +2147,7 @@ mod tests {
                 care: false,
                 refused: Refused::NONE,
                 loadout: 0,
+                focus: None,
             }],
             moves: list.moves.clone(),
             staff: Vec::new(),
