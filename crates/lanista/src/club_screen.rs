@@ -2753,6 +2753,8 @@ mod tests {
                 let terms = GameState::asked_terms(&state.free_agents[a], &data);
                 screen.decisions.moves.push(Move::Sign(a, terms));
             }
+            // A rival fighter meets only one of the club's fighters in a challenge.
+            let mut taken = Vec::new();
             for (i, plan) in screen.decisions.plans.iter_mut().enumerate() {
                 let Activity::Fight(id) = plan.activity else {
                     continue;
@@ -2763,10 +2765,12 @@ mod tests {
                         let fighters = 0..state.rivals[club].fighters.len();
                         fighters.map(move |fighter| RivalId { club, fighter })
                     })
+                    .filter(|rival| !taken.contains(rival))
                     .filter(|&rival| state.may_challenge(i, id, rival, &data))
                     .min_by_key(|rival| (state.relation(rival.club), rival.club));
                 if let Some(rival) = target {
                     plan.activity = Activity::Challenge(id, rival);
+                    taken.push(rival);
                 }
             }
             screen.next_week();

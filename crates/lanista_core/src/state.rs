@@ -894,12 +894,14 @@ fn relate(state: &mut GameState, club: usize, why: Reason, data: &DesignData) {
 /// Each fighter's wanted plan, `GameState::suggested_plan` without one, and the colosseum
 /// and outsider of its title fight. Title fights are settled before anyone plays, from
 /// the rankings as they stand; one the fighter may not have turns into rest, and so does
-/// a challenge it may not have.
+/// a challenge it may not have. An outsider meets only one of the club's fighters in a
+/// title fight or a challenge: the first in club order; the others rest.
 fn week_plans(
     state: &GameState,
     decisions: &Decisions,
     data: &DesignData,
 ) -> (Vec<WeekPlan>, Vec<Option<(usize, Contender)>>) {
+    let mut taken = Vec::new();
     (0..state.fighters.len())
         .map(|i| {
             let mut plan = decisions
@@ -907,18 +909,27 @@ fn week_plans(
                 .get(i)
                 .copied()
                 .unwrap_or_else(|| state.suggested_plan(i, data));
-            let meeting = match plan.activity {
+            let mut meeting = match plan.activity {
                 Activity::TitleFight(id) => state.title_opponent(i, id, data),
                 _ => None,
             };
-            let allowed = match plan.activity {
-                Activity::TitleFight(_) => meeting.is_some(),
-                Activity::Challenge(id, rival) => state.may_challenge(i, id, rival, data),
-                Activity::Melee(_) => state.opens_season(data),
-                _ => true,
+            let met = match plan.activity {
+                Activity::TitleFight(_) => meeting.map(|(_, them)| them),
+                Activity::Challenge(_, rival) => Some(Contender::Rival(rival)),
+                _ => None,
             };
-            if !allowed {
+            let allowed = !met.is_some_and(|them| taken.contains(&them))
+                && match plan.activity {
+                    Activity::TitleFight(_) => meeting.is_some(),
+                    Activity::Challenge(id, rival) => state.may_challenge(i, id, rival, data),
+                    Activity::Melee(_) => state.opens_season(data),
+                    _ => true,
+                };
+            if allowed {
+                taken.extend(met);
+            } else {
                 plan.activity = Activity::Rest;
+                meeting = None;
             }
             (plan, meeting)
         })
@@ -1939,6 +1950,47 @@ mod tests {
                 Activity::Rest
             );
         }
+    }
+
+    #[test]
+    fn an_outsider_meets_one_club_fighter_in_a_title_fight_or_a_challenge() {
+        let data = data();
+        let rome = ColosseumId(1);
+        // Two club fighters at the top of Rome's ranking.
+        let two_at_the_top = || {
+            let mut state = top_of_rome(&data);
+            let twin = state.fighters[0].clone();
+            state.fighters.push(twin);
+            let rating = crate::colosseum::Rating {
+                contender: Contender::Club(1),
+                elo: 1100,
+            };
+            state.colosseums[1].ranking.insert(1, rating);
+            state
+        };
+        let both = |activity| Decisions {
+            plans: vec![plan(activity, false).plans[0]; 2],
+            ..Decisions::default()
+        };
+        let mut state = two_at_the_top();
+        assert!(state.title_opponent(1, rome, &data).is_some());
+        let summary = next_week(&mut state, &both(Activity::TitleFight(rome)), &data);
+        let fights = (summary.titles.iter())
+            .filter(|(c, n)| *c == 1 && matches!(n, TitleNews::Fight { .. }))
+            .count();
+        assert_eq!(fights, 1);
+        let second = summary.reports[1].as_ref().unwrap();
+        assert_eq!(second.plan.activity, Activity::Rest);
+
+        let mut state = two_at_the_top();
+        let rival = ranked(&state, 8);
+        assert!((0..2).all(|i| state.may_challenge(i, rome, rival, &data)));
+        let summary = next_week(&mut state, &both(Activity::Challenge(rome, rival)), &data);
+        let first = summary.reports[0].as_ref().unwrap();
+        assert_eq!(first.plan.activity, Activity::Challenge(rome, rival));
+        let second = summary.reports[1].as_ref().unwrap();
+        assert_eq!(second.plan.activity, Activity::Rest);
+        assert!(second.fight.is_none());
     }
 
     #[test]
