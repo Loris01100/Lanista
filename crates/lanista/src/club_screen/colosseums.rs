@@ -535,7 +535,7 @@ pub(super) fn ranked_name(
     )
 }
 
-/// "pour Ludus Magnus, de saison 1, semaine 3 à saison 2, semaine 7, 2 défenses, battu".
+/// "pour Ludus Magnus, de la saison 1, semaine 3 à la saison 2, semaine 7, 2 défenses, battu".
 pub(super) fn reign_text(reign: &Reign, state: &GameState, data: &DesignData) -> String {
     let club = match reign.won_as {
         Contender::Club(_) => tr!("reign-for", club = named_club(&state.name)),
@@ -544,7 +544,7 @@ pub(super) fn reign_text(reign: &Reign, state: &GameState, data: &DesignData) ->
     };
     let status = state.rosters().fighter(reign.holder).map(|f| f.status);
     let (until, end) = match reign.end {
-        None => (tr!("reign-now"), "current"),
+        None => (String::new(), "current"),
         Some(ReignEnd { week, how }) => (
             date_in_sentence(week, data),
             match how {

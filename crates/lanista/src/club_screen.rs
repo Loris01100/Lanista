@@ -2560,7 +2560,7 @@ mod tests {
         assert_eq!(
             alert_texts(&screen),
             [format!(
-                "{name} : titre de Rome à défendre au plus tard en saison 1, semaine 5"
+                "{name} : titre de Rome à défendre d'ici la saison 1, semaine 5"
             )]
         );
         // The rival champions defend in week 5, without the player.
@@ -2878,7 +2878,7 @@ mod tests {
         let from = date_in_sentence(reign.from, &screen.data);
         assert_eq!(
             reign_text(&reign, &screen.state, &screen.data),
-            format!("pour {club}, de {from} à aujourd'hui, aucune défense")
+            format!("pour {club}, de la {from} à aujourd'hui, aucune défense")
         );
         // The champion died with the title after two defenses.
         screen.state.rivals[id.club].fighters[id.fighter].status = Status::Dead;
@@ -2893,7 +2893,7 @@ mod tests {
         let until = date_in_sentence(reign.from + 3, &screen.data);
         assert_eq!(
             reign_text(&died, &screen.state, &screen.data),
-            format!("pour {club}, de {from} à {until}, 2 défenses, mort avec le titre")
+            format!("pour {club}, de la {from} à la {until}, 2 défenses, mort avec le titre")
         );
     }
 

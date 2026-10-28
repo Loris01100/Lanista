@@ -535,7 +535,7 @@ pending-counter-offer = Marché : { $club } demande { $price } pour { $fighter }
 alert-debts = Dettes : { $money }
 alert-injury = { $fighter } : blessure, { $injury }
 alert-tired = { $fighter } : fatigué (forme { $form })
-alert-title-defense = { $fighter } : titre de { $place } à défendre au plus tard en { $week }
+alert-title-defense = { $fighter } : titre de { $place } à défendre d'ici la { $week }
 alert-sale-offer = { $club } veut acheter { $fighter } pour { $price } (à accepter au marché cette semaine)
 alert-rival = { $club } est votre rival depuis la { $since } : recettes à { $receipts } %, renommée +{ $fame } par combat
 alert-no-fighter = Plus aucun combattant : recrutez un free agent au marché
@@ -659,7 +659,7 @@ colosseum-bonus-chip = Bonus champion { $bonus }
 colosseum-champion = Champion :
 colosseum-no-champion = aucun
 colosseum-defend-by = à défendre d'ici la { $deadline }
-colosseum-title-since = Titre défendu ou pris en { $since }
+colosseum-title-since = Titre défendu ou pris à la { $since }
 ranked-unnamed = n° { $number }
 ranking-rank = Rang
 ranking-club = Club
@@ -672,7 +672,10 @@ colosseum-honours = Palmarès ({ $reigns } { $reigns ->
         [one] règne
        *[other] règnes
     })
-reign = { $club }, de { $from } à { $until }, { $defenses ->
+reign = { $club }, de la { $from } à { $end ->
+        [current] aujourd'hui
+       *[other] la { $until }
+    }, { $defenses ->
         [0] aucune défense
         [one] { $defenses } défense
        *[other] { $defenses } défenses
@@ -686,7 +689,6 @@ reign = { $club }, de { $from } à { $until }, { $defenses ->
     }
 reign-for = pour { $club }
 reign-no-club = sans club
-reign-now = aujourd'hui
 
 ## Marché (vue)
 
@@ -974,7 +976,7 @@ culture-mesoamerique = Mésoamérique
 culture-amerique_sud = Tribus d'Amérique du Sud
 culture-oceanie = Tribus d'Océanie
 
-# « de » devant un nom de club ou de combattant, élidé devant une voyelle ($vowel).
+# « de » devant un nom de club ou de combattant, élidé devant une voyelle ou un h muet ($vowel).
 club-de = { $vowel ->
         [true] d'
        *[false] {"de "}
