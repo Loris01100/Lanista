@@ -652,7 +652,7 @@ pub fn world_article(news: News, state: &GameState, data: &DesignData) -> Articl
                 "headline-founded",
                 club = named_club(&r.name),
                 culture = culture_name(&r.culture),
-                continent = continent_name(r.continent)
+                continent = continent_in(r.continent)
             )
         })),
     }
@@ -798,6 +798,17 @@ pub fn continent_name(continent: Continent) -> String {
         Continent::Americas => tr!("continent-americas"),
         Continent::Africa => tr!("continent-africa"),
         Continent::Oceania => tr!("continent-oceania"),
+    }
+}
+
+/// "en Europe", "dans les Amériques": the continent as the place something is in.
+pub fn continent_in(continent: Continent) -> String {
+    match continent {
+        Continent::Europe => tr!("continent-in-europe"),
+        Continent::Asia => tr!("continent-in-asia"),
+        Continent::Americas => tr!("continent-in-americas"),
+        Continent::Africa => tr!("continent-in-africa"),
+        Continent::Oceania => tr!("continent-in-oceania"),
     }
 }
 

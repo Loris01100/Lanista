@@ -280,6 +280,11 @@ continent-asia = Asie
 continent-americas = Amériques
 continent-africa = Afrique
 continent-oceania = Océanie
+continent-in-europe = en Europe
+continent-in-asia = en Asie
+continent-in-americas = dans les Amériques
+continent-in-africa = en Afrique
+continent-in-oceania = en Océanie
 
 culture = culture : { $culture }
 
@@ -322,7 +327,7 @@ headline-champion-bought = { $club } s'offre { $fighter }, champion de { $place 
 headline-closed = Faillite : { $club } ferme ses portes, ses combattants partent au marché
 headline-rivalry = { $club } se déclare votre rival : vos combats contre lui attireront les foules
 headline-rivalry-ended = { $club } enterre la hache de guerre et met fin à sa rivalité avec vous
-headline-founded = Un nouveau ludus ouvre ses portes : { $club } ({ $culture }), en { $continent }
+headline-founded = Un nouveau ludus ouvre ses portes : { $club } ({ $culture }), { $continent }
 
 ## Journal
 
@@ -358,7 +363,6 @@ reason-betrayed = { $fighter } a trahi son pacte avec { $rival } en mêlée
 ## Commun
 
 labelled = { $label } : { $text }
-this-week = Cette semaine : { $what }
 confirm = Confirmer
 cancel = Annuler
 back = Retour
@@ -376,7 +380,6 @@ not-ranked = non classé
 ## Écran du club
 
 save-resumed = Partie reprise
-save-autosave-unreadable = Sauvegarde automatique illisible : { $error }
 save-saved = Partie sauvegardée
 save-failed = Sauvegarde impossible : { $error }
 save-loaded = Partie chargée
@@ -385,7 +388,7 @@ save-unreadable = Sauvegarde illisible : { $error }
 save-slot = Emplacement { $slot } : { $game }
 save-slot-empty = vide
 save-slot-unreadable = illisible
-save-slot-game = { $club }, { $date }, club { $wealth } en { $continent }
+save-slot-game = { $club }, { $date }, club { $wealth } { $continent }
 
 club-becomes = Le club devient { $wealth }
 
@@ -507,7 +510,7 @@ wiki-off-arm = Autre bras
 wiki-leg = Jambe
 
 menu-title = Menu général
-menu-club = { $club } : { $wealth }, en { $continent }
+menu-club = { $club } : { $wealth }, { $continent }
 menu-alerts = Alertes
 menu-active = { $active } / { $max } combattants en activité
 menu-next-week = Semaine suivante (Espace)
@@ -523,8 +526,8 @@ menu-save = Sauvegarder
 menu-load = Charger
 menu-new-club = club { $wealth }
 menu-draw-name = Tirer un nom
-menu-new-game-started = Nouvelle partie, { $club }, club { $wealth } en { $continent }, graine { $seed }
-confirm-new-game = Commencer une nouvelle partie avec { $club }, club { $wealth } en { $continent } ? La partie à continuer sera perdue si elle n'est pas sauvegardée.
+menu-new-game-started = Nouvelle partie, { $club }, club { $wealth } { $continent }, graine { $seed }
+confirm-new-game = Commencer une nouvelle partie avec { $club }, club { $wealth } { $continent } ? La partie à continuer sera perdue si elle n'est pas sauvegardée.
 confirm-load = Charger l'emplacement { $slot } ({ $game }) ? La partie à continuer sera perdue si elle n'est pas sauvegardée.
 confirm-overwrite = Écraser l'emplacement { $slot } ({ $game }) ?
 menu-language = Langue :
@@ -640,10 +643,16 @@ prestige-t1 = T1
 prestige-t2 = T2
 
 rival-closed = Fermé, ruiné : { $date }
-rival-description = Club { $profile } et { $wealth }, { $culture }, en { $continent }, { $fighters } combattants en activité (au plus { $max })
+rival-description = Club { $profile } et { $wealth }, { $culture }, { $continent }, { $fighters ->
+        [one] { $fighters } combattant en activité
+       *[other] { $fighters } combattants en activité
+    } (au plus { $max })
 rival-relation = Relation avec { $club } : { $relation }
 rival-history = Ce qui s'est passé entre vous
-rival-gone = { $gone } anciens combattants : retraités, morts, vendus ou libérés
+rival-gone = { $gone ->
+        [one] 1 ancien combattant : retraité, mort, vendu ou libéré
+       *[other] { $gone } anciens combattants : retraités, morts, vendus ou libérés
+    }
 
 colosseum-arena-chip = Arène : { $arena }
 colosseum-prestige = Prestige { $prestige } / 5
@@ -691,7 +700,6 @@ market-this-week = Cette semaine
 market-tab-free = Free agents ({ $count })
 market-tab-rivals = Clubs rivaux ({ $count })
 market-tab-yours = Vos combattants ({ $count })
-market-full = Effectif complet
 market-sale-status = Vente
 market-contract = Contrat
 market-asked-wage = Gages demandés
@@ -770,7 +778,10 @@ staff-care-weeks = Convalescence { $kept } %
 staff-care-weeks-hint = Part des semaines d'arrêt qui restent après les soins
 staff-care-cost = Prix des soins { $cost } %
 staff-spared = Séquelles évitées { $spared } %
-staff-revealed = +{ $revealed } stat / sem.
+staff-revealed = { $revealed ->
+        [one] +{ $revealed } stat / sem.
+       *[other] +{ $revealed } stats / sem.
+    }
 staff-ranges = Fourchettes { $width } %
 staff-ranges-hint = Largeur des fourchettes de stats d'un combattant observé, par rapport à l'habituelle
 staff-potential = { $potential ->

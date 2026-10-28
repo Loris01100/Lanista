@@ -16,9 +16,9 @@ use super::{ClubScreen, RANKS_SHOWN, View, chip, wrapped_chip};
 use crate::lang::tr;
 use crate::texts::{
     arena_effect, arena_name, class_name, club_name, colosseum_name, colosseum_rules_name,
-    condition_text, contender_name, continent_name, culture_name, culture_text, date_in_sentence,
-    date_text, named_club, place_name, profile_name, record_text, relation_change_text,
-    relation_text, rival_fighter_name, staff_text, stage_name, wealth_name,
+    condition_text, contender_name, continent_in, continent_name, culture_name, culture_text,
+    date_in_sentence, date_text, named_club, place_name, profile_name, record_text,
+    relation_change_text, relation_text, rival_fighter_name, staff_text, stage_name, wealth_name,
 };
 use crate::theme;
 
@@ -271,7 +271,7 @@ impl ClubScreen {
             profile = profile_name(rival.profile),
             wealth = wealth_name(rival.wealth),
             culture = culture_text(&rival.culture),
-            continent = continent_name(rival.continent),
+            continent = continent_in(rival.continent),
             fighters = rival.active(),
             max = data.world.roster.max
         ));

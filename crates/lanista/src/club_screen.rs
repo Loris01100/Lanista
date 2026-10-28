@@ -53,7 +53,7 @@ use crate::options;
 use crate::saves;
 use crate::texts::{
     Article, activity_name, against_text, challenger_text, change, class_name, club_name,
-    colosseum_name, colosseum_rules_name, contender_name, continent_name, date_in_sentence,
+    colosseum_name, colosseum_rules_name, contender_name, continent_in, date_in_sentence,
     date_text, fight_text, fighter_name, illness_effect, illness_text, injury_effect, injury_text,
     loadout_name, market_news_text, money_line, move_text, named_club, origin_place, priced,
     result_text, rival_fighter_name, staff_move_text, staff_news_text, stage_name, stat_names,
@@ -474,7 +474,7 @@ impl ClubScreen {
             "menu-club",
             club = named_club(&self.state.name),
             wealth = wealth_text(self.state.wealth),
-            continent = continent_name(self.state.continent)
+            continent = continent_in(self.state.continent)
         ));
         ui.add_space(6.0);
         self.calendar(ui);

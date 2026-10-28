@@ -21,7 +21,9 @@ use crate::club_screen::ClubScreen;
 use crate::lang::tr;
 use crate::options;
 use crate::saves;
-use crate::texts::{continent_name, culture_name, date_text, named_club, wealth_name};
+use crate::texts::{
+    continent_in, continent_name, culture_name, date_text, named_club, wealth_name,
+};
 
 const BACKGROUND: Color = Color::new(0.16, 0.13, 0.11, 1.0);
 /// Width of the menu's buttons.
@@ -135,7 +137,7 @@ impl TitleScreen {
                 "menu-new-game-started",
                 club = named_club(&state.name),
                 wealth = wealth_name(wealth),
-                continent = continent_name(continent),
+                continent = continent_in(continent),
                 seed = seed.to_string()
             )
         });
@@ -345,7 +347,7 @@ impl TitleScreen {
                 "confirm-new-game",
                 club = named_club(&self.new_club.1),
                 wealth = wealth_name(wealth),
-                continent = continent_name(continent)
+                continent = continent_in(continent)
             ),
         }
     }
@@ -471,7 +473,7 @@ pub fn slot_text(slot: &Slot, data: &DesignData) -> String {
             club = named_club(club),
             date = date_text(*week, data),
             wealth = wealth_name(*wealth),
-            continent = continent_name(*continent)
+            continent = continent_in(*continent)
         ),
         Slot::Unreadable => tr!("save-slot-unreadable"),
     }
