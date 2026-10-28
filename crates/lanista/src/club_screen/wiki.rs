@@ -157,18 +157,26 @@ fn page(ui: &mut egui::Ui, entry: Entry, data: &DesignData) {
                 spell_line(ui, spell);
             }
             section(ui, &tr!("wiki-configurations"));
-            for loadout in &class.loadouts {
+            let id = loadout_id(i);
+            let mut chosen = ui.data(|d| d.get_temp(id)).unwrap_or(0);
+            ui.horizontal(|ui| {
+                for (l, loadout) in class.loadouts.iter().enumerate() {
+                    let name = tr!(&format!("loadout-{}", loadout.key));
+                    if ui.selectable_label(l == chosen, name).clicked() {
+                        chosen = l;
+                        ui.data_mut(|d| d.insert_temp(id, l));
+                    }
+                }
+            });
+            if let Some(loadout) = class.loadouts.get(chosen) {
                 let weapon = tr!(&format!("weapon-{}", loadout.weapon));
                 let off_hand = match loadout.off_hand {
                     OffHand::Free => tr!("wiki-off-hand-free"),
                     OffHand::Shield => tr!("wiki-off-hand-shield"),
                     OffHand::Weapon => tr!("wiki-off-hand-weapon"),
                 };
-                let name = tr!(&format!("loadout-{}", loadout.key));
-                ui.label(egui::RichText::new(name).strong());
                 ui.label(tr!("wiki-loadout", weapon = weapon, off_hand = off_hand));
                 spell_line(ui, &loadout.spell);
-                ui.add_space(4.0);
             }
         }
         Entry::Weapon(i) => {
@@ -185,6 +193,11 @@ fn page(ui: &mut egui::Ui, entry: Entry, data: &DesignData) {
     }
     section(ui, &tr!("wiki-history"));
     prose(ui, entry, data, "history");
+}
+
+/// Where the egui memory keeps the loadout shown on the page of the class at `class`.
+fn loadout_id(class: usize) -> egui::Id {
+    egui::Id::new(("wiki-loadout", class))
 }
 
 /// The text `wiki-<kind>-<key>-<part>`, or that it is still to write.
@@ -304,7 +317,8 @@ fn card(ui: &mut egui::Ui, entry: Entry, data: &DesignData, open: &mut Option<En
     }
 }
 
-/// Links to the classes of `users`, each with its loadout's name.
+/// Links to the classes of `users`, each with its loadout's name, the class's page then
+/// showing that loadout.
 fn users_links(
     ui: &mut egui::Ui,
     data: &DesignData,
@@ -317,6 +331,7 @@ fn users_links(
         let loadout = tr!(&format!("loadout-{}", data.classes[c].loadouts[l].key));
         let text = tr!("wiki-user", class = class.name(data), loadout = loadout);
         if ui.link(text).clicked() {
+            ui.data_mut(|d| d.insert_temp(loadout_id(c), l));
             *open = Some(class);
         }
     }
