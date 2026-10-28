@@ -1,19 +1,22 @@
 //! The encyclopedia, laid out as a civilopedia: its categories over the page, the list of
 //! a category's pages (or of those a search finds) on the left, the page's rules and
 //! history in the middle, its card on the right. Every figure comes from the design
-//! data; only the prose is in the language files (`wiki-<kind>-<key>-rules` and
-//! `-history`), a page without it saying so.
+//! data, the formulas of the Calculs pages too; only the prose is in the language files
+//! (`wiki-<kind>-<key>-rules` and `-history`), a page without it saying so.
 
 use std::rc::Rc;
 
 use lanista_core::combat::{DamageKind, Range};
 use lanista_core::design_data::{DesignData, LoadoutData, SpellData};
+use lanista_core::fighter::Stats;
 use lanista_core::fighter::equipment::OffHand;
+use lanista_core::fighter::illness::IllnessLevel;
 use reesch::egui;
 
 use super::{ClubScreen, View, section};
 use crate::combat_screen::{cost_text, tenths};
 use crate::lang::tr;
+use crate::texts::{arena_effect, arena_name, continent_name, stat_names};
 
 /// A page of the encyclopedia.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -24,17 +27,71 @@ pub(super) enum Entry {
     Weapon(usize),
     /// The shield an off hand may hold (`OffHand::Shield`).
     Shield,
+    /// The colosseum at this index of `WorldRules::colosseums`.
+    Colosseum(usize),
+    /// A formula of the game.
+    Calc(Calc),
+}
+
+/// The formulas the Calculs pages lay out, each with the figures of the design data.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(super) enum Calc {
+    Damage,
+    Defense,
+    Hit,
+    Stun,
+    Cut,
+    Bleed,
+    Form,
+    Injury,
+    Illness,
+}
+
+impl Calc {
+    const ALL: [Self; 9] = [
+        Self::Damage,
+        Self::Defense,
+        Self::Hit,
+        Self::Stun,
+        Self::Cut,
+        Self::Bleed,
+        Self::Form,
+        Self::Injury,
+        Self::Illness,
+    ];
+
+    /// Names it in the language files (`calc-<key>`).
+    fn key(self) -> &'static str {
+        match self {
+            Self::Damage => "damage",
+            Self::Defense => "defense",
+            Self::Hit => "hit",
+            Self::Stun => "stun",
+            Self::Cut => "cut",
+            Self::Bleed => "bleed",
+            Self::Form => "form",
+            Self::Injury => "injury",
+            Self::Illness => "illness",
+        }
+    }
 }
 
 impl Entry {
     /// The first page of each category, in the order of the tabs.
-    pub(super) const CATEGORIES: [Self; 2] = [Self::Class(0), Self::Weapon(0)];
+    pub(super) const CATEGORIES: [Self; 4] = [
+        Self::Class(0),
+        Self::Weapon(0),
+        Self::Colosseum(0),
+        Self::Calc(Calc::Damage),
+    ];
 
     /// Its category's name key.
     fn category(self) -> &'static str {
         match self {
             Self::Class(_) => "wiki-classes",
             Self::Weapon(_) | Self::Shield => "wiki-weapons",
+            Self::Colosseum(_) => "wiki-colosseums",
+            Self::Calc(_) => "wiki-calcs",
         }
     }
 
@@ -50,6 +107,12 @@ impl Entry {
                 .nth(i)
                 .map(|k| ("weapon", k.as_str())),
             Self::Shield => Some(("weapon", "shield")),
+            Self::Colosseum(i) => data
+                .world
+                .colosseums
+                .get(i)
+                .map(|c| ("colosseum", c.key.as_str())),
+            Self::Calc(calc) => Some(("calc", calc.key())),
         }
     }
 
@@ -59,11 +122,17 @@ impl Entry {
     }
 }
 
-/// Every page, the classes then the weapons and the shield.
+/// Every page, the classes, the weapons and the shield, the colosseums, the formulas.
 pub(super) fn entries(data: &DesignData) -> impl Iterator<Item = Entry> {
     let classes = (0..data.classes.len()).map(Entry::Class);
     let weapons = (0..data.combat.weapons.len()).map(Entry::Weapon);
-    classes.chain(weapons).chain([Entry::Shield])
+    let colosseums = (0..data.world.colosseums.len()).map(Entry::Colosseum);
+    let calcs = Calc::ALL.into_iter().map(Entry::Calc);
+    classes
+        .chain(weapons)
+        .chain([Entry::Shield])
+        .chain(colosseums)
+        .chain(calcs)
 }
 
 /// The pages of `shown`'s category, or of all whose name holds `query`, whatever the case.
@@ -190,9 +259,365 @@ fn page(ui: &mut egui::Ui, entry: Entry, data: &DesignData) {
             let percent = data.fighter.equipment.shield_defense_percent;
             ui.label(tr!("wiki-shield-effect", percent = percent));
         }
+        Entry::Colosseum(i) => {
+            let Some(colosseum) = data.world.colosseums.get(i) else {
+                return;
+            };
+            section(ui, &tr!("wiki-arena"));
+            let layout = data.combat.arenas.get(colosseum.arena);
+            ui.label(egui::RichText::new(arena_name(colosseum.arena)).strong());
+            ui.label(arena_effect(colosseum.arena));
+            let floor = tr!(
+                "wiki-arena-floor",
+                width = decimal(layout.width),
+                height = decimal(layout.height),
+                speed = layout.speed_percent,
+                pillars = layout.pillars.len()
+            );
+            ui.label(egui::RichText::new(floor).small().weak());
+        }
+        // A formula has no history.
+        Entry::Calc(calc) => return calc_page(ui, calc, data),
     }
     section(ui, &tr!("wiki-history"));
     prose(ui, entry, data, "history");
+}
+
+/// The formula of `calc`, with the design data's figures.
+fn calc_page(ui: &mut egui::Ui, calc: Calc, data: &DesignData) {
+    section(ui, &tr!("wiki-formula"));
+    for line in calc_lines(calc, data) {
+        ui.label(line);
+    }
+    match calc {
+        Calc::Injury => {
+            severity_table(ui, data);
+            parts_table(ui, data);
+        }
+        Calc::Illness => illness_table(ui, data),
+        _ => {}
+    }
+}
+
+/// The lines of `calc`'s formula, those of the fight; the others in `health_lines`.
+fn calc_lines(calc: Calc, data: &DesignData) -> Vec<String> {
+    let combat = &data.combat;
+    let fighter = &data.fighter;
+    match calc {
+        Calc::Damage => vec![
+            tr!("wiki-calc-damage-formula"),
+            tr!("wiki-calc-damage-stats"),
+            tr!(
+                "wiki-calc-damage-off-hand",
+                percent = fighter.equipment.off_hand_attack_percent
+            ),
+        ],
+        Calc::Defense => vec![
+            tr!("wiki-calc-defense-formula"),
+            tr!(
+                "wiki-calc-defense-shield",
+                percent = fighter.equipment.shield_defense_percent
+            ),
+        ],
+        Calc::Hit => vec![
+            tr!(
+                "wiki-calc-hit-formula",
+                even = combat.accuracy.even_percent,
+                min = combat.accuracy.min_percent,
+                max = combat.accuracy.max_percent
+            ),
+            tr!(
+                "wiki-calc-hit-location",
+                head = combat.hits.head,
+                body = combat.hits.body,
+                arm = combat.hits.arm,
+                leg = combat.hits.leg
+            ),
+        ],
+        Calc::Stun => vec![
+            tr!(
+                "wiki-calc-stun-chance",
+                blunt = hundredths(combat.stun.blunt_hundredths),
+                cutting = hundredths(combat.stun.cutting_hundredths),
+                head = combat.stun.head_injury_percent
+            ),
+            tr!(
+                "wiki-calc-stun-rise",
+                seconds = tenths(combat.stun.ticks),
+                timid = combat.stun.rise_percent_most_timid,
+                bold = combat.stun.rise_percent_boldest,
+                lost = combat.stun.rise_percent_lost_per_stun
+            ),
+        ],
+        Calc::Cut => vec![tr!(
+            "wiki-calc-cut",
+            limb = hundredths(combat.cut.limb_hundredths),
+            head = hundredths(combat.cut.head_hundredths),
+            fatal = combat.cut.fatal_head_percent
+        )],
+        Calc::Bleed => vec![tr!(
+            "wiki-calc-bleed",
+            percent = combat.bleed.hp_percent_per_second,
+            head = combat.bleed.head_seconds,
+            body = combat.bleed.body_seconds,
+            arm = combat.bleed.arm_seconds,
+            leg = combat.bleed.leg_seconds
+        )],
+        Calc::Form | Calc::Injury | Calc::Illness => health_lines(calc, data),
+    }
+}
+
+/// The lines of the formulas of form, injuries and illnesses.
+fn health_lines(calc: Calc, data: &DesignData) -> Vec<String> {
+    let fighter = &data.fighter;
+    match calc {
+        Calc::Form => {
+            let form = &fighter.form;
+            vec![
+                tr!(
+                    "wiki-calc-form-risk",
+                    k = decimal(form.risk_factor),
+                    max = decimal(1.0 + form.risk_factor)
+                ),
+                tr!(
+                    "wiki-calc-form-events",
+                    fight = form.fight,
+                    title = form.title_defense,
+                    melee = form.melee,
+                    training = form.training,
+                    rest = form.rest
+                ),
+            ]
+        }
+        Calc::Injury => {
+            let injury = &fighter.injury;
+            vec![
+                tr!(
+                    "wiki-calc-injury-chance",
+                    percent = percent(injury.chance_per_fight),
+                    survival = percent(injury.fatal_blow_survival),
+                    stun = percent(injury.stun_wound_chance)
+                ),
+                tr!("wiki-calc-care", percent = fighter.care.weeks_kept_percent),
+                tr!("wiki-calc-max-malus", max = injury.max_malus),
+            ]
+        }
+        Calc::Illness => {
+            let illness = &fighter.illness;
+            vec![
+                tr!(
+                    "wiki-calc-illness-chance",
+                    percent = percent(illness.chance_per_week),
+                    chance = percent(illness.worsening_chance),
+                    min = illness.worsening_weeks.0,
+                    max = illness.worsening_weeks.1
+                ),
+                tr!("wiki-calc-care", percent = fighter.care.weeks_kept_percent),
+            ]
+        }
+        _ => Vec::new(),
+    }
+}
+
+/// The injuries' severities: chance, weeks, share of the maluses, care.
+fn severity_table(ui: &mut egui::Ui, data: &DesignData) {
+    let rules = &data.fighter.injury;
+    let (weights, weeks, malus) = (
+        &rules.severity_weights,
+        &rules.healing_weeks,
+        &rules.severity_percent,
+    );
+    let cost = &data.fighter.care.injury_cost;
+    section(ui, &tr!("wiki-severities"));
+    egui::Grid::new("wiki-severities")
+        .striped(true)
+        .show(ui, |ui| {
+            header_row(
+                ui,
+                &[
+                    "wiki-level",
+                    "wiki-weight",
+                    "wiki-healing",
+                    "wiki-maluses",
+                    "wiki-care",
+                ],
+            );
+            let severities = [
+                (
+                    "wiki-light",
+                    weights.light,
+                    Some((weeks.light, malus.light, cost.light)),
+                ),
+                (
+                    "wiki-medium",
+                    weights.medium,
+                    Some((weeks.medium, malus.medium, cost.medium)),
+                ),
+                (
+                    "wiki-severe",
+                    weights.severe,
+                    Some((weeks.severe, malus.severe, cost.severe)),
+                ),
+                ("wiki-permanent", weights.permanent, None),
+            ];
+            for (name, weight, heals) in severities {
+                ui.label(tr!(name));
+                ui.label(weight.to_string());
+                if let Some(((min, max), malus, cost)) = heals {
+                    ui.label(tr!("wiki-weeks-range", min = min, max = max));
+                    ui.label(format!("{malus} %"));
+                    ui.label(cost.to_string());
+                } else {
+                    ui.label(tr!("wiki-never"));
+                    ui.label(tr!("wiki-after-effect"));
+                    ui.label("—");
+                }
+                ui.end_row();
+            }
+        });
+}
+
+/// The maluses of an injury on each part of the body, medium, permanent, the limb lost.
+fn parts_table(ui: &mut egui::Ui, data: &DesignData) {
+    let rules = &data.fighter.injury;
+    section(ui, &tr!("wiki-parts"));
+    let (temporary, permanent, lost) = (&rules.temporary, &rules.permanent, &rules.lost);
+    let at = &rules.location_weights;
+    let parts = [
+        (
+            "location-head",
+            at.head,
+            temporary.head,
+            permanent.head,
+            None,
+        ),
+        (
+            "location-body",
+            at.body,
+            temporary.body,
+            permanent.body,
+            None,
+        ),
+        (
+            "wiki-dominant-arm",
+            at.arm,
+            temporary.dominant_arm,
+            permanent.dominant_arm,
+            Some(lost.dominant_arm),
+        ),
+        (
+            "wiki-off-arm",
+            at.arm,
+            temporary.off_arm,
+            permanent.off_arm,
+            Some(lost.off_arm),
+        ),
+        (
+            "wiki-leg",
+            at.leg,
+            temporary.leg,
+            permanent.leg,
+            Some(lost.leg),
+        ),
+    ];
+    egui::Grid::new("wiki-parts").striped(true).show(ui, |ui| {
+        header_row(
+            ui,
+            &[
+                "wiki-part",
+                "wiki-weight",
+                "wiki-medium",
+                "wiki-permanent",
+                "wiki-lost",
+            ],
+        );
+        for (name, weight, temporary, permanent, lost) in parts {
+            ui.label(tr!(name));
+            ui.label(weight.to_string());
+            ui.label(maluses(temporary));
+            ui.label(maluses(permanent));
+            ui.label(lost.map_or_else(|| "—".into(), maluses));
+            ui.end_row();
+        }
+    });
+}
+
+/// The illnesses' levels: chance, weeks, malus on every stat, rest, care.
+fn illness_table(ui: &mut egui::Ui, data: &DesignData) {
+    let rules = &data.fighter.illness;
+    let cost = &data.fighter.care.illness_cost;
+    let levels = [
+        ("wiki-mild", IllnessLevel::Mild, cost.mild),
+        ("wiki-moderate", IllnessLevel::Moderate, cost.moderate),
+        ("wiki-severe-illness", IllnessLevel::Severe, cost.severe),
+    ];
+    section(ui, &tr!("wiki-levels"));
+    egui::Grid::new("wiki-levels").striped(true).show(ui, |ui| {
+        header_row(
+            ui,
+            &[
+                "wiki-level",
+                "wiki-weight",
+                "wiki-healing",
+                "wiki-all-stats",
+                "wiki-rest",
+                "wiki-care",
+            ],
+        );
+        for (name, level, cost) in levels {
+            let (min, max) = rules.weeks.get(level);
+            ui.label(tr!(name));
+            ui.label(rules.level_weights.get(level).to_string());
+            ui.label(tr!("wiki-weeks-range", min = min, max = max));
+            ui.label(format!("-{} %", rules.malus.get(level)));
+            ui.label(format!("{} %", rules.rest_percent.get(level)));
+            ui.label(cost.to_string());
+            ui.end_row();
+        }
+    });
+}
+
+/// A grid's first row, its columns' names.
+fn header_row(ui: &mut egui::Ui, keys: &[&str]) {
+    for key in keys {
+        ui.label(egui::RichText::new(tr!(key)).strong());
+    }
+    ui.end_row();
+}
+
+/// Stat maluses in percent, « PRÉ -10 %, PV -10 % », or a dash for none.
+fn maluses(stats: Stats) -> String {
+    let maluses: Vec<String> = stat_names()
+        .into_iter()
+        .zip(stats.to_array())
+        .filter(|&(_, percent)| percent > 0)
+        .map(|(stat, percent)| tr!("health-malus", stat = stat, percent = percent))
+        .collect();
+    if maluses.is_empty() {
+        "—".into()
+    } else {
+        maluses.join(", ")
+    }
+}
+
+/// Hundredths of a percent as a percent: « 1,67 » for 167, « 5 » for 500.
+fn hundredths(n: u32) -> String {
+    match n % 100 {
+        0 => (n / 100).to_string(),
+        rest => format!("{},{rest:02}", n / 100)
+            .trim_end_matches('0')
+            .into(),
+    }
+}
+
+/// A chance from 0 to 1 in percent, rounded: « 15 » for 0.15.
+fn percent(chance: f64) -> String {
+    (chance * 100.0).round().to_string()
+}
+
+/// A number with a decimal comma: « 1,5 ».
+fn decimal(x: f64) -> String {
+    x.to_string().replace('.', ",")
 }
 
 /// Where the egui memory keeps the loadout shown on the page of the class at `class`.
@@ -256,6 +681,10 @@ fn spell_line(ui: &mut egui::Ui, spell: &SpellData) {
 /// The right of the page: its figures, and links to the pages it leads to, the one
 /// clicked in `open`.
 fn card(ui: &mut egui::Ui, entry: Entry, data: &DesignData, open: &mut Option<Entry>) {
+    // A formula's figures are all on its page.
+    if matches!(entry, Entry::Calc(_)) {
+        return;
+    }
     section(ui, &tr!("wiki-card"));
     match entry {
         Entry::Class(i) => {
@@ -314,6 +743,35 @@ fn card(ui: &mut egui::Ui, entry: Entry, data: &DesignData, open: &mut Option<En
             let users = users(data, |l| l.off_hand == OffHand::Shield);
             users_links(ui, data, users, open);
         }
+        Entry::Colosseum(i) => {
+            let Some(colosseum) = data.world.colosseums.get(i) else {
+                return;
+            };
+            let purses = &colosseum.purses;
+            let receipts = tr!(
+                "wiki-receipts-value",
+                base = purses.receipts_base,
+                per_fame = purses.receipts_per_fame
+            );
+            let rows = [
+                ("wiki-continent", continent_name(colosseum.continent)),
+                ("wiki-prestige", format!("{} / 5", colosseum.prestige)),
+                ("wiki-residents", colosseum.residents.to_string()),
+                ("wiki-entry-fee", purses.entry_fee.to_string()),
+                ("wiki-win-prize", purses.win_prize.to_string()),
+                ("wiki-receipts", receipts),
+                ("wiki-champion-bonus", purses.champion_bonus.to_string()),
+                ("wiki-melee-prize", purses.melee_prize.to_string()),
+            ];
+            egui::Grid::new("wiki-colosseum").show(ui, |ui| {
+                for (name, value) in rows {
+                    ui.label(tr!(name));
+                    ui.label(value);
+                    ui.end_row();
+                }
+            });
+        }
+        Entry::Calc(_) => {}
     }
 }
 
@@ -352,6 +810,14 @@ mod tests {
             .map(|e| e.name(&data))
             .collect();
         assert_eq!(found, ["Glaive"]);
+    }
+
+    #[test]
+    fn hundredths_read_as_percents() {
+        assert_eq!(hundredths(500), "5");
+        assert_eq!(hundredths(167), "1,67");
+        assert_eq!(hundredths(17), "0,17");
+        assert_eq!(hundredths(250), "2,5");
     }
 
     #[test]

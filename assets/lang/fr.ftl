@@ -435,6 +435,75 @@ wiki-blows = { $n } coups
 wiki-mine = pose une mine
 wiki-gathers = ramasse { $n } élém.
 wiki-bleed = saignement { $percent } %
+wiki-colosseums = Colisées
+wiki-arena = Arène
+wiki-arena-floor = { $width } × { $height } m, marche à { $speed } % de la vitesse, { $pillars ->
+        [0] sans pilier
+        [1] 1 pilier
+       *[other] { $pillars } piliers
+    }
+wiki-continent = Continent
+wiki-prestige = Prestige
+wiki-residents = Classés à l'ouverture
+wiki-entry-fee = Inscription
+wiki-win-prize = Victoire
+wiki-receipts = Recettes
+wiki-receipts-value = { $base } + { $per_fame } × renommée
+wiki-champion-bonus = Bonus champion
+wiki-melee-prize = Mêlée d'ouverture
+wiki-calcs = Calculs
+calc-damage = Dégâts
+calc-defense = Défense
+calc-hit = Toucher
+calc-stun = Étourdissement
+calc-cut = Membres tranchés
+calc-bleed = Saignement
+calc-form = Forme et risque
+calc-injury = Blessures
+calc-illness = Maladies
+wiki-formula = Formule
+wiki-calc-damage-formula = Dégâts = attaque × 100 / (100 + défense), arrondis au supérieur, puis multipliés par la puissance de la capacité.
+wiki-calc-damage-stats = Au contact, l'AC contre la DC ; à distance, l'AL contre la DL.
+wiki-calc-damage-off-hand = Une seconde arme ramène l'AC à { $percent } %, sauf pour un ambidextre.
+wiki-calc-defense-formula = Une défense D ne laisse passer que 100 / (100 + D) des dégâts : 100 de défense les divise par deux, 300 par quatre. Elle ne les annule jamais.
+wiki-calc-defense-shield = Un bouclier porte la DC et la DL à { $percent } %.
+wiki-calc-hit-formula = Chance de toucher = { $even } % × 2 × PRÉ / (PRÉ + VIT de la cible), entre { $min } % et { $max } %, puis multipliée par la précision de la capacité. À PRÉ égale à la VIT adverse, on touche à { $even } %.
+wiki-calc-hit-location = Le coup tombe sur la tête, le corps, un bras ou une jambe, avec les poids { $head }, { $body }, { $arm } et { $leg }.
+wiki-calc-stun-chance = Un coup qui ne met pas fin au combat étourdit avec { $blunt } % de chance s'il est contondant, { $cutting } % s'il est tranchant, par dixième des PV max qu'il enlève ; un coup neutre, jamais. Chaque blessure à la tête augmente cette chance de { $head } %.
+wiki-calc-stun-rise = L'étourdi reste à terre { $seconds } s, puis se relève avec { $timid } % de chance s'il est le plus timide, jusqu'à { $bold } % s'il est le plus audacieux, { $lost } points de moins par étourdissement après le premier. Sinon il est mis K.-O. et perd, vivant.
+wiki-calc-cut = Un coup tranchant qui porte peut trancher la partie touchée. Un membre, si la cible combat encore, avec { $limb } % de chance par dixième des PV max qu'il enlève : elle sort vivante, mutilée à vie. La tête, avec { $head } % par dixième, ou { $fatal } % sur le coup qui la met à 0 PV : elle meurt. Le corps, jamais.
+wiki-calc-bleed = Un coup qui porte fait saigner la partie touchée avec la chance de saignement de la capacité, si elle ne saigne pas déjà : { $percent } % des PV max par seconde (au moins 1), pendant { $head } s à la tête, { $body } s au corps, { $arm } s à un bras, { $leg } s à une jambe. Les saignements s'additionnent et peuvent tuer.
+wiki-calc-form-risk = Risque = base × (1 + { $k } × (1 − forme / 100)) : à forme 0, le risque de blessure ou de maladie est multiplié par { $max }.
+wiki-calc-form-events = Forme, sur 100 : -{ $fight } par combat, -{ $title } par défense de titre, -{ $melee } par mêlée, -{ $training } par semaine d'entraînement, +{ $rest } par semaine de repos.
+wiki-calc-injury-chance = { $percent } % de risque de blessure par combat en pleine forme, multiplié par le risque de la forme. Un combattant mis à 0 PV survit avec { $survival } % de chance, gravement blessé ; un combattant étourdi a { $stun } % de chance d'en garder une blessure grave à la tête.
+wiki-calc-illness-chance = { $percent } % de risque de tomber malade par semaine en pleine forme, multiplié par le risque de la forme. Combattre avec une maladie sévère a { $chance } % de chance de la prolonger de { $min } à { $max } semaines.
+wiki-calc-care = Les soins ne gardent que { $percent } % des semaines restantes, arrondis au supérieur, au moins une.
+wiki-calc-max-malus = Toutes blessures cumulées, une stat ne perd pas plus de { $max } %.
+wiki-severities = Gravités
+wiki-levels = Niveaux
+wiki-parts = Parties du corps
+wiki-level = Niveau
+wiki-part = Partie
+wiki-weight = Poids
+wiki-healing = Guérison
+wiki-maluses = Part des malus
+wiki-all-stats = Toutes les stats
+wiki-rest = Repos
+wiki-care = Soins
+wiki-light = Légère
+wiki-medium = Moyenne
+wiki-severe = Grave
+wiki-permanent = Séquelle
+wiki-lost = Perdu
+wiki-mild = Faible
+wiki-moderate = Moyenne
+wiki-severe-illness = Sévère
+wiki-never = jamais
+wiki-after-effect = à vie
+wiki-weeks-range = { $min } à { $max } sem.
+wiki-dominant-arm = Bras dominant
+wiki-off-arm = Autre bras
+wiki-leg = Jambe
 
 menu-title = Menu général
 menu-club = { $club } : { $wealth }, en { $continent }
