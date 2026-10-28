@@ -201,7 +201,7 @@ mod tests {
         // A file written by hand: an unknown key, bad values and missing lines.
         std::fs::write(
             folder.join(SETTINGS),
-            "colour = red\nmusic = loud\neffects=0.3\n",
+            "colour = red\nmusic = loud\nmusic = NaN\neffects=0.3\n",
         )
         .unwrap();
         let mut read = Audio::default();

@@ -75,8 +75,11 @@ impl Audio {
         self.music_volume
     }
 
-    /// Also applies to the music playing.
+    /// Also applies to the music playing. A NaN volume is ignored.
     pub fn set_music_volume(&mut self, volume: f32) {
+        if volume.is_nan() {
+            return;
+        }
         self.music_volume = volume.clamp(0.0, 1.0);
         if let Some((_, sound)) = &self.music {
             set_sound_volume(sound, self.music_volume);
@@ -88,8 +91,11 @@ impl Audio {
         self.effects_volume
     }
 
-    /// Applies to the next effects; those playing keep their volume.
+    /// Applies to the next effects; those playing keep their volume. A NaN volume is ignored.
     pub fn set_effects_volume(&mut self, volume: f32) {
+        if volume.is_nan() {
+            return;
+        }
         self.effects_volume = volume.clamp(0.0, 1.0);
     }
 }
