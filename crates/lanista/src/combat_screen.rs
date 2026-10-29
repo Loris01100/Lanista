@@ -43,8 +43,10 @@ const SCORE_WIDTH: f32 = 220.0;
 /// the controls.
 const TOP_ROOM: f32 = 120.0;
 const BOTTOM_ROOM: f32 = 150.0;
-/// Height of the controls with their margin, in points: the feed goes above.
-const CONTROLS_HEIGHT: f32 = 52.0;
+/// Height of the controls with their margin, in points, before their first frame: the
+/// feed goes above.
+const CONTROLS_HEIGHT: f32 = 60.0;
+const CONTROLS: &str = "controls";
 const THUMBNAIL_FRAME: Color = Color::new(0.9, 0.85, 0.7, 1.0);
 /// Over a thumbnail whose fight is over.
 const FINISHED: Color = Color::new(0.55, 0.55, 0.55, 1.0);
@@ -299,6 +301,7 @@ impl CombatScreen {
     /// to go back, from the result's « Continuer ».
     fn controls(&mut self, ui: &egui::Context) -> bool {
         egui::Window::new(tr!("controls"))
+            .id(egui::Id::new(CONTROLS))
             .title_bar(false)
             .resizable(false)
             .anchor(egui::Align2::CENTER_BOTTOM, [0.0, -MARGIN])
@@ -496,10 +499,16 @@ impl CombatScreen {
         if lines.is_empty() {
             return;
         }
+        // Above the controls as laid out last frame: their height follows the theme.
+        let above = ui
+            .memory(|m| m.area_rect(egui::Id::new(CONTROLS)))
+            .map_or(CONTROLS_HEIGHT, |r| {
+                ui.screen_rect().bottom() - r.top() + MARGIN / 2.0
+            });
         egui::Window::new(tr!("feed"))
             .title_bar(false)
             .resizable(false)
-            .anchor(egui::Align2::CENTER_BOTTOM, [0.0, -CONTROLS_HEIGHT])
+            .anchor(egui::Align2::CENTER_BOTTOM, [0.0, -above])
             .show(ui, |ui| {
                 ui.set_width(FEED_WIDTH);
                 let weak = ui.visuals().weak_text_color();
