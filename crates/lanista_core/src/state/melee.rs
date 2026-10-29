@@ -3,11 +3,8 @@
 
 use std::cmp::Reverse;
 
-use rand::RngExt;
-use rand_chacha::ChaCha8Rng;
-
 use crate::colosseum::{ColosseumId, Contender};
-use crate::combat::Floor;
+use crate::combat::{Floor, shuffle};
 use crate::design_data::DesignData;
 use crate::economy::{Flow, Transaction};
 use crate::fighter::career::{Activity, Status, WeekPlan, WeekReport};
@@ -310,13 +307,4 @@ pub(super) fn melee_entries(
         }
     }
     Some((melee, weeks))
-}
-
-/// Shuffles `items` on `rng` (Fisher-Yates on u32 draws, the same on every platform).
-fn shuffle<T>(rng: &mut ChaCha8Rng, items: &mut [T]) {
-    for k in (1..items.len()).rev() {
-        let Ok(top) = u32::try_from(k) else { continue };
-        let j = rng.random_range(0..=top);
-        items.swap(k, usize::try_from(j).unwrap_or(k));
-    }
 }

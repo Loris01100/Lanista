@@ -8,7 +8,7 @@ use std::cmp::Ordering;
 use rand::RngExt;
 use serde::Deserialize;
 
-use crate::combat::{Arena, ArenaLayout, CombatRules, Floor, Pillar, Vec2, edge_distance};
+use crate::combat::{Arena, ArenaLayout, CombatRules, Floor, Pillar, Vec2, edge_distance, shuffle};
 use crate::fighter::personality::Personality;
 use crate::fighter::{Fighter, FighterId};
 use crate::log::{Event, EventKind};
@@ -352,7 +352,7 @@ pub fn eliminate(arena: &mut Arena) {
         let mut tied: Vec<usize> = order.iter().copied().filter(|i| side(i).is_eq()).collect();
         let need = count - out.len();
         if need < tied.len() {
-            shuffle(arena, &mut tied);
+            shuffle(&mut arena.rng, &mut tied);
         }
         out.extend(tied.into_iter().take(need));
         out.sort_unstable();
@@ -366,16 +366,6 @@ pub fn eliminate(arena: &mut Arena) {
     }
     for f in &mut arena.fighters {
         f.round_damage = 0;
-    }
-}
-
-/// Shuffles `items` on the arena's generator (Fisher-Yates on u32 draws, the same on
-/// every platform).
-fn shuffle(arena: &mut Arena, items: &mut [usize]) {
-    for k in (1..items.len()).rev() {
-        let Ok(top) = u32::try_from(k) else { continue };
-        let j = arena.rng.random_range(0..=top);
-        items.swap(k, usize::try_from(j).unwrap_or(k));
     }
 }
 

@@ -949,14 +949,18 @@ fn cast_order(arena: &mut Arena) -> Vec<usize> {
         .collect();
     order.sort_by_key(|&i| std::cmp::Reverse(fighters[i].stats.speed));
     for tie in order.chunk_by_mut(|&a, &b| fighters[a].stats.speed == fighters[b].stats.speed) {
-        // Fisher-Yates on u32 draws, the same on every platform.
-        for k in (1..tie.len()).rev() {
-            let Ok(top) = u32::try_from(k) else { continue };
-            let j = arena.rng.random_range(0..=top);
-            tie.swap(k, usize::try_from(j).unwrap_or(k));
-        }
+        shuffle(&mut arena.rng, tie);
     }
     order
+}
+
+/// Shuffles `items` on `rng` (Fisher-Yates on u32 draws, the same on every platform).
+pub(crate) fn shuffle<T>(rng: &mut ChaCha8Rng, items: &mut [T]) {
+    for k in (1..items.len()).rev() {
+        let Ok(top) = u32::try_from(k) else { continue };
+        let j = rng.random_range(0..=top);
+        items.swap(k, usize::try_from(j).unwrap_or(k));
+    }
 }
 
 /// Casts the spell each fighter standing chose, if it is ready, affordable and the
