@@ -47,7 +47,7 @@ use reesch::{Assets, Audio, Bindings, Screen, Transition, egui};
 
 use crate::Action;
 use crate::combat_screen::{CombatScreen, Watched};
-use crate::fight_view::Cast;
+use crate::fight_view::{Cast, Intro};
 use crate::lang::tr;
 use crate::options;
 use crate::saves;
@@ -1329,6 +1329,31 @@ fn to_watch(fights: &[FightReport], state: &GameState, data: &DesignData) -> Vec
             .iter()
             .map(|f| elo_in(state, report.colosseum, f))
             .collect();
+        let intros = fight
+            .setup
+            .fighters
+            .iter()
+            .enumerate()
+            .map(|(k, f)| {
+                let class = class_name(f, data);
+                Intro {
+                    name: if f.name.is_empty() {
+                        class.clone()
+                    } else {
+                        stage_name(&f.name)
+                    },
+                    class,
+                    loadout: loadout_name(f, f.loadout, data),
+                    season: f.season_record,
+                    career: f.record,
+                    no_armour: fight
+                        .setup
+                        .entrants
+                        .get(k)
+                        .is_some_and(|e| e.refused.armour),
+                }
+            })
+            .collect();
         let survivors = (0..)
             .zip(fight.survived_fatal_blow.iter().copied())
             .filter(|&(_, survived)| survived)
@@ -1341,6 +1366,7 @@ fn to_watch(fights: &[FightReport], state: &GameState, data: &DesignData) -> Vec
                 club: mine.iter().map(|f| f.fight.me).collect(),
                 survivors,
                 elos,
+                intros,
             },
         });
     }
@@ -2275,6 +2301,19 @@ mod tests {
             })
             .map(|r| r.elo);
         assert_eq!(cast.elos[1], elo);
+        // Presented as it went in: its class, loadout and records, armour on.
+        let intro = &cast.intros[1];
+        assert_eq!(intro.name, stage_name(&resident.name));
+        assert_eq!(intro.class, class);
+        assert_eq!(
+            intro.loadout,
+            loadout_name(&resident, resident.loadout, &screen.data)
+        );
+        assert_eq!(
+            (intro.season, intro.career),
+            (resident.season_record, resident.record)
+        );
+        assert!(!intro.no_armour);
         // A week of rest: nothing to watch, nothing to sum up.
         screen.decisions.plans[0].activity = Activity::Rest;
         screen.next_week();

@@ -18,7 +18,7 @@ use crate::fight_view::{Cast, FightView, STANDS, Tone, Verdict};
 use crate::fighter_sprite::PIXELS_PER_METRE;
 use crate::lang::tr;
 use crate::options;
-use crate::texts::{part_injury_text, part_name};
+use crate::texts::{part_injury_text, part_name, record_text};
 use crate::theme;
 
 pub use crate::fight_view::{DEATH_SOUND, HIT_SOUND};
@@ -37,6 +37,8 @@ const THUMBNAIL_FRAME: Color = Color::new(0.9, 0.85, 0.7, 1.0);
 const FINISHED: Color = Color::new(0.55, 0.55, 0.55, 1.0);
 /// Width of the pause menu.
 const PAUSE_WIDTH: f32 = 220.0;
+/// Height of the presentation's rows before they scroll, a melee of twenty.
+const PRESENTATION_HEIGHT: f32 = 420.0;
 /// Lines of the fight's feed, and its width.
 const FEED_LINES: usize = 6;
 const FEED_WIDTH: f32 = 340.0;
@@ -71,6 +73,9 @@ pub struct CombatScreen {
     paused: bool,
     /// Whether the options, opened from the pause menu, are laid over it.
     options_open: bool,
+    /// Whether the fighters of the fight shown big are being presented, before the
+    /// first tick; the fights wait meanwhile.
+    presenting: bool,
 }
 
 impl CombatScreen {
@@ -92,6 +97,7 @@ impl CombatScreen {
             settings: None,
             paused: false,
             options_open: false,
+            presenting: true,
         }
     }
 
@@ -243,6 +249,74 @@ impl CombatScreen {
 }
 
 impl CombatScreen {
+    /// While `presenting`, the fighters of the fight shown big in the middle of the
+    /// screen, one row each, the club's in bronze: class, loadout, Elo in the fight's
+    /// colosseum, season and career records, armour refused. « Au combat ! » starts it.
+    fn presentation(&mut self, ui: &egui::Context) {
+        if !self.presenting {
+            return;
+        }
+        let fight = self.fight();
+        let cast = &fight.cast;
+        let mut start = false;
+        egui::Window::new(tr!("presentation"))
+            .collapsible(false)
+            .resizable(false)
+            .anchor(egui::Align2::CENTER_CENTER, [0.0, 0.0])
+            .show(ui, |ui| {
+                egui::ScrollArea::vertical()
+                    .max_height(PRESENTATION_HEIGHT)
+                    .show(ui, |ui| {
+                        egui::Grid::new("presentation_grid")
+                            .striped(true)
+                            .spacing([16.0, 6.0])
+                            .show(ui, |ui| {
+                                for key in [
+                                    "presentation-fighter",
+                                    "presentation-class",
+                                    "presentation-loadout",
+                                    "presentation-elo",
+                                    "presentation-season",
+                                    "presentation-career",
+                                    "presentation-armour",
+                                ] {
+                                    ui.strong(tr!(key));
+                                }
+                                ui.end_row();
+                                for (k, intro) in cast.intros.iter().enumerate() {
+                                    let id = FighterId(u32::try_from(k).unwrap_or(u32::MAX));
+                                    let mut name = egui::RichText::new(&intro.name).strong();
+                                    if cast.club.contains(&id) {
+                                        name = name.color(theme::BRONZE);
+                                    }
+                                    ui.label(name);
+                                    ui.label(&intro.class);
+                                    ui.label(&intro.loadout);
+                                    ui.label(cast.elos.get(k).copied().flatten().map_or_else(
+                                        || tr!("presentation-unranked"),
+                                        |elo| elo.to_string(),
+                                    ));
+                                    ui.label(record_text(intro.season));
+                                    ui.label(record_text(intro.career));
+                                    if intro.no_armour {
+                                        ui.colored_label(theme::BLOOD, tr!("plan-no-armour"));
+                                    } else {
+                                        ui.label(tr!("presentation-armoured"));
+                                    }
+                                    ui.end_row();
+                                }
+                            });
+                    });
+                ui.add_space(8.0);
+                ui.vertical_centered(|ui| {
+                    start = ui.button(tr!("presentation-start")).clicked();
+                });
+            });
+        if start {
+            self.presenting = false;
+        }
+    }
+
     /// The time left before the time limit of the fight shown big, top right.
     fn timer(&self, ui: &egui::Context) {
         let arena = &self.fight().arena;
@@ -636,8 +710,12 @@ impl Screen for CombatScreen {
                 self.speed = speed;
             }
         }
-        if keys && self.running() && self.bindings.pressed(ui, &Action::Skip) {
-            self.skip();
+        if keys && self.bindings.pressed(ui, &Action::Skip) {
+            if self.presenting {
+                self.presenting = false;
+            } else if self.running() {
+                self.skip();
+            }
         }
         if self.controls(ui) || self.pause_menu(ui) {
             return Transition::Pop;
@@ -662,11 +740,12 @@ impl Screen for CombatScreen {
         self.elimination(ui);
         self.gauges(ui);
         self.popups(ui);
+        self.presentation(ui);
         // ponytail: no screen to tell a failure on; the options then last until the
         // game closes.
         let _ = options::window(ui, audio, self.settings.as_deref(), &mut self.options_open);
         audio.play_music(assets, MUSIC);
-        if self.paused {
+        if self.paused || self.presenting {
             return Transition::None;
         }
         // Speed scales time: more or fewer ticks per frame, animations alike.

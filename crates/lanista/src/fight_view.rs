@@ -6,6 +6,7 @@ use lanista_core::ai::{self, CombatAi};
 use lanista_core::combat::{self, Arena, RADIUS};
 use lanista_core::design_data::DesignData;
 use lanista_core::duel::ais;
+use lanista_core::fighter::career::Record;
 use lanista_core::fighter::injury::Location;
 use lanista_core::fighter::{Effect, Fighter, FighterId};
 use lanista_core::log::EventKind;
@@ -124,6 +125,21 @@ pub struct Cast {
     /// Each fighter's Elo in the fight's colosseum, in the arena's order; `None` for one
     /// unranked.
     pub elos: Vec<Option<i32>>,
+    /// How each fighter comes in, in the arena's order, told before the first tick;
+    /// none for a fighter missing.
+    pub intros: Vec<Intro>,
+}
+
+/// A fighter as the presentation tells it, as it went in.
+#[derive(Debug, Clone, Default, PartialEq)]
+pub struct Intro {
+    /// Its stage name, without its class.
+    pub name: String,
+    pub class: String,
+    pub loadout: String,
+    pub season: Record,
+    pub career: Record,
+    pub no_armour: bool,
 }
 
 /// How a fight ended for the club.
