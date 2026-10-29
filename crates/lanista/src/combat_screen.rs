@@ -618,6 +618,8 @@ fn intro_texts(cast: &Cast, k: usize) -> Option<[egui::RichText; 7]> {
 
 fn result_view(ui: &mut egui::Ui, fight: &FightView) {
     ui.vertical(|ui| {
+        // Beside the buttons there is little room left: one line per sentence.
+        ui.style_mut().wrap_mode = Some(egui::TextWrapMode::Extend);
         if let Some(verdict) = fight.verdict() {
             let (text, color) = match verdict {
                 Verdict::Victory => (tr!("verdict-victory"), theme::LAUREL),
