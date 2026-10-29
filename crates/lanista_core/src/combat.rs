@@ -77,9 +77,10 @@ pub struct Arena {
     /// What the floor offers to gather (`SpellData::gathers`); nothing, unless set with
     /// [`Arena::with_layout`].
     pub element: Option<Element>,
-    /// The way out, on a wall: a fighter giving up must reach it to be out of the fight,
-    /// and runs for it meanwhile (`Fighter::fleeing`). None, unless set with
-    /// [`Arena::with_layout`]: a fighter then gives up on the spot.
+    /// The way out, on a wall, with its twin on the opposite wall (`Arena::doors`): a
+    /// fighter giving up must reach one to be out of the fight, and runs for the nearest
+    /// meanwhile (`Fighter::fleeing`). None, unless set with [`Arena::with_layout`]: a
+    /// fighter then gives up on the spot.
     pub door: Option<Vec2>,
     /// Percentage of its speed a fighter running for the door walks at: 100, unless set
     /// with [`Arena::with_rules`].
@@ -478,6 +479,15 @@ impl Arena {
         self.pacts
             .iter()
             .any(|&pact| pact == (a, b) || pact == (b, a))
+    }
+
+    /// The ways out: the door and its twin, mirrored through the middle of the floor.
+    #[must_use]
+    pub fn doors(&self) -> Vec<Vec2> {
+        self.door
+            .into_iter()
+            .flat_map(|d| [d, Vec2::new(self.width - d.x, self.height - d.y)])
+            .collect()
     }
 
     /// This arena on `layout`'s floor: its size, its pillars, its door, its ground
@@ -1563,13 +1573,11 @@ fn give_up(arena: &mut Arena, t: usize) -> Option<EventKind> {
     Some(EventKind::Flee { fighter })
 }
 
-/// Every fighter on the run and free walks for the door, every tick, around the
+/// Every fighter on the run and free walks for the nearest door, every tick, around the
 /// pillars, the mines it sees and the other fighters: one standing in the way blocks it.
 // ponytail: goes round the nearest one in the way, no plan to lure a blocker off the door.
 fn run_for_the_door(arena: &mut Arena) {
-    let Some(door) = arena.door else {
-        return;
-    };
+    let doors = arena.doors();
     for i in 0..arena.fighters.len() {
         let f = &arena.fighters[i];
         if !f.fleeing || !f.is_free() {
@@ -1585,20 +1593,27 @@ fn run_for_the_door(arena: &mut Arena) {
                 radius: RADIUS,
             });
         let obstacles: Vec<Pillar> = arena.obstacles(f.id).into_iter().chain(others).collect();
+        let Some(&door) = doors
+            .iter()
+            .min_by(|a, b| distance(f.position, **a).total_cmp(&distance(f.position, **b)))
+        else {
+            return;
+        };
         let direction = path_direction(&obstacles, f.position, door);
         arena.fighters[i].action = Action::Move(direction);
     }
 }
 
-/// Every fighter on the run that reached the door, or still running when time is up,
+/// Every fighter on the run that reached a door, or still running when time is up,
 /// gives up: out of the fight, alive.
 fn escape(arena: &mut Arena) {
-    let Some(door) = arena.door else {
-        return;
-    };
+    let doors = arena.doors();
     let last = arena.tick + 1 >= arena.max_ticks;
     for f in &mut arena.fighters {
-        if f.fleeing && f.is_fighting() && (last || distance(f.position, door) <= 2.0 * RADIUS) {
+        let out = doors
+            .iter()
+            .any(|&d| distance(f.position, d) <= 2.0 * RADIUS);
+        if f.fleeing && f.is_fighting() && (last || out) {
             f.surrendered = true;
             f.action = Action::Wait;
             arena.log.push(Event {
@@ -2920,6 +2935,25 @@ mod tests {
         play(&mut arena, &[Action::Move(Vec2::new(1.0, 0.0))], 30);
         // Speed 30 → 3 m/s, halved, for one second.
         assert!((arena.fighters[0].position.x - 6.5).abs() < 1e-9);
+    }
+
+    #[test]
+    fn a_fighter_giving_up_runs_out_through_the_nearest_door() {
+        let mut arena = Arena::new(20.0, 20.0, vec![fighter(0, 10.0, 17.0)], 0)
+            .with_layout(&floor_of(), Element::Sand);
+        assert_eq!(
+            arena.doors(),
+            vec![Vec2::new(10.0, 0.0), Vec2::new(10.0, 20.0)]
+        );
+        arena.fighters[0].fleeing = true;
+        play(&mut arena, &[Action::Wait], 30);
+        assert!(arena.fighters[0].position.y > 17.0);
+        assert_eq!(
+            arena.log.last().map(|e| e.kind),
+            Some(EventKind::Surrender {
+                fighter: FighterId(0)
+            })
+        );
     }
 
     #[test]

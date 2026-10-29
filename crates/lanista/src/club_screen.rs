@@ -2477,7 +2477,7 @@ mod tests {
         let data = Rc::clone(&screen.data);
         let target = RivalId {
             club: 2,
-            fighter: 1,
+            fighter: 3,
         };
         let state = &screen.state;
         let wanted = state.rival_fighter(target).unwrap();

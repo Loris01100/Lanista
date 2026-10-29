@@ -764,7 +764,7 @@ impl FightView {
             draw_circle(x, y, radius, PILLAR);
             draw_circle(x, y, radius * 0.75, PILLAR_TOP);
         }
-        if let Some(door) = self.arena.door {
+        for door in self.arena.doors() {
             let (x, y) = (to_f32(door.x), to_f32(door.y));
             let half = to_f32(RADIUS) * 2.0;
             draw_rectangle(x - half, y - half * 0.5, half * 2.0, half, DOOR);

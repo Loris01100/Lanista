@@ -3081,9 +3081,8 @@ mod tests {
         // The clubs replaced those who died, retired or were released in the off-season.
         // Fighters released at `release_age` are worth signing, so the clubs seldom buy
         // from one another (none here).
-        let open = state.rivals.iter().filter(|r| r.is_open());
-        for (rival, before) in open.zip(&start.rivals) {
-            assert!(rival.fighters.len() > before.fighters.len());
+        for (rival, before) in state.rivals.iter().zip(&start.rivals) {
+            assert!(!rival.is_open() || rival.fighters.len() > before.fighters.len());
         }
         let released = state
             .rivals
