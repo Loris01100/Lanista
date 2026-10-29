@@ -534,6 +534,11 @@ menu-club = { $club } : { $wealth }, { $continent }
 menu-alerts = Alertes
 menu-active = { $active } / { $max } combattants en activité
 menu-next-week = Semaine suivante (Espace)
+menu-unpaid = ⚠ Caisse insuffisante : { $count ->
+    [one] 1 combattant
+   *[other] { $count } combattants
+}
+menu-unpaid-hint = La caisse ne suffira pas à payer toute la semaine prévue : ces combattants se reposeront ou ne seront pas soignés. Les gains des combats de la semaine ne sont pas comptés.
 no-fighter-title = Aucun combattant
 no-fighter-text = Votre ludus n'a plus aucun combattant en activité : la semaine ne peut pas être jouée. Rendez-vous au marché pour en recruter un.
 no-fighter-market = Aller au marché
@@ -562,6 +567,7 @@ pending-counter-offer = Marché : { $club } demande { $price } pour { $fighter }
 alert-debts = Dettes : { $money }
 alert-injury = { $fighter } : blessure, { $injury }
 alert-tired = { $fighter } : fatigué (forme { $form })
+alert-unpaid = { $fighter } : pas assez d'argent pour sa semaine
 alert-title-defense = { $fighter } : titre de { $place } à défendre d'ici la { $week }
 alert-sale-offer = { $club } veut acheter { $fighter } pour { $price } (à accepter au marché cette semaine)
 alert-rival = { $club } est votre rival depuis la { $since } : recettes à { $receipts } %, renommée +{ $fame } par combat
@@ -579,6 +585,8 @@ roster-orders-hint = Ce qu'il fait chaque semaine, sauf exception choisie dans s
 roster-orders-all = Consigne pour tous…
 roster-exception = exception cette semaine
 roster-exception-hint = Sa semaine ne suit pas sa consigne : elle a été choisie dans sa fiche.
+roster-unpaid = faute d'argent
+roster-unpaid-hint = La caisse ne suffira pas à payer sa semaine, une fois payés les salaires et les combattants avant lui dans la liste : il se reposera ou ne sera pas soigné. Les gains des combats ne sont pas comptés.
 roster-age-years = { $age } ans
 roster-fit = En forme
 roster-fame-chip = Renommée { $fame }

@@ -465,6 +465,19 @@ impl ClubScreen {
             ui.toggle_value(&mut self.game_open, tr!("game"));
             ui.toggle_value(&mut self.options_open, tr!("options"));
             ui.separator();
+            // Beside the button, so the week is not played without knowing.
+            let unpaid = self.unpaid().into_iter().filter(|&u| u).count();
+            if unpaid > 0 {
+                let text = egui::RichText::new(tr!("menu-unpaid", count = unpaid))
+                    .color(egui::Color32::LIGHT_RED);
+                if ui
+                    .link(text)
+                    .on_hover_text(tr!("menu-unpaid-hint"))
+                    .clicked()
+                {
+                    self.go_to(View::Roster);
+                }
+            }
             // On every view, as the game's main action, so the week is played from where
             // its decisions are taken.
             let next = egui::Button::new(egui::RichText::new(tr!("menu-next-week")).strong())
@@ -854,6 +867,12 @@ impl ClubScreen {
         pages
     }
 
+    /// Which of the club's fighters the money will not pay the week of, as decided
+    /// (`GameState::unpaid`).
+    fn unpaid(&self) -> Vec<bool> {
+        self.state.unpaid(&self.decisions.plans, &self.data)
+    }
+
     /// What needs the player's attention before the week, each with the view where
     /// the player acts on it.
     fn alerts(&self) -> Vec<(String, View)> {
@@ -861,11 +880,16 @@ impl ClubScreen {
         if self.state.money < 0 {
             alerts.push((tr!("alert-debts", money = self.state.money), View::Market));
         }
+        let unpaid = self.unpaid();
         for (i, f) in self.state.fighters.iter().enumerate() {
             if f.status != Status::Active {
                 continue;
             }
             let name = fighter_name(i, f, &self.data);
+            if unpaid[i] {
+                let text = tr!("alert-unpaid", fighter = name.as_str());
+                alerts.push((text, View::Sheet(i)));
+            }
             for injury in &f.injuries {
                 if matches!(injury.severity, Severity::Medium | Severity::Severe) {
                     let injury = injury_text(*injury, f.dominant_hand);
@@ -1420,21 +1444,16 @@ fn elo_in(state: &GameState, colosseum: ColosseumId, fighter: &CareerFighter) ->
         .map(|r| r.elo)
 }
 
-/// Turns to rest a week the club cannot pay (`next_week` would drop it) or a special
-/// fight no longer offered (not in `special`), and drops care and refused armour that
-/// no longer apply: run every frame, the sheet open or not.
+/// Turns to rest a special fight no longer offered (not in `special`), and drops care
+/// and refused armour that no longer apply: run every frame, the sheet open or not. A
+/// fight the club cannot pay is kept, to be shown as such (`GameState::unpaid`), and
+/// `next_week` drops it.
 fn settle_plan(
     plan: &mut WeekPlan,
     fighter: &CareerFighter,
     special: &[(Activity, String)],
     (state, care): (&GameState, &CareRules),
-    data: &DesignData,
 ) {
-    if let Activity::Fight(id) = plan.activity
-        && i64::from(state.entry_fee(id, data).unwrap_or(0)) > state.money
-    {
-        plan.activity = Activity::Rest;
-    }
     if matches!(plan.activity, Activity::TitleFight(_) | Activity::Melee(_))
         && !special.iter().any(|(a, _)| *a == plan.activity)
     {
@@ -1472,7 +1491,7 @@ fn ordered(
 ) -> WeekPlan {
     let mut plan = state.ordered_plan(i, orders, data);
     if let Some(f) = state.fighters.get(i) {
-        settle_plan(&mut plan, f, special, (state, care), data);
+        settle_plan(&mut plan, f, special, (state, care));
     }
     plan
 }
@@ -1489,7 +1508,7 @@ fn plan_editor(
     club: (&GameState, &CareRules),
     data: &DesignData,
 ) {
-    settle_plan(plan, fighter, special, club, data);
+    settle_plan(plan, fighter, special, club);
     let (state, care) = club;
     // The loadout, changed freely from one week to the next.
     let loadouts = data.class(fighter.class).map_or(0, |c| c.loadouts.len());
@@ -3289,6 +3308,18 @@ mod tests {
         let up = ages(MarketSort::new(SortBy::Age, true));
         assert!(up.is_sorted(), "{up:?}");
         assert_ne!(up.first(), up.last(), "the free agents are all of one age");
+    }
+
+    #[test]
+    fn a_week_the_money_cannot_pay_for_is_an_alert() {
+        let mut screen = screen(7);
+        assert!(screen.unpaid().iter().all(|&u| !u));
+        screen.decisions.plans[0].activity = Activity::Train;
+        screen.state.money = 0;
+        let name = fighter_name(0, &screen.state.fighters[0], &screen.data);
+        let alert = format!("{name} : pas assez d'argent pour sa semaine");
+        assert!(alert_texts(&screen).contains(&alert));
+        assert_eq!(screen.alerts()[0].1, View::Sheet(0));
     }
 
     #[test]

@@ -44,6 +44,7 @@ impl ClubScreen {
                 }
             });
         ui.add_space(4.0);
+        let unpaid = state.unpaid(&self.decisions.plans, data);
         let decisions = &mut self.decisions;
         let mut cards: Vec<_> = state
             .fighters
@@ -70,9 +71,10 @@ impl ClubScreen {
                         if let Some(duty) = all {
                             orders.activity = duty;
                         }
-                        settle_plan(plan, f, special, club, data);
+                        settle_plan(plan, f, special, club);
                         let apart = exception(plan, before, i, special, club, data);
-                        if fighter_card(ui, i, f, (plan, orders, apart), state, data) {
+                        let week = (&**plan, &mut **orders, apart, unpaid[i]);
+                        if fighter_card(ui, i, f, week, state, data) {
                             goto = Some(View::Sheet(i));
                         }
                         // New orders: this week follows them.
@@ -118,13 +120,13 @@ fn duties(state: &GameState, data: &DesignData) -> Vec<Duty> {
 }
 
 /// One fighter's card, with its `orders` to change and, if it is `apart` from them,
-/// its week (`plan`) marked as an exception; true when its name is clicked, to open
-/// its sheet.
+/// its week (`plan`) marked as an exception, and as `unpaid` if the money falls short;
+/// true when its name is clicked, to open its sheet.
 fn fighter_card(
     ui: &mut egui::Ui,
     index: usize,
     fighter: &CareerFighter,
-    (plan, orders, apart): (&WeekPlan, &mut Orders, bool),
+    (plan, orders, apart, unpaid): (&WeekPlan, &mut Orders, bool, bool),
     state: &GameState,
     data: &DesignData,
 ) -> bool {
@@ -163,7 +165,7 @@ fn fighter_card(
                         }
                     });
             });
-            week_chips(ui, fighter, plan, apart, data);
+            week_chips(ui, fighter, plan, (apart, unpaid), data);
         });
     open
 }
@@ -249,12 +251,13 @@ fn health_chips(ui: &mut egui::Ui, fighter: &CareerFighter, state: &GameState, d
 }
 
 /// Its week as tags: the activity, in red for a fight, the loadout and its ease with
-/// it, care, the armour left and whether the week is `apart` from its orders.
+/// it, care, the armour left, whether the week is `apart` from its orders and whether
+/// the money will not pay for it (`unpaid`).
 fn week_chips(
     ui: &mut egui::Ui,
     fighter: &CareerFighter,
     plan: &WeekPlan,
-    apart: bool,
+    (apart, unpaid): (bool, bool),
     data: &DesignData,
 ) {
     let neutral = ui.visuals().widgets.inactive.bg_fill;
@@ -284,6 +287,10 @@ fn week_chips(
                 theme::BRONZE.gamma_multiply(0.6),
             )
             .on_hover_text(tr!("roster-exception-hint"));
+        }
+        if unpaid {
+            wrapped_chip(ui, tr!("roster-unpaid"), theme::BLOOD)
+                .on_hover_text(tr!("roster-unpaid-hint"));
         }
     });
 }

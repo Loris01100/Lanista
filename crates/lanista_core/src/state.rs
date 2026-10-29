@@ -866,6 +866,41 @@ impl GameState {
         self.staff.training_cost(data.economy.training_cost)
     }
 
+    /// Which of the club's fighters `next_week` would cut the week of (`plans`, in club
+    /// order) for want of money: no care, or rest instead. Paid one after the other as
+    /// the week does, the salaries first, each fighter's upkeep and wage after its week;
+    /// no fight's earnings are counted, so the forecast errs on the safe side.
+    #[must_use]
+    pub fn unpaid(&self, plans: &[WeekPlan], data: &DesignData) -> Vec<bool> {
+        let costs = (self.training_cost(data), self.staff_effects().medicine);
+        let care = self.care_rules(data);
+        let mut left = self.money - self.staff.salaries().map(i64::from).sum::<i64>();
+        self.fighters
+            .iter()
+            .zip(plans)
+            .map(|(f, &plan)| {
+                if f.status != Status::Active {
+                    return false;
+                }
+                let paid = affordable(plan, f, (left, self.continent), costs, data);
+                let activity = match paid.activity {
+                    Activity::Train => costs.0,
+                    Activity::Fight(id) | Activity::Challenge(id, _) | Activity::Melee(id) => {
+                        data.world.entry_fee(id, self.continent).unwrap_or(0)
+                    }
+                    Activity::Rest | Activity::TitleFight(_) => 0,
+                };
+                let care = if paid.care { f.care_cost(&care) } else { 0 };
+                let wage = f.contract.unwrap_or_default().wage;
+                left -= [activity, care, data.economy.upkeep, wage]
+                    .into_iter()
+                    .map(i64::from)
+                    .sum::<i64>();
+                paid != plan
+            })
+            .collect()
+    }
+
     /// Whether `m` may be made now: a candidate on the market hired with the money for
     /// a first salary, paid as many times as the club's fighters make it
     /// (`StaffRules::salary_shares`), or a post held emptied.
@@ -1544,6 +1579,37 @@ mod tests {
             state.money,
             i64::from(modest.starting_money) - cost - upkeep - wage
         );
+    }
+
+    #[test]
+    fn a_week_the_money_cannot_pay_for_is_foreseen() {
+        let data = data();
+        let mut state = game(7, &data);
+        let second = state.fighters[0].clone();
+        state.fighters.push(second);
+        let week = WeekPlan {
+            activity: Activity::Train,
+            ..state.suggested_plan(0, &data)
+        };
+        let plans = [week, week];
+        let cost = i64::from(state.training_cost(&data));
+        let upkeep = i64::from(data.economy.upkeep);
+        let wage = i64::from(state.fighters[0].contract.unwrap().wage);
+        // The first trains and is paid for, the second is left a coin short.
+        state.money = cost + upkeep + wage + cost - 1;
+        assert_eq!(state.unpaid(&plans, &data), [false, true]);
+        state.money += 1;
+        assert_eq!(state.unpaid(&plans, &data), [false, false]);
+        // As the week does it.
+        state.money = cost - 1;
+        assert_eq!(state.unpaid(&plans, &data), [true, true]);
+        let decisions = Decisions {
+            plans: plans.to_vec(),
+            ..state.suggested_decisions(&data)
+        };
+        let summary = next_week(&mut state, &decisions, &data);
+        let report = summary.reports[0].as_ref().unwrap();
+        assert_eq!(report.plan.activity, Activity::Rest);
     }
 
     /// Puts someone for `role`, exactly as `level` is, on the market; returns its place.
