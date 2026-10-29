@@ -6,7 +6,7 @@
 use std::hint::black_box;
 
 use criterion::{BatchSize, Criterion, criterion_group, criterion_main};
-use lanista_core::combat::{Arena, ArenaKind, Vec2, tick};
+use lanista_core::combat::{Arena, ArenaKind, Element, Floor, Vec2, tick};
 use lanista_core::design_data::DesignData;
 use lanista_core::duel::{ais, random_duel};
 use lanista_core::fighter::FighterId;
@@ -25,7 +25,12 @@ fn melee(data: &DesignData, kind: ArenaKind, seed: u64) -> Arena {
             f.combat_fighter(FighterId(id), Refused::NONE, data, Vec2::new(0.0, 0.0))
         })
         .collect();
-    melee_arena(fighters, kind, seed, &data.combat)
+    melee_arena(
+        fighters,
+        Floor::new(kind, Element::Stone),
+        seed,
+        &data.combat,
+    )
 }
 
 /// Plays `arenas` one tick each in turn until all are over or out of time.

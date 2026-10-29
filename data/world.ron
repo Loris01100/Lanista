@@ -125,6 +125,10 @@
     // the one it would join, adds to the chance it refuses a move: loyal to its club,
     // glad to come back to one it liked.
     ties: (weekly: 1, decay: 1, released: -60, sold: -20, refuses_below: -30, refusal_percent: 50),
+    // What the floors of each continent's colosseums offer a maître du terrain to
+    // gather and throw (a spell's gathers and thrown, data/classes.ron): stone in Europe,
+    // sand in Africa, obsidian in the Americas, kelp in Oceania, jade in Asia.
+    elements: {Europe: Stone, Asia: Jade, Americas: Obsidian, Africa: Sand, Oceania: Kelp},
     // Each continent has a major colosseum, of the highest prestige, and one or two
     // minor ones around it, where prestige-2 ones ask a small fee; on each continent
     // where clubs live, at least one must be free to enter: the safety net of a club

@@ -7,7 +7,7 @@ use rand::RngExt;
 use rand_chacha::ChaCha8Rng;
 
 use crate::colosseum::{ColosseumId, Contender};
-use crate::combat::ArenaKind;
+use crate::combat::Floor;
 use crate::design_data::DesignData;
 use crate::economy::{Flow, Transaction};
 use crate::fighter::career::{Activity, Status, WeekPlan, WeekReport};
@@ -47,7 +47,11 @@ pub(super) fn melees(
         let Some(entries) = lineup else {
             continue;
         };
-        let played = melee_entries(state, &entries, (wanted, rules.arena), effects, data);
+        let floor = Floor {
+            kind: rules.arena,
+            element: data.world.element(rules.continent),
+        };
+        let played = melee_entries(state, &entries, (wanted, floor), effects, data);
         if let Some(played) = played {
             settle_melee(
                 state,
@@ -247,7 +251,7 @@ pub(super) fn pact_reason(entries: &[Contender], pact: Pact) -> Option<(usize, R
     Some((rival.club, why))
 }
 
-/// The melee of `entries`, on the floor of `kind`, played: each club's fighter begins
+/// The melee of `entries`, on `floor`, played: each club's fighter begins
 /// its week following its `wanted` plan (care, paid by the caller), then everyone
 /// fights, and each one goes back where it came from. Returns the melee and, for each
 /// entry, the club's fighter's week begun; `None` if an entry is nobody, before anyone's
@@ -255,7 +259,7 @@ pub(super) fn pact_reason(entries: &[Contender], pact: Pact) -> Option<(usize, R
 pub(super) fn melee_entries(
     state: &mut GameState,
     entries: &[Contender],
-    (wanted, kind): (&[WeekPlan], ArenaKind),
+    (wanted, floor): (&[WeekPlan], Floor),
     effects: StaffEffects,
     data: &DesignData,
 ) -> Option<(MeleeFight, Vec<Option<WeekReport>>)> {
@@ -298,7 +302,7 @@ pub(super) fn melee_entries(
             weeks.push(None);
         }
     }
-    let melee = play_melee(&mut fighters, &entrants, kind, &mut state.rng, data);
+    let melee = play_melee(&mut fighters, &entrants, floor, &mut state.rng, data);
     for (&entry, f) in entries.iter().zip(fighters) {
         match entry {
             Contender::Club(i) => state.fighters[i] = f,

@@ -5,13 +5,13 @@ use rand::{Rng, RngExt};
 use serde::{Deserialize, Serialize};
 
 use crate::colosseum::{ColosseumId, Contender};
-use crate::combat::{Arena, ArenaKind, Vec2};
+use crate::combat::{Arena, ArenaKind, Floor, Vec2};
 use crate::design_data::{DesignData, FighterRules};
 use crate::duel::{STATS, play};
 use crate::economy::Contract;
 use crate::fighter::appearance::Appearance;
 use crate::fighter::care::CareRules;
-use crate::fighter::equipment::Refused;
+use crate::fighter::equipment::{OffHand, Refused};
 use crate::fighter::fame::{Fame, FightOutcome, FightResult};
 use crate::fighter::form::{Form, FormEvent};
 use crate::fighter::illness::{Illness, IllnessLevel, roll_illness};
@@ -391,6 +391,9 @@ impl CareerFighter {
             .map(|v| percent_of(v, percent));
         let class = (class_data, self.loadout);
         let mut fighter = Fighter::in_loadout(id, self.class, class, stats, position);
+        if fighter.off_hand == OffHand::Shield {
+            fighter.shield_percent = equipment.shield_defense_percent;
+        }
         fighter.surrender_hp = self.personality.surrender_hp(stats.hp, &rules.personality);
         fighter.appearance = self.appearance.clone();
         fighter.refused = refused;
@@ -481,10 +484,10 @@ impl CareerFighter {
                     (&mut stranger, Medicine::default())
                 };
                 let medicine = [staff.medicine, theirs];
-                let arena = data.world.arena(id);
+                let floor = data.world.floor(id);
                 let refused = plan.refused;
                 let (fight, injury, spared) =
-                    self.fight(opponent, (arena, refused), form, medicine, rng, data);
+                    self.fight(opponent, (floor, refused), form, medicine, rng, data);
                 let prestige = data.world.colosseum(id).map_or(0, |c| c.prestige);
                 let title = matches!(plan.activity, Activity::TitleFight(_));
                 self.on_stage(prestige, title, rules);
@@ -589,28 +592,28 @@ impl CareerFighter {
     pub fn duel<R: Rng + ?Sized>(
         &self,
         opponent: &Self,
-        (kind, refused): (ArenaKind, Refused),
+        (floor, refused): (Floor, Refused),
         rng: &mut R,
         data: &DesignData,
     ) -> (u64, Arena, Arena) {
         let seed = rng.random::<u64>();
-        let start = self.duel_arena(opponent, (kind, refused), seed, data);
+        let start = self.duel_arena(opponent, (floor, refused), seed, data);
         let mut arena = start.clone();
         play(&mut arena);
         (seed, start, arena)
     }
 
-    /// The arena of this fighter's duel against `opponent` on `kind`'s floor, before the
-    /// first tick: this fighter is `FighterId(0)`, without the `refused` pieces of
-    /// equipment.
+    /// The arena of this fighter's duel against `opponent` on `floor`, before the first
+    /// tick: this fighter is `FighterId(0)`, without the `refused` pieces of equipment.
     #[must_use]
     pub fn duel_arena(
         &self,
         opponent: &Self,
-        (kind, refused): (ArenaKind, Refused),
+        (floor, refused): (Floor, Refused),
         seed: u64,
         data: &DesignData,
     ) -> Arena {
+        let kind = floor.kind;
         let layout = data.combat.arenas.get(kind);
         let (width, middle) = (layout.width, layout.height / 2.0);
         let (left, right) = (
@@ -623,7 +626,7 @@ impl CareerFighter {
         ];
         Arena::new(width, layout.height, fighters, seed)
             .with_rules(&data.combat)
-            .with_layout(layout)
+            .with_layout(layout, floor.element)
     }
 
     /// This fighter ready for a duel against `opponent` on the floor of `kind`, as fighter
@@ -1059,18 +1062,18 @@ impl CareerFighter {
     pub fn dueled_fight<R: Rng + ?Sized>(
         &mut self,
         opponent: &mut Self,
-        kind: ArenaKind,
+        floor: Floor,
         form: FormEvent,
         rng: &mut R,
         data: &DesignData,
     ) -> FightResult {
         let alone = [Medicine::default(); 2];
-        let equipped = (kind, Refused::NONE);
+        let equipped = (floor, Refused::NONE);
         let (summary, _, _) = self.fight(opponent, equipped, form, alone, rng, data);
         summary.result
     }
 
-    /// A duel against `opponent` in an arena of `kind`, without the `refused` pieces of
+    /// A duel against `opponent` on `floor`, without the `refused` pieces of
     /// equipment, then its effects on both: fame, death, morale, form (`form`'s cost),
     /// illness worsening, a possible injury and progression. Returns this fighter's new
     /// injury, and whether its doctor's `medicine` (the first, the opponent's doctor's
@@ -1078,18 +1081,19 @@ impl CareerFighter {
     fn fight<R: Rng + ?Sized>(
         &mut self,
         opponent: &mut Self,
-        (kind, refused): (ArenaKind, Refused),
+        (floor, refused): (Floor, Refused),
         form: FormEvent,
         medicine: [Medicine; 2],
         rng: &mut R,
         data: &DesignData,
     ) -> (FightSummary, Option<Injury>, bool) {
         let rules = &data.fighter;
-        let (seed, _, arena) = self.duel(opponent, (kind, refused), rng, data);
+        let kind = floor.kind;
+        let (seed, _, arena) = self.duel(opponent, (floor, refused), rng, data);
         let stronger = opponent.stronger_than(self, rules);
         let weaker = self.stronger_than(opponent, rules);
         let setup = FightSetup {
-            kind,
+            floor,
             fighters: vec![self.clone(), opponent.clone()],
             entrants: vec![
                 Entrant {
@@ -1451,7 +1455,7 @@ impl FightSummary {
 /// as it went in.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct FightSetup {
-    pub kind: ArenaKind,
+    pub floor: Floor,
     pub fighters: Vec<CareerFighter>,
     /// How each fighter went in, in the same order; only the refused equipment counts
     /// in a duel.
@@ -1468,9 +1472,9 @@ impl FightSetup {
         match self.fighters.as_slice() {
             [me, opponent] if !self.melee => {
                 let refused = self.entrants.first().map_or(Refused::NONE, |e| e.refused);
-                me.duel_arena(opponent, (self.kind, refused), seed, data)
+                me.duel_arena(opponent, (self.floor, refused), seed, data)
             }
-            fighters => melee_start(fighters, &self.entrants, self.kind, seed, data),
+            fighters => melee_start(fighters, &self.entrants, self.floor, seed, data),
         }
     }
 }
@@ -1575,6 +1579,7 @@ pub mod entries {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::combat::Element;
     use crate::staff::Coaching;
     use rand::SeedableRng;
     use rand_chacha::ChaCha8Rng;
@@ -1911,10 +1916,11 @@ mod tests {
         assert_eq!(melee[1].win_streak, Some((sand, 2)));
         assert_eq!(melee[0].win_streak, None);
         // A spiteful one goes for its grudges first, stronger with one there.
-        let start = melee_start(&melee, &[], sand, 0, &data());
+        let floor = Floor::new(sand, Element::Sand);
+        let start = melee_start(&melee, &[], floor, 0, &data());
         assert_eq!(start.hunts, [(FighterId(0), FighterId(1))]);
         let without = [melee[0].clone(), melee[2].clone()];
-        let without = melee_start(&without, &[], sand, 0, &data());
+        let without = melee_start(&without, &[], floor, 0, &data());
         assert!(start.fighters[0].stats.hp > without.fighters[0].stats.hp);
     }
 
@@ -2292,9 +2298,11 @@ mod tests {
             CareerFighter::random(&mut rng, &data),
             CareerFighter::random(&mut rng, &data),
         );
-        for kind in ArenaKind::ALL {
+        for (kind, element) in ArenaKind::ALL.into_iter().zip(Element::ALL) {
             let layout = data.combat.arenas.get(kind);
-            let (_, start, end) = a.duel(&b, (kind, Refused::NONE), &mut rng, &data);
+            let floor = Floor::new(kind, element);
+            let (_, start, end) = a.duel(&b, (floor, Refused::NONE), &mut rng, &data);
+            assert_eq!(start.element, Some(element));
             assert_eq!((start.width, start.height), (layout.width, layout.height));
             assert_eq!(start.speed_percent, layout.speed_percent);
             assert_eq!(start.pillars, layout.pillars);
@@ -2341,7 +2349,7 @@ mod tests {
                 let mut mine = CareerFighter::random(&mut rng, &data);
                 let mut theirs = CareerFighter::random(&mut rng, &data);
                 let alone = [Medicine::default(); 2];
-                let sand = ArenaKind::Sand;
+                let sand = Floor::new(ArenaKind::Sand, Element::Sand);
                 let (summary, ..) = mine.fight(
                     &mut theirs,
                     (sand, Refused::NONE),

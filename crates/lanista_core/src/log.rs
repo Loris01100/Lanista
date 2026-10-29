@@ -114,6 +114,13 @@ pub enum EventKind {
         part: Location,
         damage: u32,
     },
+    /// `fighter`'s poison took `damage` HP, dealt by `source`; a `Death` or `Surrender`
+    /// may follow.
+    Poisoned {
+        fighter: FighterId,
+        source: FighterId,
+        damage: u32,
+    },
 }
 
 /// Summary of a fight, built from its log.
@@ -206,6 +213,11 @@ impl Report {
                     damage,
                     ..
                 }
+                | EventKind::Poisoned {
+                    fighter: target,
+                    source: owner,
+                    damage,
+                }
                 | EventKind::Blast {
                     owner,
                     target,
@@ -239,20 +251,24 @@ impl Report {
                 }
             }
         }
-        let over = arena.is_over();
-        let winner = arena
-            .fighters
-            .iter()
-            .find(|f| f.is_fighting())
-            .map(|f| f.id)
-            .filter(|_| over);
         Self {
             ticks: arena.tick,
-            over,
-            winner,
+            over: arena.is_over(),
+            winner: winner(arena),
             fighters,
         }
     }
+}
+
+/// The one still fighting once the fight is over; none in a fight not over.
+fn winner(arena: &Arena) -> Option<FighterId> {
+    let over = arena.is_over();
+    arena
+        .fighters
+        .iter()
+        .find(|f| f.is_fighting())
+        .map(|f| f.id)
+        .filter(|_| over)
 }
 
 impl fmt::Display for Report {
@@ -390,7 +406,7 @@ pub fn log_text(arena: &Arena) -> String {
                     event.tick, fighter.0
                 )
             }
-            EventKind::Afflicted { .. } | EventKind::Bled { .. } => {
+            EventKind::Afflicted { .. } | EventKind::Bled { .. } | EventKind::Poisoned { .. } => {
                 writeln!(text, "[{:>5}] {}", event.tick, effect_line(event.kind))
             }
             EventKind::Gather { .. } | EventKind::Lay { .. } | EventKind::Blast { .. } => {
@@ -466,7 +482,7 @@ fn ground_line(arena: &Arena, kind: EventKind) -> String {
     }
 }
 
-/// The log's line for a lasting effect left by a hit, or a bleeding's damage.
+/// The log's line for a lasting effect left by a hit, or a bleeding's or poison's damage.
 fn effect_line(kind: EventKind) -> String {
     match kind {
         EventKind::Afflicted {
@@ -484,6 +500,16 @@ fn effect_line(kind: EventKind) -> String {
             "fighter {} is caught in a trap, taking {damage_percent} % more damage",
             fighter.0
         ),
+        EventKind::Afflicted {
+            fighter,
+            effect: Effect::Poisoned { hp_percent, .. },
+        } => format!(
+            "fighter {} is poisoned, losing {hp_percent} % of its HP each second",
+            fighter.0
+        ),
+        EventKind::Poisoned {
+            fighter, damage, ..
+        } => format!("fighter {} loses {damage} to poison", fighter.0),
         EventKind::Bled {
             fighter,
             part,
@@ -527,6 +553,7 @@ pub fn places(arena: &Arena) -> Vec<u32> {
                     | EventKind::PactBroken { .. }
                     | EventKind::Afflicted { .. }
                     | EventKind::Bled { .. }
+                    | EventKind::Poisoned { .. }
                     | EventKind::Gather { .. }
                     | EventKind::Lay { .. }
                     | EventKind::Blast { .. } => false,

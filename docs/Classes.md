@@ -59,19 +59,21 @@ Combattant qui tire parti du sol de l'arène. Les dagues runiques frappent au co
 
 | Emplacement | Sort | Coût | Description |
 | --- | --- | --- | --- |
-| 1 | Récolte | endurance | Ramasse l'élément du sol de l'arène : sable, pierre, plus tard bois. |
+| 1 | Récolte | endurance | Ramasse l'élément du sol de l'arène, celui de son continent. |
 | 2 | Jette | endurance et une partie des éléments ramassés | Lance à distance les éléments ramassés sur un adversaire. |
 | 3 | Mine | mana | Lance une mine (dague et bouclier) ou deux mines (double dague). |
 
 ### Éléments
 
-L'élément ramassé dépend de l'arène. La quantité portée au plus sera fixée aux essais.
+L'élément ramassé dépend du continent du colisée, quel que soit le type d'arène. La quantité portée au plus sera fixée aux essais.
 
-| Élément | Effet jeté |
-| --- | --- |
-| Sable | dégâts faibles, et une courte baisse de précision, qui s'additionne si l'on en reçoit plusieurs |
-| Pierre | dégâts contondants (peut étourdir) |
-| Bois | à venir |
+| Continent | Élément | Effet jeté |
+| --- | --- | --- |
+| Europe | Pierre | dégâts contondants (peut étourdir) |
+| Afrique | Sable | dégâts faibles, et une courte baisse de précision, qui s'additionne si l'on en reçoit plusieurs |
+| Amériques | Obsidienne | dégâts tranchants, avec une chance de faire saigner |
+| Océanie | Varech urticant | dégâts faibles ; retient brièvement la cible, puis le poison lui retire des PV quelques secondes |
+| Asie | Éclats de jade | dégâts comme si la cible n'avait pas de bouclier : il ignore le bonus de défense du bouclier, rien de plus contre un adversaire sans bouclier |
 
 ### Mines
 
@@ -151,5 +153,4 @@ Chaque étape laisse le jeu jouable avec mirmillon et augure, qui servent de ter
 
 ## Questions ouvertes
 
-- Les éléments qu'offre chaque arène attendent la définition des arènes ; le bois viendra plus tard.
 - Les types d'armes de l'attaque automatique, à l'équilibrage.

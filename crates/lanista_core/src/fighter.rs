@@ -229,6 +229,10 @@ pub struct Fighter {
     pub refused: Refused,
     /// What its loadout's off hand holds; only drawn, its effects are in `stats`.
     pub off_hand: OffHand,
+    /// Percentage of its melee and ranged defenses its shield brings, in `stats`; 100
+    /// without one. A spell that `ignores_shield` hits as if it had none
+    /// (`Fighter::stats_against`).
+    pub shield_percent: u32,
     /// How it is drawn; no effect on the fight.
     pub appearance: Appearance,
     /// The learned AI that plays it; the utility AI without one (see `duel::ais`).
@@ -242,9 +246,11 @@ pub enum Effect {
     Bleeding { part: Location, source: FighterId },
     /// Its attacks hit less often: `percent` of its accuracy lost, adding up.
     Blinded { percent: u32 },
-    /// Caught in a trap (`design_data::TrapData`): neither acts nor moves, but is hit,
-    /// taking `damage_percent` more; the first hit taking HP frees it.
+    /// Caught in a trap or held by a throw (`design_data::TrapData`): neither acts nor
+    /// moves, but is hit, taking `damage_percent` more; the first hit taking HP frees it.
     Trapped { damage_percent: u32 },
+    /// Loses `hp_percent` of its max HP each second, dealt by `source`; one at most.
+    Poisoned { source: FighterId, hp_percent: u32 },
 }
 
 /// An effect and the ticks it lasts still.
@@ -343,6 +349,7 @@ impl Fighter {
             off_hand: class_data
                 .loadout(loadout)
                 .map_or(OffHand::Free, |l| l.off_hand),
+            shield_percent: 100,
             appearance: Appearance::default(),
             model: None,
         }
@@ -386,10 +393,26 @@ impl Fighter {
             .iter()
             .map(|l| match l.effect {
                 Effect::Blinded { percent } => percent,
-                Effect::Bleeding { .. } | Effect::Trapped { .. } => 0,
+                Effect::Bleeding { .. } | Effect::Trapped { .. } | Effect::Poisoned { .. } => 0,
             })
             .sum();
         percent_of(self.stats.accuracy, 100 - lost.min(100))
+    }
+
+    /// Its stats as `spell` hits them: without its shield's bonus to its defenses, for
+    /// a spell that ignores it (`SpellData::ignores_shield`).
+    #[must_use]
+    pub fn stats_against(&self, spell: &SpellData) -> Stats {
+        let mut stats = self.stats;
+        if spell.ignores_shield && self.shield_percent > 0 {
+            let unshielded = |v: u32| {
+                let v = u64::from(v) * 100 / u64::from(self.shield_percent);
+                u32::try_from(v).unwrap_or(u32::MAX)
+            };
+            stats.melee_defense = unshielded(stats.melee_defense);
+            stats.ranged_defense = unshielded(stats.ranged_defense);
+        }
+        stats
     }
 
     /// Fighting and not down: can be hit, and acts unless caught in a trap.
@@ -403,7 +426,7 @@ impl Fighter {
     pub fn trapped(&self) -> Option<u32> {
         self.effects.iter().find_map(|l| match l.effect {
             Effect::Trapped { damage_percent } => Some(damage_percent),
-            Effect::Bleeding { .. } | Effect::Blinded { .. } => None,
+            Effect::Bleeding { .. } | Effect::Blinded { .. } | Effect::Poisoned { .. } => None,
         })
     }
 
@@ -514,6 +537,9 @@ pub(crate) fn test_fighter(id: u32, x: f64, y: f64) -> Fighter {
             over_obstacles: false,
             area: 0.0,
             trap: None,
+            poison: None,
+            hold: None,
+            ignores_shield: false,
         }],
         loadouts: Vec::new(),
     };
@@ -556,6 +582,10 @@ pub(crate) fn test_thrower(id: u32, x: f64, y: f64) -> Fighter {
         power,
         damage_kind,
         accuracy_drop,
+        bleed_percent: 0,
+        poison: None,
+        hold: None,
+        ignores_shield: false,
     };
     let sand = AccuracyDrop {
         percent: 20,

@@ -8,7 +8,8 @@ use rand_chacha::ChaCha8Rng;
 
 use crate::ai::{Action, CombatAi, UtilityAi};
 use crate::combat::{
-    Arena, ArenaKind, Pillar, TICKS_PER_DECISION, Vec2, can_cast_on, edge_distance, tick,
+    Arena, ArenaKind, Element, Floor, Pillar, TICKS_PER_DECISION, Vec2, can_cast_on, edge_distance,
+    tick,
 };
 use crate::design_data::DesignData;
 use crate::duel::{STATS, random_duel};
@@ -108,19 +109,19 @@ impl Environment {
         }
     }
 
-    /// Starts the duel of `seed`: two generated fighters on a drawn arena kind's floor,
-    /// as a career duel; gives each fighter's observation.
+    /// Starts the duel of `seed`: two generated fighters on a drawn floor, as a career
+    /// duel; gives each fighter's observation.
     pub fn reset(&mut self, seed: u64) -> Vec<Vec<f64>> {
-        let (kind, fighters) = self.draw(seed, 2);
-        let arena = fighters[0].duel_arena(&fighters[1], (kind, Refused::NONE), seed, &self.data);
+        let (floor, fighters) = self.draw(seed, 2);
+        let arena = fighters[0].duel_arena(&fighters[1], (floor, Refused::NONE), seed, &self.data);
         self.arena = arena;
         self.observations()
     }
 
-    /// Starts the melee of `seed`: `count` generated fighters on a drawn arena kind's
-    /// floor, as the season-opening melee; gives each fighter's observation.
+    /// Starts the melee of `seed`: `count` generated fighters on a drawn floor, as the
+    /// season-opening melee; gives each fighter's observation.
     pub fn reset_melee(&mut self, seed: u64, count: u32) -> Vec<Vec<f64>> {
-        let (kind, fighters) = self.draw(seed, count);
+        let (floor, fighters) = self.draw(seed, count);
         let fighters = (0..count)
             .zip(fighters)
             .map(|(id, fighter)| {
@@ -128,18 +129,20 @@ impl Environment {
                 fighter.combat_fighter(FighterId(id), Refused::NONE, &self.data, at)
             })
             .collect();
-        self.arena = melee_arena(fighters, kind, seed, &self.data.combat);
+        self.arena = melee_arena(fighters, floor, seed, &self.data.combat);
         self.observations()
     }
 
-    /// The arena kind and the `count` generated fighters of the fight of `seed`.
-    fn draw(&self, seed: u64, count: u32) -> (ArenaKind, Vec<CareerFighter>) {
+    /// The floor and the `count` generated fighters of the fight of `seed`.
+    fn draw(&self, seed: u64, count: u32) -> (Floor, Vec<CareerFighter>) {
         let mut rng = ChaCha8Rng::seed_from_u64(seed);
         let kind = ArenaKind::ALL[rng.random_range(0..ArenaKind::ALL.len())];
+        let element = Element::ALL[rng.random_range(0..Element::ALL.len())];
+        let floor = Floor { kind, element };
         let fighters = (0..count)
             .map(|_| CareerFighter::random(&mut rng, &self.data))
             .collect();
-        (kind, fighters)
+        (floor, fighters)
     }
 
     /// Plays `actions[i]` (below [`Environment::action_count`]) for fighter `i` until the

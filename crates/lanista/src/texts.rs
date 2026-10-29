@@ -1243,7 +1243,7 @@ mod tests {
 
     #[test]
     fn a_melee_is_told_by_its_size_and_place() {
-        use lanista_core::combat::ArenaKind;
+        use lanista_core::combat::{ArenaKind, Element, Floor};
         use lanista_core::fighter::melee::play_melee;
         use rand_chacha::ChaCha8Rng;
         use rand_chacha::rand_core::SeedableRng;
@@ -1253,7 +1253,8 @@ mod tests {
         let mut fighters: Vec<CareerFighter> = (0..5)
             .map(|_| CareerFighter::random(&mut rng, &data))
             .collect();
-        let melee = play_melee(&mut fighters, &[], ArenaKind::Sand, &mut rng, &data);
+        let sand = Floor::new(ArenaKind::Sand, Element::Sand);
+        let melee = play_melee(&mut fighters, &[], sand, &mut rng, &data);
         let summary = melee.summary(2).unwrap();
         let text = fight_text(&FightLine::new(&summary, &data), &data);
         let place = place_name(melee.places[2]);

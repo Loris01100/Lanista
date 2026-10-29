@@ -8,7 +8,7 @@ use std::collections::BTreeMap;
 use rand::{Rng, RngExt};
 use serde::{Deserialize, Serialize};
 
-use crate::combat::ArenaKind;
+use crate::combat::{ArenaKind, Element, Floor};
 use crate::economy::Purses;
 use crate::fighter::career::{CareerFighter, Status};
 use crate::fighter::fame::FightResult;
@@ -46,6 +46,9 @@ pub struct WorldRules {
     pub relations: RelationRules,
     /// What the fighters feel for the clubs they were in (`CareerFighter::ties`).
     pub ties: TieRules,
+    /// What each continent's floors offer to gather (`SpellData::gathers`), every
+    /// continent's.
+    pub elements: BTreeMap<Continent, Element>,
     /// `ColosseumId(i)` is the colosseum at index `i`.
     pub colosseums: Vec<ColosseumData>,
 }
@@ -61,6 +64,29 @@ impl WorldRules {
     #[must_use]
     pub fn arena(&self, id: ColosseumId) -> ArenaKind {
         self.colosseum(id).map_or(ArenaKind::Sand, |c| c.arena)
+    }
+
+    /// The floor of colosseum `id`: its arena kind, and its continent's element; as
+    /// Capoue's for one missing from the data.
+    #[must_use]
+    pub fn floor(&self, id: ColosseumId) -> Floor {
+        let continent = self
+            .colosseum(id)
+            .map_or(Continent::Europe, |c| c.continent);
+        Floor {
+            kind: self.arena(id),
+            element: self.element(continent),
+        }
+    }
+
+    /// What `continent`'s floors offer to gather; stone for one missing from the data,
+    /// which loading refuses.
+    #[must_use]
+    pub fn element(&self, continent: Continent) -> Element {
+        self.elements
+            .get(&continent)
+            .copied()
+            .unwrap_or(Element::Stone)
     }
 
     /// What a club of `home` pays to register a fighter in colosseum `id`: its entry

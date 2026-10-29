@@ -1,7 +1,7 @@
 //! What `calibrate` does: plays real duels between varied fighters, then fits the
 //! statistical model of `lanista_core::stat_model` on their results.
 
-use lanista_core::combat::ArenaKind;
+use lanista_core::combat::{ArenaKind, Element, Floor};
 use lanista_core::design_data::DesignData;
 use lanista_core::fighter::career::CareerFighter;
 use lanista_core::fighter::equipment::Refused;
@@ -57,18 +57,28 @@ pub fn varied_fighter(rng: &mut ChaCha8Rng, data: &DesignData) -> CareerFighter 
     fighter
 }
 
-/// The real duel of `seed` between two varied fighters, in an arena of `kind`.
+/// The real duel of `seed` between two varied fighters, in an arena of `kind`, its
+/// element taken in turn by seed (`floor_of`).
 #[must_use]
 pub fn record(seed: u64, kind: ArenaKind, data: &DesignData) -> Sample {
     let mut rng = ChaCha8Rng::seed_from_u64(seed);
     let a = varied_fighter(&mut rng, data);
     let b = varied_fighter(&mut rng, data);
-    let (_, start, arena) = a.duel(&b, (kind, Refused::NONE), &mut rng, data);
+    let floor = (floor_of(seed, kind), Refused::NONE);
+    let (_, start, arena) = a.duel(&b, floor, &mut rng, data);
     let side = |i| Ending::from_arena(&arena, FighterId(i), &data.fighter.fame);
     Sample {
         fighters: [start.fighters[0].clone(), start.fighters[1].clone()],
         sides: [side(0), side(1)],
     }
+}
+
+/// The floor of the duel of `seed` in an arena of `kind`: every element in turn, as
+/// the model of a kind is for all the continents' floors.
+#[must_use]
+pub fn floor_of(seed: u64, kind: ArenaKind) -> Floor {
+    let i = usize::try_from(seed % 5).unwrap_or(0);
+    Floor::new(kind, Element::ALL[i % Element::ALL.len()])
 }
 
 /// The model fitted on `samples`, for `classes` classes: a logistic regression on the

@@ -8,7 +8,7 @@ use std::cmp::Ordering;
 use rand::RngExt;
 use serde::Deserialize;
 
-use crate::combat::{Arena, ArenaKind, ArenaLayout, CombatRules, Pillar, Vec2, edge_distance};
+use crate::combat::{Arena, ArenaLayout, CombatRules, Floor, Pillar, Vec2, edge_distance};
 use crate::fighter::personality::Personality;
 use crate::fighter::{Fighter, FighterId};
 use crate::log::{Event, EventKind};
@@ -109,7 +109,6 @@ pub fn melee_layout(layout: &ArenaLayout, count: usize, rules: &MeleeRules) -> A
         width: layout.width * scale,
         height: layout.height * scale,
         speed_percent: layout.speed_percent,
-        element: layout.element,
         pillars: layout
             .pillars
             .iter()
@@ -142,25 +141,25 @@ pub fn start_positions(layout: &ArenaLayout, count: usize) -> Vec<Vec2> {
         .collect()
 }
 
-/// The melee of `fighters` (each `FighterId` its index) on the floor of `kind`, grown
+/// The melee of `fighters` (each `FighterId` its index) on `floor`, grown
 /// for them (see [`melee_layout`]), each placed on the starting circle in order (see
 /// [`start_positions`]), with `rules` for hits, stuns, cuts and pacts. Seeded with
 /// `seed`.
 #[must_use]
 pub fn melee_arena(
     mut fighters: Vec<Fighter>,
-    kind: ArenaKind,
+    floor: Floor,
     seed: u64,
     rules: &CombatRules,
 ) -> Arena {
-    let layout = melee_layout(rules.arenas.get(kind), fighters.len(), &rules.melee);
+    let layout = melee_layout(rules.arenas.get(floor.kind), fighters.len(), &rules.melee);
     let positions = start_positions(&layout, fighters.len());
     for (fighter, position) in fighters.iter_mut().zip(positions) {
         fighter.position = position;
     }
     Arena::new(layout.width, layout.height, fighters, seed)
         .with_rules(rules)
-        .with_layout(&layout)
+        .with_layout(&layout, floor.element)
         .with_pacts(rules.melee.pacts)
         .with_elimination(rules.melee.elimination.clone())
         .with_max_ticks(rules.melee.max_ticks)
@@ -389,7 +388,7 @@ fn log(arena: &mut Arena, kind: EventKind) {
 mod tests {
     use super::*;
     use crate::ai::{CombatAi, UtilityAi};
-    use crate::combat::{TICKS_PER_DECISION, run, tick};
+    use crate::combat::{ArenaKind, Element, TICKS_PER_DECISION, run, tick};
     use crate::design_data::DesignData;
     use crate::fighter::personality::TraitValue;
     use crate::fighter::test_fighter;
@@ -710,7 +709,9 @@ mod tests {
                     })
                     .collect();
                 let kind = ArenaKind::ALL[usize::try_from(seed % 3).unwrap()];
-                let mut arena = melee_arena(fighters, kind, seed, &data.combat);
+                let element = Element::ALL[usize::try_from(seed % 5).unwrap()];
+                let floor = Floor::new(kind, element);
+                let mut arena = melee_arena(fighters, floor, seed, &data.combat);
                 let mut ais: Vec<Box<dyn CombatAi>> = (0..20)
                     .map(|_| Box::new(UtilityAi) as Box<dyn CombatAi>)
                     .collect();

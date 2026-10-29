@@ -5,7 +5,7 @@
 use rand::{Rng, RngExt};
 use serde::{Deserialize, Serialize};
 
-use crate::combat::{Arena, ArenaKind, Vec2, run};
+use crate::combat::{Arena, Floor, Vec2, run};
 use crate::design_data::DesignData;
 use crate::duel::ais;
 use crate::fighter::FighterId;
@@ -128,7 +128,7 @@ impl MeleeFight {
 }
 
 /// The melee between `fighters` (as `entrants` go in, one each, missing ones fully
-/// equipped without doctor) on the floor of `kind`, before its first tick, seeded with
+/// equipped without doctor) on `floor`, before its first tick, seeded with
 /// `seed`: a declared rival club's fighters go for the player's first, and each club's
 /// standing adds its points to their chance of a pact with them; a spiteful fighter
 /// goes first for those it bears a grudge against, stronger if one is there (see
@@ -137,7 +137,7 @@ impl MeleeFight {
 pub(crate) fn melee_start(
     fighters: &[CareerFighter],
     entrants: &[Entrant],
-    kind: ArenaKind,
+    floor: Floor,
     seed: u64,
     data: &DesignData,
 ) -> Arena {
@@ -149,11 +149,11 @@ pub(crate) fn melee_start(
             let id = FighterId(u32::try_from(i).unwrap_or(u32::MAX));
             let refused = entrants.get(i).map_or(Refused::NONE, |e| e.refused);
             let grudge = fighters.iter().any(|o| f.bears_grudge(o.id));
-            let percent = f.trait_percent(kind, grudge, &data.fighter);
+            let percent = f.trait_percent(floor.kind, grudge, &data.fighter);
             f.combat_fighter_at(id, (refused, percent), data, origin)
         })
         .collect();
-    let mut start = melee_arena(combat, kind, seed, &data.combat);
+    let mut start = melee_arena(combat, floor, seed, &data.combat);
     for (hunter, h) in (0..).map(FighterId).zip(fighters) {
         for (prey, p) in (0..).map(FighterId).zip(fighters) {
             if h.bears_grudge(p.id) {
@@ -196,7 +196,7 @@ pub fn place_fame(place: u32, (count, paid): (usize, u32), rules: &FameRules) ->
 }
 
 /// The melee between `fighters` (as `entrants` go in, one each, missing ones fully
-/// equipped without doctor) on the floor of `kind`, played to its end or its time
+/// equipped without doctor) on `floor`, played to its end or its time
 /// limit, then its effects on each, in order: fame, record and death, then morale,
 /// form (a melee's cost), illness worsening, a possible injury and progression.
 /// Fame is the place's share (see [`place_fame`]) and the refused equipment's bonus
@@ -207,7 +207,7 @@ pub fn place_fame(place: u32, (count, paid): (usize, u32), rules: &FameRules) ->
 pub fn play_melee<R: Rng + ?Sized>(
     fighters: &mut [CareerFighter],
     entrants: &[Entrant],
-    kind: ArenaKind,
+    floor: Floor,
     rng: &mut R,
     data: &DesignData,
 ) -> MeleeFight {
@@ -215,7 +215,7 @@ pub fn play_melee<R: Rng + ?Sized>(
     let entrant = |i: usize| entrants.get(i).copied().unwrap_or_default();
     let seed = rng.random::<u64>();
     let setup = FightSetup {
-        kind,
+        floor,
         fighters: fighters.to_vec(),
         entrants: (0..fighters.len()).map(entrant).collect(),
         melee: true,
@@ -250,7 +250,7 @@ pub fn play_melee<R: Rng + ?Sized>(
         })
         .collect();
     let results: Vec<FightResult> = taken.iter().map(|(_, t)| t.outcome.result).collect();
-    CareerFighter::remember_melee(fighters, &results, kind, rules);
+    CareerFighter::remember_melee(fighters, &results, floor.kind, rules);
     let survived_fatal_blow = fighters
         .iter()
         .zip(&arena.fighters)
@@ -292,8 +292,13 @@ pub fn play_melee<R: Rng + ?Sized>(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::combat::{ArenaKind, Element};
     use rand::SeedableRng;
     use rand_chacha::ChaCha8Rng;
+
+    const SAND: Floor = Floor::new(ArenaKind::Sand, Element::Sand);
+    const PILLARS: Floor = Floor::new(ArenaKind::Pillars, Element::Stone);
+    const NARROW: Floor = Floor::new(ArenaKind::Narrow, Element::Stone);
 
     fn data() -> DesignData {
         DesignData::load().unwrap()
@@ -354,7 +359,7 @@ mod tests {
         let data = data();
         let (mut fighters, mut rng) = twenty(&data, 1);
         let before = fighters.clone();
-        let melee = play_melee(&mut fighters, &[], ArenaKind::Sand, &mut rng, &data);
+        let melee = play_melee(&mut fighters, &[], SAND, &mut rng, &data);
         let winners: Vec<usize> = (0..20)
             .filter(|&i| melee.sides[i].result == FightResult::Won)
             .collect();
@@ -397,7 +402,7 @@ mod tests {
         let data = data();
         let play = || {
             let (mut fighters, mut rng) = twenty(&data, 2);
-            let melee = play_melee(&mut fighters, &[], ArenaKind::Pillars, &mut rng, &data);
+            let melee = play_melee(&mut fighters, &[], PILLARS, &mut rng, &data);
             (melee, fighters)
         };
         assert_eq!(play(), play());
@@ -420,7 +425,7 @@ mod tests {
             ..Entrant::default()
         };
         let entrants = [club, hunter, friend, hunter, club];
-        let melee = play_melee(&mut fighters, &entrants, ArenaKind::Narrow, &mut rng, &data);
+        let melee = play_melee(&mut fighters, &entrants, NARROW, &mut rng, &data);
         let hunt = |a, b| (FighterId(a), FighterId(b));
         assert_eq!(
             melee.start.hunts,
@@ -442,7 +447,7 @@ mod tests {
                 ..Entrant::default()
             },
         ];
-        let melee = play_melee(&mut fighters, &entrants, ArenaKind::Narrow, &mut rng, &data);
+        let melee = play_melee(&mut fighters, &entrants, NARROW, &mut rng, &data);
         let summary = melee.summary(1).unwrap();
         assert_eq!(summary.me, FighterId(1));
         assert!(summary.is_melee());

@@ -1,7 +1,7 @@
 //! What `compare` does: plays the same fights between varied fighters as real duels and
 //! through the statistical model, then sets their rates side by side.
 
-use lanista_core::combat::ArenaKind;
+use lanista_core::combat::{ArenaKind, Floor};
 use lanista_core::design_data::DesignData;
 use lanista_core::fighter::career::{CareerFighter, Status};
 use lanista_core::fighter::form::FormEvent;
@@ -10,7 +10,7 @@ use lanista_core::staff::Medicine;
 use rand::SeedableRng;
 use rand_chacha::ChaCha8Rng;
 
-use crate::calibration::{share, varied_fighter};
+use crate::calibration::{floor_of, share, varied_fighter};
 
 /// How one fight ended for its two fighters.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -37,8 +37,8 @@ pub struct Pair {
     pub model: Outcome,
 }
 
-/// The fight of `seed` between two varied fighters in an arena of `kind`, as a real
-/// duel and as the model resolves it, each with what the fight leaves them (injuries
+/// The fight of `seed` between two varied fighters in an arena of `kind`, on the
+/// element of `calibration::floor_of`, as a real duel and as the model resolves it, each with what the fight leaves them (injuries
 /// included).
 #[must_use]
 pub fn play(seed: u64, kind: ArenaKind, data: &DesignData) -> Pair {
@@ -61,16 +61,22 @@ pub fn play(seed: u64, kind: ArenaKind, data: &DesignData) -> Pair {
     Pair {
         classes: [class(a), class(b)],
         stronger,
-        real: outcome(fighters.clone(), kind, false, &mut rng, data),
-        model: outcome(fighters, kind, true, &mut model_rng, data),
+        real: outcome(
+            fighters.clone(),
+            floor_of(seed, kind),
+            false,
+            &mut rng,
+            data,
+        ),
+        model: outcome(fighters, floor_of(seed, kind), true, &mut model_rng, data),
     }
 }
 
-/// How the fight between `fighters` in an arena of `kind` ends, `modelled` or as a
-/// real duel.
+/// How the fight between `fighters` on `floor` ends, `modelled` (by its arena kind
+/// alone) or as a real duel.
 fn outcome(
     fighters: [CareerFighter; 2],
-    kind: ArenaKind,
+    floor: Floor,
     modelled: bool,
     rng: &mut ChaCha8Rng,
     data: &DesignData,
@@ -80,14 +86,14 @@ fn outcome(
     if modelled {
         a.modelled_fight(
             &mut b,
-            kind,
+            floor.kind,
             FormEvent::Fight,
             [Medicine::default(); 2],
             rng,
             data,
         );
     } else {
-        a.dueled_fight(&mut b, kind, FormEvent::Fight, rng, data);
+        a.dueled_fight(&mut b, floor, FormEvent::Fight, rng, data);
     }
     let after = [a, b];
     let gained = |i: usize| after[i].record.wins > before[i].record.wins;

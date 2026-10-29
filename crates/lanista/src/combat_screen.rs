@@ -568,6 +568,10 @@ fn states(f: &Fighter) -> Vec<(String, bool)> {
                 tr!("state-trapped", percent = damage_percent, seconds = seconds),
                 false,
             ),
+            Effect::Poisoned { hp_percent, .. } => (
+                tr!("state-poisoned", percent = hp_percent, seconds = seconds),
+                true,
+            ),
         });
     }
     lines

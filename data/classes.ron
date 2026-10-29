@@ -7,9 +7,14 @@
 // cost: what a cast spends, all of it needed (mana, endurance, elements of the floor
 // from the fighter's reserve); what is left out costs nothing.
 // max_elements: elements of the floor a fighter carries at most, 0 if left out. A spell's
-// gathers adds that many of the arena's element (data/combat.ron) to its caster's
-// reserve, without target nor damage; its thrown gives, for each element, the power,
-// damage_kind and accuracy_drop it hits with in an arena of that element.
+// gathers adds that many of the floor's element (its continent's, data/world.ron) to its
+// caster's reserve, without target nor damage; its thrown gives, for each element, the
+// power, damage_kind and the effects (accuracy_drop, bleed_percent, poison, hold,
+// ignores_shield) it hits with on a floor of that element.
+// poison: the target loses hp_percent_per_second of its max HP (at least 1) each second
+// for seconds; a new one takes the place of the old. hold: holds the target as a trap
+// does (ticks, damage_percent), unless already caught. ignores_shield: hits as if the
+// target had no shield.
 // mine: true lays a mine at the target's feet instead of hitting it; it blasts with the
 // spell's power and damage_kind (mines in data/combat.ron). False if left out; a
 // loadout's mines_per_cast (1 if left out) sets how many mines its mine spells lay.
@@ -237,6 +242,14 @@
                             accuracy_drop: Some((percent: 15, ticks: 90)),
                         ),
                         Stone: (power: 110, damage_kind: Blunt),
+                        Obsidian: (power: 90, damage_kind: Cutting, bleed_percent: 40),
+                        Kelp: (
+                            power: 40,
+                            damage_kind: Neutral,
+                            hold: Some((ticks: 45, damage_percent: 0)),
+                            poison: Some((hp_percent_per_second: 1, seconds: 5)),
+                        ),
+                        Jade: (power: 100, damage_kind: Neutral, ignores_shield: true),
                     },
                 )),
             ),
@@ -260,6 +273,14 @@
                             accuracy_drop: Some((percent: 15, ticks: 90)),
                         ),
                         Stone: (power: 110, damage_kind: Blunt),
+                        Obsidian: (power: 90, damage_kind: Cutting, bleed_percent: 40),
+                        Kelp: (
+                            power: 40,
+                            damage_kind: Neutral,
+                            hold: Some((ticks: 45, damage_percent: 0)),
+                            poison: Some((hp_percent_per_second: 1, seconds: 5)),
+                        ),
+                        Jade: (power: 100, damage_kind: Neutral, ignores_shield: true),
                     },
                 )),
             ),

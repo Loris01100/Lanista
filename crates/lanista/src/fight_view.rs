@@ -625,7 +625,10 @@ impl FightView {
                 [a, b],
                 tr!("feed-pact-ended", a = self.name(a), b = self.name(b)),
             ),
-            EventKind::Bled { .. } | EventKind::Gather { .. } | EventKind::Lay { .. } => {
+            EventKind::Bled { .. }
+            | EventKind::Poisoned { .. }
+            | EventKind::Gather { .. }
+            | EventKind::Lay { .. } => {
                 return None;
             }
         })
@@ -645,6 +648,9 @@ impl FightView {
             Effect::Blinded { percent } => tr!("feed-blinded", who = who, percent = percent),
             Effect::Trapped { damage_percent } => {
                 tr!("feed-trapped", who = who, percent = damage_percent)
+            }
+            Effect::Poisoned { hp_percent, .. } => {
+                tr!("feed-poisoned", who = who, percent = hp_percent)
             }
         }
     }
@@ -930,6 +936,9 @@ fn popup(kind: EventKind) -> Option<(FighterId, String, Tone, f32)> {
         ),
         EventKind::Bled {
             fighter, damage, ..
+        }
+        | EventKind::Poisoned {
+            fighter, damage, ..
         } if damage > 0 => (
             fighter,
             tr!("popup-damage", damage = damage),
@@ -941,6 +950,7 @@ fn popup(kind: EventKind) -> Option<(FighterId, String, Tone, f32)> {
                 Effect::Bleeding { .. } => "popup-bleeding",
                 Effect::Blinded { .. } => "popup-blinded",
                 Effect::Trapped { .. } => "popup-trapped",
+                Effect::Poisoned { .. } => "popup-poisoned",
             };
             (fighter, tr!(key), Tone::Wound, IMPACT_DELAY)
         }
@@ -957,6 +967,7 @@ fn popup(kind: EventKind) -> Option<(FighterId, String, Tone, f32)> {
             (fighter, tr!(key), Tone::Wound, IMPACT_DELAY)
         }
         EventKind::Bled { .. }
+        | EventKind::Poisoned { .. }
         | EventKind::Death { .. }
         | EventKind::Rise { .. }
         | EventKind::Freed { .. }
@@ -1000,7 +1011,7 @@ mod tests {
 
     #[test]
     fn a_melee_tells_its_next_elimination_and_where_the_club_stands() {
-        use lanista_core::combat::ArenaKind;
+        use lanista_core::combat::{ArenaKind, Element, Floor};
         use lanista_core::melee::melee_arena;
 
         let data = DesignData::load().unwrap();
@@ -1013,7 +1024,8 @@ mod tests {
                 f
             })
             .collect();
-        let arena = melee_arena(fighters, ArenaKind::Sand, 1, &data.combat);
+        let floor = Floor::new(ArenaKind::Sand, Element::Sand);
+        let arena = melee_arena(fighters, floor, 1, &data.combat);
         let cast = Cast {
             names: vec!["Mirmillon n° 1".into()],
             club: vec![FighterId(0)],

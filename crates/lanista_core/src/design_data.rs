@@ -168,6 +168,10 @@ impl LoadoutData {
 
 #[derive(Debug, Clone, PartialEq, Deserialize)]
 #[serde(deny_unknown_fields)]
+#[expect(
+    clippy::struct_excessive_bools,
+    reason = "independent flags of a spell, each read from data/classes.ron"
+)]
 pub struct SpellData {
     /// Names it in the fight logs and in the spells the combat screen lists.
     pub name: String,
@@ -203,8 +207,19 @@ pub struct SpellData {
     /// `gather`); 0, a spell like the others, if left out.
     #[serde(default)]
     pub gathers: u32,
+    /// Poisons the target it hits (`fighter::Effect::Poisoned`); never if left out.
+    #[serde(default)]
+    pub poison: Option<PoisonData>,
+    /// Holds the target it hits as a trap does (`SpellData::trap`); never if left out.
+    #[serde(default)]
+    pub hold: Option<TrapData>,
+    /// Hits as if its target had no shield (`fighter::Fighter::stats_against`); false if
+    /// left out.
+    #[serde(default)]
+    pub ignores_shield: bool,
     /// What it hits like when it throws each element, in place of its own `power`,
-    /// `damage_kind` and `accuracy_drop`, set by `Arena::with_layout`; nothing if left out.
+    /// `damage_kind`, `accuracy_drop`, `bleed_percent`, `poison`, `hold` and
+    /// `ignores_shield`, set by `Arena::with_layout`; nothing if left out.
     #[serde(default)]
     pub thrown: BTreeMap<Element, Thrown>,
     /// Lays a mine at its target's feet instead of hitting it: the mine blasts with this
@@ -247,7 +262,8 @@ pub struct TrapData {
     pub damage_percent: u32,
 }
 
-/// How a spell hits with an element of the floor (`SpellData::thrown`).
+/// How a spell hits with an element of the floor (`SpellData::thrown`): as the fields
+/// of the same name of `SpellData`, none of its effects if left out.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct Thrown {
@@ -255,6 +271,23 @@ pub struct Thrown {
     pub damage_kind: DamageKind,
     #[serde(default)]
     pub accuracy_drop: Option<AccuracyDrop>,
+    #[serde(default)]
+    pub bleed_percent: u32,
+    #[serde(default)]
+    pub poison: Option<PoisonData>,
+    #[serde(default)]
+    pub hold: Option<TrapData>,
+    #[serde(default)]
+    pub ignores_shield: bool,
+}
+
+/// A poison (`fighter::Effect::Poisoned`): `hp_percent_per_second` of its target's max
+/// HP, at least 1, at the end of each of its `seconds`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct PoisonData {
+    pub hp_percent_per_second: u32,
+    pub seconds: u32,
 }
 
 /// A share of a fighter's accuracy lost for a while (`fighter::Effect::Blinded`).
@@ -622,6 +655,12 @@ impl DesignData {
         }
         if self.world.roster.max < self.world.roster.wanted {
             return Err(world("roster", "fewer places than fighters wanted"));
+        }
+        if !Continent::ALL
+            .iter()
+            .all(|c| self.world.elements.contains_key(c))
+        {
+            return Err(world("elements", "a continent without an element"));
         }
         Ok(())
     }
@@ -1112,6 +1151,8 @@ mod tests {
         assert_eq!(world_field(&empty, NAMES), "clubs.count");
         let crowded = WORLD.replacen("max: 100", "max: 39", 1);
         assert_eq!(world_field(&crowded, NAMES), "clubs.max");
+        let barren = WORLD.replacen(", Oceania: Kelp", "", 1);
+        assert_eq!(world_field(&barren, NAMES), "elements");
         let doomed = WORLD.replacen("ruined_seasons: 2", "ruined_seasons: 0", 1);
         assert_eq!(world_field(&doomed, NAMES), "clubs.ruined_seasons");
         let muddled = WORLD.replacen("tense: (from: -59", "tense: (from: 30", 1);

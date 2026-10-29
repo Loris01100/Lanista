@@ -895,8 +895,12 @@ feed-hit-part = { $caster } : { $spell } sur { $target }, -{ $damage } PV ({ $pa
 feed-miss = { $caster } : { $spell } sur { $target }, raté
 feed-blast = Une mine frappe { $target }, -{ $damage } PV
 feed-trap = Un piège mord { $target }, -{ $damage } PV
-feed-trapped = { $who } est pris au piège : +{ $percent } % de dégâts subis.
-feed-freed = { $who } se dégage du piège.
+feed-trapped = { $percent ->
+        [0] { $who } est retenu.
+       *[other] { $who } est pris au piège : +{ $percent } % de dégâts subis.
+    }
+feed-freed = { $who } se dégage.
+feed-poisoned = { $who } est empoisonné : -{ $percent } % de PV par seconde.
 feed-bleeding = { $who } saigne ({ $part }).
 feed-blinded = { $who } est aveuglé : -{ $percent } % de précision.
 feed-stunned = { $who } est étourdi.
@@ -911,6 +915,7 @@ popup-miss = raté
 popup-bleeding = saigne
 popup-blinded = aveuglé
 popup-trapped = piégé
+popup-poisoned = empoisonné
 popup-stunned = étourdi
 popup-knocked-out = K.-O.
 popup-gave-up = abandonne
@@ -920,7 +925,11 @@ popup-beheaded = décapité !
 state-stunned = Étourdi, { $seconds } s
 state-bleeding = Saigne : { $part }, { $seconds } s
 state-blinded = Aveuglé : -{ $percent } % de précision, { $seconds } s
-state-trapped = Pris au piège : +{ $percent } % de dégâts subis, { $seconds } s
+state-trapped = { $percent ->
+        [0] Retenu, { $seconds } s
+       *[other] Pris au piège : +{ $percent } % de dégâts subis, { $seconds } s
+    }
+state-poisoned = Empoisonné : -{ $percent } % de PV par seconde, { $seconds } s
 final-duel = Duel final
 elimination-next = Élimination dans { $seconds } s : { $out ->
         [1] 1 combattant sort

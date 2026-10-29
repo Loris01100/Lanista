@@ -117,8 +117,7 @@
         ),
     },
     // Each colosseum's arena kind (data/world.ron) sets its floor: a size in meters,
-    // the percentage of their speed fighters walk at, the element a spell may gather
-    // there (Sand or Stone; a spell's gathers and thrown, data/classes.ron), and round pillars (center and
+    // the percentage of their speed fighters walk at, and round pillars (center and
     // radius in meters) that block the way and ranged spells, at least a fighter's
     // width from the walls. A duel starts at 15 % and 85 % of the width, mid-height.
     arenas: (
@@ -128,7 +127,6 @@
             width: 20.0,
             height: 20.0,
             speed_percent: 70,
-            element: Sand,
             pillars: [],
             door: (x: 10.0, y: 0.0),
         ),
@@ -137,7 +135,6 @@
             width: 20.0,
             height: 20.0,
             speed_percent: 100,
-            element: Stone,
             pillars: [
                 (x: 10.0, y: 4.0, radius: 1.2),
                 (x: 10.0, y: 10.0, radius: 1.2),
@@ -150,7 +147,6 @@
             width: 8.0,
             height: 6.0,
             speed_percent: 100,
-            element: Stone,
             pillars: [],
             door: (x: 4.0, y: 0.0),
         ),

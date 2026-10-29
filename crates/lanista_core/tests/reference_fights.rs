@@ -2,7 +2,7 @@
 //! A changed snapshot means the fight changed: review it with `cargo insta review`.
 
 use lanista_core::ai::{CombatAi, UtilityAi};
-use lanista_core::combat::{Arena, ArenaKind, Vec2, run};
+use lanista_core::combat::{Arena, ArenaKind, Element, Floor, Vec2, run};
 use lanista_core::design_data::DesignData;
 use lanista_core::duel::{MAX_TICKS, STATS, play, random_duel};
 use lanista_core::fighter::personality::TraitValue;
@@ -69,6 +69,16 @@ fn a_standard_duel_with_a_beheading() {
 
 /// A murmillo against an augur, both in their first loadout, on the floor of `kind`:
 /// see [`loadout_duel`].
+/// The element each arena kind's floor had before floors took their continent's: the
+/// reference fights stay those they were.
+fn element_of(kind: ArenaKind) -> Element {
+    if kind == ArenaKind::Sand {
+        Element::Sand
+    } else {
+        Element::Stone
+    }
+}
+
 fn arena_duel(kind: ArenaKind, seed: u64) -> String {
     loadout_duel(kind, [(0, 0), (1, 0)], seed)
 }
@@ -97,7 +107,7 @@ fn loadout_duel(kind: ArenaKind, fighters: [(u32, usize); 2], seed: u64) -> Stri
     ];
     let mut arena = Arena::new(layout.width, layout.height, fighters, seed)
         .with_rules(&data.combat)
-        .with_layout(layout);
+        .with_layout(layout, element_of(kind));
     play(&mut arena);
     format!("{}\n{}", log_text(&arena), Report::new(&arena))
 }
@@ -144,7 +154,8 @@ fn reference_melee(seed: u64) -> String {
             f
         })
         .collect();
-    let mut arena = melee_arena(fighters, ArenaKind::Sand, seed, &data.combat);
+    let floor = Floor::new(ArenaKind::Sand, Element::Sand);
+    let mut arena = melee_arena(fighters, floor, seed, &data.combat);
     play(&mut arena);
     format!(
         "{}\n{}\nplaces: {:?}",

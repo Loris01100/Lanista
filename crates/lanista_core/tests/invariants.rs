@@ -2,8 +2,8 @@
 
 use lanista_core::ai::{CombatAi, UtilityAi};
 use lanista_core::combat::{
-    AccuracyRules, Arena, ArenaKind, RADIUS, Range, TICKS_PER_DECISION, Vec2, run, shot_blocked,
-    tick,
+    AccuracyRules, Arena, ArenaKind, Element, Floor, RADIUS, Range, TICKS_PER_DECISION, Vec2, run,
+    shot_blocked, tick,
 };
 use lanista_core::design_data::DesignData;
 use lanista_core::duel::{ARENA_SIZE, MAX_TICKS, STATS};
@@ -79,7 +79,8 @@ fn melee(kind: ArenaKind, count: u32, seed: u64) -> (Arena, Vec<Box<dyn CombatAi
             f
         })
         .collect();
-    let arena = melee_arena(fighters, kind, seed, &data.combat);
+    let element = Element::ALL[usize::try_from(seed % 5).unwrap()];
+    let arena = melee_arena(fighters, Floor::new(kind, element), seed, &data.combat);
     let ais = (0..count)
         .map(|_| Box::new(UtilityAi) as Box<dyn CombatAi>)
         .collect();
@@ -155,7 +156,7 @@ proptest! {
             .collect();
         let mut arena = Arena::new(1.0, 1.0, fighters, seed)
             .with_rules(&data.combat)
-            .with_layout(layout);
+            .with_layout(layout, Element::ALL[usize::try_from(seed % 5).unwrap()]);
         let mut ais: Vec<Box<dyn CombatAi>> = vec![Box::new(UtilityAi), Box::new(UtilityAi)];
         while !arena.is_over() && arena.tick < MAX_TICKS {
             let logged = arena.log.len();

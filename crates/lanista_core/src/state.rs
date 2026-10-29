@@ -1025,7 +1025,7 @@ mod tests {
     };
     use super::*;
     use crate::colosseum::title_kept;
-    use crate::combat::ArenaKind;
+    use crate::combat::{ArenaKind, Element, Floor};
     use crate::economy::Flow;
     use crate::fighter::injury::{Injury, Location, Severity};
     use crate::fighter::melee::Pact;
@@ -2429,7 +2429,7 @@ mod tests {
         let played = melee_entries(
             &mut state,
             &entries,
-            (&wanted, ArenaKind::Sand),
+            (&wanted, Floor::new(ArenaKind::Sand, Element::Sand)),
             StaffEffects::default(),
             &data,
         );

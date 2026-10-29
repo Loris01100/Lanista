@@ -228,7 +228,7 @@ fn cast_value(me: &Fighter, target: &Fighter, spell: &SpellData, rules: &Accurac
     let hit = f64::from(spell_hit_percent(me, &target.stats, spell, rules)) / 100.0;
     let blows = if spell.mine { 1 } else { spell.blows };
     share(
-        spell_damage(&me.stats, &target.stats, spell) * blows,
+        spell_damage(&me.stats, &target.stats_against(spell), spell) * blows,
         target.hp,
     ) * hit
 }
@@ -449,11 +449,11 @@ mod tests {
             width: 20.0,
             height: 20.0,
             speed_percent: 100,
-            element: Element::Stone,
             pillars: Vec::new(),
             door: crate::combat::Vec2::new(10.0, 0.0),
         };
-        let mut arena = Arena::new(20.0, 20.0, fighters.clone(), 0).with_layout(&floor);
+        let mut arena =
+            Arena::new(20.0, 20.0, fighters.clone(), 0).with_layout(&floor, Element::Stone);
         let gather = Action::Cast {
             spell: 1,
             target: FighterId(0),
@@ -555,7 +555,7 @@ mod tests {
             .collect();
         let mut arena = Arena::new(8.0, 6.0, fighters, 0)
             .with_rules(&data.combat)
-            .with_layout(floor);
+            .with_layout(floor, crate::combat::Element::Stone);
         let me = &mut arena.fighters[0];
         let auto = me.auto_attack.unwrap();
         // Too tired to gather or throw, its mine affordable but the target in its blast:

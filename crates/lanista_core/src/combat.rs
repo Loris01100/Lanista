@@ -6,7 +6,7 @@ use rand_chacha::rand_core::SeedableRng;
 use serde::{Deserialize, Serialize};
 
 use crate::ai::{Action, CombatAi};
-use crate::design_data::{AccuracyDrop, SpellData, TrapData};
+use crate::design_data::{AccuracyDrop, PoisonData, SpellData, TrapData};
 use crate::fighter::injury::{Location, LocationWeights, Side, roll_location};
 use crate::fighter::personality::Personality;
 use crate::fighter::{Effect, Fighter, FighterId, Lasting, Stats, percent_of, pick};
@@ -142,11 +142,40 @@ impl ArenaKind {
     pub const ALL: [Self; 3] = [Self::Sand, Self::Pillars, Self::Narrow];
 }
 
-/// What a fighter may gather from an arena's floor and throw (`SpellData::thrown`).
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Deserialize)]
+/// What a fighter may gather from an arena's floor and throw (`SpellData::thrown`):
+/// each continent's own (`colosseum::WorldRules::elements`).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
 pub enum Element {
     Sand,
     Stone,
+    Obsidian,
+    Kelp,
+    Jade,
+}
+
+impl Element {
+    pub const ALL: [Self; 5] = [
+        Self::Sand,
+        Self::Stone,
+        Self::Obsidian,
+        Self::Kelp,
+        Self::Jade,
+    ];
+}
+
+/// Where a fight is played: its arena kind, and the element of its floor, its
+/// colosseum's continent's (`colosseum::WorldRules::floor`).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub struct Floor {
+    pub kind: ArenaKind,
+    pub element: Element,
+}
+
+impl Floor {
+    #[must_use]
+    pub const fn new(kind: ArenaKind, element: Element) -> Self {
+        Self { kind, element }
+    }
 }
 
 /// A round pillar: fighters walk around it, and ranged spells do not go through it.
@@ -169,8 +198,6 @@ pub struct ArenaLayout {
     pub height: f64,
     /// Percentage of their speed fighters walk at.
     pub speed_percent: u32,
-    /// What its floor offers to gather.
-    pub element: Element,
     pub pillars: Vec<Pillar>,
     /// The way out, on a wall, in meters.
     pub door: Vec2,
@@ -454,21 +481,25 @@ impl Arena {
     }
 
     /// This arena on `layout`'s floor: its size, its pillars, its door, its ground
-    /// slowing fighters down to its speed percentage, and its element, which the
+    /// slowing fighters down to its speed percentage, and `element` to gather, which the
     /// fighters' throwing spells now hit with (`SpellData::thrown`).
     #[must_use]
-    pub fn with_layout(mut self, layout: &ArenaLayout) -> Self {
+    pub fn with_layout(mut self, layout: &ArenaLayout, element: Element) -> Self {
         self.width = layout.width;
         self.height = layout.height;
         self.speed_percent = layout.speed_percent;
         self.pillars.clone_from(&layout.pillars);
-        self.element = Some(layout.element);
+        self.element = Some(element);
         self.door = Some(layout.door);
         for spell in self.fighters.iter_mut().flat_map(|f| &mut f.spells) {
-            if let Some(thrown) = spell.thrown.get(&layout.element) {
+            if let Some(thrown) = spell.thrown.get(&element) {
                 spell.power = thrown.power;
                 spell.damage_kind = thrown.damage_kind;
                 spell.accuracy_drop = thrown.accuracy_drop;
+                spell.bleed_percent = thrown.bleed_percent;
+                spell.poison = thrown.poison;
+                spell.hold = thrown.hold;
+                spell.ignores_shield = thrown.ignores_shield;
             }
         }
         self
@@ -1161,6 +1192,7 @@ fn blast(arena: &mut Arena, mine: Mine) {
     let data = &arena.fighters[o].spells[mine.spell];
     let (kind, bleed_percent, accuracy_drop) =
         (data.damage_kind, data.bleed_percent, data.accuracy_drop);
+    let lasting = (data.poison, data.hold);
     for t in 0..arena.fighters.len() {
         let target = &arena.fighters[t];
         if !target.is_fighting()
@@ -1189,7 +1221,13 @@ fn blast(arena: &mut Arena, mine: Mine) {
         free(arena, t, damage);
         let cut = part.filter(|_| kind == DamageKind::Cutting);
         strike(arena, (id, t), (damage, false), kind, cut);
-        afflict(arena, (mine.owner, t), (bleed_percent, part), accuracy_drop);
+        afflict(
+            arena,
+            (mine.owner, t),
+            (bleed_percent, part),
+            accuracy_drop,
+            lasting,
+        );
         if t != o {
             let owner = &mut arena.fighters[o];
             owner.round_damage = owner.round_damage.saturating_add(damage);
@@ -1261,11 +1299,12 @@ fn hit(arena: &mut Arena, i: usize, spell: usize, (target, t): (FighterId, usize
     let amount = if missed {
         0
     } else {
-        spell_damage(&caster.stats, &defender.stats, data)
+        spell_damage(&caster.stats, &defender.stats_against(data), data)
     };
     let kind = data.damage_kind;
     let sure_cut_hits = data.sure_cut_hits.filter(|_| !missed);
     let (bleed_percent, accuracy_drop) = (data.bleed_percent, data.accuracy_drop);
+    let lasting = (data.poison, data.hold);
     let caster = caster.id;
     for blow in 0..blows {
         if blow > 0 && !arena.fighters[t].is_fighting() {
@@ -1299,7 +1338,13 @@ fn hit(arena: &mut Arena, i: usize, spell: usize, (target, t): (FighterId, usize
         let cut = part.filter(|_| kind == DamageKind::Cutting);
         strike(arena, (target, t), (damage, sure), kind, cut);
         if !missed {
-            afflict(arena, (caster, t), (bleed_percent, part), accuracy_drop);
+            afflict(
+                arena,
+                (caster, t),
+                (bleed_percent, part),
+                accuracy_drop,
+                lasting,
+            );
         }
         let caster = &mut arena.fighters[i];
         caster.round_damage = caster.round_damage.saturating_add(damage);
@@ -1308,12 +1353,15 @@ fn hit(arena: &mut Arena, i: usize, spell: usize, (target, t): (FighterId, usize
 
 /// What a hit from `source` leaves on the target, if it still fights: the part it
 /// landed on bleeds with `bleed_percent`, drawn only if that part can and does not
-/// already; its accuracy drops by `accuracy_drop`, adding up with the drops it has.
+/// already; its accuracy drops by `accuracy_drop`, adding up with the drops it has; a
+/// `poison` takes the place of the one it has; a `hold` catches it as a trap does,
+/// unless already caught (`Effect::Trapped`).
 fn afflict(
     arena: &mut Arena,
     (source, t): (FighterId, usize),
     (bleed_percent, part): (u32, Option<Location>),
     accuracy_drop: Option<AccuracyDrop>,
+    (poison, hold): (Option<PoisonData>, Option<TrapData>),
 ) {
     let defender = &arena.fighters[t];
     if !defender.is_fighting() {
@@ -1337,6 +1385,24 @@ fn afflict(
         };
         effects.push((effect, drop.ticks));
     }
+    if let Some(poison) = poison.filter(|p| p.hp_percent_per_second > 0 && p.seconds > 0) {
+        let effect = Effect::Poisoned {
+            source,
+            hp_percent: poison.hp_percent_per_second,
+        };
+        effects.push((effect, poison.seconds.saturating_mul(TICKS_PER_SECOND)));
+        arena.fighters[t]
+            .effects
+            .retain(|l| !matches!(l.effect, Effect::Poisoned { .. }));
+    }
+    let defender = &mut arena.fighters[t];
+    if let Some(hold) = hold.filter(|h| h.ticks > 0 && defender.trapped().is_none()) {
+        let effect = Effect::Trapped {
+            damage_percent: hold.damage_percent,
+        };
+        effects.push((effect, hold.ticks));
+        defender.action = Action::Wait;
+    }
     let fighter = arena.fighters[t].id;
     for (effect, ticks_left) in effects {
         arena.fighters[t]
@@ -1350,11 +1416,11 @@ fn afflict(
 }
 
 /// Counts down the effects on every fighter still in the fight, which wear off at 0, a
-/// trap letting its fighter go (`EventKind::Freed`). A bleeding part takes `BleedRules::hp_percent_per_second` of the fighter's max HP, at
-/// least 1, at the end of each of its seconds, as damage its source dealt: it may die
-/// or give up.
+/// trap letting its fighter go (`EventKind::Freed`). A bleeding part takes `BleedRules::hp_percent_per_second` of the fighter's max HP, a
+/// poison its own `hp_percent`, at least 1, at the end of each of its seconds, as damage
+/// its source dealt: it may die or give up.
 fn wear_off(arena: &mut Arena) {
-    let percent = arena.bleed.hp_percent_per_second;
+    let bleed_percent = arena.bleed.hp_percent_per_second;
     for t in 0..arena.fighters.len() {
         let f = &mut arena.fighters[t];
         if !f.is_fighting() {
@@ -1364,10 +1430,18 @@ fn wear_off(arena: &mut Arena) {
         let mut freed = false;
         for lasting in &mut f.effects {
             lasting.ticks_left = lasting.ticks_left.saturating_sub(1);
-            if let Effect::Bleeding { part, source } = lasting.effect
-                && lasting.ticks_left.is_multiple_of(TICKS_PER_SECOND)
-            {
-                bled.push((part, source));
+            let second = lasting.ticks_left.is_multiple_of(TICKS_PER_SECOND);
+            match lasting.effect {
+                Effect::Bleeding { part, source } if second => {
+                    bled.push((Some(part), source, bleed_percent));
+                }
+                Effect::Poisoned { source, hp_percent } if second => {
+                    bled.push((None, source, hp_percent));
+                }
+                Effect::Bleeding { .. }
+                | Effect::Poisoned { .. }
+                | Effect::Blinded { .. }
+                | Effect::Trapped { .. } => {}
             }
             freed |= matches!(lasting.effect, Effect::Trapped { .. }) && lasting.ticks_left == 0;
         }
@@ -1379,7 +1453,7 @@ fn wear_off(arena: &mut Arena) {
                 kind: EventKind::Freed { fighter },
             });
         }
-        for (part, source) in bled {
+        for (part, source, percent) in bled {
             let f = &mut arena.fighters[t];
             if !f.is_fighting() {
                 break;
@@ -1397,11 +1471,18 @@ fn wear_off(arena: &mut Arena) {
             }
             let tick = arena.tick;
             let mut log = |kind| arena.log.push(Event { tick, kind });
-            log(EventKind::Bled {
-                fighter,
-                source,
-                part,
-                damage,
+            log(match part {
+                Some(part) => EventKind::Bled {
+                    fighter,
+                    source,
+                    part,
+                    damage,
+                },
+                None => EventKind::Poisoned {
+                    fighter,
+                    source,
+                    damage,
+                },
             });
             if died {
                 log(EventKind::Death { fighter });
@@ -2505,13 +2586,12 @@ mod tests {
         assert_eq!(arena.fighters[0].position, Vec2::new(RADIUS, 10.0 - RADIUS));
     }
 
-    /// A 20 m floor of `element`, nothing on it.
-    fn floor_of(element: Element) -> ArenaLayout {
+    /// A 20 m floor, nothing on it.
+    fn floor_of() -> ArenaLayout {
         ArenaLayout {
             width: 20.0,
             height: 20.0,
             speed_percent: 100,
-            element,
             pillars: Vec::new(),
             door: Vec2::new(10.0, 0.0),
         }
@@ -2522,7 +2602,7 @@ mod tests {
         let fighters = vec![test_thrower(0, 5.0, 5.0), fighter(1, 6.5, 5.0)];
         let arena = Arena::new(20.0, 20.0, fighters, 0);
         match element {
-            Some(element) => arena.with_layout(&floor_of(element)),
+            Some(element) => arena.with_layout(&floor_of(), element),
             None => arena,
         }
     }
@@ -2593,6 +2673,75 @@ mod tests {
         play(&mut arena, &[THROW, Action::Wait], 1);
         assert!(arena.fighters[1].hp < 100);
         assert_eq!(arena.fighters[1].accuracy(), 24);
+    }
+
+    const POISON: PoisonData = PoisonData {
+        hp_percent_per_second: 1,
+        seconds: 2,
+    };
+    const HOLD: TrapData = TrapData {
+        ticks: 45,
+        damage_percent: 0,
+    };
+
+    #[test]
+    fn a_throw_hits_with_all_the_effects_of_its_floor_s_element() {
+        let mut thrower = test_thrower(0, 5.0, 5.0);
+        let kelp = crate::design_data::Thrown {
+            power: 40,
+            damage_kind: DamageKind::Neutral,
+            accuracy_drop: None,
+            bleed_percent: 30,
+            poison: Some(POISON),
+            hold: Some(HOLD),
+            ignores_shield: true,
+        };
+        thrower.spells[2].thrown.insert(Element::Kelp, kelp);
+        let arena =
+            Arena::new(20.0, 20.0, vec![thrower], 0).with_layout(&floor_of(), Element::Kelp);
+        let s = &arena.fighters[0].spells[2];
+        assert_eq!(
+            (s.power, s.bleed_percent, s.poison, s.hold, s.ignores_shield),
+            (40, 30, Some(POISON), Some(HOLD), true)
+        );
+    }
+
+    #[test]
+    fn a_held_and_poisoned_target_stays_held_while_its_poison_takes_hp() {
+        let mut arena = throwing_duel(None);
+        let throw = &mut arena.fighters[0].spells[2];
+        (throw.power, throw.poison, throw.hold) = (50, Some(POISON), Some(HOLD));
+        arena.fighters[0].elements.current = 2;
+        play(&mut arena, &[THROW, Action::Wait], 1);
+        let hit = arena.fighters[1].hp;
+        assert!(hit < 100);
+        assert_eq!(arena.fighters[1].trapped(), Some(0));
+        // The poison's first second does not free it.
+        play(&mut arena, &[Action::Wait, Action::Wait], 30);
+        assert_eq!(arena.fighters[1].hp, hit - 1);
+        assert!(!arena.fighters[1].is_free());
+        play(&mut arena, &[Action::Wait, Action::Wait], 30);
+        assert_eq!(arena.fighters[1].hp, hit - 2);
+        assert!(arena.fighters[1].is_free());
+        assert_eq!(arena.fighters[1].effects, []);
+        let poisoned = |e: &&Event| matches!(e.kind, EventKind::Poisoned { damage: 1, .. });
+        assert_eq!(arena.log.iter().filter(poisoned).count(), 2);
+    }
+
+    #[test]
+    fn a_throw_that_ignores_shields_hits_a_shielded_target_harder() {
+        let lost = |ignores_shield| {
+            let mut arena = throwing_duel(None);
+            arena.fighters[0].spells[2].power = 100;
+            arena.fighters[0].spells[2].ignores_shield = ignores_shield;
+            arena.fighters[0].elements.current = 2;
+            arena.fighters[1].stats.ranged_defense = 100;
+            arena.fighters[1].shield_percent = 200;
+            play(&mut arena, &[THROW, Action::Wait], 1);
+            100 - arena.fighters[1].hp
+        };
+        // 10 × 100 / (100 + 100), then / (100 + 50).
+        assert_eq!((lost(false), lost(true)), (5, 7));
     }
 
     const MINES: MineRules = MineRules {
@@ -2762,11 +2911,11 @@ mod tests {
             width: 20.0,
             height: 20.0,
             speed_percent: 50,
-            element: Element::Sand,
             pillars: Vec::new(),
             door: Vec2::new(10.0, 0.0),
         };
-        let mut arena = Arena::new(1.0, 1.0, vec![fighter(0, 5.0, 5.0)], 0).with_layout(&floor);
+        let mut arena =
+            Arena::new(1.0, 1.0, vec![fighter(0, 5.0, 5.0)], 0).with_layout(&floor, Element::Sand);
         assert_eq!((arena.width, arena.height), (20.0, 20.0));
         play(&mut arena, &[Action::Move(Vec2::new(1.0, 0.0))], 30);
         // Speed 30 → 3 m/s, halved, for one second.
