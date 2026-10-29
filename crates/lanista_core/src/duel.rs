@@ -7,7 +7,7 @@ use rand::{RngExt, SeedableRng};
 use rand_chacha::ChaCha8Rng;
 
 use crate::ai::{CombatAi, UtilityAi};
-use crate::combat::{Arena, Vec2, run};
+use crate::combat::{Arena, Element, Vec2, run};
 use crate::design_data::DesignData;
 use crate::fighter::appearance::Appearance;
 use crate::fighter::{ClassId, Fighter, FighterId, Stats};
@@ -29,8 +29,9 @@ pub const STATS: Stats = Stats {
 };
 
 /// A duel set up from `seed`: random classes, fighter 0 starts in the left quarter,
-/// fighter 1 in the right quarter, each with a random look. The arena gets the same seed
-/// and `data`'s combat rules.
+/// fighter 1 in the right quarter, each with a random look, on a floor of a random element
+/// (every continent's colosseums have one). The arena gets the same seed and `data`'s
+/// combat rules.
 ///
 /// # Panics
 /// If `data` has no class, which [`DesignData::from_ron`] rejects: a bug, not a data error.
@@ -51,7 +52,10 @@ pub fn random_duel(data: &DesignData, seed: u64) -> Arena {
     for f in &mut fighters {
         f.appearance = Appearance::random(&mut rng, &data.fighter.appearance);
     }
-    Arena::new(ARENA_SIZE, ARENA_SIZE, fighters, seed).with_rules(&data.combat)
+    let element = Element::ALL[rng.random_range(0..Element::ALL.len())];
+    let mut arena = Arena::new(ARENA_SIZE, ARENA_SIZE, fighters, seed).with_rules(&data.combat);
+    arena.element = Some(element);
+    arena
 }
 
 /// The AI of every fighter of `arena`: its learned model's ([`LearnedAi`]), the utility

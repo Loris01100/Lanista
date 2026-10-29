@@ -60,11 +60,11 @@ fn a_standard_duel_with_a_lost_limb() {
     insta::assert_snapshot!(standard_duel(23));
 }
 
-/// The standard duel of seed 46: a gladiator makes a field master's arm bleed, then
+/// The standard duel of seed 8: a gladiator makes a hunter's head bleed, then
 /// takes its head off.
 #[test]
 fn a_standard_duel_with_a_beheading() {
-    insta::assert_snapshot!(standard_duel(46));
+    insta::assert_snapshot!(standard_duel(8));
 }
 
 /// A gladiator against a field master, both in their first loadout, on the floor of `kind`:
