@@ -923,8 +923,13 @@ impl ClubScreen {
             if let Some(Contender::Club(i)) = colosseum.champion
                 && let Some(f) = self.state.fighters.get(i)
             {
+                let forfeit = self.decisions.orders.get(i).is_some_and(|o| o.forfeit);
                 let text = tr!(
-                    "alert-title-defense",
+                    if forfeit {
+                        "alert-title-forfeit"
+                    } else {
+                        "alert-title-defense"
+                    },
                     fighter = fighter_name(i, f, &self.data),
                     place = colosseum_rules_name(rules),
                     week =
@@ -3320,6 +3325,21 @@ mod tests {
         let alert = format!("{name} : pas assez d'argent pour sa semaine");
         assert!(alert_texts(&screen).contains(&alert));
         assert_eq!(screen.alerts()[0].1, View::Sheet(0));
+    }
+
+    #[test]
+    fn a_title_let_go_is_an_alert() {
+        let mut screen = screen(7);
+        screen.state.colosseums[1].champion = Some(Contender::Club(0));
+        let name = fighter_name(0, &screen.state.fighters[0], &screen.data);
+        let gives_up = |screen: &ClubScreen| {
+            alert_texts(screen)
+                .iter()
+                .any(|a| a.starts_with(&format!("{name} renonce au titre")))
+        };
+        assert!(!gives_up(&screen));
+        screen.decisions.orders[0].forfeit = true;
+        assert!(gives_up(&screen));
     }
 
     #[test]

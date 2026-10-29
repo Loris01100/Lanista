@@ -1309,6 +1309,8 @@ pub struct Orders {
     pub activity: Duty,
     /// The equipment it leaves when it fights.
     pub refused: Refused,
+    /// Lets its titles go rather than defend them before their deadline.
+    pub forfeit: bool,
 }
 
 /// The activity of a fighter's [`Orders`].
@@ -2614,6 +2616,7 @@ mod tests {
         f.orders = Orders {
             activity: Duty::Fight(rome),
             refused: armour,
+            ..Orders::default()
         };
         assert_eq!(
             (week(&f, 1), week(&f, 2)),

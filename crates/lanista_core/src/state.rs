@@ -608,7 +608,8 @@ impl GameState {
     /// [`Duty::Auto`] in the first colosseum of the club's continent
     /// (`WorldRules::first_colosseum`), the season opened with the melee where it would
     /// have fought, and who defends a title instead of fighting or training in the last
-    /// two weeks before its deadline.
+    /// two weeks before its deadline, unless its orders let the title go
+    /// (`Orders::forfeit`).
     #[must_use]
     pub fn ordered_plan(&self, i: usize, orders: Orders, data: &DesignData) -> WeekPlan {
         let Some(fighter) = self.fighters.get(i) else {
@@ -627,6 +628,7 @@ impl GameState {
                 && self.week + 1 >= c.defense_deadline(&data.world)
         });
         if plan.activity != Activity::Rest
+            && !orders.forfeit
             && let Some(c) = defense.and_then(|c| u32::try_from(c).ok())
         {
             plan.activity = Activity::TitleFight(ColosseumId(c));
@@ -2012,6 +2014,13 @@ mod tests {
             state.suggested_plan(0, &data).activity,
             Activity::TitleFight(ColosseumId(1))
         );
+        // Told to let it go: it follows its orders.
+        state.fighters[0].orders.forfeit = true;
+        assert!(!matches!(
+            state.suggested_plan(0, &data).activity,
+            Activity::TitleFight(_)
+        ));
+        state.fighters[0].orders.forfeit = false;
         // Too tired to fight: rest, and the title will be lost.
         state.fighters[0].form = crate::fighter::form::Form::new(10);
         assert_eq!(state.suggested_plan(0, &data).activity, Activity::Rest);

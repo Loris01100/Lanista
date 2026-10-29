@@ -569,6 +569,7 @@ alert-injury = { $fighter } : blessure, { $injury }
 alert-tired = { $fighter } : fatigué (forme { $form })
 alert-unpaid = { $fighter } : pas assez d'argent pour sa semaine
 alert-title-defense = { $fighter } : titre de { $place } à défendre d'ici la { $week }
+alert-title-forfeit = { $fighter } renonce au titre de { $place } : il le perdra après la { $week }
 alert-sale-offer = { $club } veut acheter { $fighter } pour { $price } (à accepter au marché cette semaine)
 alert-rival = { $club } est votre rival depuis la { $since } : recettes à { $receipts } %, renommée +{ $fame } par combat
 alert-no-fighter = Plus aucun combattant : recrutez un free agent au marché
@@ -581,10 +582,16 @@ roster-fame = Renommée
 roster-condition = État
 roster-intro = La consigne d'un combattant vaut pour chaque semaine, jusqu'à nouvel ordre. Son nom ouvre sa fiche, où se choisit une exception pour cette semaine.
 roster-orders = Consigne :
-roster-orders-hint = Ce qu'il fait chaque semaine, sauf exception choisie dans sa fiche. Blessé ou fatigué, il se repose ; la mêlée d'ouverture et la défense d'un titre passent avant.
+roster-orders-hint = Ce qu'il fait chaque semaine, sauf exception choisie dans sa fiche. Blessé ou fatigué, il se repose ; la mêlée d'ouverture et la défense d'un titre, sauf si vous y renoncez, passent avant.
 roster-orders-all = Consigne pour tous…
 roster-exception = exception cette semaine
 roster-exception-hint = Sa semaine ne suit pas sa consigne : elle a été choisie dans sa fiche.
+roster-defend = Défendre le titre de { $place } d'ici la { $week } ({ $left ->
+        [0] cette semaine
+        [one] encore { $left } semaine
+       *[other] encore { $left } semaines
+    })
+roster-defend-hint = Coché, il défend le titre dans les deux dernières semaines, sauf s'il est blessé, malade ou fatigué. Décoché, il ne se présente pas et le titre passe au mieux classé. Un combat pour le titre peut aussi se choisir dans sa fiche.
 roster-unpaid = faute d'argent
 roster-unpaid-hint = La caisse ne suffira pas à payer sa semaine, une fois payés les salaires et les combattants avant lui dans la liste : il se reposera ou ne sera pas soigné. Les gains des combats ne sont pas comptés.
 roster-age-years = { $age } ans

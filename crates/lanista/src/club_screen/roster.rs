@@ -1,6 +1,6 @@
 //! The fighter list: a card per fighter in activity, the former ones below.
 
-use lanista_core::colosseum::ColosseumId;
+use lanista_core::colosseum::{ColosseumId, Contender};
 use lanista_core::design_data::DesignData;
 use lanista_core::fighter::career::{Activity, CareerFighter, Duty, Orders, Status, WeekPlan};
 use lanista_core::fighter::form::Form;
@@ -13,8 +13,9 @@ use super::{
 };
 use crate::lang::tr;
 use crate::texts::{
-    activity_name, class_name, condition_text, duty_name, illness_effect, illness_text,
-    injury_effect, injury_text, loadout_name, record_text, stage_name, unsellable_text,
+    activity_name, class_name, colosseum_rules_name, condition_text, date_in_sentence, duty_name,
+    illness_effect, illness_text, injury_effect, injury_text, loadout_name, record_text,
+    stage_name, unsellable_text,
 };
 use crate::theme;
 
@@ -165,9 +166,37 @@ fn fighter_card(
                         }
                     });
             });
+            title_boxes(ui, index, orders, state, data);
             week_chips(ui, fighter, plan, (apart, unpaid), data);
         });
     open
+}
+
+/// A box per title the club's fighter `index` holds, with its deadline: ticked, it
+/// defends its titles in time; unticked, it lets them go (`Orders::forfeit`).
+fn title_boxes(
+    ui: &mut egui::Ui,
+    index: usize,
+    orders: &mut Orders,
+    state: &GameState,
+    data: &DesignData,
+) {
+    for (colosseum, rules) in state.colosseums.iter().zip(&data.world.colosseums) {
+        if colosseum.champion != Some(Contender::Club(index)) {
+            continue;
+        }
+        let deadline = colosseum.defense_deadline(&data.world);
+        let text = tr!(
+            "roster-defend",
+            place = colosseum_rules_name(rules),
+            week = date_in_sentence(deadline, data),
+            left = deadline.saturating_sub(state.week)
+        );
+        let mut defend = !orders.forfeit;
+        ui.checkbox(&mut defend, text)
+            .on_hover_text(tr!("roster-defend-hint"));
+        orders.forfeit = !defend;
+    }
 }
 
 /// Form and morale as bars, from red when empty through bronze to green when full.
