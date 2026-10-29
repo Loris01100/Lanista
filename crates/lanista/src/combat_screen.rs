@@ -88,8 +88,8 @@ pub struct CombatScreen {
     paused: bool,
     /// Whether the options, opened from the pause menu, are laid over it.
     options_open: bool,
-    /// Whether the fighters of the fight shown big are being presented in a table,
-    /// before the first tick, the entrance off; the fights wait meanwhile.
+    /// Whether the table presenting the fighters of the fight shown big is open, from
+    /// the controls' « Présentation »; the fights wait meanwhile.
     presenting: bool,
     /// Their entrance, if on, instead of the table; the fights wait meanwhile.
     entrance: Option<Entrance>,
@@ -125,7 +125,7 @@ impl CombatScreen {
             settings: None,
             paused: false,
             options_open: false,
-            presenting: !display.entrance,
+            presenting: false,
             entrance,
             fatal_blow,
         }
@@ -288,6 +288,9 @@ impl CombatScreen {
             .anchor(egui::Align2::CENTER_BOTTOM, [0.0, -12.0])
             .show(ui, |ui| {
                 ui.horizontal(|ui| {
+                    if !self.cutscene() {
+                        ui.toggle_value(&mut self.presenting, tr!("presentation-open"));
+                    }
                     if self.running() {
                         let labels = [tr!("speed-slow"), tr!("speed-normal"), tr!("speed-fast")];
                         for (speed, label) in SPEEDS.into_iter().zip(labels) {
@@ -363,15 +366,11 @@ impl CombatScreen {
 impl CombatScreen {
     /// While `presenting`, the fighters of the fight shown big in the middle of the
     /// screen, one row each, the club's in bronze: class, loadout, Elo in the fight's
-    /// colosseum, season and career records, armour refused. « Au combat ! » starts it.
+    /// colosseum, season and career records, armour refused. Its cross closes it.
     fn presentation(&mut self, ui: &egui::Context) {
-        if !self.presenting {
-            return;
-        }
-        let fight = self.fight();
-        let cast = &fight.cast;
-        let mut start = false;
+        let cast = &self.views[self.focus].cast;
         egui::Window::new(tr!("presentation"))
+            .open(&mut self.presenting)
             .collapsible(false)
             .resizable(false)
             .anchor(egui::Align2::CENTER_CENTER, [0.0, 0.0])
@@ -395,14 +394,7 @@ impl CombatScreen {
                                 }
                             });
                     });
-                ui.add_space(8.0);
-                ui.vertical_centered(|ui| {
-                    start = ui.button(tr!("presentation-start")).clicked();
-                });
             });
-        if start {
-            self.presenting = false;
-        }
     }
 
     /// During the entrance, the card of the fighter the camera has stopped on, on the
