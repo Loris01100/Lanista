@@ -1922,7 +1922,7 @@ mod tests {
     #[test]
     fn rival_champions_defend_without_the_player() {
         let data = data();
-        let mut state = game(2, &data);
+        let mut state = game(1, &data);
         let rest = plan(Activity::Rest, false);
         let mut fights = 0;
         for _ in 0..12 {
@@ -2514,7 +2514,7 @@ mod tests {
     #[test]
     fn everyone_ages_at_the_start_of_the_off_season_whenever_they_arrived() {
         let data = data();
-        let mut state = game(3, &data);
+        let mut state = game(4, &data);
         let calendar = &data.calendar;
         let off_season = u64::from(calendar.competition_weeks + calendar.great_event_weeks + 1);
         while state.week < off_season / 2 {

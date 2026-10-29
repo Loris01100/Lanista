@@ -26,7 +26,7 @@
 // spells: the first and third slots. Each of the class's two loadouts brings the second
 // (spell: Some((...))), its weapon (a key of weapons in data/combat.ron, whose auto attack the fighter
 // strikes with once none of its spells is both affordable and of use) and what its off
-// hand holds: Free,
+// hand holds: Free, BothHands (the weapon takes both hands, a bow),
 // Shield (a defense bonus) or Weapon (a second one, weaker for who is not ambidextrous;
 // equipment in data/fighter.ron). A loadout's key names it in the language files
 // (loadout-<key>). A loadout without spell leaves the class's three spells as they are.
@@ -297,7 +297,7 @@
             (
                 key: "heavy-bow",
                 weapon: "bow",
-                off_hand: Free,
+                off_hand: BothHands,
                 speed_percent: 85,
                 shot_power_percent: 130,
                 shot_cooldown_percent: 140,
@@ -305,9 +305,9 @@
             (
                 key: "light-bow",
                 weapon: "bow",
-                off_hand: Free,
+                off_hand: BothHands,
                 speed_percent: 115,
-                shot_power_percent: 75,
+                shot_power_percent: 65,
                 shot_cooldown_percent: 70,
             ),
         ],

@@ -83,8 +83,8 @@ Archer qui combat à distance. Ses deux configurations ont les mêmes sorts : l'
 
 | Configuration | Équipement | Effet |
 | --- | --- | --- |
-| Arc lourd | un arc, main libre | gros dégâts, recharge lente, vitesse réduite |
-| Arc léger | un arc, main libre | faibles dégâts, recharge rapide, vitesse accrue |
+| Arc lourd | un arc à deux mains | tirs à 130 % de puissance et 140 % de recharge, vitesse réduite |
+| Arc léger | un arc à deux mains | moitié moins de puissance et recharge deux fois plus rapide que l'arc lourd (65 %, 70 %), vitesse accrue : deux tirs valent un tir lourd |
 
 | Emplacement | Sort | Description |
 | --- | --- | --- |

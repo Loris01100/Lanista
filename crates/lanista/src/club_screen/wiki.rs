@@ -241,6 +241,7 @@ fn page(ui: &mut egui::Ui, entry: Entry, data: &DesignData) {
                 let weapon = tr!(&format!("weapon-{}", loadout.weapon));
                 let off_hand = match loadout.off_hand {
                     OffHand::Free => tr!("wiki-off-hand-free"),
+                    OffHand::BothHands => tr!("wiki-off-hand-both-hands"),
                     OffHand::Shield => tr!("wiki-off-hand-shield"),
                     OffHand::Weapon => tr!("wiki-off-hand-weapon"),
                 };

@@ -164,7 +164,7 @@
     // nothing. A Hair layer's variant is the fighter's hair shape, one of `hair`. A layer
     // goes with a part of the body (Body, Head, ArmFront, ArmBack, LegFront, LegBack, the
     // fighter facing right), left undrawn once it is lost; a Head layer is one image that
-    // follows the head. `with` draws a layer only with that off hand (Free, Shield, Weapon).
+    // follows the head. `with` draws a layer only with that off hand (Free, BothHands, Shield, Weapon).
     appearance: (
         // A class without its own look: the `build` variant of `layers`.
         build: "average",

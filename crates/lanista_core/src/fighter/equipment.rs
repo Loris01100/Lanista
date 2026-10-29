@@ -43,6 +43,8 @@ impl Refused {
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize)]
 pub enum OffHand {
     Free,
+    /// None: the weapon takes both hands (a bow).
+    BothHands,
     /// A defense bonus; it does not parry.
     Shield,
     /// A second weapon, which strikes weaker unless the fighter is ambidextrous.
@@ -65,7 +67,7 @@ impl OffHand {
             Self::Weapon if !ambidextrous => {
                 stats.melee_attack = percent_of(stats.melee_attack, rules.off_hand_attack_percent);
             }
-            Self::Weapon | Self::Free => {}
+            Self::Weapon | Self::Free | Self::BothHands => {}
         }
         stats
     }

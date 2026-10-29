@@ -417,6 +417,7 @@ wiki-defenses = Défenses
 wiki-shield-effect = Défenses au contact et à distance à { $percent } % ; il ne pare pas.
 wiki-loadout = { $weapon }, { $off_hand }
 wiki-off-hand-free = main libre
+wiki-off-hand-both-hands = à deux mains
 wiki-off-hand-shield = bouclier
 wiki-off-hand-weapon = seconde arme
 wiki-auto-attack = Attaque de base

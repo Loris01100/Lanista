@@ -2585,7 +2585,7 @@ mod tests {
         let data = Rc::new(DesignData::load().unwrap());
         let folder = std::env::temp_dir().join(format!("lanista-season-{}", std::process::id()));
         // A game whose fighter lives the whole season: most die before its end.
-        let mut screen = saved_screen(2, &data, &folder);
+        let mut screen = saved_screen(5, &data, &folder);
         // Halfway, on a week the club fought, so that there is a fight to watch again.
         let mut half = 0;
         while half < u64::from(data.calendar.season_weeks() / 2) || screen.fights.is_empty() {
@@ -2615,7 +2615,7 @@ mod tests {
         let next = screen.state.date(&data);
         assert_eq!((next.season, next.week), (2, 1));
         // The rival fighters who lived the whole season took a year.
-        let start = GameState::new(2, &data);
+        let start = GameState::new(5, &data);
         let survivors: Vec<_> = start
             .rivals
             .iter()
