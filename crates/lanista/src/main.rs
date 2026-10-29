@@ -4,6 +4,7 @@
 mod club_screen;
 mod combat_screen;
 mod entrance;
+mod fatal_blow;
 mod fight_view;
 mod fighter_sprite;
 mod lang;

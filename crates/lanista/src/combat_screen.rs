@@ -18,6 +18,7 @@ use reesch::{
 use crate::Action;
 use crate::club_screen::gauge;
 use crate::entrance::{self, Entrance};
+use crate::fatal_blow::FatalBlow;
 use crate::fight_view::{Cast, FightView, STANDS, Tone, Verdict};
 use crate::fighter_sprite::PIXELS_PER_METRE;
 use crate::lang::tr;
@@ -92,6 +93,8 @@ pub struct CombatScreen {
     presenting: bool,
     /// Their entrance, the cutscenes on, instead of the table; the fights wait meanwhile.
     entrance: Option<Entrance>,
+    /// The fatal blow of the first fight, a duel, the cutscenes on, until shown.
+    fatal_blow: Option<FatalBlow>,
 }
 
 impl CombatScreen {
@@ -107,6 +110,10 @@ impl CombatScreen {
             .first()
             .filter(|_| cutscenes)
             .map(|v| Entrance::new(presented(v)));
+        let fatal_blow = views
+            .first()
+            .filter(|_| cutscenes)
+            .and_then(|v| FatalBlow::find(&v.arena));
         Self {
             data,
             views,
@@ -120,6 +127,7 @@ impl CombatScreen {
             options_open: false,
             presenting: !cutscenes,
             entrance,
+            fatal_blow,
         }
     }
 
@@ -149,6 +157,7 @@ impl CombatScreen {
     /// Plays the rest of every fight at once, without drawing them.
     fn skip(&mut self) {
         self.end_entrance();
+        self.fatal_blow = None;
         for view in &mut self.views {
             view.skip();
         }
@@ -194,17 +203,69 @@ impl CombatScreen {
         }
     }
 
+    /// Plays `dt` real seconds: the entrance, the fatal blow, or the fights at their
+    /// speed; returns the sounds of the one shown big.
+    pub(crate) fn play(&mut self, dt: f32) -> Vec<&'static str> {
+        if self.entrance.is_some() {
+            self.enter(dt);
+            return Vec::new();
+        }
+        if self.presenting {
+            return Vec::new();
+        }
+        if let Some(blow) = &mut self.fatal_blow {
+            let live = &mut self.views[0];
+            if blow.missed(live) {
+                self.fatal_blow = None;
+            } else if self.focus == 0 && blow.begins(live) {
+                // The other fights wait meanwhile.
+                let sounds = blow.play(live, dt);
+                if blow.is_over() {
+                    self.fatal_blow = None;
+                }
+                return sounds;
+            }
+        }
+        self.advance(dt * self.speed)
+    }
+
+    /// Whether the fatal blow is being shown.
+    fn striking(&self) -> bool {
+        self.fatal_blow.as_ref().is_some_and(FatalBlow::playing)
+    }
+
+    /// Whether a cutscene takes the screen: the entrance or the fatal blow.
+    fn cutscene(&self) -> bool {
+        self.entrance.is_some() || self.striking()
+    }
+
+    /// The fight drawn big: the one shown big, or the replay of its fatal blow.
+    fn shown(&self) -> &FightView {
+        self.fatal_blow
+            .as_ref()
+            .and_then(FatalBlow::replay)
+            .unwrap_or_else(|| self.fight())
+    }
+
     /// The camera of the fight shown big: its art's pixels enlarged by a whole factor,
-    /// going from one fighter to the next during the entrance.
+    /// going from one fighter to the next during the entrance, closing in on the fatal
+    /// blow.
     fn main_camera(&self) -> Camera2D {
-        let Some(entrance) = &self.entrance else {
-            return pixel_camera(self.main_view(), PIXELS_PER_METRE);
-        };
         let screen = vec2(screen_width(), screen_height());
         let shown = |view| pixel_view(view, screen, PIXELS_PER_METRE);
-        let fight = self.fight();
-        let close_up = |id| fight.place(id).map_or(self.main_view(), entrance::close_up);
-        fit_camera(entrance.view(shown(self.main_view()), |id| shown(close_up(id))))
+        if let Some(entrance) = &self.entrance {
+            let fight = self.fight();
+            let close_up = |id| fight.place(id).map_or(self.main_view(), entrance::close_up);
+            return fit_camera(entrance.view(shown(self.main_view()), |id| shown(close_up(id))));
+        }
+        let Some(blow) = self.fatal_blow.as_ref().filter(|_| self.striking()) else {
+            return pixel_camera(self.main_view(), PIXELS_PER_METRE);
+        };
+        let mut camera = fit_camera(blow.view(self.main_view(), shown));
+        if blow.mirrored() {
+            camera.zoom.x = -camera.zoom.x;
+        }
+        camera
     }
 
     fn main_view(&self) -> Rect {
@@ -236,7 +297,7 @@ impl CombatScreen {
                             self.skip();
                         }
                     }
-                    if !self.fight().running() {
+                    if !self.fight().running() && !self.striking() {
                         result_view(ui, self.fight());
                     }
                     if !self.running() {
@@ -286,7 +347,7 @@ impl CombatScreen {
         let mouse = Vec2::from(mouse_position());
         let rects = thumbnail_rects(self.views.len() - 1, screen_width());
         if let Some(slot) = rects.iter().position(|r| r.contains(mouse)) {
-            if self.entrance.is_none() && is_mouse_button_pressed(MouseButton::Left) {
+            if !self.cutscene() && is_mouse_button_pressed(MouseButton::Left) {
                 self.focus = self.thumbnailed()[slot];
             }
             return;
@@ -429,7 +490,7 @@ impl CombatScreen {
     /// wounds, rising and fading: the damage taken, red for the club's fighters, a miss
     /// in grey, a wound in blood, a fall in bronze.
     fn popups(&self, ui: &egui::Context) {
-        let fight = self.fight();
+        let fight = self.shown();
         let camera = self.main_camera();
         let points = ui.pixels_per_point();
         let painter = ui.layer_painter(egui::LayerId::new(
@@ -812,6 +873,8 @@ impl Screen for CombatScreen {
         if keys && self.bindings.pressed(ui, &Action::Skip) {
             if self.entrance.is_some() {
                 self.end_entrance();
+            } else if self.striking() {
+                self.fatal_blow = None;
             } else if self.presenting {
                 self.presenting = false;
             } else if self.running() {
@@ -836,12 +899,24 @@ impl Screen for CombatScreen {
                     egui::Frame::popup(ui.style()).show(ui, |ui| ui.label(name));
                 });
         }
-        if self.entrance.is_none() {
+        if !self.cutscene() {
             self.timer(ui);
             self.feed(ui);
             self.elimination(ui);
             self.gauges(ui);
+        }
+        if self.entrance.is_none() {
             self.popups(ui);
+        }
+        if self
+            .fatal_blow
+            .as_ref()
+            .is_some_and(|b| b.replay().is_some())
+        {
+            egui::Area::new(egui::Id::new("replay"))
+                .anchor(egui::Align2::CENTER_TOP, [0.0, 3.0 * MARGIN])
+                .interactable(false)
+                .show(ui, |ui| ui.heading(tr!("replay")));
         }
         self.card(ui);
         self.presentation(ui);
@@ -852,16 +927,7 @@ impl Screen for CombatScreen {
         if self.paused {
             return Transition::None;
         }
-        if self.entrance.is_some() {
-            // In real time, whatever the fight speed.
-            self.enter(get_frame_time());
-            return Transition::None;
-        }
-        if self.presenting {
-            return Transition::None;
-        }
-        // Speed scales time: more or fewer ticks per frame, animations alike.
-        for sound in self.advance(get_frame_time() * self.speed) {
+        for sound in self.play(get_frame_time()) {
             audio.play_effect(assets, sound);
         }
         Transition::None
@@ -876,7 +942,7 @@ impl Screen for CombatScreen {
         }
         clear_background(STANDS);
         set_camera(&self.main_camera());
-        self.fight().draw(assets, &self.data);
+        self.shown().draw(assets, &self.data);
         set_default_camera();
         let rects = thumbnail_rects(shown.len(), screen_width());
         for ((target, &k), rect) in self.targets.iter().zip(&shown).zip(rects) {
@@ -1198,6 +1264,43 @@ mod tests {
         assert!((9.0..9.3).contains(&seconds), "{seconds} s");
         assert_eq!(screen.fight().fighter_at(place), Some(FighterId(0)));
         assert_eq!(screen.fight().arena.tick, 0);
+    }
+
+    /// Seed 13 ends in a death at tick 115: the blow is shown slowed down, then played
+    /// again close on the killer, then mirrored, and the fight stays the simulated one.
+    #[test]
+    fn the_fatal_blow_is_slowed_down_then_played_again_twice() {
+        let mut screen = screen(13);
+        let mut shots = Vec::new();
+        let mut seconds = 0.0;
+        while screen.running() || screen.fatal_blow.is_some() {
+            screen.play(1.0 / 60.0);
+            seconds += 1.0 / 60.0;
+            let shot = screen
+                .fatal_blow
+                .as_ref()
+                .filter(|blow| blow.playing())
+                .map(|blow| (blow.replay().is_some(), blow.mirrored()));
+            if let Some(shot) = shot
+                && shots.last() != Some(&shot)
+            {
+                shots.push(shot);
+            }
+        }
+        assert_eq!(shots, [(false, false), (true, false), (true, true)]);
+        // The walk in, 2.3 s at full speed, then 10 s live and two replays of 5 s.
+        assert!((22.0..27.0).contains(&seconds), "{seconds} s");
+        assert_same_fight(&screen, 13);
+    }
+
+    #[test]
+    fn a_melee_has_no_fatal_blow() {
+        let data = DesignData::load().unwrap();
+        let mut melee = random_duel(&data, 13);
+        let third = melee.fighters[0].clone();
+        melee.fighters.push(third);
+        assert!(FatalBlow::find(&melee).is_none());
+        assert!(FatalBlow::find(&random_duel(&data, 13)).is_some());
     }
 
     /// The standard duel of `seed`, watched.

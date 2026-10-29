@@ -1054,7 +1054,7 @@ fn index(id: u32) -> Option<usize> {
     clippy::cast_possible_truncation,
     reason = "screen coordinates, in meters: f32 is plenty"
 )]
-fn to_f32(meters: f64) -> f32 {
+pub(crate) fn to_f32(meters: f64) -> f32 {
     meters as f32
 }
 
