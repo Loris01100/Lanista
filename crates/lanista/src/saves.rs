@@ -10,6 +10,8 @@ use reesch::Audio;
 
 /// Written after every week, so quitting never loses a week played.
 pub const AUTO: &str = "autosave.json";
+/// The two autosaves before `AUTO`, newest first, to go back when a week went wrong.
+const OLDER_AUTOS: [&str; 2] = ["autosave-2.json", "autosave-3.json"];
 /// The save slots, written when the player asks; the first keeps the name of the
 /// single manual save of before.
 pub const SLOTS: [&str; 3] = ["save.json", "save-2.json", "save-3.json"];
@@ -51,12 +53,22 @@ pub fn log_panics(folder: PathBuf) {
 }
 
 /// Writes `state` to `file` in `folder`, whole or not at all: a crash while
-/// writing leaves the previous save in place.
+/// writing leaves the previous save in place. Writing `AUTO` keeps the two before it
+/// in `OLDER_AUTOS`.
 pub fn write(folder: &Path, file: &str, state: &GameState) -> std::io::Result<()> {
     std::fs::create_dir_all(folder)?;
     let path = folder.join(file);
     let partial = path.with_extension("json.tmp");
     std::fs::write(&partial, to_json(state))?;
+    if file == AUTO {
+        let [second, third] = OLDER_AUTOS.map(|f| folder.join(f));
+        for (from, to) in [(&second, &third), (&path, &second)] {
+            match std::fs::rename(from, to) {
+                Err(e) if e.kind() != std::io::ErrorKind::NotFound => return Err(e),
+                _ => {}
+            }
+        }
+    }
     std::fs::rename(partial, path)
 }
 
@@ -168,6 +180,23 @@ mod tests {
         let state = GameState::new(7, &data);
         write(&folder, SLOTS[0], &state).unwrap();
         assert_eq!(read(&folder, SLOTS[0], &data), Ok(Some(state)));
+        std::fs::remove_dir_all(folder).unwrap();
+    }
+
+    #[test]
+    fn the_last_three_autosaves_are_kept() {
+        let data = DesignData::load().unwrap();
+        let folder = std::env::temp_dir().join(format!("lanista-autos-{}", std::process::id()));
+        let states: Vec<GameState> = (1..=4).map(|seed| GameState::new(seed, &data)).collect();
+        for state in &states {
+            write(&folder, AUTO, state).unwrap();
+        }
+        let kept = [AUTO, OLDER_AUTOS[0], OLDER_AUTOS[1]].map(|f| read(&folder, f, &data));
+        assert_eq!(
+            kept,
+            [3, 2, 1].map(|i| Ok(Some(states[i].clone()))),
+            "newest first"
+        );
         std::fs::remove_dir_all(folder).unwrap();
     }
 

@@ -122,10 +122,7 @@ Point ouvert depuis longtemps, et il bloque la page Steam, le README public et `
 
 ### 6.3 Sauvegardes (P2)
 
-L'écriture est déjà atomique (fichier partiel puis renommé). Il manque :
-
-- une rotation de trois sauvegardes automatiques, pour revenir en arrière si une semaine tourne mal à cause d'un bug ;
-- un test qui charge une partie de dix saisons et mesure sa taille, pour surveiller la croissance (9,6 Mo avant la réduction de la phase 6 bis).
+Fait : rotation de trois sauvegardes automatiques et test de taille sur dix saisons (voir la phase 4).
 
 ### 6.4 Accessibilité et Steam Deck (P1, avant la phase 10)
 

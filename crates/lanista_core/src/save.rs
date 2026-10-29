@@ -126,6 +126,17 @@ mod tests {
         assert_eq!(reloaded, state);
     }
 
+    /// Watches the save's growth: 9.6 MB after ten seasons before phase 6 bis made it
+    /// smaller, 8.3 MB since.
+    #[test]
+    fn ten_seasons_save_small_and_reload() {
+        let data = data();
+        let state = played(7, 10 * data.calendar.season_weeks(), &data);
+        let json = to_json(&state);
+        assert!(json.len() < 10_000_000, "{} bytes", json.len());
+        assert_eq!(from_json(&json, &data).unwrap(), state);
+    }
+
     #[test]
     fn other_versions_are_refused() {
         let data = data();
