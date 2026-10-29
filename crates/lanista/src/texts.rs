@@ -40,7 +40,7 @@ pub fn stat_names() -> [String; STAT_COUNT] {
     ]
 }
 
-/// "Flamma (Mirmillon)": how the game names the fighter at `index` in the club; by its
+/// "Flamma (Gladiateur)": how the game names the fighter at `index` in the club; by its
 /// class and that index if it has no name.
 pub fn fighter_name(index: usize, fighter: &CareerFighter, data: &DesignData) -> String {
     let class = class_name(fighter, data);
@@ -112,7 +112,7 @@ pub fn loadout_name(fighter: &CareerFighter, loadout: usize, data: &DesignData) 
         .map_or_else(|| "?".into(), |l| data_name("loadout", &l.key))
 }
 
-/// Its ease with each loadout of its class: "Glaive et bouclier 85, Double glaive 40".
+/// Its ease with each loadout of its class: "Épée et bouclier 85, Double épée 40".
 pub fn ease_text(fighter: &CareerFighter, data: &DesignData) -> String {
     let loadouts = data.class(fighter.class).map_or(0, |c| c.loadouts.len());
     let each = (0..loadouts).map(|l| {
@@ -150,7 +150,7 @@ pub fn activity_name(activity: Activity, data: &DesignData) -> String {
     }
 }
 
-/// "Flamma (Mirmillon, free agent)": how the market names the free agent at `index`.
+/// "Flamma (Gladiateur, free agent)": how the market names the free agent at `index`.
 pub fn free_agent_name(index: usize, fighter: &CareerFighter, data: &DesignData) -> String {
     let class = class_name(fighter, data);
     if fighter.name.is_empty() {
@@ -164,7 +164,7 @@ pub fn free_agent_name(index: usize, fighter: &CareerFighter, data: &DesignData)
     }
 }
 
-/// "Flamma (Augure, Ludus Magnus)": how the game names a rival club's fighter; by its
+/// "Flamma (Chasseur, Ludus Magnus)": how the game names a rival club's fighter; by its
 /// class and place in the roster if it has no name.
 pub fn rival_fighter_name(id: RivalId, state: &GameState, data: &DesignData) -> String {
     let fighter = state.rival_fighter(id);
@@ -477,7 +477,7 @@ pub fn market_news_text(news: MarketNews, state: &GameState, data: &DesignData) 
     }
 }
 
-/// "Augure n° 3 (Ludus Magnus) à Capoue": who would receive the challenge, and where.
+/// "Chasseur n° 3 (Ludus Magnus) à Capoue": who would receive the challenge, and where.
 pub fn challenger_text(
     colosseum: ColosseumId,
     rival: RivalId,
@@ -504,7 +504,7 @@ pub struct Article {
 /// colosseum, so that a page does not repeat itself and stays the same when reloaded.
 const HEADLINE_VARIANTS: u64 = 3;
 
-/// "Flamma", "Augure n° 3": `contender` by its name alone, for a headline.
+/// "Flamma", "Chasseur n° 3": `contender` by its name alone, for a headline.
 fn contender_short_name(contender: Contender, state: &GameState, data: &DesignData) -> String {
     let (fighter, number) = match contender {
         Contender::Club(i) => (state.fighters.get(i), i),
@@ -690,7 +690,7 @@ pub fn relation_text(club: usize, state: &GameState, data: &DesignData) -> Strin
     )
 }
 
-/// "-30 : Augure n° 1 a tué Guerrier n° 3 (saison 1, semaine 5)": one change of a
+/// "-30 : Chasseur n° 1 a tué Guerrier n° 3 (saison 1, semaine 5)": one change of a
 /// rival club's relation, with its reason.
 pub fn relation_change_text(change: Change, state: &GameState, data: &DesignData) -> String {
     let club = |i| club_fighter(i, state, data);
@@ -1092,7 +1092,7 @@ pub fn result_text(fight: &FightLine) -> String {
     }
 }
 
-/// Who the club's fighter faced: « Contre un Augure, plus fort, sans armure ».
+/// Who the club's fighter faced: « Contre un Chasseur, plus fort, sans armure ».
 pub fn against_text(fight: &FightLine, data: &DesignData) -> String {
     let stronger = if fight.against_stronger {
         "true"

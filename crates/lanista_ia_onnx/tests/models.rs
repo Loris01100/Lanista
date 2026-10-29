@@ -33,9 +33,9 @@ fn the_exported_network_gives_the_onnx_model_logits() {
     let data = DesignData::load().unwrap();
     let senses = Senses::of(&data);
     let dir = Path::new(env!("CARGO_MANIFEST_DIR"));
-    let text = std::fs::read_to_string(dir.join("tests/mirmillon-recruit.json")).unwrap();
+    let text = std::fs::read_to_string(dir.join("tests/gladiateur-recruit.json")).unwrap();
     let model = Model::new(serde_json::from_str(&text).unwrap(), senses).unwrap();
-    let onnx = dir.join("../../assets/ai/mirmillon-recruit.onnx");
+    let onnx = dir.join("../../assets/ai/gladiateur-recruit.onnx");
     for seed in 0..20_u32 {
         let observation: Vec<f64> = (0..senses.observation_size())
             .map(|i| f64::from((u32::try_from(i).unwrap() * 37 + seed * 101) % 201) / 100.0 - 1.0)

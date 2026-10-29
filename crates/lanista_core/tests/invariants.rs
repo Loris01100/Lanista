@@ -62,7 +62,10 @@ fn duel(setup: Setup, stats: [Stats; 2], seed: u64) -> (Arena, Vec<Box<dyn Comba
         })
         .collect();
     let ais: Vec<Box<dyn CombatAi>> = vec![Box::new(UtilityAi), Box::new(UtilityAi)];
-    let arena = Arena::new(ARENA_SIZE, ARENA_SIZE, fighters, seed).with_rules(&data.combat);
+    let mut arena = Arena::new(ARENA_SIZE, ARENA_SIZE, fighters, seed).with_rules(&data.combat);
+    // Stone to gather, as every colosseum's floor has an element: two field masters
+    // with nothing to throw never come to blows.
+    arena.element = Some(Element::Stone);
     (arena, ais)
 }
 
@@ -233,7 +236,20 @@ proptest! {
             for (old, new) in before.iter().zip(&arena.fighters) {
                 // Down for the whole tick: it did not get up at its start.
                 if old.stunned_ticks > 1 {
-                    prop_assert_eq!(new.hp, old.hp);
+                    // Only its bleeding and poison go on taking HP.
+                    let lasting: u32 = arena.log[logged..]
+                        .iter()
+                        .filter_map(|e| match e.kind {
+                            EventKind::Bled { fighter, damage, .. }
+                            | EventKind::Poisoned { fighter, damage, .. }
+                                if fighter == old.id =>
+                            {
+                                Some(damage)
+                            }
+                            _ => None,
+                        })
+                        .sum();
+                    prop_assert_eq!(new.hp, old.hp.saturating_sub(lasting));
                     prop_assert_eq!(new.position, old.position);
                     let cast = arena.log[logged..].iter().any(|e| {
                         matches!(e.kind, EventKind::Cast { caster, .. } if caster == old.id)

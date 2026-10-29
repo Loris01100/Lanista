@@ -1,0 +1,24 @@
+---
+source: crates/lanista_core/tests/reference_fights.rs
+expression: "duel([0, 1], 42)"
+---
+[   42] fighter 1 casts Mine: a mine is laid
+[   96] fighter 1 casts Coup de dague on fighter 0: 6 damage to the right arm
+[   96] fighter 0 casts Guillotine on fighter 1: missed
+[  102] fighter 0 casts Bouclier tranchant on fighter 1: 25 damage to the head
+[  108] fighter 0 casts Slash sanguin on fighter 1: 14 damage to the right arm
+[  132] fighter 1 casts Coup de dague on fighter 0: 6 damage to the body
+[  144] fighter 0 casts Slash sanguin on fighter 1: 14 damage to the right arm
+[  168] fighter 1 casts Coup de dague on fighter 0: 6 damage to the head
+[  180] fighter 0 casts Slash sanguin on fighter 1: 14 damage to the left arm
+[  204] fighter 1 casts Coup de dague on fighter 0: 6 damage to the head
+[  216] fighter 0 casts Slash sanguin on fighter 1: 14 damage to the left arm
+[  240] fighter 1 casts Coup de dague on fighter 0: 6 damage to the right leg
+[  252] fighter 0 casts Slash sanguin on fighter 1: 14 damage to the head
+[  258] fighter 0 casts Bouclier tranchant on fighter 1: 5 damage to the head
+[  258] fighter 1 is beheaded
+[  258] fighter 1 dies
+
+over after 259 ticks, winner: fighter 0
+fighter 0: 70/100 HP, dealt 100, taken 30, 8 spells cast, 1 missed
+fighter 1: 0/100 HP, dealt 30, taken 100, 6 spells cast, 0 missed, beheaded

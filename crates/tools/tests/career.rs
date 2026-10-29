@@ -13,7 +13,7 @@ fn career(args: &[&str]) -> std::process::Output {
 #[test]
 fn a_long_career_is_printed_week_by_week() {
     // A seed whose fighter lives to retire: most die in the arena first.
-    let output = career(&["--seed", "8", "--weeks", "500"]);
+    let output = career(&["--seed", "2", "--weeks", "500"]);
     assert!(output.status.success());
     let text = String::from_utf8(output.stdout).expect("UTF-8 output");
     for expected in [

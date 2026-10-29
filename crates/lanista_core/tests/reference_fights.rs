@@ -26,12 +26,12 @@ fn duel(classes: [u32; 2], seed: u64) -> String {
 }
 
 #[test]
-fn murmillo_against_augur() {
+fn gladiator_against_field_master() {
     insta::assert_snapshot!(duel([0, 1], 42));
 }
 
 #[test]
-fn murmillo_against_murmillo() {
+fn gladiator_against_gladiator() {
     insta::assert_snapshot!(duel([0, 0], 42));
 }
 
@@ -54,20 +54,20 @@ fn a_standard_duel_with_a_knock_out() {
     insta::assert_snapshot!(standard_duel(128));
 }
 
-/// The standard duel of seed 87: a cutting hit takes off the second fighter's arm.
+/// The standard duel of seed 23: a cutting hit takes off the second fighter's arm.
 #[test]
 fn a_standard_duel_with_a_lost_limb() {
-    insta::assert_snapshot!(standard_duel(87));
+    insta::assert_snapshot!(standard_duel(23));
 }
 
-/// The standard duel of seed 97: a gladiator makes a hunter's arm bleed, then takes
-/// its head off.
+/// The standard duel of seed 46: a gladiator makes a field master's arm bleed, then
+/// takes its head off.
 #[test]
 fn a_standard_duel_with_a_beheading() {
-    insta::assert_snapshot!(standard_duel(97));
+    insta::assert_snapshot!(standard_duel(46));
 }
 
-/// A murmillo against an augur, both in their first loadout, on the floor of `kind`:
+/// A gladiator against a field master, both in their first loadout, on the floor of `kind`:
 /// see [`loadout_duel`].
 /// The element each arena kind's floor had before floors took their continent's: the
 /// reference fights stay those they were.
@@ -131,17 +131,17 @@ fn a_duel_in_a_narrow_arena() {
 /// two daggers (two mines a cast), gathering and throwing sand.
 #[test]
 fn two_swords_against_two_daggers_on_sand() {
-    insta::assert_snapshot!(loadout_duel(ArenaKind::Sand, [(2, 1), (3, 1)], 42));
+    insta::assert_snapshot!(loadout_duel(ArenaKind::Sand, [(0, 1), (1, 1)], 42));
 }
 
 /// A hunter with a heavy bow against a field master with a dagger and a shield among
 /// pillars: its rain of arrows flies over them, its trap catches the thrower.
 #[test]
 fn a_heavy_bow_against_a_dagger_and_shield_among_pillars() {
-    insta::assert_snapshot!(loadout_duel(ArenaKind::Pillars, [(4, 0), (3, 0)], 42));
+    insta::assert_snapshot!(loadout_duel(ArenaKind::Pillars, [(2, 0), (1, 0)], 42));
 }
 
-/// A melee of 8, murmillos and augurs in turn with the standard duel's stats, timid
+/// A melee of 8, gladiators and field masters in turn with the standard duel's stats, timid
 /// enough to make pacts, bold enough to break some, on sand: its log and places.
 fn reference_melee(seed: u64) -> String {
     let data = DesignData::load().unwrap();

@@ -1,6 +1,6 @@
 # Classes
 
-Classes prévues pour remplacer les prototypes actuels de `data/classes.ron` (mirmillon, augure), qui seront supprimés une fois les nouvelles classes en place ; ils restent jusque-là. Aucune statistique n'est fixée pour l'instant : ce document ne décrit que l'intention. Une classe a 3 sorts pour le moment.
+Classes qui ont remplacé les prototypes de `data/classes.ron` (mirmillon, augure), maintenant supprimés. Aucune statistique n'est fixée pour l'instant : ce document ne décrit que l'intention. Une classe a 3 sorts pour le moment.
 
 ## Règles communes
 
@@ -97,7 +97,7 @@ Archer qui combat à distance. Ses deux configurations ont les mêmes sorts : l'
 
 ## Plan de mise en œuvre
 
-Chaque étape laisse le jeu jouable avec mirmillon et augure, qui servent de terrain d'essai, et finit par `cargo test`, clippy et, quand le combat change, `calibrate` puis `compare`. L'IA utilitaire suit à chaque étape ; l'IA apprise ne suit qu'à la fin (étape 11), ses modèles n'étant que des substituts jusqu'à la phase 9.
+Chaque étape laisse le jeu jouable (avec mirmillon et augure comme terrain d'essai jusqu'à leur retrait), et finit par `cargo test`, clippy et, quand le combat change, `calibrate` puis `compare`. L'IA utilitaire suit à chaque étape ; l'IA apprise ne suit qu'à la fin (étape 11), ses modèles n'étant que des substituts jusqu'à la phase 9.
 
 1. **Partie du corps touchée** (`combat.rs`, `fighter/injury.rs`) — fait : chaque coup qui touche tire la partie du corps qu'il touche, avec les poids `hits` de `data/combat.ron`. Le tranchage (`combat::severs`) ne coupe que cette partie, jamais le corps. Le journal de combat la dit.
 2. **Modificateurs par sort** (`design_data::SpellData`, `combat.rs`) — fait : deux champs facultatifs dans `data/classes.ron`. `accuracy_percent` (100 par défaut) garde ce pourcentage de la chance de toucher (`combat::spell_hit_percent`, aussi lu par l'IA utilitaire), même dans une arène qui touche toujours. `sure_cut_hits` : à partir de ce nombre de coups portés par le sort sur une même cible (`Fighter::cleaving_hits`), un coup tranchant tranche à coup sûr la tête ou le membre touché (`combat::severs`), jamais le corps ni un moignon ; Guillotine aura `Some(2)`.
@@ -146,7 +146,7 @@ Chaque étape laisse le jeu jouable avec mirmillon et augure, qui servent de ter
    - les sprites (bouclier, deuxième arme) viendront plus tard, fournis à part.
 10 bis. **Chasseur** (`data/classes.ron`, `combat.rs`, `design_data.rs`) — fait : voir « Chasseur » dans `docs/feuille_de_route/phase-5-bis.md`.
 11. **Retrait de mirmillon et augure, IA apprise et modèle statistique** :
-    - retirer les deux anciennes classes, leurs clés de `fr.ftl`, leurs modèles de `assets/ai/` ; mettre à jour le test qui compte les classes (`design_data.rs`) et les snapshots `insta` ;
+    - fait : les deux anciennes classes sont retirées, avec leurs armes, leurs clés de `fr.ftl` et leurs modèles de `assets/ai/` ; le test qui compte les classes (`design_data.rs`) et les snapshots `insta` sont mis à jour (voir « Retrait du mirmillon et de l'augure » dans `docs/feuille_de_route/phase-5-bis.md`) ;
     - l'IA apprise (`learning.rs`, `learned.rs`, `lanista_py`, `python/`) : l'observation gagne la configuration, l'aisance, les saignements, la réserve d'éléments et les mines proches ; les actions gagnent l'attaque automatique ; réexporter les substituts (`export.py`) ;
     - le modèle statistique (`stat_model.rs`) gagne la configuration et l'aisance ; relancer `calibrate` et `compare`.
 12. **Documents** : reporter dans la feuille de route (phase 9) et le plan de conception ce qui a été fait.

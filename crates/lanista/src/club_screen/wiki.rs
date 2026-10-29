@@ -95,8 +95,8 @@ impl Entry {
         }
     }
 
-    /// Its kind and key in the language files, `class` and `mirmillon` for
-    /// `class-mirmillon`; none if it is out of the design data.
+    /// Its kind and key in the language files, `class` and `chasseur` for
+    /// `class-chasseur`; none if it is out of the design data.
     fn key(self, data: &DesignData) -> Option<(&'static str, &str)> {
         match self {
             Self::Class(i) => data.classes.get(i).map(|c| ("class", c.key.as_str())),
@@ -912,11 +912,11 @@ mod tests {
         let classes = listed(&data, Entry::Class(0), "");
         assert_eq!(classes.len(), data.classes.len());
         assert!(classes.iter().all(|e| matches!(e, Entry::Class(_))));
-        let found: Vec<String> = listed(&data, Entry::Class(0), " GLAI")
+        let found: Vec<String> = listed(&data, Entry::Class(0), " RUNI")
             .into_iter()
             .map(|e| e.name(&data))
             .collect();
-        assert_eq!(found, ["Glaive"]);
+        assert_eq!(found, ["Dague runique"]);
     }
 
     #[test]

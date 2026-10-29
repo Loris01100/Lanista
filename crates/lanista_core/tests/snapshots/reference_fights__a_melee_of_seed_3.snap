@@ -2,60 +2,142 @@
 source: crates/lanista_core/tests/reference_fights.rs
 expression: reference_melee(3)
 ---
-[    0] fighter 7 casts Éclair on fighter 6: 35 damage to the left arm
-[    0] fighter 5 casts Éclair on fighter 6: 35 damage to the head
-[    0] fighter 3 casts Éclair on fighter 4: 35 damage to the left arm
-[    0] fighter 1 casts Éclair on fighter 2: 35 damage to the left arm
-[    6] fighter 7 casts Trait de feu on fighter 6: 19 damage to the body
-[    6] fighter 3 casts Trait de feu on fighter 4: 19 damage to the right leg
-[    6] fighter 5 casts Trait de feu on fighter 6: 11 damage to the head
-[    6] fighter 6 dies
-[    6] fighter 1 casts Trait de feu on fighter 2: 19 damage to the right leg
+[    0] fighter 7 casts Mine: a mine is laid
+[    0] fighter 5 casts Mine: a mine is laid
+[    0] fighter 3 casts Mine: a mine is laid
+[    0] fighter 1 casts Mine: a mine is laid
+[    6] fighter 3 casts Récolte: 2 elements gathered
+[    6] fighter 7 casts Récolte: 2 elements gathered
+[    6] fighter 5 casts Récolte: 2 elements gathered
+[    6] fighter 1 casts Récolte: 2 elements gathered
+[   12] fighter 5 casts Jette on fighter 6: 10 damage to the body
+[   12] fighter 6 loses 15 % accuracy
+[   12] fighter 3 casts Jette on fighter 4: 10 damage to the body
+[   12] fighter 4 loses 15 % accuracy
+[   12] fighter 1 casts Jette on fighter 2: 10 damage to the left arm
+[   12] fighter 2 loses 15 % accuracy
+[   12] fighter 7 casts Jette on fighter 6: 10 damage to the body
+[   12] fighter 6 loses 15 % accuracy
 [   42] fighters 1 and 2 make a pact
-[   54] fighter 1 casts Trait de feu on fighter 0: 19 damage to the head
-[   54] fighter 3 casts Trait de feu on fighter 4: 19 damage to the body
-[   60] fighter 3 casts Coup de bâton on fighter 4: 12 damage to the head
-[   60] fighter 4 casts Frappe brutale on fighter 3: 48 damage to the head
-[   60] fighter 0 casts Frappe brutale on fighter 1: 48 damage to the left arm
-[   60] fighter 1 casts Coup de bâton on fighter 0: 12 damage to the right arm
-[   66] fighter 0 casts Charge au bouclier on fighter 1: 29 damage to the body
-[   66] fighter 1 is stunned
-[   66] fighter 4 casts Charge au bouclier on fighter 3: 29 damage to the right leg
-[   78] fighter 7 casts Trait de feu on fighter 0: 19 damage to the head
-[   96] fighter 5 casts Trait de feu on fighter 4: 15 damage to the right arm
-[   96] fighter 4 dies
-[  126] fighter 1 is knocked out
-[  126] fighter 7 casts Trait de feu on fighter 0: missed
-[  132] fighter 0 casts Coup de glaive on fighter 2: 19 damage to the left arm
-[  132] fighter 2 loses its left arm
-[  144] fighter 5 casts Trait de feu on fighter 3: 19 damage to the left arm
-[  144] fighter 3 casts Trait de feu on fighter 5: 19 damage to the left arm
-[  162] fighter 7 casts Coup de bâton on fighter 0: 12 damage to the body
-[  168] fighter 0 casts Coup de glaive on fighter 7: 19 damage to the head
-[  174] fighter 7 casts Trait de feu on fighter 0: 19 damage to the body
-[  186] fighter 5 casts Éclair on fighter 3: missed
-[  186] fighter 7 casts Éclair on fighter 0: 19 damage to the left arm
-[  186] fighter 0 dies
-[  186] fighter 3 casts Éclair on fighter 5: 35 damage to the right arm
-[  192] fighter 5 casts Trait de feu on fighter 3: 4 damage to the left leg
-[  192] fighter 3 dies
-[  228] fighter 7 casts Trait de feu on fighter 5: 19 damage to the left arm
-[  240] fighter 5 casts Trait de feu on fighter 7: 19 damage to the head
-[  276] fighter 7 casts Trait de feu on fighter 5: 19 damage to the left leg
-[  288] fighter 7 casts Coup de bâton on fighter 5: missed
-[  288] fighter 5 casts Trait de feu on fighter 7: 19 damage to the left leg
-[  294] fighter 5 casts Coup de bâton on fighter 7: 12 damage to the head
-[  324] fighter 7 casts Trait de feu on fighter 5: 8 damage to the head
-[  324] fighter 5 dies
+[   60] fighter 0 casts Guillotine on fighter 1: missed
+[   60] fighter 4 casts Guillotine on fighter 3: 48 damage to the body
+[   60] fighter 6 casts Guillotine on fighter 7: missed
+[   66] fighter 6 casts Bouclier tranchant on fighter 7: missed
+[   66] fighter 4 casts Bouclier tranchant on fighter 3: 25 damage to the body
+[   66] fighter 0 casts Bouclier tranchant on fighter 1: 25 damage to the head
+[   72] fighter 6 casts Slash sanguin on fighter 7: 14 damage to the left arm
+[   72] fighter 5 casts Récolte: 2 elements gathered
+[   72] fighter 7 casts Récolte: 2 elements gathered
+[   72] fighter 0 casts Slash sanguin on fighter 1: 14 damage to the right arm
+[   72] fighter 1's right arm bleeds
+[   72] fighter 3 casts Récolte: 2 elements gathered
+[   78] fighter 3 casts Jette on fighter 4: missed
+[   78] fighter 7 casts Jette on fighter 6: missed
+[   78] fighter 5 casts Jette on fighter 6: 10 damage to the right arm
+[   78] fighter 6 loses 15 % accuracy
+[   78] fighter 1 casts Récolte: 2 elements gathered
+[   78] fighter 4 casts Slash sanguin on fighter 3: 14 damage to the head
+[   84] fighter 1 casts Jette on fighter 0: 10 damage to the body
+[   84] fighter 0 loses 15 % accuracy
+[   84] fighter 2 casts Guillotine on fighter 0: missed
+[   90] fighter 2 casts Bouclier tranchant on fighter 0: 25 damage to the body
+[   96] fighters 6 and 7 make a pact
+[   96] fighter 2 casts Slash sanguin on fighter 0: 14 damage to the head
+[  102] fighter 1 bleeds 1 from the right arm
+[  114] fighter 4 casts Slash sanguin on fighter 3: 13 damage to the head
+[  114] fighter 3 is beheaded
+[  114] fighter 3 dies
+[  132] fighter 1 bleeds 1 from the right arm
+[  138] fighter 5 casts Récolte: 2 elements gathered
+[  138] fighter 7 casts Récolte: 2 elements gathered
+[  144] fighter 1 casts Récolte: 2 elements gathered
+[  144] fighter 5 casts Jette on fighter 6: 10 damage to the body
+[  144] fighter 6 loses 15 % accuracy
+[  144] fighter 7 casts Jette on fighter 5: 10 damage to the body
+[  144] fighter 5 loses 15 % accuracy
+[  150] fighter 2 casts Slash sanguin on fighter 0: 14 damage to the body
+[  150] fighter 0 casts Slash sanguin on fighter 2: 14 damage to the left leg
+[  150] fighter 1 casts Jette on fighter 0: 10 damage to the head
+[  150] fighter 0 loses 15 % accuracy
+[  162] fighter 1 bleeds 1 from the right arm
+[  186] fighter 6 casts Slash sanguin on fighter 5: 14 damage to the head
+[  186] fighter 5's head bleeds
+[  192] fighter 1 bleeds 1 from the right arm
+[  192] fighter 0 casts Slash sanguin on fighter 1: 14 damage to the left leg
+[  204] fighter 7 casts Récolte: 2 elements gathered
+[  204] fighter 5 casts Récolte: 2 elements gathered
+[  210] fighter 5 casts Jette on fighter 6: missed
+[  210] fighter 1 casts Récolte: 2 elements gathered
+[  210] fighter 7 casts Jette on fighter 5: missed
+[  216] fighters 4 and 5 make a pact
+[  216] fighter 5 bleeds 1 from the head
+[  216] fighter 1 casts Jette on fighter 0: 10 damage to the head
+[  216] fighter 0 loses 15 % accuracy
+[  222] fighter 1 bleeds 1 from the right arm
+[  222] fighter 6 casts Bouclier tranchant on fighter 5: 25 damage to the left arm
+[  222] fighter 0 casts Bouclier tranchant on fighter 1: 25 damage to the head
+[  222] fighter 1 is beheaded
+[  222] fighter 1 dies
+[  228] fighter 6 casts Slash sanguin on fighter 5: missed
+[  246] fighter 5 bleeds 1 from the head
+[  246] fighter 7 casts Mine: a mine is laid
+[  246] fighter 4 casts Bouclier tranchant on fighter 6: 25 damage to the body
+[  252] fighter 0 casts Slash sanguin on fighter 2: 14 damage to the body
+[  252] fighter 2 casts Bouclier tranchant on fighter 0: missed
+[  258] fighter 2 casts Slash sanguin on fighter 0: 14 damage to the body
+[  264] fighter 4 casts Slash sanguin on fighter 7: 14 damage to the head
+[  270] fighters 0 and 2 make a pact
+[  270] fighter 7 casts Récolte: 2 elements gathered
+[  270] fighter 5 casts Mine: a mine is laid
+[  276] fighter 5 bleeds 1 from the head
+[  276] fighter 7 casts Jette on fighter 4: 10 damage to the right leg
+[  276] fighter 4 loses 15 % accuracy
+[  282] fighter 5 casts Récolte: 2 elements gathered
+[  288] fighter 5 casts Jette on fighter 6: 10 damage to the head
+[  288] fighter 6 loses 15 % accuracy
+[  294] fighter 6 casts Slash sanguin on fighter 5: 14 damage to the body
+[  300] fighter 4 casts Slash sanguin on fighter 7: 14 damage to the head
+[  300] fighter 7's head bleeds
+[  306] fighter 5 bleeds 1 from the head
+[  330] fighter 7 bleeds 1 from the head
+[  330] fighter 6 casts Slash sanguin on fighter 5: missed
+[  336] fighter 7 casts Récolte: 2 elements gathered
+[  336] fighter 4 casts Slash sanguin on fighter 7: 14 damage to the body
+[  336] fighter 7's body bleeds
+[  342] fighter 7 casts Jette on fighter 4: 10 damage to the left arm
+[  342] fighter 4 loses 15 % accuracy
+[  348] fighter 5 casts Récolte: 2 elements gathered
+[  354] fighter 5 casts Jette on fighter 6: 10 damage to the head
+[  354] fighter 6 loses 15 % accuracy
+[  360] fighter 7 bleeds 1 from the head
+[  366] fighter 7 bleeds 1 from the body
+[  366] fighter 6 casts Slash sanguin on fighter 5: 14 damage to the right leg
+[  372] fighter 4 casts Slash sanguin on fighter 7: 14 damage to the head
+[  378] fighter 6 casts Bouclier tranchant on fighter 5: 19 damage to the right arm
+[  378] fighter 5 dies
+[  390] fighter 7 bleeds 1 from the head
+[  396] fighter 7 bleeds 1 from the body
+[  402] fighter 4 casts Bouclier tranchant on fighter 7: 25 damage to the head
+[  402] fighter 7 is beheaded
+[  402] fighter 7 dies
+[  402] fighter 6 casts Taille d'épée on fighter 4: 8 damage to the head
+[  408] fighter 4 casts Taille d'épée on fighter 6: 8 damage to the head
+[  438] fighters 4 and 6 make a pact
+[  449] fighter 0 is out for dealing too little damage
+[  449] fighter 2 is out for dealing too little damage
+[  450] the pact between fighters 4 and 6 ends
+[  456] fighter 4 casts Slash sanguin on fighter 6: 7 damage to the head
+[  456] fighter 6 is beheaded
+[  456] fighter 6 dies
 
-over after 325 ticks, winner: fighter 7
-fighter 0: 0/100 HP, dealt 115, taken 100, 4 spells cast, 0 missed
-fighter 1: 23/100 HP, dealt 85, taken 77, 4 spells cast, 0 missed, stunned once, knocked out
-fighter 2: 27/100 HP, dealt 0, taken 73, 0 spells cast, 0 missed, lost its left arm
-fighter 3: 0/100 HP, dealt 139, taken 100, 6 spells cast, 0 missed
-fighter 4: 0/100 HP, dealt 77, taken 100, 2 spells cast, 0 missed
-fighter 5: 0/100 HP, dealt 134, taken 100, 9 spells cast, 1 missed
-fighter 6: 0/100 HP, dealt 0, taken 100, 0 spells cast, 0 missed
-fighter 7: 31/100 HP, dealt 169, taken 69, 11 spells cast, 2 missed
+over after 457 ticks, winner: fighter 4
+fighter 0: 3/100 HP, dealt 111, taken 97, 7 spells cast, 1 missed, eliminated
+fighter 1: 0/100 HP, dealt 40, taken 83, 9 spells cast, 0 missed, beheaded
+fighter 2: 62/100 HP, dealt 67, taken 38, 6 spells cast, 2 missed, eliminated
+fighter 3: 0/100 HP, dealt 10, taken 100, 5 spells cast, 1 missed, beheaded
+fighter 4: 62/100 HP, dealt 226, taken 38, 12 spells cast, 0 missed
+fighter 5: 0/100 HP, dealt 50, taken 100, 14 spells cast, 1 missed
+fighter 6: 0/100 HP, dealt 112, taken 100, 11 spells cast, 4 missed, beheaded
+fighter 7: 0/100 HP, dealt 40, taken 100, 14 spells cast, 2 missed, beheaded
 
-places: [4, 6, 5, 3, 7, 2, 8, 1]
+places: [3, 7, 3, 8, 1, 6, 2, 5]

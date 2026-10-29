@@ -2,18 +2,17 @@
 source: crates/lanista_core/tests/reference_fights.rs
 expression: "arena_duel(ArenaKind::Narrow, 42)"
 ---
-[    0] fighter 1 casts Éclair on fighter 0: 35 damage to the left leg
-[    6] fighter 1 casts Trait de feu on fighter 0: 19 damage to the left arm
-[   42] fighter 0 casts Frappe brutale on fighter 1: 48 damage to the body
-[   42] fighter 1 casts Coup de bâton on fighter 0: 12 damage to the right arm
-[   48] fighter 0 casts Charge au bouclier on fighter 1: 29 damage to the body
-[   54] fighter 0 casts Coup de glaive on fighter 1: missed
-[   54] fighter 1 casts Trait de feu on fighter 0: 19 damage to the right arm
-[   78] fighter 1 casts Coup de bâton on fighter 0: 12 damage to the body
-[   90] fighter 0 casts Coup de glaive on fighter 1: 19 damage to the head
-[  102] fighter 1 casts Trait de feu on fighter 0: 3 damage to the head
-[  102] fighter 0 dies
+[    0] fighter 1 casts Mine: a mine is laid
+[    6] fighter 1 casts Récolte: 2 elements gathered
+[   12] fighter 1 casts Jette on fighter 0: 21 damage to the left leg
+[   42] fighter 0 casts Guillotine on fighter 1: 48 damage to the right arm
+[   48] fighter 0 casts Bouclier tranchant on fighter 1: 25 damage to the head
+[   54] fighter 0 casts Slash sanguin on fighter 1: 14 damage to the body
+[   72] fighter 1 casts Récolte: 2 elements gathered
+[   78] fighter 1 casts Jette on fighter 0: missed
+[   90] fighter 0 casts Slash sanguin on fighter 1: 13 damage to the body
+[   90] fighter 1 dies
 
-over after 103 ticks, winner: fighter 1
-fighter 0: 0/100 HP, dealt 96, taken 100, 4 spells cast, 1 missed
-fighter 1: 4/100 HP, dealt 100, taken 96, 6 spells cast, 0 missed
+over after 91 ticks, winner: fighter 0
+fighter 0: 79/100 HP, dealt 100, taken 21, 4 spells cast, 0 missed
+fighter 1: 0/100 HP, dealt 21, taken 100, 5 spells cast, 1 missed

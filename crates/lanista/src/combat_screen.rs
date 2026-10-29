@@ -824,12 +824,12 @@ mod tests {
         assert!(rects.iter().all(|r| (r.x - MARGIN).abs() < 1e-6));
     }
 
-    /// The loser of seed 1 dies: its stain starts at the death and keeps
+    /// The loser of seed 13 dies: its stain starts at the death and keeps
     /// spreading after the fight, the winner never bleeds.
     #[test]
     fn only_the_dead_bleed_from_their_death_on() {
-        let mut screen = screen(1);
-        // The fight lasts 91 ticks, under 5 s.
+        let mut screen = screen(13);
+        // The fight lasts 115 ticks, under 5 s.
         for _ in 0..60 * 5 {
             if screen
                 .fight()
@@ -881,14 +881,14 @@ mod tests {
         );
     }
 
-    /// The loser of seed 42 falls at 0 HP: watched as a survivor of the fatal blow, it
+    /// The loser of seed 5 falls at 0 HP: watched as a survivor of the fatal blow, it
     /// lies down alive, without a cry, a stain or a darker body.
     #[test]
     fn a_survivor_of_the_fatal_blow_falls_and_lies_down_alive() {
-        let mut fallen = simulated(42);
+        let mut fallen = simulated(5);
         let dead = fallen.fighters.iter().position(|f| !f.is_alive()).unwrap();
         let id = fallen.fighters[dead].id;
-        fallen = random_duel(&DesignData::load().unwrap(), 42);
+        fallen = random_duel(&DesignData::load().unwrap(), 5);
         let watched = Watched {
             arena: fallen,
             cast: Cast {
@@ -918,10 +918,10 @@ mod tests {
         assert!(view.result().contains(&fell), "{:?}", view.result());
     }
 
-    /// In the standard duel of seed 87, fighter 1 loses an arm: it lies down, alive.
+    /// In the standard duel of seed 23, fighter 1 loses an arm: it lies down, alive.
     #[test]
     fn a_fighter_that_lost_a_limb_lies_down_alive() {
-        let mut screen = screen(87);
+        let mut screen = screen(23);
         while screen.running() {
             screen.advance(1.0 / 60.0);
         }
@@ -951,7 +951,7 @@ mod tests {
             let duel = Watched {
                 arena: random_duel(&data, 128),
                 cast: Cast {
-                    names: vec!["Datis".into(), "Augure".into()],
+                    names: vec!["Datis".into(), "Chasseur".into()],
                     club: vec![FighterId(club)],
                     ..Cast::default()
                 },
@@ -968,13 +968,13 @@ mod tests {
             (
                 Some(Verdict::Defeat),
                 vec![
-                    "Augure, l'adversaire, remporte le combat.".to_owned(),
+                    "Chasseur, l'adversaire, remporte le combat.".to_owned(),
                     "Datis est mis K.-O.".to_owned()
                 ]
             )
         );
         assert_eq!(watch(1).0, Some(Verdict::Victory));
-        assert_eq!(watch(1).1[0], "Augure remporte le combat.");
+        assert_eq!(watch(1).1[0], "Chasseur remporte le combat.");
     }
 
     /// The standard duel of `seed`, watched.

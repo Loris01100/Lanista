@@ -221,7 +221,7 @@ mod tests {
         let armed = names(OffHand::Weapon);
         assert!(armed.contains(&"weapon_back") && !armed.contains(&"shield"));
         assert!(armed.contains(&"weapon") && armed.contains(&"crest"));
-        assert_eq!(rules.look("augure"), rules.default_look());
+        assert_eq!(rules.look("spartiate"), rules.default_look());
         assert_eq!(rules.default_look().0, rules.build);
     }
 }

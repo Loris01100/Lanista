@@ -8,15 +8,15 @@ model, which joins its older versions. At the end, the model plays duels against
 utility AI and prints its win rate.
 
 From the repo root inside python/.venv (pip install stable-baselines3), for each class:
-    python python/train.py mirmillon duel --steps 2000000
-    python python/train.py mirmillon melee --steps 2000000
+    python python/train.py gladiateur duel --steps 2000000
+    python python/train.py gladiateur melee --steps 2000000
 Models and snapshots go to python/models/<class>/ (not committed); export.py turns them
 into the game's ONNX models.
 
 Curves (reward, fight length, losses, entropy, and the win rate against the utility AI
 over `--live-check` duels at each snapshot, `check/win_rate`) go to python/models/<class>/logs/;
 watch them live with: tensorboard --logdir python/models
-Self-check: python python/train.py augure duel --steps 4096 --envs 2 --check 20
+Self-check: python python/train.py chasseur duel --steps 4096 --envs 2 --check 20
 """
 
 import argparse

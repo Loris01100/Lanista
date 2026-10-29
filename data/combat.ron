@@ -69,15 +69,6 @@
     // (a mine with the target too close, nothing to gather, a shot blocked), so it always
     // has a little attack left. The weapon types wait for balancing.
     weapons: {
-        "glaive": (
-            name: "Estoc",
-            range: Melee,
-            reach: 1.0,
-            power: 40,
-            cooldown: 45,
-            cost: (endurance: 1),
-            damage_kind: Cutting,
-        ),
         "sword": (
             name: "Taille d'épée",
             range: Melee,
@@ -95,15 +86,6 @@
             cooldown: 30,
             cost: (endurance: 1),
             damage_kind: Cutting,
-        ),
-        "staff": (
-            name: "Revers de bâton",
-            range: Melee,
-            reach: 1.0,
-            power: 30,
-            cooldown: 45,
-            cost: (endurance: 1),
-            damage_kind: Blunt,
         ),
         "bow": (
             name: "Tir simple",

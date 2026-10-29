@@ -197,7 +197,7 @@ impl ClubScreen {
             .collect()
     }
 
-    /// "Champion de Capoue : Augure n° 3 (Ludus Magnus)" for each title rival club
+    /// "Champion de Capoue : Chasseur n° 3 (Ludus Magnus)" for each title rival club
     /// `club` holds.
     pub(super) fn titles_of(&self, club: usize) -> Vec<String> {
         (0..)
@@ -511,7 +511,7 @@ fn purses(
     });
 }
 
-/// "Nakula" and "Augure": how a ranking names a contender, its club in a column of
+/// "Nakula" and "Chasseur": how a ranking names a contender, its club in a column of
 /// its own.
 pub(super) fn ranked_name(
     contender: Contender,

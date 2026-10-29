@@ -86,10 +86,10 @@ if __name__ == "__main__":
 
     check_env(FightEnv(), skip_render_check=True)
     check_env(FightEnv(utility_ai, melee=True), skip_render_check=True)
-    augure = FightEnv(fighter_class="augure")
+    hunter = FightEnv(fighter_class="chasseur")
     for seed in range(5):
-        augure.reset(seed=seed)
-        assert augure.env.classes[0] == "augure"
+        hunter.reset(seed=seed)
+        assert hunter.env.classes[0] == "chasseur"
     envs = vector_env(4)
     envs.reset(seed=7)
     episodes = 0

@@ -384,7 +384,7 @@ impl FightView {
             .unwrap_or_else(|| tr!("fighter-number", number = id.0))
     }
 
-    /// "Flamma (Augure) · Elo 1520": the fighter's name with its Elo, when ranked.
+    /// "Flamma (Chasseur) · Elo 1520": the fighter's name with its Elo, when ranked.
     pub fn name_and_elo(&self, id: FighterId) -> String {
         let name = self.name(id);
         match index(id.0).and_then(|i| self.cast.elos.get(i).copied().flatten()) {
@@ -1027,7 +1027,7 @@ mod tests {
         let floor = Floor::new(ArenaKind::Sand, Element::Sand);
         let arena = melee_arena(fighters, floor, 1, &data.combat);
         let cast = Cast {
-            names: vec!["Mirmillon n° 1".into()],
+            names: vec!["Gladiateur n° 1".into()],
             club: vec![FighterId(0)],
             ..Cast::default()
         };
@@ -1036,7 +1036,7 @@ mod tests {
         assert_eq!(lines[0], "Élimination dans 15 s : 3 combattants sortent");
         assert!(lines[1].starts_with("Pour rester, plus de 0 dégât "));
         assert!(
-            lines[2].starts_with("Mirmillon n° 1 : 0 dégât, "),
+            lines[2].starts_with("Gladiateur n° 1 : 0 dégât, "),
             "{lines:?}"
         );
         view.skip();
@@ -1062,14 +1062,14 @@ mod tests {
         let arena = random_duel(&data, 42);
         let first = arena.fighters[0].position;
         let cast = Cast {
-            names: vec!["Mirmillon n° 1".into()],
+            names: vec!["Gladiateur n° 1".into()],
             ..Cast::default()
         };
         let view = FightView::new(arena, cast);
         let on = vec2(to_f32(first.x) + 0.3, to_f32(first.y) - 0.3);
         assert_eq!(view.fighter_at(on), Some(FighterId(0)));
         assert_eq!(view.fighter_at(vec2(-5.0, -5.0)), None);
-        assert_eq!(view.name(FighterId(0)), "Mirmillon n° 1");
+        assert_eq!(view.name(FighterId(0)), "Gladiateur n° 1");
         assert_eq!(view.name(FighterId(1)), "combattant 1");
         assert_eq!(view.world(), Rect::new(-1.0, -1.0, 22.0, 22.0));
     }

@@ -1347,7 +1347,7 @@ fn to_watch(fights: &[FightReport], state: &GameState, data: &DesignData) -> Vec
     watched
 }
 
-/// "Flamma (Augure)": a fighter of a fight not of the club, as it went in; by its class
+/// "Flamma (Chasseur)": a fighter of a fight not of the club, as it went in; by its class
 /// if it has no name.
 fn outsider_name(fighter: &CareerFighter, data: &DesignData) -> String {
     let class = class_name(fighter, data);
@@ -1408,7 +1408,7 @@ fn settle_plan(
     }
 }
 
-/// A fighter's week in a few words, for the roster: "Repos, Double glaive, avec soins".
+/// A fighter's week in a few words, for the roster: "Repos, Double épée, avec soins".
 /// A fighter's week: rest, training, a fight at home or, in a list, abroad, a title
 /// fight or a melee (in `special`, with their names), and care at the
 /// price of the club's `care`, all within the money of the club's `state`.
@@ -2473,7 +2473,7 @@ mod tests {
     fn the_market_tells_moves_offers_and_what_is_seen() {
         // A game whose fighter lives through the opening melee, to be sold, and the
         // wanted rival fighter too.
-        let mut screen = screen(10);
+        let mut screen = screen(0);
         let data = Rc::clone(&screen.data);
         let target = RivalId {
             club: 2,

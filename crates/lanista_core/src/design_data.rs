@@ -957,7 +957,7 @@ mod tests {
             CLASSES, COMBAT, FIGHTER, CALENDAR, ECONOMY, WORLD, NAMES, STAT_MODEL,
         )
         .unwrap();
-        assert_eq!(data.classes.len(), 5);
+        assert_eq!(data.classes.len(), 3);
         for class in &data.classes {
             assert_eq!(class.loadouts.len(), 2, "{}", class.key);
             for (i, loadout) in class.loadouts.iter().enumerate() {
@@ -976,11 +976,11 @@ mod tests {
             assert_eq!(class.loadout(9), class.loadouts.first());
         }
         // The double dague lays two mines a cast, the dague and bouclier one.
-        let mines = |loadout| data.classes[3].spells_in(loadout)[2].blows;
+        let mines = |loadout| data.classes[1].spells_in(loadout)[2].blows;
         assert_eq!((mines(0), mines(1)), (1, 2));
         // The hunter's heavy bow shoots harder and slower than the light one, its trap
         // alike in both, and slows it down.
-        let hunter = &data.classes[4];
+        let hunter = &data.classes[2];
         assert_eq!(hunter.key, "chasseur");
         let (heavy, light) = (hunter.spells_in(0), hunter.spells_in(1));
         for (h, l) in heavy.iter().zip(&light) {
@@ -1018,8 +1018,8 @@ mod tests {
             CLASSES, COMBAT, FIGHTER, CALENDAR, ECONOMY, WORLD, NAMES, STAT_MODEL,
         )
         .unwrap();
-        assert_eq!(data.class(ClassId(4)), data.classes.get(4));
-        assert_eq!(data.class(ClassId(5)), None);
+        assert_eq!(data.class(ClassId(2)), data.classes.get(2));
+        assert_eq!(data.class(ClassId(3)), None);
     }
 
     #[test]
@@ -1045,7 +1045,7 @@ mod tests {
             other => panic!("expected an invalid field, got {other:?}"),
         };
         assert_eq!(field("[]", FIGHTER), "classes");
-        let unarmed = CLASSES.replacen("weapon: \"glaive\"", "weapon: \"fork\"", 1);
+        let unarmed = CLASSES.replacen("weapon: \"sword\"", "weapon: \"fork\"", 1);
         assert_eq!(field(&unarmed, FIGHTER), "weapon");
         let nowhere = CLASSES.replacen("area: 2.0", "area: -1.0", 1);
         assert_eq!(field(&nowhere, FIGHTER), "area");

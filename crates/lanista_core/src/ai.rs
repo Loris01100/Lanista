@@ -483,25 +483,25 @@ mod tests {
     #[test]
     fn picks_the_strongest_ready_spell() {
         let data = shipped_classes();
-        let murmillo = &data.classes[0];
+        let gladiator = &data.classes[0];
         let fighters = vec![
             Fighter::new(
                 FighterId(0),
                 ClassId(0),
-                murmillo,
+                gladiator,
                 STATS,
                 Vec2::new(5.0, 5.0),
             ),
             Fighter::new(
                 FighterId(1),
                 ClassId(0),
-                murmillo,
+                gladiator,
                 STATS,
                 Vec2::new(6.5, 5.0),
             ),
         ];
         let mut arena = Arena::new(20.0, 20.0, fighters, 0);
-        // Spell 2 (power 250) beats spell 1 (150), which beats spell 0 (100).
+        // Spell 2 (power 250) beats spell 1 (130), which beats spell 0 (70).
         let cast = |spell| Action::Cast {
             spell,
             target: FighterId(1),
@@ -514,7 +514,7 @@ mod tests {
     #[test]
     fn strikes_with_its_weapon_only_once_it_can_pay_for_no_spell() {
         let data = shipped_classes();
-        let murmillo = &data.classes[0];
+        let gladiator = &data.classes[0];
         let fighters = [5.0, 6.5]
             .into_iter()
             .zip(0..)
@@ -522,7 +522,7 @@ mod tests {
                 Fighter::new(
                     FighterId(id),
                     ClassId(0),
-                    murmillo,
+                    gladiator,
                     STATS,
                     Vec2::new(x, 5.0),
                 )
@@ -534,7 +534,7 @@ mod tests {
         // Every spell on cooldown but affordable: it waits.
         arena.fighters[0].cooldowns[..3].fill(10);
         assert_eq!(UtilityAi.decide(&arena, FighterId(0)), Action::Wait);
-        // Too tired for its cheapest spell (5 endurance): it strikes with its glaive.
+        // Too tired for its cheapest spell (5 endurance): it strikes with its sword.
         arena.fighters[0].endurance.current = 4;
         let strike = Action::Cast {
             spell: auto,
@@ -547,11 +547,11 @@ mod tests {
     fn strikes_with_its_weapon_when_no_affordable_spell_is_of_use() {
         let data = shipped_classes();
         let floor = data.combat.arenas.get(crate::combat::ArenaKind::Narrow);
-        let class = &data.classes[3];
+        let class = &data.classes[1];
         let fighters = [2.0, 3.5]
             .into_iter()
             .zip(0..)
-            .map(|(x, id)| Fighter::new(FighterId(id), ClassId(3), class, STATS, Vec2::new(x, 3.0)))
+            .map(|(x, id)| Fighter::new(FighterId(id), ClassId(1), class, STATS, Vec2::new(x, 3.0)))
             .collect();
         let mut arena = Arena::new(8.0, 6.0, fighters, 0)
             .with_rules(&data.combat)
@@ -760,12 +760,12 @@ mod tests {
     #[test]
     fn a_showman_waits_for_its_strongest_spell() {
         let data = shipped_classes();
-        let murmillo = &data.classes[0];
+        let gladiator = &data.classes[0];
         let fighter = |id, x| {
             Fighter::new(
                 FighterId(id),
                 ClassId(0),
-                murmillo,
+                gladiator,
                 STATS,
                 Vec2::new(x, 5.0),
             )

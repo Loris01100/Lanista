@@ -88,8 +88,8 @@ mod tests {
     #[test]
     fn a_message_is_filled_with_its_arguments() {
         assert_eq!(
-            tr!("fighter-unnamed", class = "Mirmillon", number = 2),
-            "Mirmillon n° 2"
+            tr!("fighter-unnamed", class = "Gladiateur", number = 2),
+            "Gladiateur n° 2"
         );
         assert_eq!(tr!("weeks", n = 1), "1 semaine");
         assert_eq!(tr!("weeks", n = 3), "3 semaines");
