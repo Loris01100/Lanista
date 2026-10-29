@@ -294,6 +294,11 @@ profile-showman = spectaculaire
 arena-sand = sable
 arena-pillars = piliers
 arena-narrow = couloir
+element-sand = Sable
+element-stone = Pierre
+element-obsidian = Obsidienne
+element-kelp = Varech
+element-jade = Jade
 arena-sand-effect = le sable ralentit tout le monde, les tireurs en profitent
 arena-pillars-effect = les piliers arrêtent les tirs et barrent le passage
 arena-narrow-effect = le corps à corps s'engage vite
@@ -451,6 +456,12 @@ wiki-arena-floor = { $width } × { $height } m, marche à { $speed } % de la vit
        *[other] { $pillars } piliers
     }
 wiki-continent = Continent
+wiki-element = Élément au sol
+wiki-element-thrown = Lancé par { $spell } :
+wiki-blinds = aveugle : -{ $percent } % de précision, { $seconds } s
+wiki-hold = retient { $seconds } s
+wiki-poison = poison : -{ $percent } % de PV par seconde, { $seconds } s
+wiki-ignores-shield = ignore le bouclier
 wiki-prestige = Prestige
 wiki-residents = Classés à l'ouverture
 wiki-entry-fee = Inscription

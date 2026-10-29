@@ -6,7 +6,7 @@
 
 use std::rc::Rc;
 
-use lanista_core::combat::{DamageKind, Range};
+use lanista_core::combat::{DamageKind, Element, Range};
 use lanista_core::design_data::{DesignData, LoadoutData, SpellData};
 use lanista_core::fighter::Stats;
 use lanista_core::fighter::equipment::OffHand;
@@ -16,7 +16,7 @@ use reesch::egui;
 use super::{ClubScreen, View, section};
 use crate::combat_screen::{cost_text, tenths};
 use crate::lang::tr;
-use crate::texts::{arena_effect, arena_name, continent_name, stat_names};
+use crate::texts::{arena_effect, arena_name, continent_name, element_name, stat_names};
 
 /// A page of the encyclopedia.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -288,12 +288,75 @@ fn page(ui: &mut egui::Ui, entry: Entry, data: &DesignData) {
                 pillars = layout.pillars.len()
             );
             ui.label(egui::RichText::new(floor).small().weak());
+            element_lines(ui, data.world.element(colosseum.continent), data);
         }
         // A formula has no history.
         Entry::Calc(calc) => return calc_page(ui, calc, data),
     }
     section(ui, &tr!("wiki-history"));
     prose(ui, entry, data, "history");
+}
+
+/// The element of the floor, and how the first spell that throws it hits with it.
+fn element_lines(ui: &mut egui::Ui, element: Element, data: &DesignData) {
+    section(ui, &tr!("wiki-element"));
+    ui.label(egui::RichText::new(element_name(element)).strong());
+    let thrown = data
+        .classes
+        .iter()
+        .flat_map(|c| {
+            c.spells
+                .iter()
+                .chain(c.loadouts.iter().filter_map(|l| l.spell.as_ref()))
+        })
+        .find_map(|s| s.thrown.get(&element).map(|t| (s, t)));
+    let Some((spell, thrown)) = thrown else {
+        return;
+    };
+    let mut figures = vec![
+        tr!("wiki-power", percent = thrown.power),
+        damage_kind_name(thrown.damage_kind),
+    ];
+    if let Some(drop) = thrown.accuracy_drop {
+        let seconds = tenths(drop.ticks);
+        figures.push(tr!(
+            "wiki-blinds",
+            percent = drop.percent,
+            seconds = seconds
+        ));
+    }
+    if thrown.bleed_percent > 0 {
+        figures.push(tr!("wiki-bleed", percent = thrown.bleed_percent));
+    }
+    match thrown.hold {
+        Some(hold) if hold.damage_percent > 0 => figures.push(tr!(
+            "wiki-trap",
+            seconds = tenths(hold.ticks),
+            percent = hold.damage_percent
+        )),
+        Some(hold) => figures.push(tr!("wiki-hold", seconds = tenths(hold.ticks))),
+        None => {}
+    }
+    if let Some(poison) = thrown.poison {
+        figures.push(tr!(
+            "wiki-poison",
+            percent = poison.hp_percent_per_second,
+            seconds = poison.seconds
+        ));
+    }
+    if thrown.ignores_shield {
+        figures.push(tr!("wiki-ignores-shield"));
+    }
+    ui.label(tr!("wiki-element-thrown", spell = spell.name.as_str()));
+    ui.label(egui::RichText::new(figures.join(" · ")).small().weak());
+}
+
+fn damage_kind_name(kind: DamageKind) -> String {
+    match kind {
+        DamageKind::Blunt => tr!("wiki-blunt"),
+        DamageKind::Cutting => tr!("wiki-cutting"),
+        DamageKind::Neutral => tr!("wiki-neutral"),
+    }
 }
 
 /// The formula of `calc`, with the design data's figures.
@@ -678,11 +741,7 @@ fn spell_line(ui: &mut egui::Ui, spell: &SpellData) {
         Range::Ranged => tr!("wiki-ranged"),
     };
     let reach = spell.reach.to_string().replace('.', ",");
-    let kind = match spell.damage_kind {
-        DamageKind::Blunt => tr!("wiki-blunt"),
-        DamageKind::Cutting => tr!("wiki-cutting"),
-        DamageKind::Neutral => tr!("wiki-neutral"),
-    };
+    let kind = damage_kind_name(spell.damage_kind);
     let mut figures = vec![
         tr!("wiki-range", range = range, metres = reach),
         tr!("wiki-power", percent = spell.power),

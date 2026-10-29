@@ -5,7 +5,7 @@ use lanista_core::calendar::{Date, roman_numeral};
 use lanista_core::colosseum::{
     ColosseumData, ColosseumId, Contender, Continent, TitleNews, title_kept,
 };
-use lanista_core::combat::ArenaKind;
+use lanista_core::combat::{ArenaKind, Element};
 use lanista_core::design_data::DesignData;
 use lanista_core::economy::{Flow, Terms, Transaction, Wealth};
 use lanista_core::fighter::STAT_COUNT;
@@ -904,6 +904,16 @@ pub fn arena_name(arena: ArenaKind) -> String {
         ArenaKind::Sand => tr!("arena-sand"),
         ArenaKind::Pillars => tr!("arena-pillars"),
         ArenaKind::Narrow => tr!("arena-narrow"),
+    }
+}
+
+pub fn element_name(element: Element) -> String {
+    match element {
+        Element::Sand => tr!("element-sand"),
+        Element::Stone => tr!("element-stone"),
+        Element::Obsidian => tr!("element-obsidian"),
+        Element::Kelp => tr!("element-kelp"),
+        Element::Jade => tr!("element-jade"),
     }
 }
 
