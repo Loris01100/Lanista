@@ -1416,8 +1416,9 @@ mod tests {
             }
         }
         assert_eq!(shots, [(false, false), (true, false), (true, true)]);
-        // The walk in, 2.3 s at full speed, then 10 s live and two replays of 5 s.
-        assert!((22.0..27.0).contains(&seconds), "{seconds} s");
+        // The walk in, 2.3 s, the fight, 3.6 s, then the live shot and two replays
+        // of 3.5 s each.
+        assert!((14.0..19.0).contains(&seconds), "{seconds} s");
         assert_same_fight(&screen, 13);
     }
 

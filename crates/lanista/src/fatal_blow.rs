@@ -15,9 +15,9 @@ use crate::fight_view::{FightView, to_f32};
 
 /// Fight time a real second plays during the blow.
 const SLOW: f32 = 0.2;
-/// Ticks before the death the slow motion begins, and the replays.
-const LEAD_TICKS: u32 = TICKS_PER_SECOND * 3 / 2;
-const REPLAY_LEAD_TICKS: u32 = TICKS_PER_SECOND / 2;
+/// Ticks before the death the slow motion begins, and the replays: a real second,
+/// for the camera to close in, the swing itself only starting on the death's tick.
+const LEAD_TICKS: u32 = TICKS_PER_SECOND / 5;
 /// Fight seconds a shot goes on once the fight is over: the fall.
 const AFTER_SECONDS: f32 = 0.5;
 /// Real seconds the camera takes to close in.
@@ -119,7 +119,7 @@ impl FatalBlow {
         let Some(shot) = self.shot.filter(|&shot| shot < SHOTS) else {
             return Vec::new();
         };
-        if self.before.is_none() && live.arena.tick + REPLAY_LEAD_TICKS >= self.tick {
+        if self.before.is_none() && live.arena.tick + LEAD_TICKS >= self.tick {
             self.before = Some(live.arena.clone());
         }
         let view = self.replay.as_mut().unwrap_or(live);
