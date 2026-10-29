@@ -95,61 +95,13 @@ Archer qui combat à distance. Ses deux configurations ont les mêmes sorts : l'
 | 3 | Piège à ours | Piège posé aux pieds de la cible, que seul le chasseur voit. Armé, il mord le premier qui marche dessus et le retient : il ne bouge ni n'agit plus, mais reste frappable et prend plus de dégâts. Le premier coup qui lui ôte des PV le libère ; sinon, il se libère au bout d'un temps fixe. |
 | Attaque de base | Tir simple | Flèche simple, peu précise, aux dégâts modérés. |
 
-## Plan de mise en œuvre
+## Ce qui reste à faire
 
-Chaque étape laisse le jeu jouable (avec mirmillon et augure comme terrain d'essai jusqu'à leur retrait), et finit par `cargo test`, clippy et, quand le combat change, `calibrate` puis `compare`. L'IA utilitaire suit à chaque étape ; l'IA apprise ne suit qu'à la fin (étape 11), ses modèles n'étant que des substituts jusqu'à la phase 9.
+Les étapes déjà faites (partie du corps touchée, modificateurs par sort, effets dans la durée, attaque automatique, configurations, aisance, armure refusée seule, éléments du sol, mines, les trois classes, retrait du mirmillon et de l'augure) sont décrites dans `docs/feuille_de_route/phase-5-bis.md`. Chaque étape finit par `cargo test`, clippy et, quand le combat change, `calibrate` puis `compare`.
 
-1. **Partie du corps touchée** (`combat.rs`, `fighter/injury.rs`) — fait : chaque coup qui touche tire la partie du corps qu'il touche, avec les poids `hits` de `data/combat.ron`. Le tranchage (`combat::severs`) ne coupe que cette partie, jamais le corps. Le journal de combat la dit.
-2. **Modificateurs par sort** (`design_data::SpellData`, `combat.rs`) — fait : deux champs facultatifs dans `data/classes.ron`. `accuracy_percent` (100 par défaut) garde ce pourcentage de la chance de toucher (`combat::spell_hit_percent`, aussi lu par l'IA utilitaire), même dans une arène qui touche toujours. `sure_cut_hits` : à partir de ce nombre de coups portés par le sort sur une même cible (`Fighter::cleaving_hits`), un coup tranchant tranche à coup sûr la tête ou le membre touché (`combat::severs`), jamais le corps ni un moignon ; Guillotine aura `Some(2)`.
-3. **Effets dans la durée** (`fighter.rs`, `combat.rs`, `log.rs`) — fait : des effets qui durent sur le combattant (`Fighter::effects`), chacun avec ses ticks restants, décomptés par `combat::wear_off`. Deux pour commencer :
-   - le saignement, un par partie du corps : sa chance par sort (`bleed_percent` dans `data/classes.ron`), la part des PV max perdue chaque seconde et la durée par partie dans `bleed` de `data/combat.ron`. Ses dégâts comptent pour celui qui l'a causé (aussi pour les contrôles de la mêlée). Il peut tuer (en passant par la survie au coup fatal) ou pousser à l'abandon ; sinon, il laisse une blessure légère ou moyenne là où le combattant a saigné en premier, à la place du tirage habituel (`injury::bleeding_wound`) ;
-   - la baisse de précision (`accuracy_drop` d'un sort : un pourcentage et une durée), qui s'additionne, pour le sable de Jette.
-   Le combat montre une petite flaque sous un combattant qui saigne (`fight_view.rs`). Le modèle statistique ne tire pas encore de saignement, et l'IA utilitaire ne compte pas encore le saignement dans la valeur d'un sort.
-4. **Attaque automatique** (`design_data.rs`, `fighter.rs`) — fait : une attaque par type d'arme (`weapons` de `data/combat.ron`), hors des emplacements de sort, au coût faible. La classe nomme son arme (`ClassData::weapon`). L'attaque s'ajoute en dernier aux sorts du combattant (`Fighter::auto_attack`). Elle n'est lançable que si aucun autre sort n'est à la fois payable et utile contre la cible (`combat::can_cast_on`, `combat::of_use`) ; l'IA utilitaire la joue alors comme un sort. L'arme vient maintenant de la configuration (étape 5).
-5. **Configurations et équipement** (`data/classes.ron`, `design_data::LoadoutData`, `fighter/equipment.rs`, `fighter/career.rs`) — fait :
-   - les `spells` d'une classe sont ceux des emplacements 1 et 3 ; chacune de ses deux configurations (`loadouts`) apporte le sort du deuxième emplacement, son arme (donc son attaque automatique) et sa main secondaire (`OffHand` : libre, bouclier ou deuxième arme). Configurations d'essai : glaive et bouclier (Charge au bouclier) ou double glaive (Double taille, tranchante) pour le mirmillon, bâton (Trait de feu) ou bâton et bouclier (Coup de bouclier) pour l'augure ;
-   - le bouclier relève les deux défenses (`shield_defense_percent`, 115 %), la deuxième arme baisse l'attaque au corps à corps d'un combattant qui n'est pas ambidextre (`off_hand_attack_percent`, 85 %), dans `equipment` de `data/fighter.ron` (`OffHand::stats`) ;
-   - l'ambidextrie (`CareerFighter::ambidextrous`, `ambidextrous_percent`, 5 %) est tirée du même jet que la main dominante, parmi les droitiers : les tirages ne changent pas. Les blessures d'un ambidextre suivent sa main droite ;
-   - chaque combattant garde sa configuration (`CareerFighter::loadout`, sauvegardée). Le plan de la semaine la porte (`WeekPlan::loadout`) : le joueur la change sans coût dans le plan (`club_screen`), et la fiche la montre avec l'ambidextrie. Un combattant créé prend, comme les clubs rivaux chaque semaine (`rivals::plan`), celle que donne `CareerFighter::preferred_loadout`, celle où il est le plus à l'aise (étape 6) ;
-   - `CareerFighter::combat_fighter` en tire les sorts (`Fighter::in_loadout`) et les modificateurs ; `Fighter::new` prend la première configuration ;
-   - ni le modèle statistique ni l'IA apprise ne voient la configuration (étape 11). Les sprites n'ont ni bouclier ni deuxième arme (étape 10).
-6. **Aisance** (`fighter/equipment.rs`, `fighter/career.rs`, `market.rs`) — fait :
-   - une aisance de 0 à 100 par configuration (`CareerFighter::ease`), réglée par `ease` dans `data/fighter.ron` (`EaseRules`) ;
-   - à la création, une configuration forte et un déséquilibre sont tirés (`EaseRules::random`) : de 70 dans les deux jusqu'à 100 dans l'une et 10 dans l'autre ;
-   - sous 70 (`comfortable`), l'attaque, les défenses et la précision baissent, jusqu'à 20 % à l'aisance 0 (`EaseRules::stats`) ;
-   - chaque combat livré dans une configuration lui ajoute 4 points (`per_fight`, dans `CareerFighter::after_fight`), jusqu'à 100 ;
-   - la fiche montre l'aisance avec chaque configuration ; pour un combattant extérieur, elle se voit une fois observé, avec un recruteur de niveau 3 ou plus (`Scouting::ease`, `market::ease_seen`) ;
-   - un combattant créé et les combattants des rivaux prennent la configuration où ils sont le plus à l'aise (`CareerFighter::preferred_loadout`) ;
-   - l'ambidextrie ne pèse pas sur le tirage : elle retire seulement le malus de la deuxième arme.
-7. **Équipement refusé : l'armure seule** (`fighter/equipment.rs`, `fighter/fame.rs`, `data/fighter.ron`, `club_screen`, `fr.ftl`) — fait : `Refused` ne garde que `armour` ; le malus d'attaque (`weaponless_attack_percent`), les coups à mains nues, les bonus de célébrité `refused_weapon` et `refused_all` et la case « Sans arme » sont retirés. L'observation de l'IA apprise garde la place de l'arme, toujours à 0, jusqu'à l'étape 11.
-8. **Éléments du sol** (`data/combat.ron`, `combat.rs`, `design_data::Cost`) — fait :
-   - chaque type d'arène dit son élément (`combat::Element`) : sable pour le sable, pierre pour les piliers et l'arène étroite ;
-   - le combattant porte une réserve d'éléments (`Fighter::elements`), vide au départ, jusqu'au `max_elements` de sa classe ;
-   - un coût est une somme, tout entière due (`Cost` : mana, endurance, éléments ; `cost: (endurance: 5)` dans `data/classes.ron`) ;
-   - Récolte : un sort qui ramasse (`gathers`), lancé sur soi, sans cible ni dégâts, sur un sol qui a un élément (`combat::gather`, `EventKind::Gather`) ;
-   - Jette : une puissance, un type de dégâts et une baisse de précision par élément (`thrown`), mis à la place des siens par `Arena::with_layout` ;
-   - l'IA utilitaire donne à la récolte 90 % de la valeur de son meilleur jet tant que la réserve n'est pas pleine : elle jette dès qu'elle peut payer.
-   Aucune classe ne s'en sert avant l'étape 10 : le combat de mirmillon et augure ne change pas.
-9. **Mines** (`combat.rs`, `ai.rs`, `fight_view.rs`) — fait :
-   - un sort de mine (`mine: true`) pose une mine (`combat::Mine`, `Arena::mines` : position, poseur, sort, armée après `arm_ticks`, partie après `life_ticks`, 30 secondes) aux pieds de sa cible ; pour l'instant, le point de chute est toujours là ;
-   - armée, elle explose au contact de quiconque, poseur compris, et frappe sans jet tous ceux qui sont dans `blast_radius` : partie du corps, étourdissement, tranchage et saignement comme un coup (`combat::blast`) ;
-   - au plus `max_per_fighter` mines par combattant : une nouvelle prend la place de la plus ancienne (`mines` de `data/combat.ron`) ;
-   - l'IA utilitaire les contourne comme les piliers (`Arena::obstacles`), s'écarte d'une mine pas encore armée qui l'atteindrait, et ne pose pas une mine qui l'atteindrait elle-même ;
-   - l'écran de combat les dessine en cercles, au cœur rouge une fois armées (format dans `docs/Formats_graphiques.md`).
-   Les deux mines de la double dague viendront avec la classe (étape 10).
-10. **Les deux classes** (`data/classes.ron`, `fr.ftl`) — fait :
-   - gladiateur (`gladiateur`) et maître du terrain (`maitre-terrain`), avec des valeurs provisoires et deux armes, l'épée et la dague runique (`weapons` de `data/combat.ron`) ; ils sont dans le jeu, recrues et clubs rivaux compris ;
-   - un sort peut porter plusieurs coups sur un seul jet de touche (`SpellData::blows`, 2 pour Lacération) ;
-   - la double dague pose deux mines par lancer (`LoadoutData::mines_per_cast`), la deuxième à côté de la cible, hors de l'explosion de la première ;
-   - le modèle statistique tire le saignement (`StatModel::bled`) ; `calibrate` et `compare` relancés ;
-   - les substituts de l'IA apprise sont réexportés pour les quatre classes (version 2) ;
-   - les sprites (bouclier, deuxième arme) viendront plus tard, fournis à part.
-10 bis. **Chasseur** (`data/classes.ron`, `combat.rs`, `design_data.rs`) — fait : voir « Chasseur » dans `docs/feuille_de_route/phase-5-bis.md`.
-11. **Retrait de mirmillon et augure, IA apprise et modèle statistique** :
-    - fait : les deux anciennes classes sont retirées, avec leurs armes, leurs clés de `fr.ftl` et leurs modèles de `assets/ai/` ; le test qui compte les classes (`design_data.rs`) et les snapshots `insta` sont mis à jour (voir « Retrait du mirmillon et de l'augure » dans `docs/feuille_de_route/phase-5-bis.md`) ;
-    - l'IA apprise (`learning.rs`, `learned.rs`, `lanista_py`, `python/`) : l'observation gagne la configuration, l'aisance, les saignements, la réserve d'éléments et les mines proches ; les actions gagnent l'attaque automatique ; réexporter les substituts (`export.py`) ;
-    - le modèle statistique (`stat_model.rs`) gagne la configuration et l'aisance ; relancer `calibrate` et `compare`.
-12. **Documents** : reporter dans la feuille de route (phase 9) et le plan de conception ce qui a été fait.
+- **IA apprise** (`learning.rs`, `learned.rs`, `lanista_py`, `python/`) : l'observation gagne la configuration, l'aisance, les saignements, la réserve d'éléments et les mines proches ; les actions gagnent l'attaque automatique ; réexporter les substituts (`export.py`).
+- **Modèle statistique** (`stat_model.rs`) : il gagne la configuration et l'aisance ; relancer `calibrate` et `compare`.
+- **Documents** : reporter dans la feuille de route (phase 9) et le plan de conception ce qui a été fait.
 
 ## Questions ouvertes
 

@@ -101,7 +101,6 @@ Chaque blessure a une localisation et une gravité (légère, moyenne, grave, pe
 | Localisation | Effet proposé | Cas permanent |
 | --- | --- | --- |
 | Tête | Baisse de précision, risque d'étourdissement accru | Séquelle : malus de précision définitif |
-
 | Corps | Baisse de PV max et de DC | Baisse de PV définitive |
 | Bras dominant | Baisse d'AC et d'AL | Bras estropié : AC et AL réduites définitivement |
 | Bras secondaire | Baisse de DC (bouclier) | Bras estropié : DC réduite définitivement |
@@ -155,7 +154,7 @@ Le moral monte avec les victoires et la renommée, baisse avec les défaites, le
 
 ### Renommée
 
-Chaque combattant a une jauge de renommée qui dépend de son style et de son audace. Elle monte avec les actions spectaculaires, les victoires contre plus fort, les King of the hill et les combats sans l'équipement du colisée. Elle baisse avec les abandons, les fuites, et les combats sans relief. Elle augmente les recettes rapportées par le combattant.
+Chaque combattant a une jauge de renommée qui dépend de son style et de son audace. Elle monte avec les actions spectaculaires, les victoires contre plus fort, les King of the hill et les combats sans armure. Elle baisse avec les abandons, les fuites, et les combats sans relief. Elle augmente les recettes rapportées par le combattant.
 
 ### Progression, âge et retraite
 
@@ -176,19 +175,17 @@ Les combats se déroulent en temps réel dans une arène 2D vue de dessus, pilot
 
 ### Classes, sorts et équipement
 
-Chaque classe a son propre jeu de sorts, avec un temps de recharge et un coût en ressource (mana ou endurance). Le mana et l'endurance remontent un peu à chaque seconde du combat, chaque classe à son rythme : un combattant à court doit patienter avant de frapper de nouveau, mais n'est jamais à sec pour de bon. Pour le prototype : 2 classes et 3 sorts chacune, puis élargir. La liste définitive des classes et des sorts reste à écrire.
+Chaque classe a son propre jeu de sorts, avec un temps de recharge et un coût en ressource (mana ou endurance). Le mana et l'endurance remontent un peu à chaque seconde du combat, chaque classe à son rythme : un combattant à court doit patienter avant de frapper de nouveau, mais n'est jamais à sec pour de bon. Les classes et leurs sorts sont décrits dans `docs/Classes.md`.
 
 L'équipement est fourni par le colisée et identique pour tous. Un combattant peut refuser son armure, jamais ses armes. Sans armure, ses défenses baissent et il gagne un bonus de renommée.
 
 | Pièce refusée | Malus | Bonus de renommée |
 | --- | --- | --- |
 | Armure | DC et DL fortement réduites | Moyen |
-| Arme | AC et AL fortement réduites | Élevé |
-| Tout l'équipement | Les deux malus cumulés | Très élevé |
 
 ### Armes et étourdissement
 
-Chaque coup frappe avec un type de dégâts, qui vient de l'arme ou du sort. Une arme contondante (bouclier, bâton) étourdit plus souvent. Une arme tranchante (glaive) étourdit rarement, mais peut trancher un membre ou la tête. Les sorts sans élément pour l'instant (feu, éclair) n'étourdissent pas.
+Chaque coup frappe avec un type de dégâts, qui vient de l'arme ou du sort. Un coup contondant (bouclier, pierre jetée, explosion de mine) étourdit plus souvent. Un coup tranchant (épée, dague) étourdit rarement, mais peut trancher un membre ou la tête.
 
 Plus le coup est fort, plus il risque d'étourdir, et une blessure à la tête augmente encore ce risque. Un combattant étourdi tombe : il ne fait plus rien et son adversaire attend qu'il se relève. Sa détermination décide s'il se relève, de moins en moins à chaque nouvel étourdissement du même combat. S'il se relève, le combat reprend et l'adversaire attaque de nouveau. Sinon, il est mis K.-O. : le combat s'arrête sur sa défaite, sans la honte d'un abandon, et il survit. Un combattant étourdi, relevé ou non, peut garder une blessure grave à la tête après le combat.
 
@@ -331,20 +328,25 @@ La calibration se fait hors du jeu : on lance des milliers de combats sans rendu
 
 ## Interface, comptes rendus, sauvegarde et tutoriel
 
-L'interface compte huit écrans ; dans un jeu de management, elle représente souvent la moitié du travail et doit être planifiée comme telle.
+L'interface compte une douzaine d'écrans ; dans un jeu de management, elle représente souvent la moitié du travail et doit être planifiée comme telle.
 
 ### Écrans
 
 | Écran | Contenu principal |
 | --- | --- |
+| Écran titre | Continuer, charger une partie, nouvelle partie (continent, club, richesse), options |
 | Menu général | Semaine en cours, argent, alertes (blessures, offres reçues), bouton « semaine suivante » |
-| Colisées | Liste des colisées, type d'arène, champion, top 50, inscriptions |
+| Colisées | Colisées d'un continent : arène, prestige, bourses, champion, classement ; ou ses clubs rivaux |
+| Club rival | Profil, argent, titres et combattants d'un club rival |
+| Acta Diurna | Le journal de la semaine, un numéro à la fois |
 | Liste des combattants | Effectif avec forme, état, rang ; choix repos, entraînement ou soins en un clic |
 | Fiche combattant | Stats, historique, blessures, maladie, personnalité, moral, renommée, âge ; bouton « libérer » |
 | Marché | Rookies et free agents, fourchettes d'observation, achat et vente |
+| Combattant extérieur | Ce que le club voit d'un free agent ou d'un combattant rival |
 | Personnel | Entraîneur, médecin, recruteur : niveau, salaire, embauche |
 | Combat | Combat principal et vignettes des autres, contrôles de vitesse |
 | Résumé de combat | Compte rendu détaillé |
+| Encyclopédie | Classes, sorts, colisées et règles du jeu |
 
 ### Compte rendu de combat
 

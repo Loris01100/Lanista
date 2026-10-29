@@ -29,7 +29,6 @@ Ce qui ne change pas : la règle d'or. La logique du jeu est séparée de l'affi
 | Compression des sauvegardes | `flate2` | GZip, seulement si besoin |
 | Historique volumineux | `rusqlite` | Seulement si le JSON devient trop lourd |
 | Parallélisme des simulations | `rayon` | Simulation de masse, calibration |
-| Rechargement à chaud des données | `notify` | Pratique pendant l'équilibrage |
 | Inférence ML | `tract` (100 % Rust) | Derrière le trait commun d'IA ; préféré à `ort` en phase 0 : aucune bibliothèque native à livrer |
 | Pont Python | `pyo3` + `maturin` | Le moteur de combat devient un module Python |
 | Entraînement | Python, Gymnasium, Stable-Baselines3 (PPO) | Environnement virtuel `venv` |
@@ -135,14 +134,22 @@ flowchart TD
 | `calendar` | Semaines, saisons, grands événements, intersaison |
 | `fighter` | Stats, forme, blessures, maladies, soins, progression, âge, retraite, mort |
 | `combat` | Arène, déplacements, collisions, dégâts, sorts, équipement, pas de temps fixe |
+| `duel` | Le duel standard tiré d'une graine, le même dans le jeu, les outils et les tests |
+| `melee` | La mêlée (King of the hill) : jusqu'à 20 combattants, pactes, éliminations |
+| `log` | Journal de combat et compte rendu |
 | `ai` | Trait `CombatAi`, utility AI |
+| `learning` | Environnement d'entraînement de l'IA apprise, exposé à Python par `lanista_py` |
+| `learned` | IA apprise jouée en jeu avec `libm`, depuis `assets/ai/` |
 | `stat_model` | Résolution statistique des combats entre rivaux |
 | `rivals` | Profils, effectifs et décisions hebdomadaires des clubs rivaux |
+| `relations` | Ce que chaque club rival pense du club du joueur, et ses effets sur les prix et les défis |
+| `names` | Cultures du monde : noms des clubs et des combattants |
+| `journal` | Journal du club : les semaines de chaque combattant, la dernière semaine jouée |
 | `economy`, `market`, `staff` | Argent, achats, ventes, libérations, personnel |
 | `colosseum` | Colisées, résidents, classement Elo, champion et défis de chaque colisée |
-| `rankings` | Titres, défis, compétitions |
 | `save` | JSON versionné, migrations entre versions |
-| `achievements` | Succès du jeu, indépendants de Steam |
+| `competitions` (phase 8) | Les trois grandes compétitions |
+| `achievements` (phase 8) | Succès du jeu, indépendants de Steam |
 | `design_data` | Chargement des classes, sorts et arènes depuis `data/` |
 
 ### Principes Rust pour ce projet
@@ -218,7 +225,7 @@ Chaque phase a son fichier : ce qu'elle contient, comment elle est faite, son ja
 | Compatibilité macroquad / egui | Blocage à la mise à jour | Vérifier en phase 0, figer les versions, solution de repli avec egui sur miniquad |
 | Interface sous-estimée | Retard général | Écrans inclus explicitement dans chaque phase, thème egui commencé en phase 2 |
 | Déterminisme cassé | Graines qui ne redonnent pas le même combat | `libm`, pas de `HashMap` dans la logique, tests de combats de référence en CI sous Windows et Linux |
-| Pont PyO3 et versions de Python | Module qui ne se charge plus | Mode `abi3`, environnement virtuel figé dans `requirements.txt` |
+| Pont PyO3 et versions de Python | Module qui ne se charge plus | Mode `abi3` (`abi3-py312`), environnement virtuel `python/.venv` |
 | Distribution d'ONNX Runtime | Jeu qui ne se lance pas sur Linux ou Steam Deck | Tester tôt, `tract` en solution de secours |
 | Entraînement ML lent ou instable | Phase 7 qui s'éternise | Jeu complet dès la phase 6 avec l'IA scriptée |
 | Récompenses mal conçues | Comportements absurdes | Récompenses simples, revoir des combats régulièrement |
