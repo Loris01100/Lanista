@@ -22,7 +22,7 @@ use crate::fight_view::{Cast, FightView, STANDS, Tone, Verdict};
 use crate::fighter_sprite::PIXELS_PER_METRE;
 use crate::lang::tr;
 use crate::options;
-use crate::texts::{part_injury_text, part_name, record_text, stat_names};
+use crate::texts::{part_injury_text, part_name, record_text};
 use crate::theme;
 
 pub use crate::fight_view::{DEATH_SOUND, HIT_SOUND};
@@ -345,20 +345,14 @@ impl CombatScreen {
     }
 
     /// During the entrance, the card of the fighter the camera has stopped on, on the
-    /// right: what the presentation tells, then its stats.
+    /// right: what the presentation tells, without the stats a recruiter would pay to learn.
     fn card(&self, ui: &egui::Context) {
-        let fight = self.fight();
-        let Some((id, fighter)) = self
+        let Some([name, told @ ..]) = self
             .entrance
             .as_ref()
             .and_then(Entrance::card)
-            .and_then(|id| Some((id, fight.arena.fighter(id)?)))
-        else {
-            return;
-        };
-        let Some([name, told @ ..]) = usize::try_from(id.0)
-            .ok()
-            .and_then(|k| intro_texts(&fight.cast, k))
+            .and_then(|id| usize::try_from(id.0).ok())
+            .and_then(|k| intro_texts(&self.fight().cast, k))
         else {
             return;
         };
@@ -374,12 +368,6 @@ impl CombatScreen {
                         for (key, text) in INTRO_HEADINGS[1..].iter().zip(told) {
                             ui.strong(tr!(key));
                             ui.label(text);
-                            ui.end_row();
-                        }
-                        let stats = fighter.stats.to_array();
-                        for (stat, value) in stat_names().into_iter().zip(stats) {
-                            ui.strong(stat);
-                            ui.label(value.to_string());
                             ui.end_row();
                         }
                     });
