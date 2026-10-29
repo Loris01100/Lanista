@@ -31,12 +31,20 @@ pub use crate::fight_view::{DEATH_SOUND, HIT_SOUND};
 pub const MUSIC: &str = "placeholder/music.wav";
 /// Fight speeds offered.
 const SPEEDS: [f32; 3] = [0.5, 1.0, 1.5];
-/// A thumbnail's width, a share of the screen's; 16:10, like its render target.
-const THUMBNAIL_SHARE: f32 = 0.24;
-/// Pixels of a thumbnail's render target.
+/// Pixels of a thumbnail's render target, 16:10; a thumbnail is as wide as a sheet.
 const THUMBNAIL_PIXELS: (u32, u32) = (384, 240);
-/// Gap around the thumbnails, in screen pixels.
+/// Gap around the windows and thumbnails, in points.
 const MARGIN: f32 = 12.0;
+/// Width of a fighter's sheet down each side, in points.
+const SHEET_WIDTH: f32 = 240.0;
+/// Width of a fighter's bars on the scoreboard, in points.
+const SCORE_WIDTH: f32 = 220.0;
+/// Points kept free above the arena for the scoreboard, and below it for the feed and
+/// the controls.
+const TOP_ROOM: f32 = 120.0;
+const BOTTOM_ROOM: f32 = 150.0;
+/// Height of the controls with their margin, in points: the feed goes above.
+const CONTROLS_HEIGHT: f32 = 52.0;
 const THUMBNAIL_FRAME: Color = Color::new(0.9, 0.85, 0.7, 1.0);
 /// Over a thumbnail whose fight is over.
 const FINISHED: Color = Color::new(0.55, 0.55, 0.55, 1.0);
@@ -55,10 +63,12 @@ const INTRO_HEADINGS: [&str; 7] = [
     "presentation-armour",
 ];
 /// Lines of the fight's feed, and its width.
-const FEED_LINES: usize = 6;
-const FEED_WIDTH: f32 = 340.0;
+const FEED_LINES: usize = 4;
+const FEED_WIDTH: f32 = 520.0;
 /// Size of the words over the fighters, in points.
 const POPUP_SIZE: f32 = 22.0;
+/// Size of « Victoire ! » or « Défaite » over the arena, in points.
+const RESULT_SIZE: f32 = 36.0;
 /// Damage taken by the club's fighters, a lighter blood to read on the sand.
 const CLUB_HURT: egui::Color32 = egui::Color32::from_rgb(0xF0, 0x5A, 0x48);
 
@@ -95,6 +105,8 @@ pub struct CombatScreen {
     entrance: Option<Entrance>,
     /// The fatal blow of the first fight, a duel, if on, until shown.
     fatal_blow: Option<FatalBlow>,
+    /// Screen pixels per UI point at the last update: the room the windows take.
+    pixels_per_point: f32,
 }
 
 impl CombatScreen {
@@ -128,6 +140,7 @@ impl CombatScreen {
             presenting: false,
             entrance,
             fatal_blow,
+            pixels_per_point: 1.0,
         }
     }
 
@@ -181,8 +194,6 @@ impl CombatScreen {
         (0..self.views.len()).filter(|&k| k != self.focus).collect()
     }
 
-    /// The world area the big view shows: its fight, with room on the left for the
-    /// thumbnails when there are any.
     /// Plays `dt` seconds of the entrance, if on, and ends it once over.
     pub(crate) fn enter(&mut self, dt: f32) {
         let Some(entrance) = &mut self.entrance else {
@@ -253,39 +264,44 @@ impl CombatScreen {
     fn main_camera(&self) -> Camera2D {
         let screen = vec2(screen_width(), screen_height());
         let shown = |view| pixel_view(view, screen, PIXELS_PER_METRE);
+        let main = self.main_view(screen);
         if let Some(entrance) = &self.entrance {
             let fight = self.fight();
-            let close_up = |id| fight.place(id).map_or(self.main_view(), entrance::close_up);
-            return fit_camera(entrance.view(shown(self.main_view()), |id| shown(close_up(id))));
+            let close_up = |id| fight.place(id).map_or(main, entrance::close_up);
+            return fit_camera(entrance.view(shown(main), |id| shown(close_up(id))));
         }
         let Some(blow) = self.fatal_blow.as_ref().filter(|_| self.striking()) else {
-            return pixel_camera(self.main_view(), PIXELS_PER_METRE);
+            return pixel_camera(main, PIXELS_PER_METRE);
         };
-        let mut camera = fit_camera(blow.view(self.main_view(), shown));
+        let mut camera = fit_camera(blow.view(main, shown));
         if blow.mirrored() {
             camera.zoom.x = -camera.zoom.x;
         }
         camera
     }
 
-    fn main_view(&self) -> Rect {
+    /// The world area the big view shows on a `screen` of that many pixels: its fight in
+    /// the middle, with room around for the scoreboard on top, a sheet on each side, the
+    /// feed and the controls below.
+    fn main_view(&self, screen: Vec2) -> Rect {
         let world = self.fight().world();
-        if self.views.len() < 2 {
-            return world;
-        }
-        let room = THUMBNAIL_SHARE + 0.02;
-        let width = world.w / (1.0 - room);
-        Rect::new(world.x - width * room, world.y, width, world.h)
+        let points = self.pixels_per_point;
+        let side = (SHEET_WIDTH + 2.0 * MARGIN) * points;
+        let (top, bottom) = (TOP_ROOM * points, BOTTOM_ROOM * points);
+        let free = vec2(screen.x - 2.0 * side, screen.y - top - bottom).max(Vec2::ONE);
+        let scale = (free.x / world.w).min(free.y / world.h);
+        let centre = vec2(screen.x / 2.0, top + free.y / 2.0);
+        let corner = world.center() - centre / scale;
+        Rect::new(corner.x, corner.y, screen.x / scale, screen.y / scale)
     }
 
-    /// Speed buttons, then the result of the fight shown big once it is over; the
-    /// « Continuer » once every fight is over. Returns whether to go back.
+    /// Speed buttons and « Passer au résultat » while the fights go on. Returns whether
+    /// to go back, from the result's « Continuer ».
     fn controls(&mut self, ui: &egui::Context) -> bool {
-        let mut done = false;
         egui::Window::new(tr!("controls"))
             .title_bar(false)
             .resizable(false)
-            .anchor(egui::Align2::CENTER_BOTTOM, [0.0, -12.0])
+            .anchor(egui::Align2::CENTER_BOTTOM, [0.0, -MARGIN])
             .show(ui, |ui| {
                 ui.horizontal(|ui| {
                     if !self.cutscene() {
@@ -300,10 +316,27 @@ impl CombatScreen {
                             self.skip();
                         }
                     }
-                    if !self.fight().running() && !self.striking() {
-                        result_view(ui, self.fight());
-                    }
+                });
+            });
+        self.result(ui)
+    }
+
+    /// Over the arena once the fight shown big is over, its result; « Continuer » once
+    /// every fight is over. Returns whether it was clicked.
+    fn result(&self, ui: &egui::Context) -> bool {
+        if self.fight().running() || self.striking() {
+            return false;
+        }
+        let mut done = false;
+        egui::Window::new("result")
+            .title_bar(false)
+            .resizable(false)
+            .anchor(egui::Align2::CENTER_CENTER, [0.0, 0.0])
+            .show(ui, |ui| {
+                ui.vertical_centered(|ui| {
+                    result_view(ui, self.fight());
                     if !self.running() {
+                        ui.add_space(6.0);
                         done = ui.button(tr!("continue")).clicked();
                     }
                 });
@@ -348,7 +381,7 @@ impl CombatScreen {
             return;
         }
         let mouse = Vec2::from(mouse_position());
-        let rects = thumbnail_rects(self.views.len() - 1, screen_width());
+        let rects = thumbnail_rects(self.views.len() - 1, self.pixels_per_point);
         if let Some(slot) = rects.iter().position(|r| r.contains(mouse)) {
             if !self.cutscene() && is_mouse_button_pressed(MouseButton::Left) {
                 self.focus = self.thumbnailed()[slot];
@@ -427,36 +460,36 @@ impl CombatScreen {
             });
     }
 
-    /// The time left before the time limit of the fight shown big, top right.
-    fn timer(&self, ui: &egui::Context) {
-        let arena = &self.fight().arena;
+    /// Top middle, the time left before the time limit of the fight shown big, the next
+    /// elimination of a melee under it; a duel's fighters face to face on each side with
+    /// their bars, the club's on the left.
+    fn scoreboard(&self, ui: &egui::Context) {
+        let fight = self.fight();
+        let arena = &fight.arena;
+        let duel = duelists(fight);
         egui::Window::new(tr!("timer"))
             .title_bar(false)
             .resizable(false)
-            .anchor(egui::Align2::RIGHT_TOP, [-12.0, 12.0])
+            .anchor(egui::Align2::CENTER_TOP, [0.0, MARGIN])
             .show(ui, |ui| {
-                ui.heading(clock(arena.max_ticks.saturating_sub(arena.tick)));
+                ui.horizontal(|ui| {
+                    if let Some([left, _]) = duel {
+                        score(ui, fight, left);
+                    }
+                    ui.vertical(|ui| {
+                        ui.heading(clock(arena.max_ticks.saturating_sub(arena.tick)));
+                        for line in fight.elimination_lines() {
+                            ui.label(line);
+                        }
+                    });
+                    if let Some([_, right]) = duel {
+                        score(ui, fight, right);
+                    }
+                });
             });
     }
 
-    /// The next elimination of the melee shown big, top middle.
-    fn elimination(&self, ui: &egui::Context) {
-        let lines = self.fight().elimination_lines();
-        if lines.is_empty() {
-            return;
-        }
-        egui::Window::new(tr!("elimination"))
-            .title_bar(false)
-            .resizable(false)
-            .anchor(egui::Align2::CENTER_TOP, [0.0, 12.0])
-            .show(ui, |ui| {
-                for line in &lines {
-                    ui.label(line);
-                }
-            });
-    }
-
-    /// The last moments of the fight shown big, under the timer: who hit whom, for how
+    /// The last moments of the fight shown big, under the arena: who hit whom, for how
     /// much and where, the wounds and falls.
     fn feed(&self, ui: &egui::Context) {
         let lines = self.fight().feed(FEED_LINES);
@@ -466,7 +499,7 @@ impl CombatScreen {
         egui::Window::new(tr!("feed"))
             .title_bar(false)
             .resizable(false)
-            .anchor(egui::Align2::RIGHT_TOP, [-12.0, 72.0])
+            .anchor(egui::Align2::CENTER_BOTTOM, [0.0, -CONTROLS_HEIGHT])
             .show(ui, |ui| {
                 ui.set_width(FEED_WIDTH);
                 let weak = ui.visuals().weak_text_color();
@@ -521,54 +554,120 @@ impl CombatScreen {
         }
     }
 
-    /// Hit points, mana, endurance and elements of the fight shown big, bottom left, the
-    /// spells each fighter has, where it was hit and what still lasts on it: both fighters
-    /// of a duel, the club's in a melee.
-    fn gauges(&self, ui: &egui::Context) {
+    /// Down each side, under the thumbnails on the left, the sheets of the fight shown
+    /// big: the spells each fighter has, where it was hit and what still lasts on it. A
+    /// duel's fighters one each side, the club's on the left, their bars on the
+    /// scoreboard; a melee's club fighters on the left, with their bars.
+    fn sheets(&self, ui: &egui::Context) {
         let fight = self.fight();
-        let fighters = &fight.arena.fighters;
-        let shown: Vec<_> = fighters
-            .iter()
-            .filter(|f| fighters.len() <= 2 || fight.cast.club.contains(&f.id))
-            .collect();
-        if shown.is_empty() {
+        let top = thumbnail_rects(self.views.len() - 1, 1.0)
+            .last()
+            .map_or(MARGIN, |r| r.bottom() + MARGIN);
+        let left = egui::Align2::LEFT_TOP;
+        if let Some([club, other]) = duelists(fight) {
+            sheet_window(ui, "sheet-left", left, [MARGIN, top], |ui| {
+                sheet(ui, fight, club, false);
+            });
+            let right = egui::Align2::RIGHT_TOP;
+            sheet_window(ui, "sheet-right", right, [-MARGIN, MARGIN], |ui| {
+                sheet(ui, fight, other, false);
+            });
             return;
         }
-        egui::Window::new(tr!("gauges"))
-            .title_bar(false)
-            .resizable(false)
-            .anchor(egui::Align2::LEFT_BOTTOM, [12.0, -12.0])
-            .show(ui, |ui| {
-                ui.set_width(260.0);
-                let height = ui.ctx().screen_rect().height() * 0.7;
-                egui::ScrollArea::vertical()
-                    .max_height(height)
-                    .show(ui, |ui| {
-                        for f in shown {
-                            ui.strong(fight.name_and_elo(f.id));
-                            gauge(ui, &tr!("stat-hp"), f.hp, f.stats.hp);
-                            for (name, g) in [
-                                (tr!("mana"), &f.mana),
-                                (tr!("endurance"), &f.endurance),
-                                (tr!("elements"), &f.elements),
-                            ] {
-                                if g.max > 0 {
-                                    gauge(ui, &name, g.current, g.max);
-                                }
-                            }
-                            spells(ui, f);
-                            anatomy(ui, &fight.arena.log, f);
-                            for (line, wound) in states(f) {
-                                let color = if wound {
-                                    ui.visuals().error_fg_color
-                                } else {
-                                    ui.visuals().warn_fg_color
-                                };
-                                ui.label(egui::RichText::new(line).small().color(color));
-                            }
-                        }
-                    });
-            });
+        let club: Vec<_> = fight
+            .arena
+            .fighters
+            .iter()
+            .filter(|f| fight.cast.club.contains(&f.id))
+            .collect();
+        if club.is_empty() {
+            return;
+        }
+        sheet_window(ui, "sheet-left", left, [MARGIN, top], |ui| {
+            for f in club {
+                sheet(ui, fight, f, true);
+                ui.add_space(6.0);
+            }
+        });
+    }
+}
+
+/// A duel's two fighters, the club's first; none for a melee.
+fn duelists(fight: &FightView) -> Option<[&Fighter; 2]> {
+    let [a, b] = fight.arena.fighters.as_slice() else {
+        return None;
+    };
+    let club = &fight.cast.club;
+    Some(if club.contains(&b.id) && !club.contains(&a.id) {
+        [b, a]
+    } else {
+        [a, b]
+    })
+}
+
+/// `f`'s name and Elo over its bars, on the scoreboard.
+fn score(ui: &mut egui::Ui, fight: &FightView, f: &Fighter) {
+    ui.vertical(|ui| {
+        ui.set_width(SCORE_WIDTH);
+        ui.strong(fight.name_and_elo(f.id));
+        bars(ui, f);
+    });
+}
+
+/// `f`'s hit points, mana, endurance and elements, a bar each, those its class has not
+/// left out.
+fn bars(ui: &mut egui::Ui, f: &Fighter) {
+    gauge(ui, &tr!("stat-hp"), f.hp, f.stats.hp);
+    for (name, g) in [
+        (tr!("mana"), &f.mana),
+        (tr!("endurance"), &f.endurance),
+        (tr!("elements"), &f.elements),
+    ] {
+        if g.max > 0 {
+            gauge(ui, &name, g.current, g.max);
+        }
+    }
+}
+
+/// A sheet's window, `SHEET_WIDTH` wide at `offset` from the `anchor` corner, what goes
+/// past the screen's bottom scrolling.
+fn sheet_window(
+    ui: &egui::Context,
+    id: &str,
+    anchor: egui::Align2,
+    offset: [f32; 2],
+    contents: impl FnOnce(&mut egui::Ui),
+) {
+    egui::Window::new(id)
+        .title_bar(false)
+        .resizable(false)
+        .anchor(anchor, offset)
+        .show(ui, |ui| {
+            ui.set_width(SHEET_WIDTH);
+            let height = ui.ctx().screen_rect().height() - offset[1] - 4.0 * MARGIN;
+            egui::ScrollArea::vertical()
+                .max_height(height)
+                .show(ui, contents);
+        });
+}
+
+/// `f`'s sheet: its name, its bars if `with_bars`, its spells, where it was hit and
+/// what lasts on it.
+fn sheet(ui: &mut egui::Ui, fight: &FightView, f: &Fighter, with_bars: bool) {
+    ui.strong(fight.name_and_elo(f.id));
+    if with_bars {
+        bars(ui, f);
+    }
+    spells(ui, f);
+    ui.separator();
+    anatomy(ui, &fight.arena.log, f);
+    for (line, wound) in states(f) {
+        let color = if wound {
+            ui.visuals().error_fg_color
+        } else {
+            ui.visuals().warn_fg_color
+        };
+        ui.label(egui::RichText::new(line).small().color(color));
     }
 }
 
@@ -617,21 +716,24 @@ fn intro_texts(cast: &Cast, k: usize) -> Option<[egui::RichText; 7]> {
 }
 
 fn result_view(ui: &mut egui::Ui, fight: &FightView) {
-    ui.vertical(|ui| {
-        // Beside the buttons there is little room left: one line per sentence.
-        ui.style_mut().wrap_mode = Some(egui::TextWrapMode::Extend);
-        if let Some(verdict) = fight.verdict() {
-            let (text, color) = match verdict {
-                Verdict::Victory => (tr!("verdict-victory"), theme::LAUREL),
-                Verdict::Defeat => (tr!("verdict-defeat"), theme::BLOOD),
-                Verdict::NoWinner => (tr!("verdict-no-winner"), theme::BRONZE),
-            };
-            ui.label(egui::RichText::new(text).heading().strong().color(color));
-        }
-        for line in fight.result() {
-            ui.label(line);
-        }
-    });
+    // One line per sentence.
+    ui.style_mut().wrap_mode = Some(egui::TextWrapMode::Extend);
+    if let Some(verdict) = fight.verdict() {
+        let (text, color) = match verdict {
+            Verdict::Victory => (tr!("verdict-victory"), theme::LAUREL),
+            Verdict::Defeat => (tr!("verdict-defeat"), theme::BLOOD),
+            Verdict::NoWinner => (tr!("verdict-no-winner"), theme::BRONZE),
+        };
+        ui.label(
+            egui::RichText::new(text)
+                .size(RESULT_SIZE)
+                .strong()
+                .color(color),
+        );
+    }
+    for line in fight.result() {
+        ui.label(line);
+    }
 }
 
 /// `f`'s spells, one line each with what it costs: ready, recharging (seconds left) or
@@ -719,49 +821,55 @@ fn anatomy(ui: &mut egui::Ui, log: &[Event], f: &Fighter) {
     let text = ui.visuals().text_color();
     let bronze = ui.visuals().warn_fg_color;
     let dark = ui.visuals().extreme_bg_color;
-    egui::Grid::new(("anatomy", f.id.0)).show(ui, |ui| {
-        for row in rows {
-            for part in row {
-                let Some(part) = part else {
-                    ui.label("");
-                    continue;
-                };
-                let damage = part_damage(log, f.id, part);
-                let percent = u64::from(damage) * 200 / u64::from(f.stats.hp.max(1));
-                let share = f32::from(u8::try_from(percent.min(100)).unwrap_or(100)) / 100.0;
-                let injuries: Vec<_> = f
-                    .condition
-                    .injuries
-                    .iter()
-                    .filter(|i| i.location == part && !i.is_lost())
-                    .collect();
-                let mut name = egui::RichText::new(part_name(part)).small();
-                if f.has_lost(part) {
-                    name = name.strikethrough().color(red);
-                } else if !injuries.is_empty() {
-                    let lasting = injuries.iter().any(|i| i.is_permanent());
-                    let back = if lasting { red } else { bronze };
-                    name = name.background_color(back).color(dark);
-                }
-                ui.vertical_centered(|ui| {
-                    let label = ui.label(name);
-                    if !injuries.is_empty() {
-                        let texts: Vec<_> =
-                            injuries.iter().map(|&&i| part_injury_text(i)).collect();
-                        label.on_hover_text(texts.join(
-                            "
-",
-                        ));
+    // A third of the sheet a column, each part's name on one line.
+    ui.style_mut().wrap_mode = Some(egui::TextWrapMode::Extend);
+    let column = SHEET_WIDTH / 3.0 - ui.spacing().item_spacing.x;
+    egui::Grid::new(("anatomy", f.id.0))
+        .min_col_width(column)
+        .max_col_width(column)
+        .show(ui, |ui| {
+            for row in rows {
+                for part in row {
+                    let Some(part) = part else {
+                        ui.label("");
+                        continue;
+                    };
+                    let damage = part_damage(log, f.id, part);
+                    let percent = u64::from(damage) * 200 / u64::from(f.stats.hp.max(1));
+                    let share = f32::from(u8::try_from(percent.min(100)).unwrap_or(100)) / 100.0;
+                    let injuries: Vec<_> = f
+                        .condition
+                        .injuries
+                        .iter()
+                        .filter(|i| i.location == part && !i.is_lost())
+                        .collect();
+                    let mut name = egui::RichText::new(part_name(part)).small();
+                    if f.has_lost(part) {
+                        name = name.strikethrough().color(red);
+                    } else if !injuries.is_empty() {
+                        let lasting = injuries.iter().any(|i| i.is_permanent());
+                        let back = if lasting { red } else { bronze };
+                        name = name.background_color(back).color(dark);
                     }
-                    ui.label(
-                        egui::RichText::new(damage.to_string())
-                            .color(text.lerp_to_gamma(red, share)),
-                    );
-                });
+                    ui.vertical_centered(|ui| {
+                        let label = ui.label(name);
+                        if !injuries.is_empty() {
+                            let texts: Vec<_> =
+                                injuries.iter().map(|&&i| part_injury_text(i)).collect();
+                            label.on_hover_text(texts.join(
+                                "
+",
+                            ));
+                        }
+                        ui.label(
+                            egui::RichText::new(damage.to_string())
+                                .color(text.lerp_to_gamma(red, share)),
+                        );
+                    });
+                }
+                ui.end_row();
             }
-            ui.end_row();
-        }
-    });
+        });
 }
 
 /// What lasts on `f` now, a line each with the seconds left, and whether it is a wound:
@@ -833,23 +941,24 @@ fn part_damage(log: &[Event], id: FighterId, part: Location) -> u32 {
         .sum()
 }
 
-/// Where the `count` thumbnails go on a screen `width` pixels wide: down the left side,
-/// each `THUMBNAIL_SHARE` of the width, 16:10.
+/// Where the `count` thumbnails go, in screen pixels at `points` pixels a UI point: down
+/// the left side, each as wide as a sheet, 16:10.
 #[must_use]
-fn thumbnail_rects(count: usize, width: f32) -> Vec<Rect> {
-    let w = width * THUMBNAIL_SHARE;
+fn thumbnail_rects(count: usize, points: f32) -> Vec<Rect> {
+    let (w, margin) = (SHEET_WIDTH * points, MARGIN * points);
     let h = w * 10.0 / 16.0;
     (0..count)
         .map(|i| {
             #[expect(clippy::cast_precision_loss, reason = "three thumbnails at most")]
             let i = i as f32;
-            Rect::new(MARGIN, MARGIN + i * (h + MARGIN), w, h)
+            Rect::new(margin, margin + i * (h + margin), w, h)
         })
         .collect()
 }
 
 impl Screen for CombatScreen {
     fn update(&mut self, ui: &egui::Context, assets: &Assets, audio: &mut Audio) -> Transition {
+        self.pixels_per_point = ui.pixels_per_point();
         // Échap opens or closes the pause menu; the options take it while open.
         if !self.options_open && self.bindings.pressed(ui, &Action::Quit) {
             self.paused = !self.paused;
@@ -894,10 +1003,9 @@ impl Screen for CombatScreen {
                 });
         }
         if !self.cutscene() {
-            self.timer(ui);
+            self.scoreboard(ui);
             self.feed(ui);
-            self.elimination(ui);
-            self.gauges(ui);
+            self.sheets(ui);
         }
         if self.entrance.is_none() {
             self.popups(ui);
@@ -938,7 +1046,7 @@ impl Screen for CombatScreen {
         set_camera(&self.main_camera());
         self.shown().draw(assets, &self.data);
         set_default_camera();
-        let rects = thumbnail_rects(shown.len(), screen_width());
+        let rects = thumbnail_rects(shown.len(), self.pixels_per_point);
         for ((target, &k), rect) in self.targets.iter().zip(&shown).zip(rects) {
             let over = !self.views[k].running();
             target.show(rect, if over { FINISHED } else { WHITE });
@@ -1036,10 +1144,19 @@ mod tests {
                 "seed {seed}"
             );
         }
-        // The big view leaves room for the thumbnails on its left.
-        let main = screen.main_view();
+        // The big view leaves room for the sheets on each side, the scoreboard above, the
+        // feed and the controls below.
+        let main = screen.main_view(vec2(1280.0, 800.0));
         let world = screen.fight().world();
-        assert!(main.x < world.x && (main.right() - world.right()).abs() < 1e-4);
+        let scale = 1280.0 / main.w;
+        let side = world.x - main.x;
+        assert!(
+            side * scale >= SHEET_WIDTH + 2.0 * MARGIN - 1e-3,
+            "{main:?}"
+        );
+        assert!((main.right() - world.right() - side).abs() < 1e-3);
+        assert!((world.y - main.y) * scale >= TOP_ROOM - 1e-3);
+        assert!((main.bottom() - world.bottom()) * scale >= BOTTOM_ROOM - 1e-3);
     }
 
     #[test]
@@ -1067,12 +1184,12 @@ mod tests {
 
     #[test]
     fn thumbnails_go_down_the_left_side() {
-        let rects = thumbnail_rects(2, 1280.0);
+        let rects = thumbnail_rects(2, 1.5);
         assert_eq!(rects.len(), 2);
-        assert!((rects[0].w - 1280.0 * THUMBNAIL_SHARE).abs() < 1e-3);
+        assert!((rects[0].w - 1.5 * SHEET_WIDTH).abs() < 1e-3);
         assert!((rects[0].h * 16.0 / 10.0 - rects[0].w).abs() < 1e-3);
         assert!(rects[1].y > rects[0].bottom());
-        assert!(rects.iter().all(|r| (r.x - MARGIN).abs() < 1e-6));
+        assert!(rects.iter().all(|r| (r.x - 1.5 * MARGIN).abs() < 1e-6));
     }
 
     /// The loser of seed 13 dies: its stain starts at the death and keeps
