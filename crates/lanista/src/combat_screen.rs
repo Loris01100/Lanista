@@ -381,7 +381,7 @@ impl CombatScreen {
             return;
         }
         let mouse = Vec2::from(mouse_position());
-        let rects = thumbnail_rects(self.views.len() - 1, self.pixels_per_point);
+        let rects = thumbnail_rects(self.views.len() - 1, self.pixels_per_point, screen_height());
         if let Some(slot) = rects.iter().position(|r| r.contains(mouse)) {
             if !self.cutscene() && is_mouse_button_pressed(MouseButton::Left) {
                 self.focus = self.thumbnailed()[slot];
@@ -554,22 +554,22 @@ impl CombatScreen {
         }
     }
 
-    /// Down each side, under the thumbnails on the left, the sheets of the fight shown
+    /// Down each side, the left one above the thumbnails, the sheets of the fight shown
     /// big: the spells each fighter has, where it was hit and what still lasts on it. A
     /// duel's fighters one each side, the club's on the left, their bars on the
     /// scoreboard; a melee's club fighters on the left, with their bars.
     fn sheets(&self, ui: &egui::Context) {
         let fight = self.fight();
-        let top = thumbnail_rects(self.views.len() - 1, 1.0)
-            .last()
-            .map_or(MARGIN, |r| r.bottom() + MARGIN);
+        let thumbnails = thumbnail_rects(self.views.len() - 1, 1.0, 0.0)
+            .first()
+            .map_or(0.0, |r| -r.y);
         let left = egui::Align2::LEFT_TOP;
         if let Some([club, other]) = duelists(fight) {
-            sheet_window(ui, "sheet-left", left, [MARGIN, top], |ui| {
+            sheet_window(ui, "sheet-left", left, thumbnails, |ui| {
                 sheet(ui, fight, club, false);
             });
             let right = egui::Align2::RIGHT_TOP;
-            sheet_window(ui, "sheet-right", right, [-MARGIN, MARGIN], |ui| {
+            sheet_window(ui, "sheet-right", right, 0.0, |ui| {
                 sheet(ui, fight, other, false);
             });
             return;
@@ -583,7 +583,7 @@ impl CombatScreen {
         if club.is_empty() {
             return;
         }
-        sheet_window(ui, "sheet-left", left, [MARGIN, top], |ui| {
+        sheet_window(ui, "sheet-left", left, thumbnails, |ui| {
             for f in club {
                 sheet(ui, fight, f, true);
                 ui.add_space(6.0);
@@ -609,6 +609,7 @@ fn duelists(fight: &FightView) -> Option<[&Fighter; 2]> {
 fn score(ui: &mut egui::Ui, fight: &FightView, f: &Fighter) {
     ui.vertical(|ui| {
         ui.set_width(SCORE_WIDTH);
+        ui.style_mut().wrap_mode = Some(egui::TextWrapMode::Truncate);
         ui.strong(fight.name_and_elo(f.id));
         bars(ui, f);
     });
@@ -629,22 +630,27 @@ fn bars(ui: &mut egui::Ui, f: &Fighter) {
     }
 }
 
-/// A sheet's window, `SHEET_WIDTH` wide at `offset` from the `anchor` corner, what goes
-/// past the screen's bottom scrolling.
+/// A sheet's window, `SHEET_WIDTH` wide in the `anchor` top corner, what goes past the
+/// `below` points kept free at the screen's bottom scrolling.
 fn sheet_window(
     ui: &egui::Context,
     id: &str,
     anchor: egui::Align2,
-    offset: [f32; 2],
+    below: f32,
     contents: impl FnOnce(&mut egui::Ui),
 ) {
+    let x = if anchor == egui::Align2::RIGHT_TOP {
+        -MARGIN
+    } else {
+        MARGIN
+    };
     egui::Window::new(id)
         .title_bar(false)
         .resizable(false)
-        .anchor(anchor, offset)
+        .anchor(anchor, [x, MARGIN])
         .show(ui, |ui| {
             ui.set_width(SHEET_WIDTH);
-            let height = ui.ctx().screen_rect().height() - offset[1] - 4.0 * MARGIN;
+            let height = ui.ctx().screen_rect().height() - below - 4.0 * MARGIN;
             egui::ScrollArea::vertical()
                 .max_height(height)
                 .show(ui, contents);
@@ -941,17 +947,18 @@ fn part_damage(log: &[Event], id: FighterId, part: Location) -> u32 {
         .sum()
 }
 
-/// Where the `count` thumbnails go, in screen pixels at `points` pixels a UI point: down
-/// the left side, each as wide as a sheet, 16:10.
+/// Where the `count` thumbnails go on a screen `height` pixels high, in screen pixels at
+/// `points` pixels a UI point: stacked in the bottom left corner, each as wide as a
+/// sheet, 16:10.
 #[must_use]
-fn thumbnail_rects(count: usize, points: f32) -> Vec<Rect> {
+fn thumbnail_rects(count: usize, points: f32, height: f32) -> Vec<Rect> {
     let (w, margin) = (SHEET_WIDTH * points, MARGIN * points);
     let h = w * 10.0 / 16.0;
     (0..count)
         .map(|i| {
             #[expect(clippy::cast_precision_loss, reason = "three thumbnails at most")]
-            let i = i as f32;
-            Rect::new(margin, margin + i * (h + margin), w, h)
+            let above = (count - i) as f32;
+            Rect::new(margin, height - above * (h + margin), w, h)
         })
         .collect()
 }
@@ -1046,7 +1053,7 @@ impl Screen for CombatScreen {
         set_camera(&self.main_camera());
         self.shown().draw(assets, &self.data);
         set_default_camera();
-        let rects = thumbnail_rects(shown.len(), self.pixels_per_point);
+        let rects = thumbnail_rects(shown.len(), self.pixels_per_point, screen_height());
         for ((target, &k), rect) in self.targets.iter().zip(&shown).zip(rects) {
             let over = !self.views[k].running();
             target.show(rect, if over { FINISHED } else { WHITE });
@@ -1183,12 +1190,13 @@ mod tests {
     }
 
     #[test]
-    fn thumbnails_go_down_the_left_side() {
-        let rects = thumbnail_rects(2, 1.5);
+    fn thumbnails_stack_in_the_bottom_left_corner() {
+        let rects = thumbnail_rects(2, 1.5, 1200.0);
         assert_eq!(rects.len(), 2);
         assert!((rects[0].w - 1.5 * SHEET_WIDTH).abs() < 1e-3);
         assert!((rects[0].h * 16.0 / 10.0 - rects[0].w).abs() < 1e-3);
         assert!(rects[1].y > rects[0].bottom());
+        assert!((rects[1].bottom() - (1200.0 - 1.5 * MARGIN)).abs() < 1e-3);
         assert!(rects.iter().all(|r| (r.x - 1.5 * MARGIN).abs() < 1e-6));
     }
 
