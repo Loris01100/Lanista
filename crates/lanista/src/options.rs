@@ -36,6 +36,11 @@ pub fn apply(display: Display) {
     reesch::set_ui_scale(f32::from(display.interface) / 100.0);
 }
 
+/// Whether the cutscenes play, as the player chose.
+pub fn cutscenes() -> bool {
+    DISPLAY.get().cutscenes
+}
+
 /// Shows the options over the screen while `open`, which a click outside, Échap or
 /// « Fermer » sets back to false; the text to show the player when keeping a choice
 /// failed.
@@ -89,9 +94,10 @@ pub fn window(
     failed.map(|e| tr!("save-failed", error = e.to_string()))
 }
 
-/// Full screen and the interface's size, changed in `display`.
+/// Full screen, the interface's size and the cutscenes, changed in `display`.
 fn graphics_tab(ui: &mut egui::Ui, display: &mut Display) {
     ui.checkbox(&mut display.fullscreen, tr!("fullscreen"));
+    ui.checkbox(&mut display.cutscenes, tr!("cutscenes"));
     ui.horizontal(|ui| {
         ui.label(tr!("interface-size"));
         egui::ComboBox::from_id_salt("interface-size")

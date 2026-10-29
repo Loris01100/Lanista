@@ -26,6 +26,23 @@ pub fn pixel_camera(view: Rect, pixels_per_unit: f32) -> Camera2D {
     camera
 }
 
+/// The area shown `t` of the way from `from` to `to` (0 to 1, clamped), eased in and
+/// out: a camera moving from one framing to another. Two areas of the screen's aspect
+/// ratio (`fit_view`, `pixel_view`) blend into one of that ratio, which `fit_camera`
+/// shows as it is.
+#[must_use]
+pub fn blend_views(from: Rect, to: Rect, t: f32) -> Rect {
+    let t = t.clamp(0.0, 1.0);
+    let eased = t * t * (3.0 - 2.0 * t);
+    let mix = |a: f32, b: f32| a + (b - a) * eased;
+    Rect::new(
+        mix(from.x, to.x),
+        mix(from.y, to.y),
+        mix(from.w, to.w),
+        mix(from.h, to.h),
+    )
+}
+
 /// Smallest area with the screen's aspect ratio that contains `view`, centred
 /// on it: the extra space shows more of the world instead of black bars.
 #[must_use]
@@ -128,6 +145,20 @@ mod tests {
         // 1440 px high: ×3.
         let shown = pixel_view(WITH_MARGIN, vec2(2560.0, 1440.0), 20.0);
         assert!((shown.h - 24.0).abs() < 1e-4);
+    }
+
+    #[test]
+    fn a_blend_eases_from_one_framing_to_the_other() {
+        let close = Rect::new(8.0, 9.0, 4.0, 2.5);
+        let whole = fit_view(ARENA, vec2(1280.0, 800.0));
+        assert_eq!(blend_views(whole, close, -1.0), whole);
+        assert_eq!(blend_views(whole, close, 2.0), close);
+        let half = blend_views(whole, close, 0.5);
+        assert_eq!(half, Rect::new(1.0, 4.5, 18.0, 11.25));
+        // Slow at both ends, and the screen's aspect ratio all the way.
+        let early = blend_views(whole, close, 0.1);
+        assert!(early.x - whole.x < (close.x - whole.x) * 0.1);
+        assert!((early.w / early.h - 1.6).abs() < 1e-5);
     }
 
     #[test]

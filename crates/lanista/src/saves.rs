@@ -98,6 +98,8 @@ pub struct Display {
     pub fullscreen: bool,
     /// The interface's size, in percent of the theme's.
     pub interface: u16,
+    /// Whether the cutscenes play: the fighters' entrance.
+    pub cutscenes: bool,
 }
 
 impl Default for Display {
@@ -105,6 +107,7 @@ impl Default for Display {
         Self {
             fullscreen: false,
             interface: 100,
+            cutscenes: true,
         }
     }
 }
@@ -137,6 +140,11 @@ pub fn read_settings(folder: &Path, audio: &mut Audio) -> Display {
                     display.fullscreen = fullscreen;
                 }
             }
+            "cutscenes" => {
+                if let Ok(cutscenes) = value.parse() {
+                    display.cutscenes = cutscenes;
+                }
+            }
             // Out of bounds, the interface would be unreadable or would not fit.
             "interface" => {
                 if let Ok(size) = value.parse()
@@ -159,11 +167,13 @@ pub fn write_settings(folder: &Path, audio: &Audio, display: Display) -> std::io
 effects = {}
 fullscreen = {}
 interface = {}
+cutscenes = {}
 ",
         audio.music_volume(),
         audio.effects_volume(),
         display.fullscreen,
-        display.interface
+        display.interface,
+        display.cutscenes
     );
     std::fs::write(folder.join(SETTINGS), text)
 }
@@ -222,6 +232,7 @@ mod tests {
         let display = Display {
             fullscreen: true,
             interface: 150,
+            cutscenes: false,
         };
         write_settings(&folder, &audio, display).unwrap();
         let mut read = Audio::default();

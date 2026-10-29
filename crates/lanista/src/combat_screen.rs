@@ -10,15 +10,19 @@ use lanista_core::fighter::injury::{Location, Side};
 use lanista_core::fighter::{Effect, Fighter, FighterId};
 use lanista_core::log::{Event, EventKind};
 use macroquad::prelude::*;
-use reesch::{Assets, Audio, Bindings, SceneTarget, Screen, Transition, egui, pixel_camera};
+use reesch::{
+    Assets, Audio, Bindings, SceneTarget, Screen, Transition, egui, fit_camera, pixel_camera,
+    pixel_view,
+};
 
 use crate::Action;
 use crate::club_screen::gauge;
+use crate::entrance::{self, Entrance};
 use crate::fight_view::{Cast, FightView, STANDS, Tone, Verdict};
 use crate::fighter_sprite::PIXELS_PER_METRE;
 use crate::lang::tr;
 use crate::options;
-use crate::texts::{part_injury_text, part_name, record_text};
+use crate::texts::{part_injury_text, part_name, record_text, stat_names};
 use crate::theme;
 
 pub use crate::fight_view::{DEATH_SOUND, HIT_SOUND};
@@ -39,6 +43,16 @@ const FINISHED: Color = Color::new(0.55, 0.55, 0.55, 1.0);
 const PAUSE_WIDTH: f32 = 220.0;
 /// Height of the presentation's rows before they scroll, a melee of twenty.
 const PRESENTATION_HEIGHT: f32 = 420.0;
+/// The presentation's headings: a column each in the table, a line each on a card.
+const INTRO_HEADINGS: [&str; 7] = [
+    "presentation-fighter",
+    "presentation-class",
+    "presentation-loadout",
+    "presentation-elo",
+    "presentation-season",
+    "presentation-career",
+    "presentation-armour",
+];
 /// Lines of the fight's feed, and its width.
 const FEED_LINES: usize = 6;
 const FEED_WIDTH: f32 = 340.0;
@@ -73,19 +87,26 @@ pub struct CombatScreen {
     paused: bool,
     /// Whether the options, opened from the pause menu, are laid over it.
     options_open: bool,
-    /// Whether the fighters of the fight shown big are being presented, before the
-    /// first tick; the fights wait meanwhile.
+    /// Whether the fighters of the fight shown big are being presented in a table,
+    /// before the first tick, the cutscenes off; the fights wait meanwhile.
     presenting: bool,
+    /// Their entrance, the cutscenes on, instead of the table; the fights wait meanwhile.
+    entrance: Option<Entrance>,
 }
 
 impl CombatScreen {
     /// Watches `fights` from their first tick, the first one big. Once all are over,
     /// « Continuer » goes back.
     pub fn watch(data: Rc<DesignData>, fights: Vec<Watched>, bindings: Bindings<Action>) -> Self {
-        let views = fights
+        let views: Vec<FightView> = fights
             .into_iter()
             .map(|f| FightView::new(f.arena, f.cast))
             .collect();
+        let cutscenes = options::cutscenes();
+        let entrance = views
+            .first()
+            .filter(|_| cutscenes)
+            .map(|v| Entrance::new(presented(v)));
         Self {
             data,
             views,
@@ -97,7 +118,8 @@ impl CombatScreen {
             settings: None,
             paused: false,
             options_open: false,
-            presenting: true,
+            presenting: !cutscenes,
+            entrance,
         }
     }
 
@@ -126,6 +148,7 @@ impl CombatScreen {
 
     /// Plays the rest of every fight at once, without drawing them.
     fn skip(&mut self) {
+        self.end_entrance();
         for view in &mut self.views {
             view.skip();
         }
@@ -151,9 +174,37 @@ impl CombatScreen {
 
     /// The world area the big view shows: its fight, with room on the left for the
     /// thumbnails when there are any.
-    /// The camera of the fight shown big: its art's pixels enlarged by a whole factor.
+    /// Plays `dt` seconds of the entrance, if on, and ends it once over.
+    pub(crate) fn enter(&mut self, dt: f32) {
+        let Some(entrance) = &mut self.entrance else {
+            return;
+        };
+        entrance.advance(dt);
+        let (walked, over) = (entrance.walked(), entrance.is_over());
+        self.views[self.focus].walk_in(walked, dt);
+        if over {
+            self.end_entrance();
+        }
+    }
+
+    /// Ends the entrance, if on: the fighters in place, the fights free to start.
+    fn end_entrance(&mut self) {
+        if self.entrance.take().is_some() {
+            self.views[self.focus].walk_in(1.0, 0.0);
+        }
+    }
+
+    /// The camera of the fight shown big: its art's pixels enlarged by a whole factor,
+    /// going from one fighter to the next during the entrance.
     fn main_camera(&self) -> Camera2D {
-        pixel_camera(self.main_view(), PIXELS_PER_METRE)
+        let Some(entrance) = &self.entrance else {
+            return pixel_camera(self.main_view(), PIXELS_PER_METRE);
+        };
+        let screen = vec2(screen_width(), screen_height());
+        let shown = |view| pixel_view(view, screen, PIXELS_PER_METRE);
+        let fight = self.fight();
+        let close_up = |id| fight.place(id).map_or(self.main_view(), entrance::close_up);
+        fit_camera(entrance.view(shown(self.main_view()), |id| shown(close_up(id))))
     }
 
     fn main_view(&self) -> Rect {
@@ -235,7 +286,7 @@ impl CombatScreen {
         let mouse = Vec2::from(mouse_position());
         let rects = thumbnail_rects(self.views.len() - 1, screen_width());
         if let Some(slot) = rects.iter().position(|r| r.contains(mouse)) {
-            if is_mouse_button_pressed(MouseButton::Left) {
+            if self.entrance.is_none() && is_mouse_button_pressed(MouseButton::Left) {
                 self.focus = self.thumbnailed()[slot];
             }
             return;
@@ -271,37 +322,13 @@ impl CombatScreen {
                             .striped(true)
                             .spacing([16.0, 6.0])
                             .show(ui, |ui| {
-                                for key in [
-                                    "presentation-fighter",
-                                    "presentation-class",
-                                    "presentation-loadout",
-                                    "presentation-elo",
-                                    "presentation-season",
-                                    "presentation-career",
-                                    "presentation-armour",
-                                ] {
+                                for key in INTRO_HEADINGS {
                                     ui.strong(tr!(key));
                                 }
                                 ui.end_row();
-                                for (k, intro) in cast.intros.iter().enumerate() {
-                                    let id = FighterId(u32::try_from(k).unwrap_or(u32::MAX));
-                                    let mut name = egui::RichText::new(&intro.name).strong();
-                                    if cast.club.contains(&id) {
-                                        name = name.color(theme::BRONZE);
-                                    }
-                                    ui.label(name);
-                                    ui.label(&intro.class);
-                                    ui.label(&intro.loadout);
-                                    ui.label(cast.elos.get(k).copied().flatten().map_or_else(
-                                        || tr!("presentation-unranked"),
-                                        |elo| elo.to_string(),
-                                    ));
-                                    ui.label(record_text(intro.season));
-                                    ui.label(record_text(intro.career));
-                                    if intro.no_armour {
-                                        ui.colored_label(theme::BLOOD, tr!("plan-no-armour"));
-                                    } else {
-                                        ui.label(tr!("presentation-armoured"));
+                                for k in 0..cast.intros.len() {
+                                    for text in intro_texts(cast, k).into_iter().flatten() {
+                                        ui.label(text);
                                     }
                                     ui.end_row();
                                 }
@@ -315,6 +342,48 @@ impl CombatScreen {
         if start {
             self.presenting = false;
         }
+    }
+
+    /// During the entrance, the card of the fighter the camera has stopped on, on the
+    /// right: what the presentation tells, then its stats.
+    fn card(&self, ui: &egui::Context) {
+        let fight = self.fight();
+        let Some((id, fighter)) = self
+            .entrance
+            .as_ref()
+            .and_then(Entrance::card)
+            .and_then(|id| Some((id, fight.arena.fighter(id)?)))
+        else {
+            return;
+        };
+        let Some([name, told @ ..]) = usize::try_from(id.0)
+            .ok()
+            .and_then(|k| intro_texts(&fight.cast, k))
+        else {
+            return;
+        };
+        egui::Window::new("entrance-card")
+            .title_bar(false)
+            .resizable(false)
+            .anchor(egui::Align2::RIGHT_CENTER, [-3.0 * MARGIN, 0.0])
+            .show(ui, |ui| {
+                ui.heading(name);
+                egui::Grid::new("entrance-grid")
+                    .spacing([16.0, 4.0])
+                    .show(ui, |ui| {
+                        for (key, text) in INTRO_HEADINGS[1..].iter().zip(told) {
+                            ui.strong(tr!(key));
+                            ui.label(text);
+                            ui.end_row();
+                        }
+                        let stats = fighter.stats.to_array();
+                        for (stat, value) in stat_names().into_iter().zip(stats) {
+                            ui.strong(stat);
+                            ui.label(value.to_string());
+                            ui.end_row();
+                        }
+                    });
+            });
     }
 
     /// The time left before the time limit of the fight shown big, top right.
@@ -464,6 +533,48 @@ impl CombatScreen {
 
 /// The result of `fight`: for the club, « Victoire ! » in green or « Défaite » in red,
 /// big, then who won and how the others went out, a sentence each.
+/// Those the entrance presents in turn: both fighters of a duel, the club's in a melee.
+fn presented(view: &FightView) -> Vec<FighterId> {
+    let duel = view.arena.fighters.len() == 2;
+    view.arena
+        .fighters
+        .iter()
+        .map(|f| f.id)
+        .filter(|id| duel || view.cast.club.contains(id))
+        .filter(|id| usize::try_from(id.0).is_ok_and(|k| k < view.cast.intros.len()))
+        .collect()
+}
+
+/// What the presentation tells of fighter `k` of `cast`, under `INTRO_HEADINGS`, the
+/// club's name in bronze; none for a fighter it does not know.
+fn intro_texts(cast: &Cast, k: usize) -> Option<[egui::RichText; 7]> {
+    let intro = cast.intros.get(k)?;
+    let mut name = egui::RichText::new(&intro.name).strong();
+    if cast.club.contains(&FighterId(u32::try_from(k).ok()?)) {
+        name = name.color(theme::BRONZE);
+    }
+    let elo = cast
+        .elos
+        .get(k)
+        .copied()
+        .flatten()
+        .map_or_else(|| tr!("presentation-unranked"), |elo| elo.to_string());
+    let armour = if intro.no_armour {
+        egui::RichText::new(tr!("plan-no-armour")).color(theme::BLOOD)
+    } else {
+        egui::RichText::new(tr!("presentation-armoured"))
+    };
+    Some([
+        name,
+        intro.class.as_str().into(),
+        intro.loadout.as_str().into(),
+        elo.into(),
+        record_text(intro.season).into(),
+        record_text(intro.career).into(),
+        armour,
+    ])
+}
+
 fn result_view(ui: &mut egui::Ui, fight: &FightView) {
     ui.vertical(|ui| {
         if let Some(verdict) = fight.verdict() {
@@ -711,7 +822,9 @@ impl Screen for CombatScreen {
             }
         }
         if keys && self.bindings.pressed(ui, &Action::Skip) {
-            if self.presenting {
+            if self.entrance.is_some() {
+                self.end_entrance();
+            } else if self.presenting {
                 self.presenting = false;
             } else if self.running() {
                 self.skip();
@@ -735,17 +848,28 @@ impl Screen for CombatScreen {
                     egui::Frame::popup(ui.style()).show(ui, |ui| ui.label(name));
                 });
         }
-        self.timer(ui);
-        self.feed(ui);
-        self.elimination(ui);
-        self.gauges(ui);
-        self.popups(ui);
+        if self.entrance.is_none() {
+            self.timer(ui);
+            self.feed(ui);
+            self.elimination(ui);
+            self.gauges(ui);
+            self.popups(ui);
+        }
+        self.card(ui);
         self.presentation(ui);
         // ponytail: no screen to tell a failure on; the options then last until the
         // game closes.
         let _ = options::window(ui, audio, self.settings.as_deref(), &mut self.options_open);
         audio.play_music(assets, MUSIC);
-        if self.paused || self.presenting {
+        if self.paused {
+            return Transition::None;
+        }
+        if self.entrance.is_some() {
+            // In real time, whatever the fight speed.
+            self.enter(get_frame_time());
+            return Transition::None;
+        }
+        if self.presenting {
             return Transition::None;
         }
         // Speed scales time: more or fewer ticks per frame, animations alike.
@@ -1054,6 +1178,38 @@ mod tests {
         );
         assert_eq!(watch(1).0, Some(Verdict::Victory));
         assert_eq!(watch(1).1[0], "Chasseur remporte le combat.");
+    }
+
+    #[test]
+    fn the_fighters_walk_in_and_are_shown_in_turn_before_the_fight() {
+        let data = Rc::new(DesignData::load().unwrap());
+        let duel = Watched {
+            arena: random_duel(&data, 42),
+            cast: Cast {
+                intros: vec![crate::fight_view::Intro::default(); 2],
+                ..named()
+            },
+        };
+        let mut screen = CombatScreen::watch(data, vec![duel], Bindings::new(Vec::new()));
+        let place = screen.fight().place(FighterId(0)).unwrap();
+        screen.enter(0.0);
+        // Still at the door.
+        assert_eq!(screen.fight().fighter_at(place), None);
+        let mut cards = Vec::new();
+        let mut seconds = 0.0;
+        while let Some(entrance) = &screen.entrance {
+            if let Some(id) = entrance.card()
+                && cards.last() != Some(&id)
+            {
+                cards.push(id);
+            }
+            screen.enter(0.1);
+            seconds += 0.1;
+        }
+        assert_eq!(cards, [FighterId(0), FighterId(1)]);
+        assert!((9.0..9.3).contains(&seconds), "{seconds} s");
+        assert_eq!(screen.fight().fighter_at(place), Some(FighterId(0)));
+        assert_eq!(screen.fight().arena.tick, 0);
     }
 
     /// The standard duel of `seed`, watched.

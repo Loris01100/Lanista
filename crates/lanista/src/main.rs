@@ -3,6 +3,7 @@
 
 mod club_screen;
 mod combat_screen;
+mod entrance;
 mod fight_view;
 mod fighter_sprite;
 mod lang;

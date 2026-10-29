@@ -250,6 +250,9 @@ pub struct FightView {
     seen_events: usize,
     pub looks: Vec<Look>,
     animations: [Animation; 5],
+    /// Share of their walk in from the door the fighters have done, before the first
+    /// tick (`FightView::walk_in`); `None` in place.
+    walk_in: Option<f32>,
 }
 
 impl FightView {
@@ -282,6 +285,7 @@ impl FightView {
             step: FixedStep::new(combat::TICKS_PER_SECOND),
             seen_events: 0,
             looks,
+            walk_in: None,
             // Same order as `Pose`.
             animations: [
                 animation(0, 0.25, true),
@@ -389,6 +393,46 @@ impl FightView {
             }
         }
         sounds
+    }
+
+    /// Shows the fighters `share` of their walk in from the nearest door, walking,
+    /// before the first tick; 1 puts them in place, at rest.
+    pub fn walk_in(&mut self, share: f32, dt: f32) {
+        let walking = share < 1.0;
+        self.walk_in = walking.then_some(share);
+        let pose = if walking { Pose::Move } else { Pose::Idle };
+        for look in &mut self.looks {
+            look.show(pose);
+            look.player.advance(&self.animations[pose as usize], dt);
+        }
+    }
+
+    /// Where fighter `f` walks in from: the nearest door, or off the nearest side wall
+    /// in an arena without one.
+    fn entry(&self, f: &Fighter) -> Vec2 {
+        let at = f.position;
+        let far = |p: &combat::Vec2| (p.x - at.x).abs() + (p.y - at.y).abs();
+        let door = self
+            .arena
+            .doors()
+            .into_iter()
+            .min_by(|a, b| far(a).total_cmp(&far(b)));
+        let from = door.unwrap_or_else(|| {
+            let side = if at.x < self.arena.width / 2.0 {
+                -1.0
+            } else {
+                self.arena.width + 1.0
+            };
+            combat::Vec2::new(side, at.y)
+        });
+        vec2(to_f32(from.x), to_f32(from.y))
+    }
+
+    /// Where fighter `id` stands once in, before the first tick.
+    #[must_use]
+    pub fn place(&self, id: FighterId) -> Option<Vec2> {
+        let at = self.arena.fighter(id)?.position;
+        Some(vec2(to_f32(at.x), to_f32(at.y)))
     }
 
     /// How the result names fighter `id`.
@@ -736,7 +780,8 @@ impl FightView {
         Rect::new(-1.0, -1.0, width + 2.0, height + 2.0)
     }
 
-    /// Where each fighter is drawn now, between its last two positions.
+    /// Where each fighter is drawn now, between its last two positions, or on its way
+    /// in from the door.
     fn drawn_positions(&self) -> Vec<Vec2> {
         let alpha = self.step.alpha();
         self.previous
@@ -744,10 +789,12 @@ impl FightView {
             .zip(&self.arena.fighters)
             .map(|(from, f)| {
                 let to = f.position;
-                vec2(
+                let at = vec2(
                     to_f32(from.x + (to.x - from.x) * alpha),
                     to_f32(from.y + (to.y - from.y) * alpha),
-                )
+                );
+                self.walk_in
+                    .map_or(at, |share| self.entry(f).lerp(at, share))
             })
             .collect()
     }

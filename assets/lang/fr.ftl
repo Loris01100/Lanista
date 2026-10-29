@@ -982,6 +982,7 @@ new-wealth = Commencer avec :
 game = Partie
 main-menu = Menu principal
 fullscreen = Plein écran
+cutscenes = Séquences (entrée des combattants)
 interface-size = Taille de l'interface :
 music = Musique
 effects = Effets
