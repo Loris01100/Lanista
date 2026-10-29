@@ -98,8 +98,9 @@ pub struct Display {
     pub fullscreen: bool,
     /// The interface's size, in percent of the theme's.
     pub interface: u16,
-    /// Whether the cutscenes play: the fighters' entrance.
-    pub cutscenes: bool,
+    /// Whether the fighters' entrance plays, and a duel's fatal blow.
+    pub entrance: bool,
+    pub fatal_blow: bool,
 }
 
 impl Default for Display {
@@ -107,7 +108,8 @@ impl Default for Display {
         Self {
             fullscreen: false,
             interface: 100,
-            cutscenes: true,
+            entrance: true,
+            fatal_blow: true,
         }
     }
 }
@@ -140,9 +142,14 @@ pub fn read_settings(folder: &Path, audio: &mut Audio) -> Display {
                     display.fullscreen = fullscreen;
                 }
             }
-            "cutscenes" => {
-                if let Ok(cutscenes) = value.parse() {
-                    display.cutscenes = cutscenes;
+            "entrance" => {
+                if let Ok(entrance) = value.parse() {
+                    display.entrance = entrance;
+                }
+            }
+            "fatal-blow" => {
+                if let Ok(fatal_blow) = value.parse() {
+                    display.fatal_blow = fatal_blow;
                 }
             }
             // Out of bounds, the interface would be unreadable or would not fit.
@@ -167,13 +174,15 @@ pub fn write_settings(folder: &Path, audio: &Audio, display: Display) -> std::io
 effects = {}
 fullscreen = {}
 interface = {}
-cutscenes = {}
+entrance = {}
+fatal-blow = {}
 ",
         audio.music_volume(),
         audio.effects_volume(),
         display.fullscreen,
         display.interface,
-        display.cutscenes
+        display.entrance,
+        display.fatal_blow
     );
     std::fs::write(folder.join(SETTINGS), text)
 }
@@ -232,7 +241,8 @@ mod tests {
         let display = Display {
             fullscreen: true,
             interface: 150,
-            cutscenes: false,
+            entrance: false,
+            fatal_blow: true,
         };
         write_settings(&folder, &audio, display).unwrap();
         let mut read = Audio::default();

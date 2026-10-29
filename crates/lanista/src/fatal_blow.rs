@@ -1,4 +1,4 @@
-//! The fatal blow of a duel shown big, the cutscenes on: shortly before the death the
+//! The fatal blow of a duel shown big, if on: shortly before the death the
 //! fight slows down and the camera closes in on both fighters; once the victim has
 //! fallen, the blow is played again from a copy of the arena taken just before it,
 //! close on the killer, then close on the victim, mirrored. The AIs keep no memory, so a

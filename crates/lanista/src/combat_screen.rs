@@ -89,11 +89,11 @@ pub struct CombatScreen {
     /// Whether the options, opened from the pause menu, are laid over it.
     options_open: bool,
     /// Whether the fighters of the fight shown big are being presented in a table,
-    /// before the first tick, the cutscenes off; the fights wait meanwhile.
+    /// before the first tick, the entrance off; the fights wait meanwhile.
     presenting: bool,
-    /// Their entrance, the cutscenes on, instead of the table; the fights wait meanwhile.
+    /// Their entrance, if on, instead of the table; the fights wait meanwhile.
     entrance: Option<Entrance>,
-    /// The fatal blow of the first fight, a duel, the cutscenes on, until shown.
+    /// The fatal blow of the first fight, a duel, if on, until shown.
     fatal_blow: Option<FatalBlow>,
 }
 
@@ -105,14 +105,14 @@ impl CombatScreen {
             .into_iter()
             .map(|f| FightView::new(f.arena, f.cast))
             .collect();
-        let cutscenes = options::cutscenes();
+        let display = options::display();
         let entrance = views
             .first()
-            .filter(|_| cutscenes)
+            .filter(|_| display.entrance)
             .map(|v| Entrance::new(presented(v)));
         let fatal_blow = views
             .first()
-            .filter(|_| cutscenes)
+            .filter(|_| display.fatal_blow)
             .and_then(|v| FatalBlow::find(&v.arena));
         Self {
             data,
@@ -125,7 +125,7 @@ impl CombatScreen {
             settings: None,
             paused: false,
             options_open: false,
-            presenting: !cutscenes,
+            presenting: !display.entrance,
             entrance,
             fatal_blow,
         }
