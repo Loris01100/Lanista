@@ -4,7 +4,7 @@
 use crate::colosseum::{ColosseumId, Contender, Rating, TitleNews, title_kept};
 use crate::design_data::DesignData;
 use crate::economy::{Flow, Transaction, Wealth};
-use crate::fighter::career::{Activity, CareerFighter, Status, WeekPlan, WeekReport};
+use crate::fighter::career::{Activity, CareerFighter, Orders, Status, WeekPlan, WeekReport};
 use crate::fighter::fame::{Fame, FightResult};
 use crate::fighter::percent_of;
 use crate::market::{MarketNews, Move};
@@ -25,6 +25,9 @@ pub struct Decisions {
     /// One plan per fighter, in club order; a fighter without one follows
     /// `GameState::suggested_plan`.
     pub plans: Vec<WeekPlan>,
+    /// The orders of each fighter from this week on (`CareerFighter::orders`), in club
+    /// order; a fighter without one keeps its own.
+    pub orders: Vec<Orders>,
     /// Market moves, each made if `GameState::may_move` allows it at its turn: the
     /// first observation, then accepted offers, releases, the transfer list and
     /// signings before the week, and the first offer for a rival fighter after it.
@@ -57,7 +60,7 @@ pub struct WeekSummary {
     pub rankings_before: Vec<(ColosseumId, Vec<Rating>)>,
 }
 
-/// Plays one week for the whole club: the market moves and the change of staff before
+/// Plays one week for the whole club: the fighters' new orders, the market moves and the change of staff before
 /// the week, the staff's salaries, then each fighter's week in
 /// club order, paid for (`pay_fighter`), then the week of the rival clubs and
 /// the free agents, the answer to the player's offer, the contracts ending and
@@ -75,6 +78,9 @@ pub struct WeekSummary {
 /// (`GameState::may_challenge`). Upkeep, wages and salaries are always paid, even into
 /// debt.
 pub fn next_week(state: &mut GameState, decisions: &Decisions, data: &DesignData) -> WeekSummary {
+    for (fighter, orders) in state.fighters.iter_mut().zip(&decisions.orders) {
+        fighter.orders = *orders;
+    }
     let (week, money, before) = (state.week, state.money, state.fighters.clone());
     let mut ledger = Vec::new();
     let mut market = market_moves(state, &decisions.moves, data, &mut ledger);

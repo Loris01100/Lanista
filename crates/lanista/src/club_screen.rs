@@ -26,7 +26,7 @@ use lanista_core::design_data::DesignData;
 use lanista_core::economy::Flow;
 use lanista_core::fighter::care::CareRules;
 use lanista_core::fighter::career::{
-    Activity, CareerFighter, FightSummary, Record, Status, WeekPlan,
+    Activity, CareerFighter, Duty, FightSummary, Orders, Record, Status, WeekPlan,
 };
 use lanista_core::fighter::equipment::Refused;
 use lanista_core::fighter::fame::{Fame, FightResult};
@@ -376,6 +376,13 @@ impl ClubScreen {
     /// Plays the week with the current decisions; its fights are queued to be
     /// watched, then summed up.
     fn next_week(&mut self) {
+        // A fighter keeps fighting without what it refused, until the player says otherwise.
+        let decisions = &mut self.decisions;
+        for (plan, orders) in decisions.plans.iter().zip(&mut decisions.orders) {
+            if plan.activity.fights() {
+                orders.refused = plan.refused;
+            }
+        }
         next_week(&mut self.state, &self.decisions, &self.data);
         self.read_journal();
         self.shown_issue = None;
@@ -402,12 +409,7 @@ impl ClubScreen {
             self.view = View::Market;
         }
         self.view = self.followed(self.view);
-        let refused: Vec<Refused> = self.decisions.plans.iter().map(|p| p.refused).collect();
         self.decisions = self.state.suggested_decisions(&self.data);
-        // A fighter keeps fighting without what it refused, until the player says otherwise.
-        for (plan, refused) in self.decisions.plans.iter_mut().zip(refused) {
-            plan.refused = refused;
-        }
         // Saved before the fights are watched: quitting during one keeps its outcome.
         self.save(saves::AUTO, false);
     }
@@ -983,6 +985,19 @@ impl ClubScreen {
             {
                 let care = self.state.care_rules(data);
                 plan_editor(ui, plan, f, &special, (&self.state, &care), data);
+                let club = (&self.state, &care);
+                if let Some(orders) = self.decisions.orders.get_mut(index)
+                    && let Some(duty) = Duty::repeating(plan.activity)
+                    && exception(plan, *orders, index, &special, club, data)
+                {
+                    let button = ui.button(tr!("sheet-make-orders"));
+                    if button
+                        .on_hover_text(tr!("sheet-make-orders-hint"))
+                        .clicked()
+                    {
+                        orders.activity = duty;
+                    }
+                }
                 challenge_picker(ui, plan, index, &self.state, data);
                 let key = (self.state.week, index, plan.activity);
                 fight_preview(ui, key, &mut self.likely, &self.state, data);
@@ -1432,6 +1447,34 @@ fn settle_plan(
     if !plan.activity.fights() {
         plan.refused = Refused::NONE;
     }
+}
+
+/// Whether the club's fighter `i`'s week (`plan`) is not what its `orders` give, both
+/// settled (`settle_plan`).
+fn exception(
+    plan: &WeekPlan,
+    orders: Orders,
+    i: usize,
+    special: &[(Activity, String)],
+    (state, care): (&GameState, &CareRules),
+    data: &DesignData,
+) -> bool {
+    ordered(orders, i, special, (state, care), data).activity != plan.activity
+}
+
+/// The club's fighter `i`'s week under `orders` (`GameState::ordered_plan`), settled.
+fn ordered(
+    orders: Orders,
+    i: usize,
+    special: &[(Activity, String)],
+    (state, care): (&GameState, &CareRules),
+    data: &DesignData,
+) -> WeekPlan {
+    let mut plan = state.ordered_plan(i, orders, data);
+    if let Some(f) = state.fighters.get(i) {
+        settle_plan(&mut plan, f, special, (state, care), data);
+    }
+    plan
 }
 
 /// A fighter's week in a few words, for the roster: "Repos, Double épée, avec soins".
@@ -2361,6 +2404,17 @@ mod tests {
         assert_eq!(screen.decisions.plans[0].refused, armour);
         let lines = &screen.histories[0][0].1;
         assert!(lines[1].contains(", sans armure :"), "{lines:?}");
+    }
+
+    #[test]
+    fn orders_are_kept_from_week_to_week_and_an_exception_is_not() {
+        let mut screen = screen(7);
+        screen.decisions.orders[0].activity = Duty::Rest;
+        screen.decisions.plans[0].activity = Activity::Train;
+        screen.next_week();
+        assert_eq!(screen.state.fighters[0].orders.activity, Duty::Rest);
+        assert_eq!(screen.decisions.orders[0].activity, Duty::Rest);
+        assert_eq!(screen.decisions.plans[0].activity, Activity::Rest);
     }
 
     #[test]

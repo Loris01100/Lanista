@@ -13,7 +13,9 @@ use crate::colosseum::{Colosseum, ColosseumId, Contender, Continent, Odds, Roste
 use crate::design_data::DesignData;
 use crate::economy::{Contract, Terms, Wealth};
 use crate::fighter::care::CareRules;
-use crate::fighter::career::{Activity, CareerFighter, Status, WeekPlan, suggested_plan};
+use crate::fighter::career::{
+    Activity, CareerFighter, Duty, Orders, Status, WeekPlan, ordered_plan,
+};
 use crate::fighter::equipment::Refused;
 use crate::fighter::fame::{Fame, FightResult};
 use crate::fighter::percent_of;
@@ -581,29 +583,39 @@ impl GameState {
             .unwrap_or_default()
     }
 
-    /// The suggested plans of every fighter this week, and no market move.
+    /// The suggested plans of every fighter this week, their orders kept, and no
+    /// market move.
     #[must_use]
     pub fn suggested_decisions(&self, data: &DesignData) -> Decisions {
         Decisions {
             plans: (0..self.fighters.len())
                 .map(|i| self.suggested_plan(i, data))
                 .collect(),
+            orders: self.fighters.iter().map(|f| f.orders).collect(),
             moves: Vec::new(),
             staff: Vec::new(),
         }
     }
 
-    /// `career::suggested_plan` for the club's fighter `i`, its fights in the first
-    /// colosseum of the club's continent (`WorldRules::first_colosseum`), who defends a
-    /// title instead
-    /// of fighting or training in the last two weeks before its deadline.
+    /// [`GameState::ordered_plan`] under the club's fighter `i`'s own orders.
     #[must_use]
     pub fn suggested_plan(&self, i: usize, data: &DesignData) -> WeekPlan {
+        let orders = self.fighters.get(i).map(|f| f.orders).unwrap_or_default();
+        self.ordered_plan(i, orders, data)
+    }
+
+    /// `career::ordered_plan` for the club's fighter `i` under `orders`, the fights of
+    /// [`Duty::Auto`] in the first colosseum of the club's continent
+    /// (`WorldRules::first_colosseum`), the season opened with the melee where it would
+    /// have fought, and who defends a title instead of fighting or training in the last
+    /// two weeks before its deadline.
+    #[must_use]
+    pub fn ordered_plan(&self, i: usize, orders: Orders, data: &DesignData) -> WeekPlan {
         let Some(fighter) = self.fighters.get(i) else {
             return REST;
         };
-        let mut plan = suggested_plan(fighter, self.week);
-        if plan.activity == Activity::Fight(ColosseumId(0)) {
+        let mut plan = ordered_plan(fighter, orders, self.week);
+        if orders.activity == Duty::Auto && plan.activity == Activity::Fight(ColosseumId(0)) {
             plan.activity = Activity::Fight(data.world.first_colosseum(self.continent));
         }
         // The season opens with the melee where it would have fought.
@@ -1095,6 +1107,7 @@ mod tests {
     fn moves(moves: &[Move]) -> Decisions {
         Decisions {
             plans: vec![REST],
+            orders: Vec::new(),
             moves: moves.to_vec(),
             staff: Vec::new(),
         }
@@ -1898,6 +1911,25 @@ mod tests {
     }
 
     #[test]
+    fn orders_given_hold_from_week_to_week() {
+        let data = data();
+        let mut state = game(7, &data);
+        let mut decisions = state.suggested_decisions(&data);
+        decisions.orders[0].activity = Duty::Train;
+        next_week(&mut state, &decisions, &data);
+        assert_eq!(state.fighters[0].orders.activity, Duty::Train);
+        // Fit, it trains, as told, the week after and the one after that.
+        for _ in 0..2 {
+            let f = &mut state.fighters[0];
+            (f.form, f.illness) = (crate::fighter::form::Form::full(), None);
+            f.injuries.clear();
+            assert_eq!(state.suggested_plan(0, &data).activity, Activity::Train);
+            let decisions = state.suggested_decisions(&data);
+            next_week(&mut state, &decisions, &data);
+        }
+    }
+
+    #[test]
     fn the_suggestion_defends_a_title_before_its_deadline() {
         let data = data();
         let mut state = game(7, &data);
@@ -2184,6 +2216,7 @@ mod tests {
                 loadout: 0,
                 focus: None,
             }],
+            orders: Vec::new(),
             moves: list.moves.clone(),
             staff: Vec::new(),
         };

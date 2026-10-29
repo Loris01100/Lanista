@@ -9,7 +9,7 @@ use lanista_core::combat::{ArenaKind, Element};
 use lanista_core::design_data::DesignData;
 use lanista_core::economy::{Flow, Terms, Transaction, Wealth};
 use lanista_core::fighter::STAT_COUNT;
-use lanista_core::fighter::career::{Activity, CareerFighter, Record, Status};
+use lanista_core::fighter::career::{Activity, CareerFighter, Duty, Record, Status};
 use lanista_core::fighter::fame::FightResult;
 use lanista_core::fighter::illness::{Illness, IllnessLevel};
 use lanista_core::fighter::injury::{Injury, Location, Severity, Side};
@@ -147,6 +147,17 @@ pub fn activity_name(activity: Activity, data: &DesignData) -> String {
         Activity::TitleFight(id) => tr!("activity-title-fight", place = colosseum_name(id, data)),
         Activity::Challenge(id, _) => tr!("activity-challenge", place = colosseum_name(id, data)),
         Activity::Melee(id) => tr!("activity-melee", place = colosseum_name(id, data)),
+    }
+}
+
+/// "Alterner, combats à Capoue": a fighter's standing duty (`Orders::activity`).
+pub fn duty_name(duty: Duty, data: &DesignData) -> String {
+    match duty {
+        Duty::Auto => tr!("duty-auto"),
+        Duty::Alternate(id) => tr!("duty-alternate", place = colosseum_name(id, data)),
+        Duty::Fight(id) => tr!("duty-fight", place = colosseum_name(id, data)),
+        Duty::Train => tr!("duty-train"),
+        Duty::Rest => tr!("duty-rest"),
     }
 }
 

@@ -97,6 +97,9 @@ pub struct CareerFighter {
     /// the last one its club chose (`WeekPlan::focus`).
     #[serde(default)]
     pub focus: Option<usize>,
+    /// What its club has it do week after week (`suggested_plan`).
+    #[serde(default)]
+    pub orders: Orders,
     /// Its ease with each loadout of its class, from 0 to 100 (`EaseRules`): drawn as a
     /// recruit, raised by each fight in it.
     #[serde(default)]
@@ -203,6 +206,7 @@ impl CareerFighter {
             ambidextrous,
             loadout: 0,
             focus: None,
+            orders: Orders::default(),
             ease,
             age,
             personality,
@@ -269,6 +273,7 @@ impl CareerFighter {
             ambidextrous: false,
             loadout: 0,
             focus: None,
+            orders: Orders::default(),
             ease: Vec::new(),
             age: 0,
             personality: Personality::neutral(),
@@ -1297,25 +1302,72 @@ impl Activity {
 /// Below this form, `suggested_plan` rests.
 pub const REST_BELOW_FORM: u32 = 50;
 
-/// A simple stand-in for the player's decisions, shared by the `career` tool and the
-/// game's default choice: care for anything medium or worse, rest when tired, badly
-/// hurt or ill, otherwise fight on odd weeks, in the first colosseum (free to enter),
-/// and train on even ones.
-// ponytail: fixed rules; the rival managers' (`rivals::plan`) could suggest instead.
+/// What the player has a fighter do week after week, unless it says otherwise for
+/// one week: what [`suggested_plan`] follows.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub struct Orders {
+    pub activity: Duty,
+    /// The equipment it leaves when it fights.
+    pub refused: Refused,
+}
+
+/// The activity of a fighter's [`Orders`].
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub enum Duty {
+    /// Fights on odd weeks in the first colosseum of the club's continent, trains on
+    /// even ones.
+    #[default]
+    Auto,
+    /// Fights on odd weeks in this colosseum, trains on even ones.
+    Alternate(ColosseumId),
+    /// Fights every week in this colosseum.
+    Fight(ColosseumId),
+    Train,
+    Rest,
+}
+
+impl Duty {
+    /// The standing activity that repeats `activity`, if one does: a title fight, a
+    /// challenge or a melee is for one week only.
+    #[must_use]
+    pub fn repeating(activity: Activity) -> Option<Self> {
+        match activity {
+            Activity::Rest => Some(Self::Rest),
+            Activity::Train => Some(Self::Train),
+            Activity::Fight(id) => Some(Self::Fight(id)),
+            Activity::TitleFight(_) | Activity::Challenge(..) | Activity::Melee(_) => None,
+        }
+    }
+}
+
+/// The fighter's own [`Orders`] as a plan ([`ordered_plan`]).
 #[must_use]
 pub fn suggested_plan(fighter: &CareerFighter, week: u64) -> WeekPlan {
+    ordered_plan(fighter, fighter.orders, week)
+}
+
+/// A simple stand-in for the player's decisions, shared by the `career` tool and the
+/// game's default choice: care for anything medium or worse, rest when tired, badly
+/// hurt or ill, otherwise follow `orders`; [`Duty::Auto`] fights in colosseum 0.
+#[must_use]
+pub fn ordered_plan(fighter: &CareerFighter, orders: Orders, week: u64) -> WeekPlan {
     let hurt = badly_hurt_or_ill(fighter);
+    let odd = week % 2 == 1;
     let activity = if hurt || fighter.form.value() < REST_BELOW_FORM {
         Activity::Rest
-    } else if week % 2 == 1 {
-        Activity::Fight(ColosseumId(0))
     } else {
-        Activity::Train
+        match orders.activity {
+            Duty::Auto if odd => Activity::Fight(ColosseumId(0)),
+            Duty::Alternate(id) if odd => Activity::Fight(id),
+            Duty::Fight(id) => Activity::Fight(id),
+            Duty::Rest => Activity::Rest,
+            Duty::Auto | Duty::Alternate(_) | Duty::Train => Activity::Train,
+        }
     };
     WeekPlan {
         activity,
         care: hurt,
-        refused: Refused::NONE,
+        refused: orders.refused,
         loadout: fighter.loadout,
         focus: fighter.focus,
     }
@@ -2551,6 +2603,35 @@ mod tests {
                 focus: None,
             }
         );
+    }
+
+    #[test]
+    fn the_suggested_plan_follows_the_orders_but_rests_the_tired() {
+        let mut f = fighter(7);
+        let rome = ColosseumId(1);
+        let armour = Refused { armour: true };
+        let week = |f: &CareerFighter, w| suggested_plan(f, w).activity;
+        f.orders = Orders {
+            activity: Duty::Fight(rome),
+            refused: armour,
+        };
+        assert_eq!(
+            (week(&f, 1), week(&f, 2)),
+            (Activity::Fight(rome), Activity::Fight(rome))
+        );
+        assert_eq!(suggested_plan(&f, 2).refused, armour);
+        f.orders.activity = Duty::Alternate(rome);
+        assert_eq!(
+            (week(&f, 1), week(&f, 2)),
+            (Activity::Fight(rome), Activity::Train)
+        );
+        f.orders.activity = Duty::Train;
+        assert_eq!(week(&f, 1), Activity::Train);
+        f.orders.activity = Duty::Rest;
+        assert_eq!(week(&f, 1), Activity::Rest);
+        f.orders.activity = Duty::Fight(rome);
+        f.form = Form::new(REST_BELOW_FORM - 1);
+        assert_eq!(week(&f, 2), Activity::Rest);
     }
 
     #[test]
