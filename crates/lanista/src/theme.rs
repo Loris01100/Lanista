@@ -21,7 +21,44 @@ const WOOD_LIGHT: Color32 = Color32::from_rgb(0x4A, 0x3B, 0x2E);
 const WOOD_LIGHTER: Color32 = Color32::from_rgb(0x5E, 0x4A, 0x38);
 const WOOD_LIGHTEST: Color32 = Color32::from_rgb(0x75, 0x59, 0x3F);
 
+/// Roman capitals for the titles.
+const DISPLAY: &str = "display";
+/// The body text.
+const BODY: &str = "body";
+
+/// The game's fonts, embedded so that the tests' themes have them too.
+fn fonts() -> egui::FontDefinitions {
+    let mut fonts = egui::FontDefinitions::default();
+    for (name, bytes) in [
+        (
+            DISPLAY,
+            &include_bytes!("../../../assets/fonts/Cinzel.ttf")[..],
+        ),
+        (
+            BODY,
+            &include_bytes!("../../../assets/fonts/Alegreya.ttf")[..],
+        ),
+    ] {
+        fonts
+            .font_data
+            .insert(name.to_owned(), egui::FontData::from_static(bytes).into());
+    }
+    // In front of egui's own, kept as fallbacks for what ours lack (emoji…).
+    fonts
+        .families
+        .entry(FontFamily::Proportional)
+        .or_default()
+        .insert(0, BODY.to_owned());
+    let mut display = vec![DISPLAY.to_owned()];
+    display.extend(fonts.families[&FontFamily::Proportional].iter().cloned());
+    fonts
+        .families
+        .insert(FontFamily::Name(DISPLAY.into()), display);
+    fonts
+}
+
 pub fn apply(ui: &egui::Context) {
+    ui.set_fonts(fonts());
     // `style_mut` sets the active theme's style only: pin it to dark so egui
     // never switches to its untouched light style.
     ui.set_theme(egui::Theme::Dark);
@@ -31,7 +68,7 @@ pub fn apply(ui: &egui::Context) {
             (TextStyle::Small, 14.0, FontFamily::Proportional),
             (TextStyle::Body, 18.0, FontFamily::Proportional),
             (TextStyle::Button, 18.0, FontFamily::Proportional),
-            (TextStyle::Heading, 26.0, FontFamily::Proportional),
+            (TextStyle::Heading, 26.0, FontFamily::Name(DISPLAY.into())),
             (TextStyle::Monospace, 16.0, FontFamily::Monospace),
         ]
         .into_iter()
