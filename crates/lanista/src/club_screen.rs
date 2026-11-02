@@ -2873,7 +2873,8 @@ mod tests {
         assert_eq!(screen.state, headless);
         assert_eq!(screen.to_watch.len(), 3);
         let melee = &screen.to_watch[0];
-        assert_eq!(melee.arena.fighters.len(), 20);
+        // Capua's entrants, past twenty, share melees of even sizes.
+        assert!((11..=20).contains(&melee.arena.fighters.len()));
         assert_eq!(melee.cast.club, [screen.fights[0].fight.me]);
         let fights = std::mem::take(&mut screen.to_watch);
         let mut watching = CombatScreen::watch(Rc::clone(&data), fights, Bindings::new(Vec::new()));

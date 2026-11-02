@@ -21,8 +21,9 @@ use super::{GameState, affordable, entry_fee, relate};
 /// Fewest fighters in a melee, below which it is called off.
 const MELEE_MIN_FIGHTERS: usize = 3;
 
-/// The season-opening melees, before the club's other fights, one per colosseum (see
-/// [`melee_lineup`] for who fights, [`settle_melee`] for what it pays). The outsiders
+/// The season-opening melees, before the club's other fights: in each colosseum, as
+/// many as it takes for no more than `MeleeRules::max_fighters` in each (see
+/// [`melee_lineup`] for who fights, [`settle_melee`] for what each pays). The outsiders
 /// who fought are added to `fought`, their week to end with the others'; the club's
 /// fighters' weeks are returned, in club order, and the club's money moves are in
 /// `ledger`.
@@ -41,34 +42,34 @@ pub(super) fn melees(
     let colosseums = data.world.colosseums.iter().enumerate();
     for (c, rules) in colosseums.take(state.colosseums.len()) {
         let lineup = melee_lineup(state, c, (wanted, plans), costs, (fought, reserved), data);
-        let Some(entries) = lineup else {
-            continue;
-        };
         let floor = Floor {
             kind: rules.arena,
             element: data.world.element(rules.continent),
         };
-        let played = melee_entries(state, &entries, (wanted, floor), effects, data);
-        if let Some(played) = played {
-            settle_melee(
-                state,
-                (c, &entries),
-                played,
-                (&mut weeks, fought, ledger),
-                data,
-            );
+        for entries in lineup.into_iter().flatten() {
+            let played = melee_entries(state, &entries, (wanted, floor), effects, data);
+            if let Some(played) = played {
+                settle_melee(
+                    state,
+                    (c, &entries),
+                    played,
+                    (&mut weeks, fought, ledger),
+                    data,
+                );
+            }
         }
     }
     weeks
 }
 
-/// Who fights colosseum `c`'s melee, in a random order: the club's fighters registered
-/// there (`Activity::Melee` in `wanted`) as the club can pay, care and fee, at `costs`;
-/// the outsiders registered there (in `plans`), then, if room is left, those ranked
-/// there who would only train, none of those who `fought` or are `reserved` for a duel
-/// with the club's fighters. At most `MeleeRules::max_fighters`, the club's fighters
-/// first, then the outsiders by Elo, the others training (or resting, for a free
-/// agent). Fewer than [`MELEE_MIN_FIGHTERS`]: it is called off, and they rest or train.
+/// Who fights colosseum `c`'s melees, each in a random order: the club's fighters
+/// registered there (`Activity::Melee` in `wanted`) as the club can pay, care and fee,
+/// at `costs`; the outsiders registered there (in `plans`), then, if room is left in a
+/// single melee of `MeleeRules::max_fighters`, those ranked there who would only train,
+/// none of those who `fought` or are `reserved` for a duel with the club's fighters.
+/// Past `max_fighters`, as many melees of even sizes as it takes, the club's fighters
+/// together in the first, the outsiders drawn into them. Fewer than
+/// [`MELEE_MIN_FIGHTERS`]: it is called off, and they rest (a free agent) or train.
 fn melee_lineup(
     state: &mut GameState,
     c: usize,
@@ -76,7 +77,7 @@ fn melee_lineup(
     costs: (u32, Medicine),
     (fought, reserved): (&[Contender], &[Contender]),
     data: &DesignData,
-) -> Option<Vec<Contender>> {
+) -> Option<Vec<Vec<Contender>>> {
     let world = &data.world;
     world.colosseums.get(c)?;
     let fee = entry_fee(c, state.continent, data);
@@ -91,7 +92,7 @@ fn melee_lineup(
         }
         let money = state.money - promised;
         let plan = affordable(wanted[i], f, (money, state.continent), costs, data);
-        if plan.activity == here && club.len() < most {
+        if plan.activity == here {
             let care = costs.1.care_rules(&data.fighter.care);
             let care = if plan.care { f.care_cost(&care) } else { 0 };
             promised += i64::from(fee) + i64::from(care);
@@ -123,26 +124,38 @@ fn melee_lineup(
             .collect();
         registered.extend(filling);
     }
-    let left_out = registered.split_off(room.min(registered.len()));
-    let called_off = club.len() + registered.len() < MELEE_MIN_FIGHTERS;
-    let instead = |o: Contender| match o {
-        Contender::Rival(_) => Activity::Train,
-        _ => Activity::Rest,
-    };
-    let sent_back = if called_off { &registered[..] } else { &[] };
-    for &o in left_out.iter().chain(sent_back) {
-        plans.set_activity(o, instead(o));
-    }
-    if called_off {
+    if club.len() + registered.len() < MELEE_MIN_FIGHTERS {
+        for &o in &registered {
+            let instead = match o {
+                Contender::Rival(_) => Activity::Train,
+                _ => Activity::Rest,
+            };
+            plans.set_activity(o, instead);
+        }
         for &i in &club {
             wanted[i].activity = Activity::Rest;
         }
         return None;
     }
-    let mut entries: Vec<Contender> = club.into_iter().map(Contender::Club).collect();
-    entries.extend(registered);
-    shuffle(&mut state.rng, &mut entries);
-    Some(entries)
+    let total = club.len() + registered.len();
+    let count = total.div_ceil(most).min(total / MELEE_MIN_FIGHTERS);
+    if count > 1 {
+        shuffle(&mut state.rng, &mut registered);
+    }
+    let mut outsiders = registered.into_iter();
+    let mut melees = Vec::with_capacity(count);
+    for k in 0..count {
+        let size = (k + 1) * total / count - k * total / count;
+        let mut entries: Vec<Contender> = if k == 0 {
+            club.iter().copied().map(Contender::Club).collect()
+        } else {
+            Vec::new()
+        };
+        entries.extend(outsiders.by_ref().take(size.saturating_sub(entries.len())));
+        shuffle(&mut state.rng, &mut entries);
+        melees.push(entries);
+    }
+    Some(melees)
 }
 
 /// What colosseum `c`'s melee of `entries` pays and leaves, `played` as

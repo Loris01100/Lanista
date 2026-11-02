@@ -376,7 +376,7 @@ Le plan Godot (C#, Godot RL Agents) est abandonné pour un moteur maison en Rust
 | Durée de la compétition | 22 semaines par saison, puis 4 de grand événement et 4 d'intersaison |
 | Titre de champion | Défense au minimum toutes les 4 semaines, plus souvent si le champion le souhaite |
 | Combat sans armure | Défenses réduites, bonus de renommée ; les armes ne se refusent pas |
-| Mêlée | Une par colisée et par saison, plusieurs combattants d'un même club autorisés, sans lien d'office, pactes spontanés en combat |
+| Mêlée | Une par colisée et par saison (plusieurs de 20 au plus quand les inscrits sont plus nombreux), plusieurs combattants d'un même club autorisés, sans lien d'office, pactes spontanés en combat |
 | Mort à l'écran | Tâche de sang et petite animation, selon ce qui est faisable |
 
 ### Points encore ouverts

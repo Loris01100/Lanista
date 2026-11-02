@@ -1230,7 +1230,9 @@ mod tests {
         };
         // Many fought in the melees, each a fight of their record.
         assert!(outsiders(&state) >= outsiders(&before) + 2 * 3);
-        for (c, colosseum) in state.colosseums.iter().enumerate() {
+        // Capua's melees take everyone who would fight; Rome's, with no one left to
+        // fill it, is called off.
+        for (c, colosseum) in state.colosseums.iter().enumerate().take(1) {
             let moved = colosseum
                 .ranking
                 .iter()
@@ -1250,6 +1252,33 @@ mod tests {
         assert_eq!(report.plan.activity, Activity::Rest);
         state.week = u64::from(data.calendar.season_weeks()) + 1;
         assert!(state.opens_season(&data));
+    }
+
+    #[test]
+    fn a_colosseum_with_more_entrants_than_a_melee_holds_plays_several() {
+        let mut data = data();
+        data.combat.melee.max_fighters = 4;
+        let mut state = game(3, &data);
+        let plans = state.outsider_plans(&data);
+        let capua = Activity::Melee(ColosseumId(0));
+        let entered: Vec<Contender> =
+            super::outsiders::outsiders(&state.rivals, &state.free_agents)
+                .filter(|&o| plans.of(o).is_some_and(|p| p.activity == capua))
+                .collect();
+        assert!(entered.len() > 4);
+        let before = state.clone();
+        next_week(&mut state, &plan(Activity::Rest, false), &data);
+        // Each one fought once, but those sold since, whose entry keeps its old record.
+        for o in entered {
+            let fights = |s: &GameState| {
+                let f = super::outsiders::outsider(&s.rivals, &s.free_agents, o).unwrap();
+                (f.status, f.record.wins + f.record.losses + f.record.draws)
+            };
+            let (status, after) = fights(&state);
+            if status != Status::Sold {
+                assert_eq!(after, fights(&before).1 + 1, "{o:?}");
+            }
+        }
     }
 
     #[test]
