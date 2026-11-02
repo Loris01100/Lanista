@@ -54,12 +54,12 @@ use crate::saves;
 use crate::texts::{
     Article, activity_name, against_text, arena_effect, arena_name, challenger_text, change,
     class_name, club_name, colosseum_name, colosseum_rules_name, contender_name, continent_in,
-    date_in_sentence, date_text, fight_text, fighter_name, illness_effect, illness_text,
-    injury_effect, injury_text, loadout_name, market_news_text, money_line, move_text, named_club,
-    origin_place, priced, range_texts, result_text, rival_fighter_name, staff_move_text,
-    staff_news_text, stage_name, stat_names, temperament_name, temperament_text, title_article,
-    title_changed, trait_memory, trait_name, trait_text, wealth_name, wealth_text, week_lines,
-    world_article, year_text,
+    date_in_sentence, date_text, fight_text, fighter_name, free_agent_name, illness_effect,
+    illness_text, injury_effect, injury_text, loadout_name, market_news_text, money_line,
+    move_text, named_club, origin_place, priced, range_texts, result_text, rival_fighter_name,
+    staff_move_text, staff_news_text, stage_name, stat_names, temperament_name, temperament_text,
+    title_article, title_changed, trait_memory, trait_name, trait_text, wealth_name, wealth_text,
+    week_lines, world_article, year_text,
 };
 use crate::theme;
 use crate::title_screen::{Slot, read_slots, slot_text};
@@ -785,6 +785,46 @@ impl ClubScreen {
         }
     }
 
+    /// The window over the screen while the club has its first fighter to pick among
+    /// the starters, one of each class; the others go back to the market.
+    fn starter_window(&mut self, ui: &egui::Context) {
+        if self.state.starters.is_empty() {
+            return;
+        }
+        let mut picked = None;
+        egui::Modal::new(egui::Id::new("starters")).show(ui, |ui| {
+            ui.heading(tr!("starter-title"));
+            ui.label(tr!("starter-text"));
+            ui.add_space(6.0);
+            let (state, data) = (&self.state, &self.data);
+            egui::Grid::new("starter grid")
+                .striped(true)
+                .spacing([18.0, 6.0])
+                .show(ui, |ui| {
+                    ui.strong(tr!("roster-fighter"));
+                    ui.strong(tr!("roster-age"));
+                    ui.strong(tr!("market-asked-wage"));
+                    ui.end_row();
+                    for &a in &state.starters {
+                        let f = &state.free_agents[a];
+                        ui.strong(free_agent_name(a, f, data));
+                        ui.label(f.age.to_string());
+                        let wage = data.economy.contracts.asked_wage(f, &data.economy.market);
+                        ui.label(tr!("wage", wage = wage));
+                        if ui.button(tr!("starter-pick")).clicked() {
+                            picked = Some(a);
+                        }
+                        ui.end_row();
+                    }
+                });
+        });
+        if let Some(a) = picked {
+            self.state.pick_starter(a, &self.data);
+            self.decisions = self.state.suggested_decisions(&self.data);
+            self.read_journal();
+        }
+    }
+
     /// Each save slot with « Sauvegarder », or the question before saving over one.
     fn save_slots(&mut self, ui: &mut egui::Ui) {
         if let Some(slot) = self.confirm {
@@ -1131,6 +1171,7 @@ impl Screen for ClubScreen {
         let keys = !self.options_open
             && !self.game_open
             && !self.no_fighter_open
+            && self.state.starters.is_empty()
             && self.terms_draft.is_none();
         if keys && self.bindings.pressed(ui, &Action::Quit) {
             if self.view == View::Menu {
@@ -1176,7 +1217,8 @@ impl Screen for ClubScreen {
             return self.watch(fight);
         }
         self.no_fighter_window(ui);
-        if play {
+        self.starter_window(ui);
+        if play && self.state.starters.is_empty() {
             if self.can_play() {
                 self.next_week();
             } else {

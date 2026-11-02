@@ -18,8 +18,8 @@ use crate::fighter::career::{
 };
 use crate::fighter::equipment::Refused;
 use crate::fighter::fame::{Fame, FightResult};
-use crate::fighter::percent_of;
 use crate::fighter::traits::Trait;
+use crate::fighter::{ClassId, percent_of};
 use crate::journal::Journal;
 use crate::market::{self, Move, SaleOffer, Target, value};
 use crate::names::{self, ClubName, FighterName};
@@ -107,6 +107,10 @@ pub struct GameState {
     /// The last `CareerFighter::id` given.
     #[serde(default)]
     pub last_fighter_id: u64,
+    /// The free agents offered as the club's first fighter, one of each class, by
+    /// index (`found`); empty once one is picked, or in a game started with its own.
+    #[serde(default)]
+    pub starters: Vec<usize>,
     /// The only source of chance after the start: same seed and decisions, same game.
     pub rng: ChaCha8Rng,
 }
@@ -133,6 +137,55 @@ impl GameState {
     ) -> Self {
         let mut rng = ChaCha8Rng::seed_from_u64(seed);
         let fighters = vec![CareerFighter::random(&mut rng, data)];
+        Self::opened(rng, fighters, (wealth, continent), name, data)
+    }
+
+    /// A new game as `start` makes it, but with no fighter: the club's first is one of
+    /// the `starters`, a free agent of each class drawn like `start`'s fighter and of
+    /// its continent, chosen with `pick_starter`; the others stay on the market.
+    #[must_use]
+    pub fn found(
+        seed: u64,
+        (wealth, continent): (Wealth, Continent),
+        name: Option<(String, ClubName)>,
+        data: &DesignData,
+    ) -> Self {
+        let rng = ChaCha8Rng::seed_from_u64(seed);
+        let mut state = Self::opened(rng, Vec::new(), (wealth, continent), name, data);
+        for (class, class_data) in (0..).zip(&data.classes) {
+            let mut agent = CareerFighter::random(&mut state.rng, data);
+            agent.class = ClassId(class);
+            agent.ease = (data.fighter.ease).random(&mut state.rng, class_data.loadouts.len());
+            agent.loadout = agent.preferred_loadout();
+            let agent = state.named(agent, Some(continent), data);
+            state.starters.push(state.free_agents.len());
+            state.free_agents.push(agent);
+        }
+        state
+    }
+
+    /// Signs starter `a` as the club's first fighter, on its asked terms, as `start`'s
+    /// fighter is; the other starters stay free agents. Nothing if `a` is not a starter.
+    pub fn pick_starter(&mut self, a: usize, data: &DesignData) {
+        if !self.starters.contains(&a) {
+            return;
+        }
+        self.starters.clear();
+        let mut agent = self.free_agents[a].clone();
+        agent.contract = Some(self.contract_for(&agent, data));
+        self.free_agents[a].status = Status::Sold;
+        self.fighters.push(agent);
+        let to = Contender::Club(self.fighters.len() - 1);
+        self.transfer(Contender::FreeAgent(a), to, &data.world.ties);
+    }
+
+    fn opened(
+        rng: ChaCha8Rng,
+        fighters: Vec<CareerFighter>,
+        (wealth, continent): (Wealth, Continent),
+        name: Option<(String, ClubName)>,
+        data: &DesignData,
+    ) -> Self {
         let (culture, name) = name.unwrap_or_default();
         let mut state = Self {
             name,
@@ -155,6 +208,7 @@ impl GameState {
             relations: BTreeMap::new(),
             journal: Journal::default(),
             last_fighter_id: 0,
+            starters: Vec::new(),
             rng,
         };
         state.open_world(data);
@@ -1419,6 +1473,36 @@ mod tests {
         }
         // The same seed draws the same world.
         assert_eq!(GameState::new(7, &data).rivals, state.rivals);
+    }
+
+    #[test]
+    fn a_founded_club_picks_its_first_fighter_and_the_others_stay_free_agents() {
+        let data = DesignData::load().unwrap();
+        let mut state = GameState::found(7, (Wealth::Modest, Continent::Asia), None, &data);
+        assert_eq!(state.fighters.len(), 0);
+        let classes: Vec<_> = state
+            .starters
+            .iter()
+            .map(|&a| state.free_agents[a].class.0)
+            .collect();
+        assert_eq!(
+            classes,
+            (0..).take(data.classes.len()).collect::<Vec<u32>>()
+        );
+        let (picked, others) = (state.starters[1], state.starters.clone());
+        let id = state.free_agents[picked].id;
+        state.pick_starter(picked, &data);
+        assert_eq!(state.starters, Vec::<usize>::new());
+        assert_eq!(state.fighters.len(), 1);
+        assert_eq!(state.fighters[0].id, id);
+        assert!(state.fighters[0].contract.is_some());
+        for &a in &others {
+            let active = state.free_agents[a].status == Status::Active;
+            assert_eq!(active, a != picked);
+        }
+        // Once one is picked, no other can be.
+        state.pick_starter(others[0], &data);
+        assert_eq!(state.fighters.len(), 1);
     }
 
     #[test]

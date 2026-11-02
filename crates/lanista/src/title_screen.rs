@@ -131,7 +131,7 @@ impl TitleScreen {
     fn new_game(&mut self, wealth: Wealth, continent: Continent) -> ClubScreen {
         let seed = new_seed();
         let club = self.new_club.clone();
-        let state = GameState::start(seed, (wealth, continent), Some(club), &self.data);
+        let state = GameState::found(seed, (wealth, continent), Some(club), &self.data);
         let message = self.keep(&state).unwrap_or_else(|| {
             tr!(
                 "menu-new-game-started",
