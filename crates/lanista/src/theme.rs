@@ -1,6 +1,7 @@
 //! The egui theme: dark wood and parchment with bronze accents, sizes made
 //! for the Steam Deck (1280 × 800, 7 inches, touch screen).
 
+use reesch::NineSlice;
 use reesch::egui::{self, Color32, FontFamily, FontId, Stroke, TextStyle, vec2};
 
 pub const PARCHMENT: Color32 = Color32::from_rgb(0xEA, 0xDB, 0xC0);
@@ -55,6 +56,47 @@ fn fonts() -> egui::FontDefinitions {
         .families
         .insert(FontFamily::Name(DISPLAY.into()), display);
     fonts
+}
+
+/// Width of the frames' border, in points.
+pub const FRAME_BORDER: f32 = 8.0;
+
+/// The 9-slice frames, embedded like the fonts.
+#[derive(Clone, Copy)]
+pub enum Frame {
+    /// The combat screen's windows.
+    Wood,
+    /// The newspaper, in a bronze border.
+    Parchment,
+}
+
+impl Frame {
+    /// The frame for `ui`'s context, its texture loaded on first use.
+    pub fn get(self, ui: &egui::Context) -> NineSlice {
+        let (name, bytes) = match self {
+            Self::Wood => (
+                "frame-wood",
+                &include_bytes!("../../../assets/ui/wood.png")[..],
+            ),
+            Self::Parchment => (
+                "frame-parchment",
+                &include_bytes!("../../../assets/ui/parchment.png")[..],
+            ),
+        };
+        let id = egui::Id::new(name);
+        if let Some(frame) = ui.data(|d| d.get_temp(id)) {
+            return frame;
+        }
+        let frame =
+            NineSlice::load(ui, name, bytes, FRAME_BORDER).expect("an embedded frame is a PNG");
+        ui.data_mut(|d| d.insert_temp(id, frame.clone()));
+        frame
+    }
+
+    /// `add`'s contents in the frame.
+    pub fn show<R>(self, ui: &mut egui::Ui, add: impl FnOnce(&mut egui::Ui) -> R) -> R {
+        self.get(ui.ctx()).show(ui, add).inner
+    }
 }
 
 pub fn apply(ui: &egui::Context) {
@@ -119,5 +161,13 @@ mod tests {
         assert_eq!(style.visuals.override_text_color, Some(PARCHMENT));
         assert_eq!(style.visuals.panel_fill, WOOD_DARK);
         assert_eq!(style.text_styles[&TextStyle::Body].size, 18.0);
+    }
+
+    #[test]
+    fn the_frames_are_loaded_once() {
+        let ui = egui::Context::default();
+        for frame in [Frame::Wood, Frame::Parchment] {
+            assert_eq!(frame.get(&ui).texture.id(), frame.get(&ui).texture.id());
+        }
     }
 }

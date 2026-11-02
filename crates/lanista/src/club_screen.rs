@@ -1350,21 +1350,22 @@ fn section(ui: &mut egui::Ui, name: &str) {
 /// A page of the newspaper: dark ink on parchment in a bronze frame, centred, no wider
 /// than `PAPER_WIDTH`.
 fn parchment(ui: &mut egui::Ui, add: impl FnOnce(&mut egui::Ui)) {
-    let margin = 24;
-    let width = ui.available_width().min(PAPER_WIDTH) - 2.0 * f32::from(margin);
+    // Inside the frame's own border.
+    let margin = 16;
+    let width =
+        ui.available_width().min(PAPER_WIDTH) - 2.0 * (f32::from(margin) + theme::FRAME_BORDER);
     ui.vertical_centered(|ui| {
-        egui::Frame::new()
-            .fill(theme::PARCHMENT)
-            .stroke(egui::Stroke::new(2.0_f32, theme::BRONZE))
-            .corner_radius(4.0)
-            .inner_margin(egui::Margin::same(margin))
-            .show(ui, |ui| {
-                ui.set_width(width);
-                let visuals = ui.visuals_mut();
-                visuals.override_text_color = Some(theme::INK);
-                visuals.widgets.noninteractive.bg_stroke.color = theme::INK;
-                ui.with_layout(egui::Layout::top_down(egui::Align::Min), add);
-            });
+        theme::Frame::Parchment.show(ui, |ui| {
+            egui::Frame::new()
+                .inner_margin(egui::Margin::same(margin))
+                .show(ui, |ui| {
+                    ui.set_width(width);
+                    let visuals = ui.visuals_mut();
+                    visuals.override_text_color = Some(theme::INK);
+                    visuals.widgets.noninteractive.bg_stroke.color = theme::INK;
+                    ui.with_layout(egui::Layout::top_down(egui::Align::Min), add);
+                });
+        });
     });
 }
 

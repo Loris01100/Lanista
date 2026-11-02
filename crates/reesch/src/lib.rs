@@ -5,6 +5,7 @@ pub mod assets;
 pub mod audio;
 pub mod camera;
 pub mod fixed_step;
+pub mod frame;
 pub mod input;
 pub mod render_target;
 pub mod screen;
@@ -17,6 +18,7 @@ pub use camera::{blend_views, fit_camera, fit_view, pixel_camera, pixel_view};
 /// separate egui dependency.
 pub use egui_macroquad::egui;
 pub use fixed_step::FixedStep;
+pub use frame::NineSlice;
 pub use input::{Bindings, Button};
 pub use render_target::{SceneTarget, target_camera};
 pub use screen::{Screen, ScreenStack, Transition};

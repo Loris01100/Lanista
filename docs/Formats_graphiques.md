@@ -114,6 +114,7 @@ Un personnage unique est dessiné à la main, sans calques générés ni teintes
 - L'interface (egui) est conçue pour 800 px de haut et agrandie au-delà ; icônes de 16 ou 32 px.
 - Le portrait de la fiche combattant réutilise les calques de tête, agrandis ×4.
 - Polices : TTF ou OTF.
+- Cadres (`assets/ui/`, `wood.png` pour les fenêtres du combat, `parchment.png` pour le journal) : PNG découpé en 9 (« 9-slice ») de **24 × 24 px**, bordure de **8 px** de chaque côté (`theme::FRAME_BORDER`). Les coins gardent leur taille ; les bords et le centre sont étirés, donc un bord ne doit varier que perpendiculairement à sa longueur, et le centre rester uni.
 
 ## Sons
 

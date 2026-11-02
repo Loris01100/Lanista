@@ -305,20 +305,24 @@ impl CombatScreen {
             .title_bar(false)
             .resizable(false)
             .anchor(egui::Align2::CENTER_BOTTOM, [0.0, -MARGIN])
+            .frame(egui::Frame::NONE)
             .show(ui, |ui| {
-                ui.horizontal(|ui| {
-                    if !self.cutscene() {
-                        ui.toggle_value(&mut self.presenting, tr!("presentation-open"));
-                    }
-                    if self.running() {
-                        let labels = [tr!("speed-slow"), tr!("speed-normal"), tr!("speed-fast")];
-                        for (speed, label) in SPEEDS.into_iter().zip(labels) {
-                            ui.selectable_value(&mut self.speed, speed, label);
+                theme::Frame::Wood.show(ui, |ui| {
+                    ui.horizontal(|ui| {
+                        if !self.cutscene() {
+                            ui.toggle_value(&mut self.presenting, tr!("presentation-open"));
                         }
-                        if ui.button(tr!("skip-to-result")).clicked() {
-                            self.skip();
+                        if self.running() {
+                            let labels =
+                                [tr!("speed-slow"), tr!("speed-normal"), tr!("speed-fast")];
+                            for (speed, label) in SPEEDS.into_iter().zip(labels) {
+                                ui.selectable_value(&mut self.speed, speed, label);
+                            }
+                            if ui.button(tr!("skip-to-result")).clicked() {
+                                self.skip();
+                            }
                         }
-                    }
+                    })
                 });
             });
         self.result(ui)
@@ -335,13 +339,16 @@ impl CombatScreen {
             .title_bar(false)
             .resizable(false)
             .anchor(egui::Align2::CENTER_CENTER, [0.0, 0.0])
+            .frame(egui::Frame::NONE)
             .show(ui, |ui| {
-                ui.vertical_centered(|ui| {
-                    result_view(ui, self.fight());
-                    if !self.running() {
-                        ui.add_space(6.0);
-                        done = ui.button(tr!("continue")).clicked();
-                    }
+                theme::Frame::Wood.show(ui, |ui| {
+                    ui.vertical_centered(|ui| {
+                        result_view(ui, self.fight());
+                        if !self.running() {
+                            ui.add_space(6.0);
+                            done = ui.button(tr!("continue")).clicked();
+                        }
+                    });
                 });
             });
         done
@@ -449,17 +456,20 @@ impl CombatScreen {
             .title_bar(false)
             .resizable(false)
             .anchor(egui::Align2::RIGHT_CENTER, [-3.0 * MARGIN, 0.0])
+            .frame(egui::Frame::NONE)
             .show(ui, |ui| {
-                ui.heading(name);
-                egui::Grid::new("entrance-grid")
-                    .spacing([16.0, 4.0])
-                    .show(ui, |ui| {
-                        for (key, text) in INTRO_HEADINGS[1..].iter().zip(told) {
-                            ui.strong(tr!(key));
-                            ui.label(text);
-                            ui.end_row();
-                        }
-                    });
+                theme::Frame::Wood.show(ui, |ui| {
+                    ui.heading(name);
+                    egui::Grid::new("entrance-grid")
+                        .spacing([16.0, 4.0])
+                        .show(ui, |ui| {
+                            for (key, text) in INTRO_HEADINGS[1..].iter().zip(told) {
+                                ui.strong(tr!(key));
+                                ui.label(text);
+                                ui.end_row();
+                            }
+                        });
+                });
             });
     }
 
@@ -474,20 +484,23 @@ impl CombatScreen {
             .title_bar(false)
             .resizable(false)
             .anchor(egui::Align2::CENTER_TOP, [0.0, MARGIN])
+            .frame(egui::Frame::NONE)
             .show(ui, |ui| {
-                ui.horizontal(|ui| {
-                    if let Some([left, _]) = duel {
-                        score(ui, fight, left);
-                    }
-                    ui.vertical(|ui| {
-                        ui.heading(clock(arena.max_ticks.saturating_sub(arena.tick)));
-                        for line in fight.elimination_lines() {
-                            ui.label(line);
+                theme::Frame::Wood.show(ui, |ui| {
+                    ui.horizontal(|ui| {
+                        if let Some([left, _]) = duel {
+                            score(ui, fight, left);
                         }
-                    });
-                    if let Some([_, right]) = duel {
-                        score(ui, fight, right);
-                    }
+                        ui.vertical(|ui| {
+                            ui.heading(clock(arena.max_ticks.saturating_sub(arena.tick)));
+                            for line in fight.elimination_lines() {
+                                ui.label(line);
+                            }
+                        });
+                        if let Some([_, right]) = duel {
+                            score(ui, fight, right);
+                        }
+                    })
                 });
             });
     }
@@ -509,14 +522,17 @@ impl CombatScreen {
             .title_bar(false)
             .resizable(false)
             .anchor(egui::Align2::CENTER_BOTTOM, [0.0, -above])
+            .frame(egui::Frame::NONE)
             .show(ui, |ui| {
-                ui.set_width(FEED_WIDTH);
-                let weak = ui.visuals().weak_text_color();
-                let last = lines.len() - 1;
-                for (k, line) in lines.iter().enumerate() {
-                    let text = egui::RichText::new(line).small();
-                    ui.label(if k == last { text } else { text.color(weak) });
-                }
+                theme::Frame::Wood.show(ui, |ui| {
+                    ui.set_width(FEED_WIDTH);
+                    let weak = ui.visuals().weak_text_color();
+                    let last = lines.len() - 1;
+                    for (k, line) in lines.iter().enumerate() {
+                        let text = egui::RichText::new(line).small();
+                        ui.label(if k == last { text } else { text.color(weak) });
+                    }
+                });
             });
     }
 
@@ -657,12 +673,15 @@ fn sheet_window(
         .title_bar(false)
         .resizable(false)
         .anchor(anchor, [x, MARGIN])
+        .frame(egui::Frame::NONE)
         .show(ui, |ui| {
-            ui.set_width(SHEET_WIDTH);
-            let height = ui.ctx().screen_rect().height() - below - 4.0 * MARGIN;
-            egui::ScrollArea::vertical()
-                .max_height(height)
-                .show(ui, contents);
+            theme::Frame::Wood.show(ui, |ui| {
+                ui.set_width(SHEET_WIDTH);
+                let height = ui.ctx().screen_rect().height() - below - 4.0 * MARGIN;
+                egui::ScrollArea::vertical()
+                    .max_height(height)
+                    .show(ui, contents);
+            });
         });
 }
 
