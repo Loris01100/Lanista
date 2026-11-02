@@ -667,9 +667,9 @@ impl ClubScreen {
                     )
                 },
             );
-            ui.separator();
+            theme::ornament(ui);
             ui.label(egui::RichText::new(issue).italics());
-            ui.separator();
+            theme::ornament(ui);
         });
     }
 
@@ -732,7 +732,7 @@ impl ClubScreen {
             ui.heading(tr!("game"));
             if self.saves.is_some() {
                 self.save_slots(ui);
-                ui.separator();
+                theme::ornament(ui);
             }
             ui.horizontal(|ui| {
                 leave = ui.button(tr!("main-menu")).clicked();
@@ -1093,7 +1093,7 @@ impl ClubScreen {
             } else {
                 ui.label(tr!("sheet-career-over"));
             }
-            ui.separator();
+            theme::ornament(ui);
             ui.heading(tr!("sheet-history"));
             egui::ScrollArea::vertical()
                 .id_salt("history")
@@ -1344,7 +1344,7 @@ fn phase_color(phase: SeasonPhase) -> egui::Color32 {
 fn section(ui: &mut egui::Ui, name: &str) {
     ui.add_space(8.0);
     ui.label(egui::RichText::new(name).strong().color(theme::BRONZE));
-    ui.separator();
+    theme::ornament(ui);
 }
 
 /// A page of the newspaper: dark ink on parchment in a bronze frame, centred, no wider
@@ -1377,7 +1377,7 @@ fn paper_section(ui: &mut egui::Ui, name: &str) {
         .extra_letter_spacing(2.0)
         .color(theme::RED_INK);
     ui.label(name);
-    ui.separator();
+    theme::ornament(ui);
 }
 
 /// An article of the newspaper: its headline, in bold if `major`, and then who it is

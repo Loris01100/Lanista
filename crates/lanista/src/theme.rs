@@ -99,6 +99,38 @@ impl Frame {
     }
 }
 
+/// A Greek key in bronze across the width, in place of `ui.separator()`.
+pub fn ornament(ui: &mut egui::Ui) {
+    // One key in grid squares: a hook down from the top edge, then a gap; a
+    // baseline runs under them all.
+    const KEY: [(f32, f32); 6] = [
+        (0.0, 4.0),
+        (0.0, 0.0),
+        (4.0, 0.0),
+        (4.0, 3.0),
+        (2.0, 3.0),
+        (2.0, 2.0),
+    ];
+    const PERIOD: f32 = 5.0;
+    const SQUARE: f32 = 4.0;
+    let size = vec2(ui.available_width(), 4.0 * SQUARE);
+    let (rect, _) = ui.allocate_exact_size(size, egui::Sense::hover());
+    // The last key needs no gap after it.
+    let keys = ((rect.width() / SQUARE + 1.0) / PERIOD).floor();
+    let span = keys * PERIOD - 1.0;
+    let origin = rect.center() - vec2(span, 4.0) * SQUARE / 2.0;
+    let at = |x: f32, y: f32| origin + vec2(x, y) * SQUARE;
+    let stroke = Stroke::new(2.0_f32, BRONZE);
+    let painter = ui.painter();
+    painter.line_segment([at(0.0, 4.0), at(span, 4.0)], stroke);
+    let mut left = 0.0;
+    while left < span {
+        let points = KEY.map(|(x, y)| at(left + x, y)).to_vec();
+        painter.add(egui::Shape::line(points, stroke));
+        left += PERIOD;
+    }
+}
+
 pub fn apply(ui: &egui::Context) {
     ui.set_fonts(fonts());
     // `style_mut` sets the active theme's style only: pin it to dark so egui
@@ -161,6 +193,26 @@ mod tests {
         assert_eq!(style.visuals.override_text_color, Some(PARCHMENT));
         assert_eq!(style.visuals.panel_fill, WOOD_DARK);
         assert_eq!(style.text_styles[&TextStyle::Body].size, 18.0);
+    }
+
+    #[test]
+    fn the_ornament_is_a_row_of_keys_across_the_width() {
+        let ui = egui::Context::default();
+        let frame = |ui: &egui::Context| {
+            egui::Area::new(egui::Id::new("ornament")).show(ui, |ui| {
+                ui.allocate_ui(vec2(100.0, 50.0), ornament);
+            });
+        };
+        // An area's first frame only measures it.
+        let _ = ui.run(egui::RawInput::default(), frame);
+        let output = ui.run(egui::RawInput::default(), frame);
+        let paths = output
+            .shapes
+            .iter()
+            .filter(|s| matches!(s.shape, egui::Shape::Path(_)))
+            .count();
+        // 100 points hold 5 keys of 4 × 5 points, the last without its gap.
+        assert_eq!(paths, 5);
     }
 
     #[test]

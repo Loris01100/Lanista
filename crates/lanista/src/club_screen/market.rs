@@ -238,7 +238,7 @@ impl ClubScreen {
         if self.market_tab != MarketTab::Yours {
             self.market_filter.row(ui);
         }
-        ui.separator();
+        theme::ornament(ui);
         let data = &self.data;
         let state = &self.state;
         let moves = &mut self.decisions.moves;
@@ -488,7 +488,7 @@ impl ClubScreen {
                 morale = f.morale.value()
             ));
             ui.label(tr!("contract-asks", terms = terms_text(asked)));
-            ui.separator();
+            theme::ornament(ui);
             let top = asked.wage.saturating_mul(2).max(terms.wage);
             egui::Grid::new("terms").num_columns(2).show(ui, |ui| {
                 ui.label(tr!("terms-wage"));
@@ -503,7 +503,7 @@ impl ClubScreen {
                 ui.end_row();
             });
             ui.label(egui::RichText::new(tr!("terms-hint")).small().weak());
-            ui.separator();
+            theme::ornament(ui);
             let worth = rules.worth(f, terms);
             let season = u64::from(data.calendar.season_weeks());
             ui.label(tr!(

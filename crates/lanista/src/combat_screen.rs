@@ -693,7 +693,7 @@ fn sheet(ui: &mut egui::Ui, fight: &FightView, f: &Fighter, with_bars: bool) {
         bars(ui, f);
     }
     spells(ui, f);
-    ui.separator();
+    theme::ornament(ui);
     anatomy(ui, &fight.arena.log, f);
     for (line, wound) in states(f) {
         let color = if wound {
