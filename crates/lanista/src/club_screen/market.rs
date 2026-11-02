@@ -14,9 +14,8 @@ use super::colosseums::{arrow, not_ranked, ranked_name};
 use super::{ClubScreen, View, chip, face_row, half_bar};
 use crate::lang::tr;
 use crate::texts::{
-    class_name, club_name, colosseum_name, condition_text, fighter_name, free_agent_name,
-    move_text, origin_text, outside_ease_text, outside_personality_text, potential_text,
-    range_texts, record_text, rival_fighter_name, stat_names, terms_text, unsellable_text, weeks,
+    class_name, club_name, colosseum_name, fighter_name, free_agent_name, move_text, range_texts,
+    record_text, rival_fighter_name, stat_names, terms_text, unsellable_text, weeks,
 };
 use crate::theme;
 
@@ -343,101 +342,99 @@ impl ClubScreen {
         }
     }
 
-    /// What the club sees of a free agent or a rival club's fighter: age, fame, record,
-    /// the stats seen, the potential and personality the recruiter sees, its standing in
-    /// each colosseum, and the market moves it allows.
+    /// What the club sees of a free agent or a rival club's fighter: its sheet as the
+    /// recruiter sees it, or whole for a starter, then its club, how long it was
+    /// observed, the comparison with one of the club's, its standing in each colosseum,
+    /// and the market moves it allows, or « Choisir » for a starter.
     pub(super) fn outside(&mut self, ui: &mut egui::Ui, target: Target) {
         let data = &self.data;
         let state = &self.state;
-        let (fighter, name) = match target {
-            Target::FreeAgent(a) => (
-                state.free_agents.get(a),
-                state
-                    .free_agents
-                    .get(a)
-                    .map(|f| free_agent_name(a, f, data)),
-            ),
-            Target::Rival(id) => (
-                state.rival_fighter(id),
-                Some(rival_fighter_name(id, state, data)),
-            ),
-        };
-        let (Some(f), Some(name)) = (fighter, name) else {
+        let (Some(f), name) = (match target {
+            Target::FreeAgent(a) => (state.free_agents.get(a), String::new()),
+            Target::Rival(id) => (state.rival_fighter(id), rival_fighter_name(id, state, data)),
+        }) else {
             return;
         };
-        let scouting = state.scouting();
-        ui.heading(tr!("sheet-title", fighter = name, age = f.age));
-        if let Some(origin) = origin_text(f, data) {
-            ui.label(origin);
-        }
-        let mut goto = None;
-        if let Target::Rival(id) = target
-            && ui
-                .link(tr!("outside-club", club = club_name(id.club, state)))
-                .clicked()
-        {
-            goto = Some(View::Rival(id.club));
-        }
-        ui.label(tr!(
-            "outside-summary",
-            condition = condition_text(f),
-            fame = f.fame.value(),
-            record = record_text(f.record)
-        ));
-        ui.label(observed_text(f));
-        ui.add_space(8.0);
-        egui::Grid::new("outside stats")
-            .striped(true)
-            .show(ui, |ui| {
-                for (stat, seen) in stat_names()
-                    .into_iter()
-                    .zip(range_texts(f, &scouting, data))
-                {
-                    ui.label(stat);
-                    ui.label(seen);
-                    ui.end_row();
-                }
-                ui.label(tr!("potential"));
-                ui.label(potential_text(f, &scouting));
-                ui.end_row();
-                ui.label(tr!("personality-title"));
-                ui.label(outside_personality_text(f, &scouting));
-                ui.end_row();
-                ui.label(tr!("ease-title"));
-                ui.label(outside_ease_text(f, &scouting, data));
-                ui.end_row();
-            });
-        ui.add_space(8.0);
-        comparison(ui, &mut self.compared, f, (state, &scouting), data);
-        let contender = match target {
-            Target::FreeAgent(a) => Contender::FreeAgent(a),
-            Target::Rival(id) => Contender::Rival(id),
+        let name = match target {
+            Target::FreeAgent(a) => free_agent_name(a, f, data),
+            Target::Rival(_) => name,
         };
-        ui.add_space(8.0);
-        self.outside_standings(ui, contender);
-        ui.add_space(8.0);
-        let moves = &mut self.decisions.moves;
+        let scouting = state.scouting();
+        let starter = match target {
+            Target::FreeAgent(a) => state.starters.contains(&a).then_some(a),
+            Target::Rival(_) => None,
+        };
+        let seen = (
+            super::best_stats(state),
+            starter.is_none().then_some(&scouting),
+        );
+        let mut goto = None;
+        let mut picked = None;
         let mut draft = None;
-        if f.status == Status::Active {
-            ui.horizontal(|ui| {
-                toggle(ui, moves, Move::Observe(target), &observe_label(f), true);
-                match target {
-                    Target::FreeAgent(a) => {
-                        let sign = Move::Sign(a, GameState::asked_terms(f, data));
-                        let allowed = state.may_move(sign, data);
-                        if let Some(m) = terms_button(ui, moves, sign, &tr!("sign"), allowed) {
-                            self.terms_draft = Some(m);
+        let mut compared = self.compared;
+        let mut terms_draft = self.terms_draft;
+        let mut moves = std::mem::take(&mut self.decisions.moves);
+        ui.columns(2, |columns| {
+            super::sheet(&mut columns[0], &name, f, seen, data);
+            let ui = &mut columns[1];
+            if let Some(a) = starter {
+                ui.label(tr!("starter-text"));
+                ui.horizontal(|ui| {
+                    if ui.button(tr!("starter-pick")).clicked() {
+                        picked = Some(a);
+                    }
+                    if ui.button(tr!("starter-back")).clicked() {
+                        goto = Some(View::Menu);
+                    }
+                });
+                return;
+            }
+            if let Target::Rival(id) = target
+                && ui
+                    .link(tr!("outside-club", club = club_name(id.club, state)))
+                    .clicked()
+            {
+                goto = Some(View::Rival(id.club));
+            }
+            ui.label(observed_text(f));
+            ui.add_space(8.0);
+            comparison(ui, &mut compared, f, (state, &scouting), data);
+            let contender = match target {
+                Target::FreeAgent(a) => Contender::FreeAgent(a),
+                Target::Rival(id) => Contender::Rival(id),
+            };
+            ui.add_space(8.0);
+            self.outside_standings(ui, contender);
+            ui.add_space(8.0);
+            let moves = &mut moves;
+            if f.status == Status::Active {
+                ui.horizontal(|ui| {
+                    toggle(ui, moves, Move::Observe(target), &observe_label(f), true);
+                    match target {
+                        Target::FreeAgent(a) => {
+                            let sign = Move::Sign(a, GameState::asked_terms(f, data));
+                            let allowed = state.may_move(sign, data);
+                            if let Some(m) = terms_button(ui, moves, sign, &tr!("sign"), allowed) {
+                                terms_draft = Some(m);
+                            }
+                        }
+                        Target::Rival(id) => {
+                            let estimate = estimate(f, data);
+                            ui.label(tr!("estimated-value-of", value = estimate));
+                            if ui.button(tr!("negotiate")).clicked() {
+                                draft = Some((id, estimate));
+                            }
                         }
                     }
-                    Target::Rival(id) => {
-                        let estimate = estimate(f, data);
-                        ui.label(tr!("estimated-value-of", value = estimate));
-                        if ui.button(tr!("negotiate")).clicked() {
-                            draft = Some((id, estimate));
-                        }
-                    }
-                }
-            });
+                });
+            }
+        });
+        self.compared = compared;
+        self.terms_draft = terms_draft;
+        self.decisions.moves = moves;
+        if let Some(a) = picked {
+            self.pick_starter(a);
+            return;
         }
         if let Some(draft) = draft {
             self.offer_draft = Some(draft);

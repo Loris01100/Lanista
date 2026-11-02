@@ -37,10 +37,10 @@ use lanista_core::fighter::morale::Morale;
 use lanista_core::fighter::retirement::too_maimed;
 use lanista_core::fighter::{FighterId, Stats};
 use lanista_core::journal::FightLine;
-use lanista_core::market::{Move, Target};
+use lanista_core::market::{Move, Target, ease_seen, personality_seen};
 use lanista_core::relations::{Club, MAX_SCORE};
 use lanista_core::rivals::RivalId;
-use lanista_core::staff::Role;
+use lanista_core::staff::{Role, Scouting};
 use lanista_core::state::{Decisions, GameState, WorldNews, next_week};
 use macroquad::prelude::*;
 use reesch::{Assets, Audio, Bindings, Screen, Transition, egui};
@@ -56,10 +56,10 @@ use crate::texts::{
     class_name, club_name, colosseum_name, colosseum_rules_name, contender_name, continent_in,
     date_in_sentence, date_text, fight_text, fighter_name, free_agent_name, illness_effect,
     illness_text, injury_effect, injury_text, loadout_name, market_news_text, money_line,
-    move_text, named_club, origin_place, priced, range_texts, result_text, rival_fighter_name,
-    staff_move_text, staff_news_text, stage_name, stat_names, temperament_name, temperament_text,
-    title_article, title_changed, trait_memory, trait_name, trait_text, wealth_name, wealth_text,
-    week_lines, world_article, year_text,
+    move_text, named_club, origin_place, potential_text, priced, range_texts, result_text,
+    rival_fighter_name, staff_move_text, staff_news_text, stage_name, stat_names, temperament_name,
+    temperament_text, title_article, title_changed, trait_memory, trait_name, trait_text,
+    wealth_name, wealth_text, week_lines, world_article, year_text,
 };
 use crate::theme;
 use crate::title_screen::{Slot, read_slots, slot_text};
@@ -786,12 +786,14 @@ impl ClubScreen {
     }
 
     /// The window over the screen while the club has its first fighter to pick among
-    /// the starters, one of each class; the others go back to the market.
+    /// the starters, one of each class; the others go back to the market. A starter's
+    /// name opens its whole sheet, over which the window waits.
     fn starter_window(&mut self, ui: &egui::Context) {
-        if self.state.starters.is_empty() {
+        let open = |a| self.view == View::Outside(Target::FreeAgent(a));
+        if self.state.starters.is_empty() || self.state.starters.iter().any(|&a| open(a)) {
             return;
         }
-        let mut picked = None;
+        let (mut picked, mut opened) = (None, None);
         egui::Modal::new(egui::Id::new("starters")).show(ui, |ui| {
             ui.heading(tr!("starter-title"));
             ui.label(tr!("starter-text"));
@@ -807,7 +809,10 @@ impl ClubScreen {
                     ui.end_row();
                     for &a in &state.starters {
                         let f = &state.free_agents[a];
-                        ui.strong(free_agent_name(a, f, data));
+                        let name = ui.link(free_agent_name(a, f, data));
+                        if name.on_hover_text(tr!("starter-sheet")).clicked() {
+                            opened = Some(a);
+                        }
                         ui.label(f.age.to_string());
                         let wage = data.economy.contracts.asked_wage(f, &data.economy.market);
                         ui.label(tr!("wage", wage = wage));
@@ -819,10 +824,18 @@ impl ClubScreen {
                 });
         });
         if let Some(a) = picked {
-            self.state.pick_starter(a, &self.data);
-            self.decisions = self.state.suggested_decisions(&self.data);
-            self.read_journal();
+            self.pick_starter(a);
+        } else if let Some(a) = opened {
+            self.go_to(View::Outside(Target::FreeAgent(a)));
         }
+    }
+
+    /// Signs starter `a` as the club's first fighter and opens its sheet.
+    fn pick_starter(&mut self, a: usize) {
+        self.state.pick_starter(a, &self.data);
+        self.decisions = self.state.suggested_decisions(&self.data);
+        self.read_journal();
+        self.go_to(View::Sheet(self.state.fighters.len() - 1));
     }
 
     /// Each save slot with « Sauvegarder », or the question before saving over one.
@@ -1046,7 +1059,14 @@ impl ClubScreen {
             self.view = View::Roster;
         }
         ui.columns(2, |columns| {
-            sheet(&mut columns[0], index, f, best_stats(&self.state), data);
+            let name = fighter_name(index, f, data);
+            sheet(
+                &mut columns[0],
+                &name,
+                f,
+                (best_stats(&self.state), None),
+                data,
+            );
             let ui = &mut columns[1];
             ui.heading(tr!("sheet-this-week"));
             if f.status == Status::Active
@@ -1764,13 +1784,17 @@ fn challenge_picker(
 }
 
 /// A fighter's sheet, drawn more than written: tags for who it is, bars for its
-/// gauges, stats, ease and personality, coloured tags for its record and health.
-fn sheet(ui: &mut egui::Ui, index: usize, f: &CareerFighter, best: Stats, data: &DesignData) {
-    ui.heading(tr!(
-        "sheet-title",
-        fighter = fighter_name(index, f, data),
-        age = f.age
-    ));
+/// gauges, stats, ease and personality, coloured tags for its record and health. With
+/// `scouting`, a fighter out of the club: its stats as the ranges the recruiter sees,
+/// the potential it estimates, a « ? » for the ease and personality it does not see.
+pub(super) fn sheet(
+    ui: &mut egui::Ui,
+    name: &str,
+    f: &CareerFighter,
+    (best, scouting): (Stats, Option<&Scouting>),
+    data: &DesignData,
+) {
+    ui.heading(tr!("sheet-title", fighter = name, age = f.age));
     identity(ui, f, data);
     egui::ScrollArea::vertical()
         .id_salt("sheet")
@@ -1812,32 +1836,64 @@ fn sheet(ui: &mut egui::Ui, index: usize, f: &CareerFighter, best: Stats, data: 
                 }
             });
             section(ui, &tr!("sheet-stats"));
-            stat_meters(ui, f, best, data);
-            section(ui, &tr!("sheet-ease-title"));
-            egui::Grid::new("ease").show(ui, |ui| {
-                let loadouts = data.class(f.class).map_or(0, |c| c.loadouts.len());
-                for l in 0..loadouts {
-                    let name = egui::RichText::new(loadout_name(f, l, data));
-                    ui.label(if l == f.loadout { name.strong() } else { name });
-                    meter(ui, f.ease_with(l), 100, theme::BRONZE, None);
-                    ui.label(f.ease_with(l).to_string());
+            if let Some(scouting) = scouting {
+                egui::Grid::new("stats").show(ui, |ui| {
+                    for (stat, seen) in stat_names().into_iter().zip(range_texts(f, scouting, data))
+                    {
+                        ui.label(stat);
+                        ui.label(seen);
+                        ui.end_row();
+                    }
+                    ui.label(tr!("potential"));
+                    ui.label(potential_text(f, scouting));
                     ui.end_row();
-                }
-            });
+                });
+            } else {
+                stat_meters(ui, f, best, data);
+            }
+            section(ui, &tr!("sheet-ease-title"));
+            if scouting.is_some_and(|s| !ease_seen(f, s)) {
+                ui.label("?");
+            } else {
+                ease_meters(ui, f, data);
+            }
             section(ui, &tr!("personality-title"));
-            let temperament = f.personality.temperament;
-            ui.label(egui::RichText::new(temperament_name(temperament)).strong());
-            ui.label(temperament_text(temperament));
-            for &t in &f.traits {
-                ui.label(egui::RichText::new(trait_name(t)).strong());
-                ui.label(trait_text(t));
-                if let Some(memory) = trait_memory(f, t) {
-                    ui.label(memory);
-                }
+            if scouting.is_some_and(|s| !personality_seen(f, s)) {
+                ui.label("?");
+            } else {
+                personality(ui, f);
             }
             section(ui, &tr!("sheet-health"));
             health(ui, f, data);
         });
+}
+
+/// A bar for the fighter's ease with each loadout of its class, its own in bold.
+fn ease_meters(ui: &mut egui::Ui, f: &CareerFighter, data: &DesignData) {
+    egui::Grid::new("ease").show(ui, |ui| {
+        let loadouts = data.class(f.class).map_or(0, |c| c.loadouts.len());
+        for l in 0..loadouts {
+            let name = egui::RichText::new(loadout_name(f, l, data));
+            ui.label(if l == f.loadout { name.strong() } else { name });
+            meter(ui, f.ease_with(l), 100, theme::BRONZE, None);
+            ui.label(f.ease_with(l).to_string());
+            ui.end_row();
+        }
+    });
+}
+
+/// The fighter's temperament and traits, what each does.
+fn personality(ui: &mut egui::Ui, f: &CareerFighter) {
+    let temperament = f.personality.temperament;
+    ui.label(egui::RichText::new(temperament_name(temperament)).strong());
+    ui.label(temperament_text(temperament));
+    for &t in &f.traits {
+        ui.label(egui::RichText::new(trait_name(t)).strong());
+        ui.label(trait_text(t));
+        if let Some(memory) = trait_memory(f, t) {
+            ui.label(memory);
+        }
+    }
 }
 
 /// Where a fighter comes from, its hand, its loadout and, once its career is over,
@@ -2281,9 +2337,8 @@ mod tests {
     use super::*;
     use crate::texts::condition_text;
     use crate::texts::{
-        club_name as rival_club_name, date_in_sentence, ease_text, free_agent_name, named_club,
-        outside_ease_text, outside_personality_text, potential_text, range_texts, staff_text,
-        stage_name, unsellable_text, weeks_left_text,
+        club_name as rival_club_name, date_in_sentence, free_agent_name, named_club,
+        potential_text, range_texts, staff_text, stage_name, unsellable_text, weeks_left_text,
     };
     use crate::title_screen::TitleScreen;
     use colosseums::reign_text;
@@ -2563,17 +2618,11 @@ mod tests {
         let observed = state.rival_fighter(id).unwrap();
         assert_eq!(observed.observed_weeks, 1);
         assert_ne!(potential_text(observed, &scouting), "?");
-        assert_eq!(
-            outside_personality_text(observed, &scouting),
-            crate::texts::personality_text(observed)
-        );
-        let data = &screen.data;
-        let ease = outside_ease_text(observed, &scouting, data);
-        assert_eq!(ease, ease_text(observed, data));
-        assert_eq!(ease.matches(", ").count() + 1, observed.ease.len());
+        assert!(personality_seen(observed, &scouting));
+        assert!(ease_seen(observed, &scouting));
         let unseen = &state.free_agents[0];
-        assert_eq!(outside_personality_text(unseen, &scouting), "?");
-        assert_eq!(outside_ease_text(unseen, &scouting, data), "?");
+        assert!(!personality_seen(unseen, &scouting));
+        assert!(!ease_seen(unseen, &scouting));
     }
 
     #[test]
@@ -3225,6 +3274,29 @@ mod tests {
         };
         screen.decisions.moves.push(Move::Offer(id, 100));
         assert!(screen.can_play());
+    }
+
+    #[test]
+    fn a_starter_s_whole_sheet_opens_and_the_one_picked_there_joins_the_club() {
+        let data = Rc::new(DesignData::load().unwrap());
+        let found = GameState::found(
+            7,
+            (lanista_core::economy::Wealth::Modest, Continent::Asia),
+            None,
+            &data,
+        );
+        let mut screen = ClubScreen::new(data, found, None, Bindings::new(Vec::new()));
+        let a = screen.state.starters[1];
+        screen.go_to(View::Outside(Target::FreeAgent(a)));
+        let ui = egui::Context::default();
+        let _ = ui.run(egui::RawInput::default(), |ui| {
+            let target = Target::FreeAgent(a);
+            egui::CentralPanel::default().show(ui, |ui| screen.outside(ui, target));
+        });
+        screen.pick_starter(a);
+        assert_eq!(screen.view, View::Sheet(0));
+        assert_eq!(screen.state.fighters.len(), 1);
+        assert_eq!(screen.state.starters, Vec::<usize>::new());
     }
 
     #[test]

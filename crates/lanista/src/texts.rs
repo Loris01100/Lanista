@@ -16,9 +16,7 @@ use lanista_core::fighter::injury::{Injury, Location, Severity, Side};
 use lanista_core::fighter::personality::Temperament;
 use lanista_core::fighter::traits::Trait;
 use lanista_core::journal::{FightLine, FighterWeek, Retired};
-use lanista_core::market::{
-    MarketNews, Move, Target, ease_seen, personality_seen, potential_range, stat_ranges,
-};
+use lanista_core::market::{MarketNews, Move, Target, potential_range, stat_ranges};
 use lanista_core::names::{ClubName, FighterName};
 use lanista_core::relations::{Change, Reason, Standing};
 use lanista_core::rivals::{Profile, RivalId};
@@ -69,13 +67,8 @@ pub fn stage_name(name: &FighterName) -> String {
     }
 }
 
-/// "Origine : Grèce (Europe)": the culture a fighter comes from and its continent;
-/// `None` for one with no culture.
-pub fn origin_text(fighter: &CareerFighter, data: &DesignData) -> Option<String> {
-    origin_place(fighter, data).map(|place| tr!("sheet-origin", place = place))
-}
-
-/// "Grèce (Europe)": [`origin_text`] without its label.
+/// "Grèce (Europe)": the culture a fighter comes from and its continent; `None` for
+/// one with no culture.
 pub fn origin_place(fighter: &CareerFighter, data: &DesignData) -> Option<String> {
     let culture = data.culture(&fighter.culture)?;
     Some(tr!(
@@ -110,33 +103,6 @@ pub fn loadout_name(fighter: &CareerFighter, loadout: usize, data: &DesignData) 
     data.class(fighter.class)
         .and_then(|c| c.loadout(loadout))
         .map_or_else(|| "?".into(), |l| data_name("loadout", &l.key))
-}
-
-/// Its ease with each loadout of its class: "Épée et bouclier 85, Double épée 40".
-pub fn ease_text(fighter: &CareerFighter, data: &DesignData) -> String {
-    let loadouts = data.class(fighter.class).map_or(0, |c| c.loadouts.len());
-    let each = (0..loadouts).map(|l| {
-        let loadout = loadout_name(fighter, l, data);
-        tr!(
-            "ease-loadout",
-            loadout = loadout,
-            ease = fighter.ease_with(l)
-        )
-    });
-    each.collect::<Vec<_>>().join(", ")
-}
-
-/// The ease of a fighter out of the club, if the recruiter sees it, or "?".
-pub fn outside_ease_text(
-    fighter: &CareerFighter,
-    scouting: &Scouting,
-    data: &DesignData,
-) -> String {
-    if ease_seen(fighter, scouting) {
-        ease_text(fighter, data)
-    } else {
-        "?".into()
-    }
 }
 
 pub fn activity_name(activity: Activity, data: &DesignData) -> String {
@@ -274,25 +240,6 @@ pub fn trait_memory(fighter: &CareerFighter, t: Trait) -> Option<String> {
             .map(|floor| tr!("trait-lucky-floor", floor = arena_name(floor))),
         _ => None,
     }
-}
-
-/// Its temperament and traits: "Téméraire, vaniteux".
-pub fn personality_text(fighter: &CareerFighter) -> String {
-    let temperament = temperament_name(fighter.personality.temperament);
-    let traits = fighter.traits.iter().map(|&t| trait_name(t));
-    std::iter::once(temperament)
-        .chain(traits)
-        .collect::<Vec<_>>()
-        .join(", ")
-}
-
-/// The temperament and traits of a fighter out of the club, if the recruiter sees
-/// them, or "?".
-pub fn outside_personality_text(fighter: &CareerFighter, scouting: &Scouting) -> String {
-    if !personality_seen(fighter, scouting) {
-        return "?".into();
-    }
-    personality_text(fighter)
 }
 
 /// "3 V, 1 D, 2 N".
