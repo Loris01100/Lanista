@@ -233,6 +233,8 @@ pub struct Fighter {
     /// without one. A spell that `ignores_shield` hits as if it had none
     /// (`Fighter::stats_against`).
     pub shield_percent: u32,
+    /// Its loadout, an index of its class's `loadouts`; only drawn, like `off_hand`.
+    pub loadout: usize,
     /// How it is drawn; no effect on the fight.
     pub appearance: Appearance,
     /// The learned AI that plays it; the utility AI without one (see `duel::ais`).
@@ -350,6 +352,7 @@ impl Fighter {
                 .loadout(loadout)
                 .map_or(OffHand::Free, |l| l.off_hand),
             shield_percent: 100,
+            loadout,
             appearance: Appearance::default(),
             model: None,
         }

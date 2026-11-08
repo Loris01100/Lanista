@@ -1,6 +1,6 @@
 -- Creates the Aseprite source of a look, art/fighters/<look>.aseprite, laid out as
--- docs/Formats_graphiques.md says: 32 x 32 px images, 16 frames, one tag per
--- animation with the game's durations, the look's layers in drawing order
+-- docs/Formats_graphiques.md says: 32 x 32 px images, 16 frames (20 for a look that
+-- throws), one tag per animation with the game's durations, the look's layers in drawing order
 -- (fighter_looks.lua), each with its `_detail` layer above it. The layers start from
 -- the drawings already in assets/fighters/ when there are some.
 --
@@ -24,6 +24,8 @@ local TAGS = {
   { name = "attack", duration = 0.06, loops = false },
   { name = "death", duration = 0.15, loops = false },
 }
+-- The fifth animation, of a look that `throws`: a mine or a trap, as fast as the attack.
+local THROW = { name = "throw", duration = 0.06, loops = false }
 
 local function fail(message)
   if app.isUIAvailable then
@@ -192,10 +194,14 @@ local function build_sprite(params, layers)
     sprite:setPalette(Palette { fromFile = palette })
   end
 
-  for number = 2, #TAGS * FRAMES_PER_TAG do
+  local tags = { table.unpack(TAGS) }
+  if layers.throws then
+    table.insert(tags, THROW)
+  end
+  for number = 2, #tags * FRAMES_PER_TAG do
     sprite:newEmptyFrame(number)
   end
-  for index, animation in ipairs(TAGS) do
+  for index, animation in ipairs(tags) do
     local first = (index - 1) * FRAMES_PER_TAG + 1
     local tag = sprite:newTag(first, first + FRAMES_PER_TAG - 1)
     tag.name = animation.name

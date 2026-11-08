@@ -12,7 +12,8 @@ use lanista_core::fighter::injury::{Location, Side};
 use macroquad::prelude::*;
 use reesch::{Assets, SpriteSheet};
 
-/// The spritesheet grid of every layer: 4 animations of 4 images of 32 × 32 px.
+/// The spritesheet grid of every layer: 4 animations of 4 images of 32 × 32 px, and a
+/// fifth, the throw, in the drawings of a look that has one.
 pub const SHEET: SpriteSheet = SpriteSheet {
     columns: 4,
     frame_width: 32.0,
@@ -24,6 +25,10 @@ pub const PIXELS_PER_METRE: f32 = 20.0;
 pub const SPRITE_SIZE: f32 = 1.6;
 /// Pixels on a side of a fighter's image.
 const PIXELS: f32 = 32.0;
+/// Images from an attack's to the throw's, a row of the same length further down.
+const THROW_OFFSET: u16 = 2 * 4;
+/// Pixel height of the drawings of a look with the throw: five rows.
+const THROW_HEIGHT: f32 = 5.0 * PIXELS;
 
 /// A layer's drawing: `fighters/<layer>/<variant>.png`.
 fn layer_path(layer: &str, variant: &str) -> String {
@@ -76,18 +81,18 @@ pub fn texture_paths(rules: &AppearanceRules) -> (Vec<String>, Vec<String>) {
     (required, optional)
 }
 
-/// The variant and the layers a fighter of `class` with `off_hand` is drawn with: its
-/// class's look if all of its drawings are loaded, otherwise the common one.
+/// The variant and the layers a fighter dressed as `who` is drawn with: its class's
+/// look if all of the drawings its off hand and loadout need are loaded, otherwise
+/// the common one.
 fn look_of<'a>(
     assets: &Assets,
     rules: &'a AppearanceRules,
-    class: &str,
-    off_hand: OffHand,
+    who: &Dress,
 ) -> (&'a str, &'a [LayerRule]) {
-    let (variant, layers) = rules.look(class);
+    let (variant, layers) = rules.look(who.class);
     let loaded = layers
         .iter()
-        .filter(|l| l.drawn_with(off_hand) && l.paint != Paint::Hair)
+        .filter(|l| l.drawn_with(who.off_hand, who.loadout) && l.paint != Paint::Hair)
         .all(|l| assets.try_texture(&layer_path(&l.name, variant)).is_some());
     if loaded {
         (variant, layers)
@@ -109,6 +114,9 @@ pub struct Placement {
     pub y: f32,
     /// The spritesheet image to show.
     pub frame: u16,
+    /// Throwing a mine or a trap: an attack image is shown from the throw's row if
+    /// the look has one.
+    pub throwing: bool,
     /// Facing left.
     pub flip_x: bool,
     /// Brightness, from 0 to 1: dimmer once dead.
@@ -216,11 +224,24 @@ fn colors<'a>(rules: &'a AppearanceRules, look: &Appearance) -> (&'a str, Tints)
     (shape, tints)
 }
 
-/// Who is drawn: its look, the key of its class and what its off hand holds.
+/// Who is drawn: its look, the key of its class, what its off hand holds and the key
+/// of its loadout.
 pub struct Dress<'a> {
     pub look: &'a Appearance,
     pub class: &'a str,
     pub off_hand: OffHand,
+    pub loadout: &'a str,
+}
+
+/// The image shown for `frame`: the throw's instead of an attack's when `throwing`
+/// with a look that has it.
+fn shown_frame(frame: u16, throwing: bool, has_throw: bool) -> u16 {
+    let attack = 2 * SHEET.columns..3 * SHEET.columns;
+    if throwing && has_throw && attack.contains(&frame) {
+        frame + THROW_OFFSET
+    } else {
+        frame
+    }
 }
 
 /// Draws a fighter as `at` says, with its class's layers and those of its off hand,
@@ -228,6 +249,13 @@ pub struct Dress<'a> {
 /// the default layered look, and whole.
 pub fn draw_fighter(assets: &Assets, rules: &AppearanceRules, who: &Dress, at: &Placement) {
     let look = who.look;
+    let (variant, layers) = look_of(assets, rules, who);
+    let has_throw = layers
+        .iter()
+        .find(|l| l.part != Part::Head && l.paint != Paint::Hair)
+        .and_then(|l| assets.try_texture(&layer_path(&l.name, variant)))
+        .is_some_and(|t| t.height() >= THROW_HEIGHT);
+    let shown = shown_frame(at.frame, at.throwing, has_throw);
     let dest = vec2(SPRITE_SIZE, SPRITE_SIZE);
     let (left, top) = (at.x - SPRITE_SIZE / 2.0, at.y - SPRITE_SIZE / 2.0);
     let sheet = |texture: &Texture2D, color: Color| {
@@ -238,7 +266,7 @@ pub fn draw_fighter(assets: &Assets, rules: &AppearanceRules, who: &Dress, at: &
             color,
             DrawTextureParams {
                 dest_size: Some(dest),
-                source: Some(SHEET.frame_rect(at.frame)),
+                source: Some(SHEET.frame_rect(shown)),
                 flip_x: at.flip_x,
                 ..Default::default()
             },
@@ -256,7 +284,7 @@ pub fn draw_fighter(assets: &Assets, rules: &AppearanceRules, who: &Dress, at: &
     // with the fighter.
     let scale = SPRITE_SIZE / PIXELS;
     let side = if at.flip_x { -1.0 } else { 1.0 };
-    let frame = usize::from(at.frame);
+    let frame = usize::from(shown);
     let (dx, dy, turn) = rules.head_frames.get(frame).copied().unwrap_or_default();
     #[expect(
         clippy::cast_possible_truncation,
@@ -285,9 +313,8 @@ pub fn draw_fighter(assets: &Assets, rules: &AppearanceRules, who: &Dress, at: &
             },
         );
     };
-    let (variant, layers) = look_of(assets, rules, who.class, who.off_hand);
     for layer in layers {
-        if !layer.drawn_with(who.off_hand) || at.missing.hides(layer.part) {
+        if !layer.drawn_with(who.off_hand, who.loadout) || at.missing.hides(layer.part) {
             continue;
         }
         let variant = if layer.paint == Paint::Hair {
@@ -338,21 +365,35 @@ mod tests {
         let rules = DesignData::load().unwrap().fighter.appearance;
         // Nothing loaded: the common look, whatever the class.
         let empty = Assets::default();
-        assert_eq!(
-            look_of(&empty, &rules, "gladiateur", OffHand::Shield),
-            rules.default_look()
-        );
+        let who = Dress {
+            look: &Appearance::default(),
+            class: "gladiateur",
+            off_hand: OffHand::Shield,
+            loadout: "sword-shield",
+        };
+        assert_eq!(look_of(&empty, &rules, &who), rules.default_look());
         let (_, layers) = rules.look("gladiateur");
         let drawn = |off_hand| {
             layers
                 .iter()
-                .filter(|l| l.drawn_with(off_hand))
+                .filter(|l| l.drawn_with(off_hand, "sword-shield"))
                 .map(|l| l.name.as_str())
                 .collect::<Vec<_>>()
         };
         assert!(drawn(OffHand::Shield).contains(&"shield"));
         assert!(!drawn(OffHand::Weapon).contains(&"shield"));
         assert!(drawn(OffHand::Weapon).contains(&"weapon_back"));
+    }
+
+    #[test]
+    fn a_throw_shows_its_own_row_only_in_a_look_that_has_one() {
+        // The third attack image, the impact.
+        assert_eq!(shown_frame(10, true, true), 18);
+        assert_eq!(shown_frame(10, true, false), 10);
+        assert_eq!(shown_frame(10, false, true), 10);
+        // Out of the attack, nothing changes.
+        assert_eq!(shown_frame(1, true, true), 1);
+        assert_eq!(shown_frame(13, true, true), 13);
     }
 
     #[test]

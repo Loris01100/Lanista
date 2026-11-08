@@ -28,12 +28,15 @@ Une spritesheet de **4 colonnes × 4 lignes, 128 × 128 px** : une ligne par ani
 | 1 | `move` | Déplacement | 0,1 s | oui |
 | 2 | `attack` | Attaque ou sort | 0,06 s | non, l'impact est la 3ᵉ image |
 | 3 | `death` | Mort | 0,15 s | non, la dernière image est le corps au sol |
+| 4 | `throw` | Lancer d'une mine ou d'un piège, facultatif | 0,06 s | non, l'impact est la 3ᵉ image |
 
 Les durées sont celles du jeu ; les mettre aussi dans Aseprite pour que l'aperçu soit fidèle.
 
+La 5ᵉ ligne n'existe que dans les dessins d'une apparence qui lance (`throws` dans `art/scripts/fighter_looks.lua`) : ses feuilles font alors **128 × 160 px**, sur 20 images. Le jeu la montre quand le combattant pose une mine ou un piège (événement `Lay`, `Look::throwing`). Une apparence sans elle montre l'attaque à la place, et le jeu le voit à la hauteur de ses dessins (`fighter_sprite::shown_frame`).
+
 ### Calques
 
-Le personnage est découpé en calques superposés, un fichier par calque. Chaque classe peut avoir son propre jeu de calques, son **apparence** (`classes` dans `appearance`, `data/fighter.ron`, par clé de classe) ; une classe sans la sienne prend l'apparence commune (`layers`, variante `build`). Chaque calque y a un nom, une teinte (`paint` : `Skin` pour la peau, `Hair` pour les cheveux, `Tunic` pour la tunique, plus tard la couleur du club, ou `Plain`, dessiné dans ses propres couleurs), la partie du corps qu'il suit (`part` : il disparaît avec elle) et, pour l'armement, la main secondaire avec laquelle il est dessiné (`with` : `Shield` ou `Weapon`, selon l'équipement du combattant dans `data/classes.ron`).
+Le personnage est découpé en calques superposés, un fichier par calque. Chaque classe peut avoir son propre jeu de calques, son **apparence** (`classes` dans `appearance`, `data/fighter.ron`, par clé de classe) ; une classe sans la sienne prend l'apparence commune (`layers`, variante `build`). Chaque calque y a un nom, une teinte (`paint` : `Skin` pour la peau, `Hair` pour les cheveux, `Tunic` pour la tunique, plus tard la couleur du club, ou `Plain`, dessiné dans ses propres couleurs), la partie du corps qu'il suit (`part` : il disparaît avec elle) et, pour l'armement, la main secondaire avec laquelle il est dessiné (`with` : `Shield` ou `Weapon`, selon l'équipement du combattant dans `data/classes.ron`) ou la configuration dans laquelle il l'est (`loadout` : la clé d'une des `loadouts` de sa classe, par exemple l'arc lourd ou l'arc léger du chasseur ; le combattant de combat la garde dans `Fighter::loadout`).
 
 Apparence commune :
 
@@ -80,9 +83,26 @@ Maître du terrain (`maitre-terrain`) : cape à capuche à la couleur du club, c
 | `weapon` (dague runique) | 11 | non | |
 | `arm_front` | 12 | peau | bandes de cuir |
 
+Chasseur (`chasseur`) : capuche à la couleur du club, qui couvre les cheveux, et petite pèlerine assortie sur les épaules, pourpoint et pantalon de cuir, ceinture avec une bourse, carquois dans le dos, brassard lacé sur le bras de l'arc, bottes à revers de fourrure. Il tient l'arc dans la main avant et tire la corde de la main arrière : un grand arc de bois clair avec l'arc lourd (`heavy-bow`), un arc court sombre aux pointes de corne avec l'arc léger (`light-bow`). Son attaque encoche, bande et lâche une flèche ; son lancer (5ᵉ ligne) jette le piège à ours par en dessous, de la main arrière. Il n'a pas de calque de cheveux.
+
+| Calque | Ordre de dessin | Teinté | Détail non teinté |
+| --- | --- | --- | --- |
+| `quiver` (carquois) | 1 | non | |
+| `leg_back` (pantalon, botte) | 2 | non | |
+| `arm_back` | 3 | peau | manche de cuir |
+| `trap` (piège à ours, dans le lancer) | 4 | non | |
+| `body` (pourpoint, ceinture, bourse) | 5 | non | |
+| `mantle` (pèlerine) | 6 | tunique | |
+| `leg_front` (pantalon, botte) | 7 | non | |
+| `head` (visage et cou) | 8 | peau | œil, sourcil, bouche |
+| `hood` (capuche) | 9 | tunique | |
+| `bow_heavy` (grand arc, corde, flèche ; avec `heavy-bow`) | 10 | non | |
+| `bow_light` (arc court, corde, flèche ; avec `light-bow`) | 11 | non | |
+| `arm_front` | 12 | peau | manche et brassard |
+
 - Une seule teinte par fichier : la tête et les cheveux sont donc deux calques, et ce qui, sur un calque, n'a pas sa teinte (une jambe nue sous la tunique, un col…) va dans un autre calque ou dans le fichier de détail.
-- Chaque calque de corps, de membre et d'arme est une feuille complète de 128 × 128 px sur la même grille, transparente hors de sa partie.
-- Les calques de tête (`part: Head` : tête, cheveux, crête) sont chacun **une seule image de 32 × 32 px** par variante, placée comme dans l'image de repos. Le jeu les décale et les tourne image par image autour du cou pour suivre le corps : le point de rotation (`head_pivot`) et, pour chacune des 16 images, le décalage en pixels et l'angle en degrés dans le sens horaire (`head_frames`) sont dans `appearance`, dans `data/fighter.ron`. Une nouvelle carrure dont le cou bouge autrement demande d'y reporter ses valeurs.
+- Chaque calque de corps, de membre et d'arme est une feuille complète de 128 × 128 px (128 × 160 avec le lancer) sur la même grille, transparente hors de sa partie.
+- Les calques de tête (`part: Head` : tête, cheveux, crête) sont chacun **une seule image de 32 × 32 px** par variante, placée comme dans l'image de repos. Le jeu les décale et les tourne image par image autour du cou pour suivre le corps : le point de rotation (`head_pivot`) et, pour chacune des 20 images (les 4 dernières, celles du lancer, ne servent qu'aux apparences qui l'ont), le décalage en pixels et l'angle en degrés dans le sens horaire (`head_frames`) sont dans `appearance`, dans `data/fighter.ron`. Une nouvelle carrure dont le cou bouge autrement demande d'y reporter ses valeurs.
 - « Avant » et « arrière » sont vus du combattant tourné vers la droite. Le côté anatomique (gauche ou droit, main dominante) est géré par le jeu. L'arme principale est dans la main avant, le bouclier ou la seconde arme dans la main arrière.
 - Le jeu dessine une classe avec l'apparence commune tant que tous les calques de la sienne ne sont pas dans `assets/fighters/`.
 - Les scripts Aseprite lisent les calques de chaque apparence dans `art/scripts/fighter_looks.lua`, à tenir identique à `data/fighter.ron`.
@@ -104,7 +124,7 @@ assets/fighters/<calque>/<variante>_detail.png   non teinté, facultatif
 
 La variante d'un calque est la clé de la classe pour une apparence de classe (`gladiateur`), la carrure pour l'apparence commune (`build` dans `data/fighter.ron`, `average` pour l'instant), et la forme pour les cheveux (`hair`). Exemples : `assets/fighters/head/average.png`, `assets/fighters/head/average_detail.png` (les yeux), `assets/fighters/hair/long.png`, `assets/fighters/shield/gladiateur.png`.
 
-Les calques de l'apparence commune sont **provisoires** : des formes simples en gris clair (carrure `average`, cheveux `short` et `long`), générées par un script en attendant les vrais dessins, qui les remplacent sous les mêmes noms. Ceux du gladiateur et du maître du terrain sont dessinés par `art/scripts/draw_gladiator.lua` et `art/scripts/draw_maitre_terrain.lua` (voir « Aseprite »), des bases à reprendre à la main.
+Les calques de l'apparence commune sont **provisoires** : des formes simples en gris clair (carrure `average`, cheveux `short` et `long`), générées par un script en attendant les vrais dessins, qui les remplacent sous les mêmes noms. Ceux du gladiateur, du maître du terrain et du chasseur sont dessinés par `art/scripts/draw_gladiator.lua`, `art/scripts/draw_maitre_terrain.lua` et `art/scripts/draw_chasseur.lua` (voir « Aseprite »), des bases à reprendre à la main.
 
 ### Personnages uniques
 
@@ -148,7 +168,7 @@ Le script `fighter_template.lua` crée ce fichier pour une apparence (`art/fight
 - Nouveau sprite de 32 × 32 px, mode de couleur RGBA, fond transparent.
 - Charger la palette du jeu (Palette > Load Palette).
 - Un calque par partie, nommé comme dans le tableau des calques (`leg_back`, `arm_back`, `body`, `leg_front`, `head`, `hair`, `arm_front`), plus un calque `_detail` à côté de chaque partie qui en a.
-- 16 images ; un tag par animation (`idle` images 1 à 4, `move` 5 à 8, `attack` 9 à 12, `death` 13 à 16).
+- 16 images ; un tag par animation (`idle` images 1 à 4, `move` 5 à 8, `attack` 9 à 12, `death` 13 à 16), et 20 avec le lancer (`throw` 17 à 20).
 - Utiliser le papier calque (Onion Skin) pour animer.
 
 Dessiner d'abord un personnage complet, puis le répartir en calques à la place des calques provisoires de `assets/fighters/` (même grille, mêmes noms) et créer les variantes.
@@ -157,9 +177,11 @@ Pour le gladiateur, `draw_gladiator.lua` dessine une première version sur le `g
 
 `draw_maitre_terrain.lua` fait de même pour le maître du terrain sur `maitre-terrain.aseprite` (gabarit avec l'apparence `maitre-terrain`) ; la cape s'envole un peu en arrière quand il marche et lance. Sans l'interface : `Aseprite.exe -b art/fighters/maitre-terrain.aseprite --script-param save=yes --script art/scripts/draw_maitre_terrain.lua`, puis `export_fighter.lua`.
 
+`draw_chasseur.lua` fait de même pour le chasseur sur `chasseur.aseprite` (gabarit avec l'apparence `chasseur`, qui crée les 20 images) : les deux arcs, chacun sur son calque, la corde tendue jusqu'à la main arrière et la flèche encochée pendant l'attaque, le piège dans la main puis en vol pendant le lancer. Sans l'interface : `Aseprite.exe -b art/fighters/chasseur.aseprite --script-param save=yes --script art/scripts/draw_chasseur.lua`, puis `export_fighter.lua`.
+
 ### Exporter
 
-Le script `art/scripts/export_fighter.lua` exporte d'un coup le fichier ouvert, apparence tirée du nom du fichier : chaque calque vers `assets/fighters/<calque>/<apparence>.png`, chaque calque `_detail` non vide vers `<apparence>_detail.png` (un calque de détail vidé supprime l'ancien fichier), les calques de tête depuis la première image, les cheveux sous leur forme (retenue sur le calque `hair` par `fighter_template.lua`). Il ignore les calques dont le nom commence par `_` et signale ceux qu'il ne connaît pas ou qui sont vides. À la main sinon, File > Export Sprite Sheet, une exportation par calque :
+Le script `art/scripts/export_fighter.lua` exporte d'un coup le fichier ouvert, apparence tirée du nom du fichier : chaque calque vers `assets/fighters/<calque>/<apparence>.png`, chaque calque `_detail` non vide vers `<apparence>_detail.png` (un calque de détail vidé supprime l'ancien fichier), les calques de tête depuis la première image, les cheveux sous leur forme (retenue sur le calque `hair` par `fighter_template.lua`). Il exporte des feuilles de 5 lignes pour un fichier de 20 images, et refuse un fichier dont le nombre d'images ne va pas avec `throws` dans `fighter_looks.lua`. Il ignore les calques dont le nom commence par `_` et signale ceux qu'il ne connaît pas ou qui sont vides. À la main sinon, File > Export Sprite Sheet, une exportation par calque :
 
 - Layout : Sheet Type « By Rows », Constraints « Fixed # of Columns » = 4.
 - Sprite : Layers = le calque à exporter ; Frames = toutes.

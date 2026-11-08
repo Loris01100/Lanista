@@ -212,21 +212,39 @@
                 (name: "weapon", paint: Plain, part: ArmFront),
                 (name: "arm_front", paint: Skin, part: ArmFront),
             ],
+            // A hood and a short mantle, a leather jerkin and trousers, a quiver on the
+            // back, a bracer on the bow arm, boots; a long bow or a short one, by
+            // loadout. Its drawings have the throw, for the bear trap.
+            "chasseur": [
+                (name: "quiver", paint: Plain, part: Body),
+                (name: "leg_back", paint: Plain, part: LegBack),
+                (name: "arm_back", paint: Skin, part: ArmBack),
+                (name: "trap", paint: Plain, part: ArmBack),
+                (name: "body", paint: Plain, part: Body),
+                (name: "mantle", paint: Tunic, part: Body),
+                (name: "leg_front", paint: Plain, part: LegFront),
+                (name: "head", paint: Skin, part: Head),
+                (name: "hood", paint: Tunic, part: Head),
+                (name: "bow_heavy", paint: Plain, part: ArmFront, loadout: Some("heavy-bow")),
+                (name: "bow_light", paint: Plain, part: ArmFront, loadout: Some("light-bow")),
+                (name: "arm_front", paint: Skin, part: ArmFront),
+            ],
         },
         hair: ["short", "long"],
         skins: [(241, 194, 150), (198, 134, 66), (120, 74, 42)],
         hair_tints: [(45, 32, 22), (150, 90, 40), (220, 196, 130)],
         tunics: [(170, 40, 40), (45, 85, 160), (225, 215, 185)],
         // The head and hair images turn around the neck, at this pixel of their 32 x
-        // 32 image; for each of the 16 images of the spritesheet (idle, move, attack,
-        // death), they move by (right, down) pixels from their place in the first idle
-        // image and turn by degrees, clockwise.
+        // 32 image; for each of the 20 images of the spritesheet (idle, move, attack,
+        // death, and the throw of a look that has it), they move by (right, down) pixels
+        // from their place in the first idle image and turn by degrees, clockwise.
         head_pivot: (16.0, 12.0),
         head_frames: [
             (0.0, 0.0, 0.0), (0.0, 1.0, 0.0), (0.0, 1.0, 0.0), (0.0, 0.0, 0.0),
             (0.0, 0.0, 0.0), (0.0, 1.0, 0.0), (0.0, 0.0, 0.0), (0.0, 1.0, 0.0),
             (-1.0, 0.0, 0.0), (0.0, 0.0, 0.0), (1.0, 0.0, 0.0), (0.0, 0.0, 0.0),
             (-2.7, 0.1, -22.5), (-4.6, 2.4, -45.0), (-4.9, 7.3, -67.5), (-3.0, 12.0, -90.0),
+            (-1.0, 2.0, -5.0), (1.0, 3.0, 10.0), (2.0, 2.0, 15.0), (1.0, 1.0, 5.0),
         ],
     ),
     // The colosseum's equipment is the same for everyone. Refusing the armour costs, in

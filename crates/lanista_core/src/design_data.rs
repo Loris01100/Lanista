@@ -12,7 +12,7 @@ use crate::combat::{
 };
 use crate::economy::EconomyRules;
 use crate::fighter::ClassId;
-use crate::fighter::appearance::AppearanceRules;
+use crate::fighter::appearance::{AppearanceRules, LayerRule};
 use crate::fighter::care::CareRules;
 use crate::fighter::career::CareerRules;
 use crate::fighter::equipment::{EaseRules, EquipmentRules, OffHand};
@@ -322,8 +322,9 @@ pub struct Cost {
 }
 
 const CLASSES_FILE: &str = "data/classes.ron";
-/// Images of a fighter's spritesheet: 4 animations of 4 (`docs/Formats_graphiques.md`).
-pub const APPEARANCE_FRAMES: usize = 16;
+/// Images of a fighter's spritesheet: 5 animations of 4, the last one, the throw,
+/// left out of the drawings of a look without it (`docs/Formats_graphiques.md`).
+pub const APPEARANCE_FRAMES: usize = 20;
 const COMBAT_FILE: &str = "data/combat.ron";
 const FIGHTER_FILE: &str = "data/fighter.ron";
 const CALENDAR_FILE: &str = "data/calendar.ron";
@@ -695,11 +696,25 @@ impl DesignData {
                 problem: "not the key of a class",
             });
         }
+        let loadouts_known = |(key, layers): (&String, &Vec<LayerRule>)| {
+            let class = self.classes.iter().find(|c| &c.key == key);
+            layers
+                .iter()
+                .filter_map(|l| l.loadout.as_ref())
+                .all(|loadout| class.is_some_and(|c| c.loadouts.iter().any(|l| &l.key == loadout)))
+        };
+        if !looks.classes.iter().all(loadouts_known) {
+            return Err(LoadError::Invalid {
+                file: FIGHTER_FILE,
+                field: "appearance.classes",
+                problem: "a layer's loadout not one of its class",
+            });
+        }
         if looks.head_frames.len() != APPEARANCE_FRAMES {
             return Err(LoadError::Invalid {
                 file: FIGHTER_FILE,
                 field: "appearance.head_frames",
-                problem: "not one for each of the spritesheet's 16 images",
+                problem: "not one for each of the spritesheet's 20 images",
             });
         }
         Ok(())
@@ -1073,6 +1088,12 @@ mod tests {
         assert_eq!(field(CLASSES, &bald), "appearance.hair");
         let still = FIGHTER.replacen("(-1.0, 0.0, 0.0), ", "", 1);
         assert_eq!(field(CLASSES, &still), "appearance.head_frames");
+        let unknown = FIGHTER.replacen(
+            r#"loadout: Some("heavy-bow")"#,
+            r#"loadout: Some("sling")"#,
+            1,
+        );
+        assert_eq!(field(CLASSES, &unknown), "appearance.classes");
         let foreign_look = FIGHTER.replacen(r#""gladiateur": ["#, r#""spartiate": ["#, 1);
         assert_eq!(field(CLASSES, &foreign_look), "appearance.classes");
         let not_a_chance = FIGHTER.replacen("worsening_chance: 0.5", "worsening_chance: 1.5", 1);

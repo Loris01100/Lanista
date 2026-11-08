@@ -86,7 +86,8 @@ pub enum Part {
 }
 
 /// One layer of a look: `assets/fighters/<name>/<variant>.png` and its optional
-/// `_detail`, drawn in its paint, only with the off hand `with` if there is one.
+/// `_detail`, drawn in its paint, only with the off hand `with` and in the loadout
+/// `loadout` (a key of its class's `loadouts`) if there are some.
 #[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct LayerRule {
@@ -95,13 +96,16 @@ pub struct LayerRule {
     pub part: Part,
     #[serde(default)]
     pub with: Option<OffHand>,
+    #[serde(default)]
+    pub loadout: Option<String>,
 }
 
 impl LayerRule {
-    /// Whether a fighter with `off_hand` has this layer.
+    /// Whether a fighter with `off_hand`, in the loadout of key `loadout`, has this layer.
     #[must_use]
-    pub fn drawn_with(&self, off_hand: OffHand) -> bool {
+    pub fn drawn_with(&self, off_hand: OffHand, loadout: &str) -> bool {
         self.with.is_none_or(|with| with == off_hand)
+            && self.loadout.as_deref().is_none_or(|key| key == loadout)
     }
 }
 
@@ -212,7 +216,7 @@ mod tests {
         let names = |off_hand| -> Vec<&str> {
             layers
                 .iter()
-                .filter(|l| l.drawn_with(off_hand))
+                .filter(|l| l.drawn_with(off_hand, "sword-shield"))
                 .map(|l| l.name.as_str())
                 .collect()
         };
@@ -223,5 +227,23 @@ mod tests {
         assert!(armed.contains(&"weapon") && armed.contains(&"crest"));
         assert_eq!(rules.look("spartiate"), rules.default_look());
         assert_eq!(rules.default_look().0, rules.build);
+    }
+
+    #[test]
+    fn a_loadout_picks_its_own_layers() {
+        let rules = DesignData::load().unwrap().fighter.appearance;
+        let (_, layers) = rules.look("chasseur");
+        let names = |loadout| -> Vec<&str> {
+            layers
+                .iter()
+                .filter(|l| l.drawn_with(OffHand::Free, loadout))
+                .map(|l| l.name.as_str())
+                .collect()
+        };
+        let heavy = names("heavy-bow");
+        assert!(heavy.contains(&"bow_heavy") && !heavy.contains(&"bow_light"));
+        let light = names("light-bow");
+        assert!(light.contains(&"bow_light") && !light.contains(&"bow_heavy"));
+        assert!(heavy.contains(&"quiver") && light.contains(&"quiver"));
     }
 }

@@ -1,6 +1,7 @@
 -- Exports the open look source (made by fighter_template.lua) to the game's files, as
 -- docs/Formats_graphiques.md says: each layer of the look (fighter_looks.lua) to
--- assets/fighters/<layer>/<look>.png (a 128 x 128 px spritesheet, 4 columns),
+-- assets/fighters/<layer>/<look>.png (a 128 x 128 px spritesheet, 4 columns, 128 x 160
+-- with the throw's fifth row),
 -- `<layer>_detail` layers to <look>_detail.png, head layers to one 32 x 32 image from
 -- the first frame, the hair under its shape (hair/<shape>.png). Layers whose name
 -- starts with `_` are not exported. A detail layer left empty removes its old file, so
@@ -15,7 +16,8 @@
 
 local FRAME = 32
 local COLUMNS = 4
-local FRAMES = 16
+-- Frames of a look, and of one that throws.
+local FRAMES, THROWING_FRAMES = 16, 20
 
 local function report(message)
   if app.isUIAvailable then
@@ -132,13 +134,13 @@ local function frame_image(layer, number)
 end
 
 -- The layer's 4-column spritesheet, or its first frame alone; nil if it is empty.
-local function layer_image(layer, head)
+local function layer_image(layer, head, frames)
   if head then
     local image = frame_image(layer, 1)
     return not image:isEmpty() and image or nil
   end
-  local sheet = Image(FRAME * COLUMNS, FRAME * (FRAMES // COLUMNS), ColorMode.RGB)
-  for index = 0, FRAMES - 1 do
+  local sheet = Image(FRAME * COLUMNS, FRAME * (frames // COLUMNS), ColorMode.RGB)
+  for index = 0, frames - 1 do
     local x = (index % COLUMNS) * FRAME
     local y = (index // COLUMNS) * FRAME
     sheet:drawImage(frame_image(layer, index + 1), Point(x, y))
@@ -173,7 +175,7 @@ local function export(sprite, params, rules)
         local folder = app.fs.joinPath(params.root, "assets", "fighters", rule.name)
         local file = variant .. (detail and "_detail" or "") .. ".png"
         local path = app.fs.joinPath(folder, file)
-        local image = layer_image(layer, rule.head)
+        local image = layer_image(layer, rule.head, #sprite.frames)
         if image then
           app.fs.makeAllDirectories(folder)
           image:saveAs(path)
@@ -204,9 +206,11 @@ local function main()
   if sprite == nil then
     return report("Open a look source first (art/fighters/<look>.aseprite).")
   end
-  if sprite.width ~= FRAME or sprite.height ~= FRAME or #sprite.frames ~= FRAMES
+  local frames = #sprite.frames
+  if sprite.width ~= FRAME or sprite.height ~= FRAME
+      or (frames ~= FRAMES and frames ~= THROWING_FRAMES)
       or sprite.colorMode ~= ColorMode.RGB then
-    return report("A look source is 32 x 32 px, 16 frames, RGB color mode.")
+    return report("A look source is 32 x 32 px, 16 frames (20 with the throw), RGB color mode.")
   end
   local looks = load_looks()
   if looks == nil then
@@ -223,6 +227,10 @@ local function main()
   local rules = looks[params.look]
   if rules == nil then
     return report("No look \"" .. params.look .. "\" in fighter_looks.lua.")
+  end
+  if (frames == THROWING_FRAMES) ~= (rules.throws == true) then
+    return report("The look \"" .. params.look .. "\" has " ..
+      (rules.throws and "20" or "16") .. " frames in fighter_looks.lua.")
   end
   if params.hair == "" then
     return report("Give the hair shape.")

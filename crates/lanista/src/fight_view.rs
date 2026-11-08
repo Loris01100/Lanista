@@ -101,6 +101,9 @@ pub struct Look {
     pub dead_for: Option<f32>,
     /// The cast being shown missed: no hit sound at its impact.
     missed: bool,
+    /// The cast being shown throws a mine or a trap: the throw's images if its look
+    /// has them, and no hit sound.
+    pub throwing: bool,
 }
 
 impl Look {
@@ -274,6 +277,7 @@ impl FightView {
                 player: AnimationPlayer::default(),
                 dead_for: None,
                 missed: false,
+                throwing: false,
             })
             .collect();
         Self {
@@ -350,6 +354,15 @@ impl FightView {
                 look.pose = Pose::Cast;
                 look.player = AnimationPlayer::default();
                 look.missed = missed;
+                look.throwing = false;
+            }
+            if let EventKind::Lay { fighter, .. } = event.kind
+                && let Some(look) = index(fighter.0).and_then(|i| self.looks.get_mut(i))
+            {
+                look.pose = Pose::Cast;
+                look.player = AnimationPlayer::default();
+                look.missed = true;
+                look.throwing = true;
             }
             if let Some((fighter, text, tone, delay)) = popup(event.kind) {
                 let row = self.popups.iter().filter(|p| p.fighter == fighter).count() % POPUP_ROWS;
@@ -893,6 +906,7 @@ impl FightView {
                 x: at[i].x,
                 y: at[i].y,
                 frame: look.player.frame(animation),
+                throwing: look.pose == Pose::Cast && look.throwing,
                 flip_x,
                 shade: if lying {
                     DEAD_SHADE
@@ -903,10 +917,14 @@ impl FightView {
                 },
                 missing: Missing::of(fighter, flip_x),
             };
+            let class = data.class(fighter.class);
             let dress = Dress {
                 look: &fighter.appearance,
-                class: data.class(fighter.class).map_or("", |c| c.key.as_str()),
+                class: class.map_or("", |c| c.key.as_str()),
                 off_hand: fighter.off_hand,
+                loadout: class
+                    .and_then(|c| c.loadout(fighter.loadout))
+                    .map_or("", |l| l.key.as_str()),
             };
             draw_fighter(assets, rules, &dress, &placement);
         }
@@ -1107,6 +1125,38 @@ mod tests {
         // A duel tells nothing.
         let duel = FightView::new(random_duel(&data, 1), Cast::default());
         assert_eq!(duel.elimination_lines(), Vec::<String>::new());
+    }
+
+    #[test]
+    fn a_mine_laid_is_thrown_and_a_cast_is_not() {
+        use lanista_core::log::Event;
+
+        let data = DesignData::load().unwrap();
+        let mut view = FightView::new(random_duel(&data, 3), Cast::default());
+        let (caster, target) = (view.arena.fighters[0].id, view.arena.fighters[1].id);
+        let lay = EventKind::Lay {
+            fighter: caster,
+            spell: 0,
+        };
+        view.arena.log.push(Event { tick: 0, kind: lay });
+        // No hit sound for a throw.
+        assert!(!view.animate(0.0).contains(&HIT_SOUND));
+        assert_eq!(view.looks[0].pose, Pose::Cast);
+        assert!(view.looks[0].throwing);
+        let cast = EventKind::Cast {
+            caster,
+            target,
+            spell: 0,
+            damage: 1,
+            missed: false,
+            part: None,
+        };
+        view.arena.log.push(Event {
+            tick: 0,
+            kind: cast,
+        });
+        view.animate(0.0);
+        assert!(!view.looks[0].throwing);
     }
 
     #[test]
