@@ -136,19 +136,20 @@ fn fighter_card(
         .fill(ui.visuals().extreme_bg_color)
         .show(ui, |ui| {
             ui.set_width(ui.available_width());
-            ui.horizontal(|ui| {
+            // Wrapped: a large interface leaves a card too narrow for its whole name line.
+            ui.horizontal_wrapped(|ui| {
                 let name = egui::RichText::new(short_name(index, fighter)).strong();
                 open = ui.link(name.color(theme::BRONZE)).clicked();
                 let class = ui.visuals().widgets.inactive.bg_fill;
-                chip(ui, class_name(fighter, data), class);
+                wrapped_chip(ui, class_name(fighter, data), class);
                 let fame = tr!("roster-fame-chip", fame = fighter.fame.value());
-                chip(ui, fame, theme::BRONZE.gamma_multiply(0.6))
+                wrapped_chip(ui, fame, theme::BRONZE.gamma_multiply(0.6))
                     .on_hover_text(tr!("roster-fame-hint"));
-                ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                    let age = tr!("roster-age-years", age = fighter.age);
-                    ui.label(egui::RichText::new(age).weak());
-                    ui.label(egui::RichText::new(record_text(fighter.record)).weak());
-                });
+                // Each on one line, to the next row rather than cut in two.
+                let record = egui::RichText::new(record_text(fighter.record)).weak();
+                ui.add(egui::Label::new(record).extend());
+                let age = tr!("roster-age-years", age = fighter.age);
+                ui.add(egui::Label::new(egui::RichText::new(age).weak()).extend());
             });
             ui.add_space(2.0);
             bars(ui, index, fighter);

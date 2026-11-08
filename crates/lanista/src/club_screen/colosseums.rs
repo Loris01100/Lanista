@@ -100,9 +100,22 @@ impl ClubScreen {
             ui.label(tr!("colosseums-none"));
         }
         let mut goto = None;
-        ui.columns(colosseums.len().max(1), |columns| {
-            for ((id, (colosseum, rules)), ui) in colosseums.into_iter().zip(columns) {
-                goto = colosseum_column(ui, id, colosseum, rules, state, data).or(goto);
+        // As many side by side as the width holds, the others below: a large interface
+        // leaves too little room for each ranking.
+        let width = ui.available_width();
+        let per_row = std::iter::successors(Some(COLUMN_WIDTH), |w| Some(w + COLUMN_WIDTH))
+            .take(colosseums.len())
+            .take_while(|&w| w <= width)
+            .count()
+            .max(1);
+        egui::ScrollArea::vertical().show(ui, |ui| {
+            for row in colosseums.chunks(per_row) {
+                ui.columns(per_row, |columns| {
+                    for (&(id, (colosseum, rules)), ui) in row.iter().zip(columns) {
+                        goto = colosseum_column(ui, id, colosseum, rules, state, data).or(goto);
+                    }
+                });
+                ui.add_space(6.0);
             }
         });
         goto
@@ -389,6 +402,10 @@ pub(super) struct RivalRow {
 
 /// The colosseums' levels, by prestige: major, middling, weak.
 const PRESTIGES: [u32; 3] = [3, 2, 1];
+/// Width a colosseum's column needs: its tags two by two, its ranking's four columns.
+const COLUMN_WIDTH: f32 = 400.0;
+/// Height of a colosseum's ranking, scrolled within.
+const RANKING_HEIGHT: f32 = 360.0;
 
 fn prestige_name(prestige: u32) -> String {
     match prestige {
@@ -577,8 +594,12 @@ fn ranking(
 ) -> Option<View> {
     let mut goto = None;
     let ranked = colosseum.active_ranking(state.rosters());
-    egui::ScrollArea::vertical()
+    // Sideways too: kept to its column when the column is narrower than the ranking.
+    // Its own height, not what is left of the window: the page scrolls down to it.
+    egui::ScrollArea::both()
         .id_salt(("ranking", id.0))
+        .max_height(RANKING_HEIGHT)
+        .min_scrolled_height(RANKING_HEIGHT)
         .show(ui, |ui| {
             egui::Grid::new(("ranking", id.0))
                 .num_columns(4)

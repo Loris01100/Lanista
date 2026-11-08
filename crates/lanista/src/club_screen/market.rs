@@ -374,9 +374,8 @@ impl ClubScreen {
         let mut compared = self.compared;
         let mut terms_draft = self.terms_draft;
         let mut moves = std::mem::take(&mut self.decisions.moves);
-        ui.columns(2, |columns| {
-            super::sheet(&mut columns[0], &name, f, seen, data);
-            let ui = &mut columns[1];
+        let left = |ui: &mut egui::Ui| super::sheet(ui, &name, f, seen, data);
+        super::side_by_side(ui, left, |ui| {
             if let Some(a) = starter {
                 ui.label(tr!("starter-text"));
                 ui.horizontal(|ui| {

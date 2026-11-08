@@ -413,6 +413,7 @@ view-market = Marché
 view-staff = Personnel
 view-wiki = 📖
 view-wiki-hint = Encyclopédie
+view-go = Aller à…
 wiki-classes = Classes
 wiki-weapons = Armes
 wiki-search = Rechercher
@@ -533,7 +534,8 @@ menu-title = Menu général
 menu-club = { $club } : { $wealth }, { $continent }
 menu-alerts = Alertes
 menu-active = { $active } / { $max } combattants en activité
-menu-next-week = Semaine suivante (Espace)
+menu-next-week = Semaine suivante
+menu-next-week-hint = Jouer la semaine (Espace)
 menu-unpaid = ⚠ Caisse insuffisante : { $count ->
     [one] 1 combattant
    *[other] { $count } combattants

@@ -24,6 +24,12 @@ pub trait Screen {
 
     /// Draws the screen; egui is drawn on top afterwards.
     fn draw(&self, assets: &Assets);
+
+    /// The most the player's interface size scales this screen's UI, for one laid out
+    /// in a fixed room (windows around a scene); `None` follows the player's size.
+    fn max_ui_scale(&self) -> Option<f32> {
+        None
+    }
 }
 
 /// Screens on top of each other; only the top one is active.
@@ -61,6 +67,12 @@ impl ScreenStack {
         if let Some(top) = self.screens.last() {
             top.draw(assets);
         }
+    }
+
+    /// The top screen's `Screen::max_ui_scale`.
+    #[must_use]
+    pub fn max_ui_scale(&self) -> Option<f32> {
+        self.screens.last().and_then(|top| top.max_ui_scale())
     }
 
     /// True once the last screen is popped: time to quit.
@@ -133,5 +145,39 @@ mod tests {
             &mut Audio::default(),
         );
         assert_eq!(stack.len(), 1);
+    }
+
+    /// Caps the interface size at 1, as a screen of windows around a scene.
+    struct Capped;
+
+    impl Screen for Capped {
+        fn update(
+            &mut self,
+            _ui: &egui::Context,
+            _assets: &Assets,
+            _audio: &mut Audio,
+        ) -> Transition {
+            Transition::Pop
+        }
+
+        fn draw(&self, _assets: &Assets) {}
+
+        fn max_ui_scale(&self) -> Option<f32> {
+            Some(1.0)
+        }
+    }
+
+    #[test]
+    fn the_top_screen_caps_the_interface_size() {
+        let mut stack = ScreenStack::new(idle());
+        assert_eq!(stack.max_ui_scale(), None);
+        stack.screens.push(Box::new(Capped));
+        assert_eq!(stack.max_ui_scale(), Some(1.0));
+        stack.update(
+            &egui::Context::default(),
+            &Assets::default(),
+            &mut Audio::default(),
+        );
+        assert_eq!(stack.max_ui_scale(), None);
     }
 }

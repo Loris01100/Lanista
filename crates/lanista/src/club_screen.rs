@@ -414,13 +414,43 @@ impl ClubScreen {
         self.save(saves::AUTO, false);
     }
 
+    /// The top bar and the view shown under it; whether to play the week, and the
+    /// seed of a fight to watch again.
+    fn panels(&mut self, ui: &egui::Context) -> (bool, Option<u64>) {
+        let mut play = false;
+        let mut again = None;
+        egui::TopBottomPanel::top("club").show(ui, |ui| play = self.top_bar(ui));
+        egui::CentralPanel::default().show(ui, |ui| {
+            // Sideways when a table is wider than the window, at a large interface;
+            // each view scrolls down on its own.
+            egui::ScrollArea::horizontal()
+                .auto_shrink(false)
+                .show(ui, |ui| match self.view {
+                    View::Menu => {
+                        egui::ScrollArea::vertical().show(ui, |ui| self.menu(ui));
+                    }
+                    View::Roster => self.roster(ui),
+                    View::Sheet(i) => self.sheet(ui, i),
+                    View::Fights => again = self.fight_summary(ui),
+                    View::Paper => self.paper(ui),
+                    View::Colosseums => self.colosseums(ui),
+                    View::Market => self.market(ui),
+                    View::Staff => self.staff(ui),
+                    View::Outside(target) => self.outside(ui, target),
+                    View::Rival(club) => self.rival_club(ui, club),
+                    View::Wiki(entry) => self.wiki(ui, entry),
+                });
+        });
+        (play, again)
+    }
+
     /// The bar over every view; returns whether to play the week.
     fn top_bar(&mut self, ui: &mut egui::Ui) -> bool {
         let mut play = false;
         let date = self.state.date(&self.data);
         let phase = phase_key(date.phase(&self.data.calendar));
-        // Wrapped: a narrow window or a large interface puts the end on a second row
-        // rather than out of the screen.
+        // Two rows, each wrapped when the window is narrow or the interface large: the
+        // club and its main actions, then where to go.
         ui.horizontal_wrapped(|ui| {
             ui.strong(named_club(&self.state.name));
             ui.separator();
@@ -432,38 +462,6 @@ impl ClubScreen {
             ));
             ui.separator();
             ui.strong(tr!("top-money", money = self.state.money));
-            ui.separator();
-            if arrow_link(ui, !self.history.is_empty(), egui::Vec2::LEFT, tr!("back")) {
-                self.back();
-            }
-            if arrow_link(ui, !self.forward.is_empty(), egui::Vec2::RIGHT, tr!("next")) {
-                self.next();
-            }
-            ui.separator();
-            let views = [
-                (View::Menu, "view-menu"),
-                (View::Roster, "view-roster"),
-                (View::Fights, "view-fights"),
-                (View::Paper, "view-paper"),
-                (View::Colosseums, "view-colosseums"),
-                (View::Market, "view-market"),
-                (View::Staff, "view-staff"),
-            ];
-            for (view, key) in views {
-                let label = egui::SelectableLabel::new(self.view == view, tr!(key));
-                let enabled = view != View::Fights || !self.fights.is_empty();
-                if ui.add_enabled(enabled, label).clicked() {
-                    self.go_to(view);
-                }
-            }
-            ui.separator();
-            let open = matches!(self.view, View::Wiki(_));
-            let wiki = egui::SelectableLabel::new(open, tr!("view-wiki"));
-            if ui.add(wiki).on_hover_text(tr!("view-wiki-hint")).clicked() {
-                self.go_to(View::Wiki(Entry::CATEGORIES[0]));
-            }
-            ui.toggle_value(&mut self.game_open, tr!("game"));
-            ui.toggle_value(&mut self.options_open, tr!("options"));
             ui.separator();
             // Beside the button, so the week is not played without knowing.
             let unpaid = self.unpaid().into_iter().filter(|&u| u).count();
@@ -482,7 +480,60 @@ impl ClubScreen {
             // its decisions are taken.
             let next = egui::Button::new(egui::RichText::new(tr!("menu-next-week")).strong())
                 .fill(theme::BRONZE.gamma_multiply(0.5));
-            play = ui.add(next).clicked();
+            play = ui
+                .add(next)
+                .on_hover_text(tr!("menu-next-week-hint"))
+                .clicked();
+            ui.toggle_value(&mut self.game_open, tr!("game"));
+            ui.toggle_value(&mut self.options_open, tr!("options"));
+        });
+        ui.horizontal_wrapped(|ui| {
+            // Tighter than elsewhere: the tabs keep to one row up to a large interface.
+            ui.spacing_mut().item_spacing.x = 4.0;
+            ui.spacing_mut().button_padding.x = 8.0;
+            if arrow_link(ui, !self.history.is_empty(), egui::Vec2::LEFT, tr!("back")) {
+                self.back();
+            }
+            if arrow_link(ui, !self.forward.is_empty(), egui::Vec2::RIGHT, tr!("next")) {
+                self.next();
+            }
+            ui.separator();
+            let views = [
+                (View::Menu, "view-menu"),
+                (View::Roster, "view-roster"),
+                (View::Fights, "view-fights"),
+                (View::Paper, "view-paper"),
+                (View::Colosseums, "view-colosseums"),
+                (View::Market, "view-market"),
+                (View::Staff, "view-staff"),
+            ]
+            .map(|(view, key)| (view, tr!(key)));
+            let shown = views.iter().find(|(view, _)| *view == self.view);
+            let shown = shown.map_or_else(|| tr!("view-go"), |(_, name)| name.clone());
+            let mut tabs = |ui: &mut egui::Ui| {
+                for (view, name) in &views {
+                    let label = egui::SelectableLabel::new(self.view == *view, name);
+                    let enabled = *view != View::Fights || !self.fights.is_empty();
+                    if ui.add_enabled(enabled, label).clicked() {
+                        self.go_to(*view);
+                    }
+                }
+            };
+            let names = views.iter().map(|(_, name)| name.as_str());
+            if tabs_width(ui, names) <= ui.available_width() - TABS_RESERVE {
+                tabs(ui);
+            } else {
+                // Folded into a list when a large interface leaves no room for a row.
+                egui::ComboBox::from_id_salt("views")
+                    .selected_text(shown)
+                    .show_ui(ui, tabs);
+            }
+            ui.separator();
+            let open = matches!(self.view, View::Wiki(_));
+            let wiki = egui::SelectableLabel::new(open, tr!("view-wiki"));
+            if ui.add(wiki).on_hover_text(tr!("view-wiki-hint")).clicked() {
+                self.go_to(View::Wiki(Entry::CATEGORIES[0]));
+            }
         });
         // On its own line: a long message would push the views out of the bar.
         if let Some(message) = &self.message {
@@ -564,7 +615,11 @@ impl ClubScreen {
                 });
                 let gap = 4.0;
                 let count = f32::from(u16::try_from(weeks).unwrap_or(u16::MAX).max(1));
-                let side = ((ui.available_width() - gap * (count - 1.0)) / count).clamp(24.0, 48.0);
+                // Rounded down: a row filled to the last fraction of a point wraps its
+                // last week.
+                let side = ((ui.available_width() - gap * (count - 1.0)) / count)
+                    .floor()
+                    .clamp(24.0, 48.0);
                 ui.horizontal_wrapped(|ui| {
                     ui.spacing_mut().item_spacing = egui::vec2(gap, gap);
                     for week in 1..=weeks {
@@ -1058,16 +1113,10 @@ impl ClubScreen {
             self.forward.clear();
             self.view = View::Roster;
         }
-        ui.columns(2, |columns| {
-            let name = fighter_name(index, f, data);
-            sheet(
-                &mut columns[0],
-                &name,
-                f,
-                (best_stats(&self.state), None),
-                data,
-            );
-            let ui = &mut columns[1];
+        let name = fighter_name(index, f, data);
+        let best = best_stats(&self.state);
+        let left = |ui: &mut egui::Ui| sheet(ui, &name, f, (best, None), data);
+        side_by_side(ui, left, |ui| {
             ui.heading(tr!("sheet-this-week"));
             if f.status == Status::Active
                 && let Some(plan) = self.decisions.plans.get_mut(index)
@@ -1207,21 +1256,8 @@ impl Screen for ClubScreen {
             self.next();
         }
         let mut play = keys && self.bindings.pressed(ui, &Action::NextWeek);
-        let mut again = None;
-        egui::TopBottomPanel::top("club").show(ui, |ui| play |= self.top_bar(ui));
-        egui::CentralPanel::default().show(ui, |ui| match self.view {
-            View::Menu => self.menu(ui),
-            View::Roster => self.roster(ui),
-            View::Sheet(i) => self.sheet(ui, i),
-            View::Fights => again = self.fight_summary(ui),
-            View::Paper => self.paper(ui),
-            View::Colosseums => self.colosseums(ui),
-            View::Market => self.market(ui),
-            View::Staff => self.staff(ui),
-            View::Outside(target) => self.outside(ui, target),
-            View::Rival(club) => self.rival_club(ui, club),
-            View::Wiki(entry) => self.wiki(ui, entry),
-        });
+        let (top, again) = self.panels(ui);
+        play |= top;
         if let Some(failed) =
             options::window(ui, audio, self.saves.as_deref(), &mut self.options_open)
         {
@@ -1251,6 +1287,54 @@ impl Screen for ClubScreen {
     fn draw(&self, _assets: &Assets) {
         clear_background(BACKGROUND);
     }
+}
+
+/// Width a column of a fighter's page needs, side by side with the other.
+const PAGE_COLUMN_WIDTH: f32 = 400.0;
+
+/// `left` and `right` in two columns, or one under the other when the width cannot
+/// hold both, at a large interface, scrolled down together.
+fn side_by_side(
+    ui: &mut egui::Ui,
+    left: impl FnOnce(&mut egui::Ui),
+    right: impl FnOnce(&mut egui::Ui),
+) {
+    if ui.available_width() >= 2.0 * PAGE_COLUMN_WIDTH {
+        ui.columns(2, |columns| {
+            left(&mut columns[0]);
+            right(&mut columns[1]);
+        });
+    } else {
+        egui::ScrollArea::vertical()
+            .id_salt("stacked")
+            .show(ui, |ui| {
+                left(ui);
+                theme::ornament(ui);
+                right(ui);
+            });
+    }
+}
+
+/// Room the top bar's second row keeps beside the views' tabs: the arrows, the
+/// separators and the encyclopedia.
+const TABS_RESERVE: f32 = 120.0;
+
+/// Width of a row of tabs named `names`, as the top bar lays them out in `ui`.
+fn tabs_width<'a>(ui: &egui::Ui, names: impl Iterator<Item = &'a str>) -> f32 {
+    let spacing = ui.spacing();
+    let around = 2.0 * spacing.button_padding.x + spacing.item_spacing.x;
+    names
+        .map(|name| {
+            let text = egui::WidgetText::from(name);
+            let galley = text.into_galley(
+                ui,
+                Some(egui::TextWrapMode::Extend),
+                f32::INFINITY,
+                egui::TextStyle::Button,
+            );
+            galley.size().x + around
+        })
+        .sum()
 }
 
 /// An arrow along `dir` to click, `text` shown on hover, faded when not `enabled`.
@@ -3501,20 +3585,7 @@ mod tests {
         };
         let draw = |screen: &mut ClubScreen| {
             let _ = ui.run(input(), |ui| {
-                egui::TopBottomPanel::top("club").show(ui, |ui| screen.top_bar(ui));
-                egui::CentralPanel::default().show(ui, |ui| match screen.view {
-                    View::Menu => screen.menu(ui),
-                    View::Roster => screen.roster(ui),
-                    View::Sheet(i) => screen.sheet(ui, i),
-                    View::Fights => drop(screen.fight_summary(ui)),
-                    View::Paper => screen.paper(ui),
-                    View::Colosseums => screen.colosseums(ui),
-                    View::Market => screen.market(ui),
-                    View::Staff => screen.staff(ui),
-                    View::Outside(target) => screen.outside(ui, target),
-                    View::Rival(club) => screen.rival_club(ui, club),
-                    View::Wiki(entry) => screen.wiki(ui, entry),
-                });
+                let _ = screen.panels(ui);
             });
         };
         let views = [

@@ -53,7 +53,9 @@ pub async fn run(
     while !stack.is_empty() {
         // One egui pass per frame: the top screen builds its UI there.
         egui_macroquad::ui(|ui| {
-            let zoom = macroquad::window::screen_height() / UI_DESIGN_HEIGHT * UI_SCALE.get();
+            let scale = UI_SCALE.get();
+            let scale = stack.max_ui_scale().map_or(scale, |most| scale.min(most));
+            let zoom = macroquad::window::screen_height() / UI_DESIGN_HEIGHT * scale;
             if zoom > 0.0 && (ui.zoom_factor() - zoom).abs() > f32::EPSILON {
                 ui.set_zoom_factor(zoom);
             }

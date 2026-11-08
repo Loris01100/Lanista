@@ -47,6 +47,9 @@ const BOTTOM_ROOM: f32 = 150.0;
 /// feed goes above.
 const CONTROLS_HEIGHT: f32 = 60.0;
 const CONTROLS: &str = "controls";
+/// The largest interface size the fight's windows take: past it, the sheets, the
+/// scoreboard and the feed leave no room for the arena.
+const MAX_UI_SCALE: f32 = 1.0;
 const THUMBNAIL_FRAME: Color = Color::new(0.9, 0.85, 0.7, 1.0);
 /// Over a thumbnail whose fight is over.
 const FINISHED: Color = Color::new(0.55, 0.55, 0.55, 1.0);
@@ -1068,6 +1071,10 @@ impl Screen for CombatScreen {
             audio.play_effect(assets, sound);
         }
         Transition::None
+    }
+
+    fn max_ui_scale(&self) -> Option<f32> {
+        Some(MAX_UI_SCALE)
     }
 
     fn draw(&self, assets: &Assets) {

@@ -388,30 +388,35 @@ impl Screen for TitleScreen {
         let mut opened = None;
         let mut quit = false;
         egui::CentralPanel::default().show(ui, |ui| {
-            ui.vertical_centered(|ui| {
-                ui.add_space(60.0);
-                ui.heading(egui::RichText::new("Lanista").size(48.0));
-                ui.add_space(30.0);
-                if let Some(message) = &self.message {
-                    ui.colored_label(egui::Color32::LIGHT_RED, message);
-                    ui.add_space(6.0);
-                }
-                if let Some(choice) = self.confirm {
-                    opened = self.confirmation(ui, choice);
-                    return;
-                }
-                match self.page {
-                    Page::Main => (opened, quit) = self.main_page(ui),
-                    Page::Load => opened = self.load_page(ui),
-                    Page::New => opened = self.new_page(ui),
-                }
-                if self.page != Page::Main {
-                    ui.add_space(12.0);
-                    if ui.button(tr!("back")).clicked() {
-                        self.page = Page::Main;
-                    }
-                }
-            });
+            // Down to the last button at a large interface.
+            egui::ScrollArea::vertical()
+                .auto_shrink(false)
+                .show(ui, |ui| {
+                    ui.vertical_centered(|ui| {
+                        ui.add_space(60.0);
+                        ui.heading(egui::RichText::new("Lanista").size(48.0));
+                        ui.add_space(30.0);
+                        if let Some(message) = &self.message {
+                            ui.colored_label(egui::Color32::LIGHT_RED, message);
+                            ui.add_space(6.0);
+                        }
+                        if let Some(choice) = self.confirm {
+                            opened = self.confirmation(ui, choice);
+                            return;
+                        }
+                        match self.page {
+                            Page::Main => (opened, quit) = self.main_page(ui),
+                            Page::Load => opened = self.load_page(ui),
+                            Page::New => opened = self.new_page(ui),
+                        }
+                        if self.page != Page::Main {
+                            ui.add_space(12.0);
+                            if ui.button(tr!("back")).clicked() {
+                                self.page = Page::Main;
+                            }
+                        }
+                    });
+                });
         });
         if let Some(failed) =
             options::window(ui, audio, self.saves.as_deref(), &mut self.options_open)
