@@ -18,7 +18,7 @@ pub use camera::{blend_views, fit_camera, fit_view, pixel_camera, pixel_view};
 /// separate egui dependency.
 pub use egui_macroquad::egui;
 pub use fixed_step::FixedStep;
-pub use frame::NineSlice;
+pub use frame::{NineSlice, load_texture};
 pub use input::{Bindings, Button};
 pub use render_target::{SceneTarget, target_camera};
 pub use screen::{Screen, ScreenStack, Transition};

@@ -9,7 +9,7 @@ use reesch::egui;
 use super::{ClubScreen, chip, wrapped_chip};
 use crate::lang::tr;
 use crate::texts::{role_title, staff_move_text, weeks_left_text};
-use crate::theme;
+use crate::theme::{self, Icon};
 
 impl ClubScreen {
     /// The staff: this week's changes, then one post at a time, chosen by its tab: who
@@ -135,14 +135,12 @@ fn candidate_card(
     });
 }
 
-/// "Niveau 3" in bronze, or « Aucun » faded.
+/// "Niveau 3" with its chevrons, or « Aucun » alone.
 fn level_chip(ui: &mut egui::Ui, level: Option<u32>) {
     if let Some(level) = level {
-        let text = tr!("staff-level", level = level);
-        chip(ui, text, theme::BRONZE.gamma_multiply(0.6));
+        chip(ui, Icon::Level, tr!("staff-level", level = level));
     } else {
-        let plain = ui.visuals().widgets.inactive.bg_fill;
-        chip(ui, tr!("staff-nobody"), plain);
+        chip(ui, None, tr!("staff-nobody"));
     }
 }
 
@@ -170,18 +168,18 @@ impl Effect {
     }
 }
 
-/// `effects` as tags; against `held`, each green where better, red where worse.
+/// `effects` as tags; against `held`, each with a green ▲ where better, a red ▼ where
+/// worse.
 fn effect_chips(ui: &mut egui::Ui, effects: &[Effect], held: Option<&[Effect]>) {
-    let plain = ui.visuals().widgets.inactive.bg_fill;
     ui.horizontal_wrapped(|ui| {
         for (n, effect) in effects.iter().enumerate() {
             let other = held.and_then(|h| h.get(n)).map(|h| h.score);
-            let color = match other.map(|o| effect.score.cmp(&o)) {
-                Some(std::cmp::Ordering::Greater) => theme::LAUREL,
-                Some(std::cmp::Ordering::Less) => theme::BLOOD,
-                _ => plain,
+            let icon = match other.map(|o| effect.score.cmp(&o)) {
+                Some(std::cmp::Ordering::Greater) => Some(Icon::Up),
+                Some(std::cmp::Ordering::Less) => Some(Icon::Down),
+                _ => None,
             };
-            let tag = wrapped_chip(ui, &effect.text, color);
+            let tag = wrapped_chip(ui, icon, &effect.text);
             if let Some(hint) = &effect.hint {
                 tag.on_hover_text(hint);
             }

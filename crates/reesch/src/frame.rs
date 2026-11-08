@@ -8,6 +8,18 @@ use egui_macroquad::egui::{
 use macroquad::Error;
 use macroquad::texture::Image;
 
+/// Decodes `bytes` (PNG…) into an egui texture named `name`, for pixel art: no blur
+/// when scaled up.
+///
+/// # Errors
+/// If the bytes are not an image.
+pub fn load_texture(ui: &egui::Context, name: &str, bytes: &[u8]) -> Result<TextureHandle, Error> {
+    let image = Image::from_file_with_format(bytes, None)?;
+    let size = [usize::from(image.width), usize::from(image.height)];
+    let image = ColorImage::from_rgba_unmultiplied(size, &image.bytes);
+    Ok(ui.load_texture(name, image, TextureOptions::NEAREST))
+}
+
 /// A 9-slice texture: an image whose `border` pixels on each side are its frame.
 #[derive(Clone)]
 pub struct NineSlice {
@@ -23,10 +35,7 @@ impl NineSlice {
     /// # Errors
     /// If the bytes are not an image.
     pub fn load(ui: &egui::Context, name: &str, bytes: &[u8], border: f32) -> Result<Self, Error> {
-        let image = Image::from_file_with_format(bytes, None)?;
-        let size = [usize::from(image.width), usize::from(image.height)];
-        let image = ColorImage::from_rgba_unmultiplied(size, &image.bytes);
-        let texture = ui.load_texture(name, image, TextureOptions::NEAREST);
+        let texture = load_texture(ui, name, bytes)?;
         Ok(Self { texture, border })
     }
 

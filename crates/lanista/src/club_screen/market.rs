@@ -17,7 +17,7 @@ use crate::texts::{
     class_name, club_name, colosseum_name, fighter_name, free_agent_name, move_text, range_texts,
     record_text, rival_fighter_name, stat_names, terms_text, unsellable_text, weeks,
 };
-use crate::theme;
+use crate::theme::{self, Icon};
 
 /// Which fighters out of the club the market lists, kept while the game runs.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -206,8 +206,8 @@ impl ClubScreen {
         ui.horizontal(|ui| {
             ui.heading(tr!("view-market"));
             let full = u32::try_from(active).is_ok_and(|n| n >= max);
-            let color = if full { theme::BLOOD } else { theme::LAUREL };
-            chip(ui, tr!("market-roster", active = active, max = max), color);
+            let icon = if full { Icon::Full } else { Icon::Class };
+            chip(ui, icon, tr!("market-roster", active = active, max = max));
         });
         ui.label(egui::RichText::new(tr!("market-rules")).small().weak());
         ui.add_space(4.0);
@@ -958,13 +958,12 @@ fn contract_cell(ui: &mut egui::Ui, f: &CareerFighter, season: u64) {
 
 /// Whether the club's fighter `i` is listed, kept or not for sale.
 fn sale_status_cell(ui: &mut egui::Ui, i: usize, unsellable: Option<&str>, state: &GameState) {
-    let plain = ui.visuals().widgets.inactive.bg_fill;
     if state.transfer_list.contains(&i) {
-        chip(ui, tr!("market-listed"), theme::BRONZE.gamma_multiply(0.6));
+        chip(ui, Icon::Listed, tr!("market-listed"));
     } else if state.kept.contains(&i) {
-        chip(ui, tr!("keep"), plain);
+        chip(ui, Icon::Kept, tr!("keep"));
     } else if let Some(text) = unsellable {
-        chip(ui, text, plain);
+        chip(ui, Icon::Recent, text);
     } else {
         ui.label("");
     }

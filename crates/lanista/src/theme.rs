@@ -1,8 +1,8 @@
 //! The egui theme: dark wood and parchment with bronze accents, sizes made
 //! for the Steam Deck (1280 × 800, 7 inches, touch screen).
 
-use reesch::NineSlice;
 use reesch::egui::{self, Color32, FontFamily, FontId, Stroke, TextStyle, vec2};
+use reesch::{NineSlice, load_texture};
 
 pub const PARCHMENT: Color32 = Color32::from_rgb(0xEA, 0xDB, 0xC0);
 pub const BRONZE: Color32 = Color32::from_rgb(0xC8, 0x96, 0x3E);
@@ -61,6 +61,9 @@ fn fonts() -> egui::FontDefinitions {
 /// Width of the frames' border, in points.
 pub const FRAME_BORDER: f32 = 8.0;
 
+/// Width of a tag's plaque border, in points.
+pub const PLAQUE_BORDER: f32 = 4.0;
+
 /// The 9-slice frames, embedded like the fonts.
 #[derive(Clone, Copy)]
 pub enum Frame {
@@ -68,27 +71,35 @@ pub enum Frame {
     Wood,
     /// The newspaper, in a bronze border.
     Parchment,
+    /// The tags: a dark plaque inset into the wood, the same for all.
+    Plaque,
 }
 
 impl Frame {
     /// The frame for `ui`'s context, its texture loaded on first use.
     pub fn get(self, ui: &egui::Context) -> NineSlice {
-        let (name, bytes) = match self {
+        let (name, bytes, border) = match self {
             Self::Wood => (
                 "frame-wood",
                 &include_bytes!("../../../assets/ui/wood.png")[..],
+                FRAME_BORDER,
             ),
             Self::Parchment => (
                 "frame-parchment",
                 &include_bytes!("../../../assets/ui/parchment.png")[..],
+                FRAME_BORDER,
+            ),
+            Self::Plaque => (
+                "frame-plaque",
+                &include_bytes!("../../../assets/ui/plaque.png")[..],
+                PLAQUE_BORDER,
             ),
         };
         let id = egui::Id::new(name);
         if let Some(frame) = ui.data(|d| d.get_temp(id)) {
             return frame;
         }
-        let frame =
-            NineSlice::load(ui, name, bytes, FRAME_BORDER).expect("an embedded frame is a PNG");
+        let frame = NineSlice::load(ui, name, bytes, border).expect("an embedded frame is a PNG");
         ui.data_mut(|d| d.insert_temp(id, frame.clone()));
         frame
     }
@@ -97,6 +108,128 @@ impl Frame {
     pub fn show<R>(self, ui: &mut egui::Ui, add: impl FnOnce(&mut egui::Ui) -> R) -> R {
         self.get(ui.ctx()).show(ui, add).inner
     }
+}
+
+/// Side of an icon in the atlas, in pixels, drawn one point each.
+pub const ICON_SIZE: f32 = 16.0;
+
+/// Icons in a row of the atlas.
+const ICON_COLUMNS: usize = 8;
+
+/// A tag's icon, its colour its own: the atlas `assets/ui/icons.png` holds them in
+/// this order, row by row.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Icon {
+    Origin,
+    Hand,
+    Class,
+    Loadout,
+    Fame,
+    Level,
+    Prestige,
+    Arena,
+    Win,
+    Loss,
+    Draw,
+    GaveUp,
+    Dead,
+    Retired,
+    Purse,
+    Released,
+    Wound,
+    Scar,
+    Illness,
+    Fit,
+    Care,
+    NoArmour,
+    Exception,
+    Unpaid,
+    Rest,
+    Train,
+    Fight,
+    Recent,
+    Up,
+    Down,
+    Money,
+    Champion,
+    Listed,
+    Kept,
+    Full,
+    Ally,
+    Title,
+}
+
+impl Icon {
+    #[cfg(test)]
+    pub const ALL: [Self; 37] = [
+        Self::Origin,
+        Self::Hand,
+        Self::Class,
+        Self::Loadout,
+        Self::Fame,
+        Self::Level,
+        Self::Prestige,
+        Self::Arena,
+        Self::Win,
+        Self::Loss,
+        Self::Draw,
+        Self::GaveUp,
+        Self::Dead,
+        Self::Retired,
+        Self::Purse,
+        Self::Released,
+        Self::Wound,
+        Self::Scar,
+        Self::Illness,
+        Self::Fit,
+        Self::Care,
+        Self::NoArmour,
+        Self::Exception,
+        Self::Unpaid,
+        Self::Rest,
+        Self::Train,
+        Self::Fight,
+        Self::Recent,
+        Self::Up,
+        Self::Down,
+        Self::Money,
+        Self::Champion,
+        Self::Listed,
+        Self::Kept,
+        Self::Full,
+        Self::Ally,
+        Self::Title,
+    ];
+
+    /// The icon as an image, the atlas loaded on first use.
+    pub fn image(self, ui: &egui::Context) -> egui::Image<'static> {
+        let atlas = icon_atlas(ui);
+        let cells = atlas.size_vec2() / ICON_SIZE;
+        let n = self as usize;
+        #[expect(clippy::cast_precision_loss, reason = "a few dozen cells")]
+        let (column, row) = ((n % ICON_COLUMNS) as f32, (n / ICON_COLUMNS) as f32);
+        let uv = egui::Rect::from_min_size(
+            egui::pos2(column / cells.x, row / cells.y),
+            vec2(1.0 / cells.x, 1.0 / cells.y),
+        );
+        egui::Image::new(egui::load::SizedTexture::new(
+            atlas.id(),
+            vec2(ICON_SIZE, ICON_SIZE),
+        ))
+        .uv(uv)
+    }
+}
+
+/// The icons' texture, embedded like the frames.
+fn icon_atlas(ui: &egui::Context) -> egui::TextureHandle {
+    let id = egui::Id::new("icons");
+    if let Some(atlas) = ui.data(|d| d.get_temp(id)) {
+        return atlas;
+    }
+    let bytes = include_bytes!("../../../assets/ui/icons.png");
+    let atlas = load_texture(ui, "icons", bytes).expect("the embedded atlas is a PNG");
+    ui.data_mut(|d| d.insert_temp(id, atlas.clone()));
+    atlas
 }
 
 pub fn apply(ui: &egui::Context) {
@@ -166,8 +299,25 @@ mod tests {
     #[test]
     fn the_frames_are_loaded_once() {
         let ui = egui::Context::default();
-        for frame in [Frame::Wood, Frame::Parchment] {
+        for frame in [Frame::Wood, Frame::Parchment, Frame::Plaque] {
             assert_eq!(frame.get(&ui).texture.id(), frame.get(&ui).texture.id());
+        }
+    }
+
+    #[test]
+    fn every_icon_has_its_cell_in_the_atlas() {
+        let ui = egui::Context::default();
+        let size = icon_atlas(&ui).size_vec2() / ICON_SIZE;
+        #[expect(
+            clippy::cast_possible_truncation,
+            clippy::cast_sign_loss,
+            reason = "cell counts"
+        )]
+        let cells = size.x as usize * size.y as usize;
+        assert_eq!(size.x, 8.0);
+        for (n, icon) in Icon::ALL.into_iter().enumerate() {
+            assert_eq!(icon as usize, n, "{icon:?} out of order");
+            assert!(n < cells, "{icon:?} has no cell");
         }
     }
 }

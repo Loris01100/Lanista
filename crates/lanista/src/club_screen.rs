@@ -61,7 +61,7 @@ use crate::texts::{
     temperament_text, title_article, title_changed, trait_memory, trait_name, trait_text,
     wealth_name, wealth_text, week_lines, world_article, year_text,
 };
-use crate::theme;
+use crate::theme::{self, Icon};
 use crate::title_screen::{Slot, read_slots, slot_text};
 
 const BACKGROUND: Color = Color::new(0.16, 0.13, 0.11, 1.0);
@@ -1985,35 +1985,30 @@ fn personality(ui: &mut egui::Ui, f: &CareerFighter) {
 /// why: one tag each.
 fn identity(ui: &mut egui::Ui, f: &CareerFighter, data: &DesignData) {
     let rules = &data.fighter;
-    let plain = ui.visuals().widgets.inactive.bg_fill;
     ui.horizontal_wrapped(|ui| {
         if let Some(origin) = origin_place(f, data) {
-            chip(ui, origin, plain);
+            chip(ui, Icon::Origin, origin);
         }
         let hand = match f.dominant_hand {
             _ if f.ambidextrous => tr!("sheet-ambidextrous"),
             Side::Right => tr!("sheet-right-handed"),
             Side::Left => tr!("sheet-left-handed"),
         };
-        chip(ui, hand, plain);
-        chip(
-            ui,
-            loadout_name(f, f.loadout, data),
-            theme::BRONZE.gamma_multiply(0.6),
-        )
-        .on_hover_text(tr!("sheet-loadout"));
+        chip(ui, Icon::Hand, hand);
+        chip(ui, Icon::Loadout, loadout_name(f, f.loadout, data))
+            .on_hover_text(tr!("sheet-loadout"));
         let status = match f.status {
             Status::Active => None,
             Status::Retired if too_maimed(&f.injuries, &rules.retirement) => {
-                Some((tr!("sheet-retired-maimed"), theme::BRONZE))
+                Some((tr!("sheet-retired-maimed"), Icon::Scar))
             }
-            Status::Retired => Some((tr!("sheet-retired"), theme::BRONZE)),
-            Status::Dead => Some((tr!("sheet-dead"), theme::BLOOD)),
-            Status::Sold => Some((tr!("sheet-sold"), plain)),
-            Status::Released => Some((tr!("sheet-released"), plain)),
+            Status::Retired => Some((tr!("sheet-retired"), Icon::Retired)),
+            Status::Dead => Some((tr!("sheet-dead"), Icon::Dead)),
+            Status::Sold => Some((tr!("sheet-sold"), Icon::Purse)),
+            Status::Released => Some((tr!("sheet-released"), Icon::Released)),
         };
-        if let Some((text, fill)) = status {
-            chip(ui, text, fill);
+        if let Some((text, icon)) = status {
+            chip(ui, icon, text);
         }
     });
 }
@@ -2070,33 +2065,32 @@ fn stat_meters(ui: &mut egui::Ui, f: &CareerFighter, best: Stats, data: &DesignD
     });
 }
 
-/// Wins, losses and draws as green, red and plain tags.
+/// Wins, losses and draws as tags: a laurel, a broken sword, a balance.
 fn record_chips(ui: &mut egui::Ui, record: Record) {
-    let plain = ui.visuals().widgets.inactive.bg_fill;
     ui.horizontal(|ui| {
-        chip(ui, tr!("record-wins", count = record.wins), theme::LAUREL);
-        chip(
-            ui,
-            tr!("record-losses", count = record.losses),
-            theme::BLOOD,
-        );
-        chip(ui, tr!("record-draws", count = record.draws), plain);
+        chip(ui, Icon::Win, tr!("record-wins", count = record.wins));
+        chip(ui, Icon::Loss, tr!("record-losses", count = record.losses));
+        chip(ui, Icon::Draw, tr!("record-draws", count = record.draws));
     });
 }
 
-/// A green « En bonne santé », or a red tag for each injury and a bronze one for an
-/// illness, what each takes off the stats on hover.
+/// « En bonne santé », or a tag for each injury and one for an illness, what each
+/// takes off the stats on hover.
 fn health(ui: &mut egui::Ui, f: &CareerFighter, data: &DesignData) {
     ui.horizontal_wrapped(|ui| {
         if f.injuries.is_empty() && f.illness.is_none() {
-            chip(ui, tr!("sheet-healthy"), theme::LAUREL);
+            chip(ui, Icon::Fit, tr!("sheet-healthy"));
         }
         for &injury in &f.injuries {
-            chip(ui, injury_text(injury, f.dominant_hand), theme::BLOOD)
-                .on_hover_text(injury_effect(injury, f.dominant_hand, data));
+            chip(
+                ui,
+                injury_icon(injury),
+                injury_text(injury, f.dominant_hand),
+            )
+            .on_hover_text(injury_effect(injury, f.dominant_hand, data));
         }
         if let Some(illness) = f.illness {
-            chip(ui, illness_text(illness), theme::BRONZE.gamma_multiply(0.6))
+            chip(ui, Icon::Illness, illness_text(illness))
                 .on_hover_text(illness_effect(illness, data));
         }
     });
@@ -2124,11 +2118,7 @@ fn fight_card(
                 let place = colosseum_name(report.colosseum, data);
                 ui.label(egui::RichText::new(tr!("summary-at", place = place)).weak());
                 ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                    chip(
-                        ui,
-                        result_text(&report.line),
-                        result_color(ui, &report.line),
-                    );
+                    chip(ui, result_icon(&report.line), result_text(&report.line));
                 });
             });
             ui.horizontal(|ui| {
@@ -2146,18 +2136,19 @@ fn fight_card(
                 let money = format!("{:+}", report.money);
                 chip(
                     ui,
+                    signed_icon(report.money, Icon::Money),
                     tr!("summary-money-chip", money = money),
-                    signed_color(ui, report.money),
                 );
                 let fame = format!("{:+}", fight.fame_change);
-                let fame_color = signed_color(ui, i64::from(fight.fame_change));
-                chip(ui, tr!("summary-fame-chip", fame = fame), fame_color);
+                let fame_icon = signed_icon(i64::from(fight.fame_change), Icon::Fame);
+                chip(ui, fame_icon, tr!("summary-fame-chip", fame = fame));
                 let (before, after) = report.form;
                 let form_change = i64::from(after) - i64::from(before);
                 let form = change(&tr!("roster-form"), before, after);
-                chip(ui, form, signed_color(ui, form_change));
+                chip(ui, signed_icon(form_change, Icon::Fit), form);
                 if let Some(injury) = report.injury {
-                    chip(ui, injury_text(injury, fighter.dominant_hand), theme::BLOOD);
+                    let text = injury_text(injury, fighter.dominant_hand);
+                    chip(ui, injury_icon(injury), text);
                 }
             });
             ui.add_space(2.0);
@@ -2290,54 +2281,69 @@ fn half_bar(ui: &mut egui::Ui, value: u32, max: u32, color: egui::Color32, leftw
     ui.painter().rect_filled(filled, 3.0, color);
 }
 
-/// Green for a win, red for a loss or a death, bronze for giving up, plain for no winner.
-fn result_color(ui: &egui::Ui, line: &FightLine) -> egui::Color32 {
+/// A laurel for a win, a broken sword for a loss, a skull for a death, a white flag
+/// for giving up, a balance for no winner.
+fn result_icon(line: &FightLine) -> Icon {
     match line.result {
-        _ if line.died => theme::BLOOD,
-        FightResult::Won => theme::LAUREL,
-        FightResult::Lost => theme::BLOOD,
-        FightResult::GaveUp => theme::BRONZE.gamma_multiply(0.6),
-        FightResult::Unfinished => ui.visuals().widgets.inactive.bg_fill,
+        _ if line.died => Icon::Dead,
+        FightResult::Won => Icon::Win,
+        FightResult::Lost => Icon::Loss,
+        FightResult::GaveUp => Icon::GaveUp,
+        FightResult::Unfinished => Icon::Draw,
     }
 }
 
-/// Green for a gain, red for a loss, plain for nothing.
-fn signed_color(ui: &egui::Ui, change: i64) -> egui::Color32 {
+/// A green ▲ for a gain, a red ▼ for a loss, `same` for nothing.
+fn signed_icon(change: i64, same: Icon) -> Icon {
     match change.signum() {
-        1 => theme::LAUREL,
-        -1 => theme::BLOOD,
-        _ => ui.visuals().widgets.inactive.bg_fill,
+        1 => Icon::Up,
+        -1 => Icon::Down,
+        _ => same,
     }
 }
 
-/// Horizontal margin inside a tag.
-const CHIP_MARGIN: i8 = 10;
+/// A wound for an injury that heals, a scar for one that stays.
+fn injury_icon(injury: Injury) -> Icon {
+    if injury.is_permanent() {
+        Icon::Scar
+    } else {
+        Icon::Wound
+    }
+}
 
-/// A small rounded tag on `fill`, its text on one line.
+/// Horizontal margin inside a tag's plaque, its border included.
+const CHIP_MARGIN: i8 = 8;
+
+/// Room between a tag's icon and its text.
+const CHIP_ICON_GAP: f32 = 4.0;
+
+/// A tag: `icon` and its text on one line, on the plaque every tag shares.
 fn chip(
     ui: &mut egui::Ui,
+    icon: impl Into<Option<Icon>>,
     text: impl Into<egui::WidgetText>,
-    fill: egui::Color32,
 ) -> egui::Response {
     let galley = chip_galley(ui, text);
-    chip_of(ui, galley, fill)
+    chip_of(ui, icon.into(), galley)
 }
 
 /// A tag as `chip` draws it, first going to the next row of a wrapping layout when it
 /// does not fit on this one. Not for a grid's cell: a new row there is the grid's.
 fn wrapped_chip(
     ui: &mut egui::Ui,
+    icon: impl Into<Option<Icon>>,
     text: impl Into<egui::WidgetText>,
-    fill: egui::Color32,
 ) -> egui::Response {
+    let icon = icon.into();
     let galley = chip_galley(ui, text);
-    let width = galley.size().x + 2.0 * f32::from(CHIP_MARGIN);
+    let icon_width = icon.map_or(0.0, |_| theme::ICON_SIZE + CHIP_ICON_GAP);
+    let width = galley.size().x + icon_width + 2.0 * f32::from(CHIP_MARGIN);
     let row_started = ui.cursor().min.x > ui.max_rect().min.x;
     // `available_width` is a whole row's in a wrapping layout, not what is left of it.
     if row_started && width > ui.available_size_before_wrap().x {
         ui.end_row();
     }
-    chip_of(ui, galley, fill)
+    chip_of(ui, icon, galley)
 }
 
 /// A tag's text laid out on one line.
@@ -2352,15 +2358,26 @@ fn chip_galley(ui: &egui::Ui, text: impl Into<egui::WidgetText>) -> std::sync::A
 
 fn chip_of(
     ui: &mut egui::Ui,
+    icon: Option<Icon>,
     galley: std::sync::Arc<egui::Galley>,
-    fill: egui::Color32,
 ) -> egui::Response {
-    egui::Frame::new()
-        .fill(fill)
-        .corner_radius(10.0)
-        .inner_margin(egui::Margin::symmetric(CHIP_MARGIN, 2))
-        .show(ui, |ui| ui.label(galley))
-        .response
+    let plaque = theme::Frame::Plaque.get(ui.ctx());
+    // Reserved first so that the plaque is painted under the contents.
+    let slot = ui.painter().add(egui::Shape::Noop);
+    let response = egui::Frame::new()
+        .inner_margin(egui::Margin::symmetric(CHIP_MARGIN, 3))
+        .show(ui, |ui| {
+            ui.horizontal(|ui| {
+                ui.spacing_mut().item_spacing.x = CHIP_ICON_GAP;
+                if let Some(icon) = icon {
+                    ui.add(icon.image(ui.ctx()));
+                }
+                ui.label(galley);
+            });
+        })
+        .response;
+    ui.painter().set(slot, plaque.shape(response.rect));
+    response
 }
 
 /// Width of the sheet's bars: room for the name and value beside them on the Steam Deck.

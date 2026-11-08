@@ -4,12 +4,14 @@ use lanista_core::colosseum::{ColosseumId, Contender};
 use lanista_core::design_data::DesignData;
 use lanista_core::fighter::career::{Activity, CareerFighter, Duty, Orders, Status, WeekPlan};
 use lanista_core::fighter::form::Form;
+use lanista_core::fighter::injury::Injury;
 use lanista_core::fighter::morale::Morale;
 use lanista_core::state::GameState;
 use reesch::egui;
 
 use super::{
-    ClubScreen, View, chip, exception, fraction, meter, ordered, settle_plan, wrapped_chip,
+    ClubScreen, View, chip, exception, fraction, injury_icon, meter, ordered, settle_plan,
+    wrapped_chip,
 };
 use crate::lang::tr;
 use crate::texts::{
@@ -17,7 +19,7 @@ use crate::texts::{
     illness_effect, illness_text, injury_effect, injury_text, loadout_name, record_text,
     stage_name, unsellable_text,
 };
-use crate::theme;
+use crate::theme::{self, Icon};
 
 /// Width a card needs: the bars and their names, the tags beside the name.
 const CARD_WIDTH: f32 = 420.0;
@@ -140,11 +142,9 @@ fn fighter_card(
             ui.horizontal_wrapped(|ui| {
                 let name = egui::RichText::new(short_name(index, fighter)).strong();
                 open = ui.link(name.color(theme::BRONZE)).clicked();
-                let class = ui.visuals().widgets.inactive.bg_fill;
-                wrapped_chip(ui, class_name(fighter, data), class);
+                wrapped_chip(ui, Icon::Class, class_name(fighter, data));
                 let fame = tr!("roster-fame-chip", fame = fighter.fame.value());
-                wrapped_chip(ui, fame, theme::BRONZE.gamma_multiply(0.6))
-                    .on_hover_text(tr!("roster-fame-hint"));
+                wrapped_chip(ui, Icon::Fame, fame).on_hover_text(tr!("roster-fame-hint"));
                 // Each on one line, to the next row rather than cut in two.
                 let record = egui::RichText::new(record_text(fighter.record)).weak();
                 ui.add(egui::Label::new(record).extend());
@@ -249,18 +249,12 @@ fn blend(from: egui::Color32, to: egui::Color32, t: f32) -> egui::Color32 {
 /// Its health as tags: each injury healing in red, each after-effect plain, an
 /// illness in bronze, or "En forme" in green; and whether it is too new to be sold.
 fn health_chips(ui: &mut egui::Ui, fighter: &CareerFighter, state: &GameState, data: &DesignData) {
-    let plain = ui.visuals().widgets.inactive.bg_fill;
     ui.horizontal_wrapped(|ui| {
         let mut fit = true;
         for &injury in &fighter.injuries {
+            fit &= injury.is_permanent();
             let text = injury_text(injury, fighter.dominant_hand);
-            let fill = if injury.is_permanent() {
-                plain
-            } else {
-                fit = false;
-                theme::BLOOD
-            };
-            wrapped_chip(ui, text, fill).on_hover_text(injury_effect(
+            wrapped_chip(ui, injury_icon(injury), text).on_hover_text(injury_effect(
                 injury,
                 fighter.dominant_hand,
                 data,
@@ -268,14 +262,14 @@ fn health_chips(ui: &mut egui::Ui, fighter: &CareerFighter, state: &GameState, d
         }
         if let Some(illness) = fighter.illness {
             fit = false;
-            wrapped_chip(ui, illness_text(illness), theme::BRONZE.gamma_multiply(0.6))
+            wrapped_chip(ui, Icon::Illness, illness_text(illness))
                 .on_hover_text(illness_effect(illness, data));
         }
         if fit {
-            wrapped_chip(ui, tr!("roster-fit"), theme::LAUREL);
+            wrapped_chip(ui, Icon::Fit, tr!("roster-fit"));
         }
         if let Some(unsellable) = unsellable_text(fighter, state, data) {
-            wrapped_chip(ui, tr!("roster-recent"), plain).on_hover_text(unsellable);
+            wrapped_chip(ui, Icon::Recent, tr!("roster-recent")).on_hover_text(unsellable);
         }
     });
 }
@@ -290,36 +284,31 @@ fn week_chips(
     (apart, unpaid): (bool, bool),
     data: &DesignData,
 ) {
-    let neutral = ui.visuals().widgets.inactive.bg_fill;
     ui.horizontal_wrapped(|ui| {
-        let color = match plan.activity {
-            Activity::Rest => theme::SEA,
-            Activity::Train => theme::BRONZE.gamma_multiply(0.6),
-            _ => theme::BLOOD,
+        let icon = match plan.activity {
+            Activity::Rest => Icon::Rest,
+            Activity::Train => Icon::Train,
+            _ => Icon::Fight,
         };
-        wrapped_chip(ui, activity_name(plan.activity, data), color);
+        wrapped_chip(ui, icon, activity_name(plan.activity, data));
         let loadout = tr!(
             "roster-loadout",
             loadout = loadout_name(fighter, plan.loadout, data),
             ease = fighter.ease_with(plan.loadout)
         );
-        wrapped_chip(ui, loadout, neutral).on_hover_text(tr!("roster-ease-hint"));
+        wrapped_chip(ui, Icon::Loadout, loadout).on_hover_text(tr!("roster-ease-hint"));
         if plan.care {
-            wrapped_chip(ui, tr!("roster-care"), theme::LAUREL);
+            wrapped_chip(ui, Icon::Care, tr!("roster-care"));
         }
         if plan.refused.armour {
-            wrapped_chip(ui, tr!("roster-no-armour"), neutral);
+            wrapped_chip(ui, Icon::NoArmour, tr!("roster-no-armour"));
         }
         if apart {
-            wrapped_chip(
-                ui,
-                tr!("roster-exception"),
-                theme::BRONZE.gamma_multiply(0.6),
-            )
-            .on_hover_text(tr!("roster-exception-hint"));
+            wrapped_chip(ui, Icon::Exception, tr!("roster-exception"))
+                .on_hover_text(tr!("roster-exception-hint"));
         }
         if unpaid {
-            wrapped_chip(ui, tr!("roster-unpaid"), theme::BLOOD)
+            wrapped_chip(ui, Icon::Unpaid, tr!("roster-unpaid"))
                 .on_hover_text(tr!("roster-unpaid-hint"));
         }
     });
@@ -345,17 +334,29 @@ fn former(ui: &mut egui::Ui, state: &GameState, data: &DesignData) -> Option<usi
             egui::Grid::new("roster-former")
                 .striped(true)
                 .show(ui, |ui| {
-                    let plain = ui.visuals().widgets.inactive.bg_fill;
                     for (i, f) in gone {
                         if ui.link(short_name(i, f)).clicked() {
                             open = Some(i);
                         }
                         ui.label(egui::RichText::new(class_name(f, data)).weak());
-                        chip(ui, condition_text(f), plain);
+                        chip(ui, condition_icon(f), condition_text(f));
                         ui.label(record_text(f.record));
                         ui.end_row();
                     }
                 });
         });
     open
+}
+
+/// The icon of `condition_text`: how its career ended, or its health.
+fn condition_icon(fighter: &CareerFighter) -> Icon {
+    match fighter.status {
+        Status::Dead => Icon::Dead,
+        Status::Retired => Icon::Retired,
+        Status::Sold => Icon::Purse,
+        Status::Released => Icon::Released,
+        Status::Active if !fighter.injuries.iter().all(Injury::is_permanent) => Icon::Wound,
+        Status::Active if fighter.illness.is_some() => Icon::Illness,
+        Status::Active => Icon::Fit,
+    }
 }

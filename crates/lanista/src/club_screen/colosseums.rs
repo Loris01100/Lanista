@@ -20,7 +20,7 @@ use crate::texts::{
     date_in_sentence, date_text, named_club, place_name, profile_name, record_text,
     relation_change_text, relation_text, rival_fighter_name, staff_text, stage_name, wealth_name,
 };
-use crate::theme;
+use crate::theme::{self, Icon};
 
 impl ClubScreen {
     /// One continent at a time, the club's first, in two tabs: its colosseums side by
@@ -157,10 +157,10 @@ impl ClubScreen {
                         ui.label(&row.profile);
                         ui.label(&row.wealth);
                         ui.label(row.fighters.to_string());
-                        chip(ui, &row.relation, standing_color(ui, row.standing));
+                        chip(ui, standing_icon(row.standing), &row.relation);
                         ui.horizontal(|ui| {
                             for title in &row.titles {
-                                chip(ui, title, theme::BRONZE.gamma_multiply(0.6));
+                                chip(ui, Icon::Title, title);
                             }
                         });
                         ui.end_row();
@@ -415,13 +415,13 @@ fn prestige_name(prestige: u32) -> String {
     }
 }
 
-/// Green for a friend, red for a rival, bronze for a tense relation.
-fn standing_color(ui: &egui::Ui, standing: Standing) -> egui::Color32 {
+/// Clasped hands for a friend, crossed swords for a rival, « ! » for a tense relation.
+fn standing_icon(standing: Standing) -> Option<Icon> {
     match standing {
-        Standing::Ally | Standing::Friend => theme::LAUREL,
-        Standing::Neutral => ui.visuals().widgets.inactive.bg_fill,
-        Standing::Tense => theme::BRONZE.gamma_multiply(0.6),
-        Standing::Rival => theme::BLOOD,
+        Standing::Ally | Standing::Friend => Some(Icon::Ally),
+        Standing::Neutral => None,
+        Standing::Tense => Some(Icon::Exception),
+        Standing::Rival => Some(Icon::Fight),
     }
 }
 
@@ -450,12 +450,8 @@ fn colosseum_column(
                 let name = egui::RichText::new(colosseum_rules_name(rules));
                 ui.label(name.strong().color(theme::BRONZE));
                 ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                    let plain = ui.visuals().widgets.inactive.bg_fill;
-                    chip(
-                        ui,
-                        tr!("colosseum-prestige", prestige = rules.prestige),
-                        plain,
-                    );
+                    let prestige = tr!("colosseum-prestige", prestige = rules.prestige);
+                    chip(ui, Icon::Prestige, prestige);
                 });
             });
             purses(ui, id, rules, state, data);
@@ -512,19 +508,22 @@ fn purses(
     state: &GameState,
     data: &DesignData,
 ) {
-    let plain = ui.visuals().widgets.inactive.bg_fill;
     ui.horizontal_wrapped(|ui| {
         let arena = tr!("colosseum-arena-chip", arena = arena_name(rules.arena));
-        wrapped_chip(ui, arena, plain).on_hover_text(arena_effect(rules.arena));
+        wrapped_chip(ui, Icon::Arena, arena).on_hover_text(arena_effect(rules.arena));
         let fee = state.entry_fee(id, data).unwrap_or(0);
-        let fee_chip = wrapped_chip(ui, tr!("colosseum-fee-chip", fee = fee), plain);
+        let fee_chip = wrapped_chip(ui, Icon::Money, tr!("colosseum-fee-chip", fee = fee));
         if fee > rules.purses.entry_fee {
             fee_chip.on_hover_text(tr!("colosseum-fee-travel"));
         }
         let prize = rules.purses.win_prize;
-        wrapped_chip(ui, tr!("colosseum-prize-chip", prize = prize), plain);
+        wrapped_chip(ui, Icon::Purse, tr!("colosseum-prize-chip", prize = prize));
         let bonus = rules.purses.champion_bonus;
-        wrapped_chip(ui, tr!("colosseum-bonus-chip", bonus = bonus), plain);
+        wrapped_chip(
+            ui,
+            Icon::Champion,
+            tr!("colosseum-bonus-chip", bonus = bonus),
+        );
     });
 }
 

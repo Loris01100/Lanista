@@ -152,6 +152,8 @@ Un personnage unique est dessiné à la main, sans calques générés ni teintes
 - Le portrait de la fiche combattant réutilise les calques de tête, agrandis ×4.
 - Polices : TTF ou OTF.
 - Cadres (`assets/ui/`, `wood.png` pour les fenêtres du combat, `parchment.png` pour le journal) : PNG découpé en 9 (« 9-slice ») de **24 × 24 px**, bordure de **8 px** de chaque côté (`theme::FRAME_BORDER`). Les coins gardent leur taille ; les bords et le centre sont étirés, donc un bord ne doit varier que perpendiculairement à sa longueur, et le centre rester uni.
+- Plaque des étiquettes (`assets/ui/plaque.png`) : même découpe en 9, **16 × 16 px**, bordure de **4 px** (`theme::PLAQUE_BORDER`), sans couleur : une seule plaque sombre, incrustée dans le bois, pour toutes les étiquettes.
+- Icônes des étiquettes (`assets/ui/icons.png`) : un atlas de cases de **16 × 16 px**, **8 par rangée**, fond transparent, affichées à un point par pixel. C'est l'icône qui porte la couleur (laurier vert, goutte rouge…), pas la plaque. L'ordre des cases est celui de `theme::Icon`, rangée par rangée : origine, main, classe, configuration, renommée, niveau, prestige, arène ; victoire, défaite, nul, abandon, mort, retraite, bourse (vendu, prime), libéré ; blessure, séquelle, maladie, en forme, soins, sans armure, exception (« ! »), faute d'argent ; repos, entraînement, combat, arrivé récemment, hausse ▲, baisse ▼, argent, couronne du champion ; en vente, invendable, effectif complet, allié, titre. Une icône ajoutée prend la case suivante et une variante de `theme::Icon` à la même place. Dans Aseprite : *File › Export Sprite Sheet*, *By Rows*, 8 colonnes, sans marge ni espacement, échelle 1×.
 
 ## Sons
 
