@@ -26,4 +26,18 @@ return {
     { name = "weapon" },
     { name = "arm_front" },
   },
+  ["maitre-terrain"] = {
+    { name = "leg_back" },
+    { name = "arm_back" },
+    { name = "weapon_back" },
+    { name = "body" },
+    { name = "cloak" },
+    { name = "leg_front" },
+    { name = "skirt" },
+    { name = "shield" },
+    { name = "head", head = true },
+    { name = "hair", head = true },
+    { name = "weapon" },
+    { name = "arm_front" },
+  },
 }

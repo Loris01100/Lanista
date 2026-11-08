@@ -195,6 +195,23 @@
                 (name: "weapon", paint: Plain, part: ArmFront),
                 (name: "arm_front", paint: Skin, part: ArmFront),
             ],
+            // A hooded cloak, the hood down, a canvas tunic, a satchel at the belt,
+            // leather bands on the forearms, wrapped feet, rune daggers, a round shield
+            // or a second dagger.
+            "maitre-terrain": [
+                (name: "leg_back", paint: Skin, part: LegBack),
+                (name: "arm_back", paint: Skin, part: ArmBack),
+                (name: "weapon_back", paint: Plain, part: ArmBack, with: Some(Weapon)),
+                (name: "body", paint: Plain, part: Body),
+                (name: "cloak", paint: Tunic, part: Body),
+                (name: "leg_front", paint: Skin, part: LegFront),
+                (name: "skirt", paint: Plain, part: Body),
+                (name: "shield", paint: Plain, part: ArmBack, with: Some(Shield)),
+                (name: "head", paint: Skin, part: Head),
+                (name: "hair", paint: Hair, part: Head),
+                (name: "weapon", paint: Plain, part: ArmFront),
+                (name: "arm_front", paint: Skin, part: ArmFront),
+            ],
         },
         hair: ["short", "long"],
         skins: [(241, 194, 150), (198, 134, 66), (120, 74, 42)],

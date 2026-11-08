@@ -63,6 +63,23 @@ Gladiateur (`gladiateur`) : casque de bronze à crête et visière percée, tors
 | `weapon` (glaive) | 10 | non | |
 | `arm_front` | 11 | peau | manica |
 
+Maître du terrain (`maitre-terrain`) : cape à capuche à la couleur du club, capuche baissée sur les épaules, tunique de toile, ceinture et sacoche pour le sable et les pierres, bandes de cuir aux avant-bras, pieds enveloppés de bandes, dagues courtes aux runes gravées dans l'acier, bouclier rond de planches rouges cerclé de fer ou seconde dague. La tête a la forme de celle de l'apparence commune, pour que ses cheveux s'y posent. Son attaque est un lancer : le bras avant passe de derrière la tête à droit devant, la dague pointée vers la cible.
+
+| Calque | Ordre de dessin | Teinté | Détail non teinté |
+| --- | --- | --- | --- |
+| `leg_back` | 1 | peau | bandes du pied |
+| `arm_back` | 2 | peau | bandes de cuir |
+| `weapon_back` (seconde dague, avec `Weapon`) | 3 | non | |
+| `body` (haut de la tunique, ceinture) | 4 | non | |
+| `cloak` (cape et capuche) | 5 | tunique | |
+| `leg_front` | 6 | peau | bandes du pied |
+| `skirt` (bas de la tunique, sacoche) | 7 | non | |
+| `shield` (bouclier rond, avec `Shield`) | 8 | non | |
+| `head` (visage et cou) | 9 | peau | œil, sourcil, bouche |
+| `hair` (cheveux) | 10 | cheveux | |
+| `weapon` (dague runique) | 11 | non | |
+| `arm_front` | 12 | peau | bandes de cuir |
+
 - Une seule teinte par fichier : la tête et les cheveux sont donc deux calques, et ce qui, sur un calque, n'a pas sa teinte (une jambe nue sous la tunique, un col…) va dans un autre calque ou dans le fichier de détail.
 - Chaque calque de corps, de membre et d'arme est une feuille complète de 128 × 128 px sur la même grille, transparente hors de sa partie.
 - Les calques de tête (`part: Head` : tête, cheveux, crête) sont chacun **une seule image de 32 × 32 px** par variante, placée comme dans l'image de repos. Le jeu les décale et les tourne image par image autour du cou pour suivre le corps : le point de rotation (`head_pivot`) et, pour chacune des 16 images, le décalage en pixels et l'angle en degrés dans le sens horaire (`head_frames`) sont dans `appearance`, dans `data/fighter.ron`. Une nouvelle carrure dont le cou bouge autrement demande d'y reporter ses valeurs.
@@ -87,7 +104,7 @@ assets/fighters/<calque>/<variante>_detail.png   non teinté, facultatif
 
 La variante d'un calque est la clé de la classe pour une apparence de classe (`gladiateur`), la carrure pour l'apparence commune (`build` dans `data/fighter.ron`, `average` pour l'instant), et la forme pour les cheveux (`hair`). Exemples : `assets/fighters/head/average.png`, `assets/fighters/head/average_detail.png` (les yeux), `assets/fighters/hair/long.png`, `assets/fighters/shield/gladiateur.png`.
 
-Les calques de l'apparence commune sont **provisoires** : des formes simples en gris clair (carrure `average`, cheveux `short` et `long`), générées par un script en attendant les vrais dessins, qui les remplacent sous les mêmes noms. Ceux du gladiateur sont dessinés par `art/scripts/draw_gladiator.lua` (voir « Aseprite »), une base à reprendre à la main.
+Les calques de l'apparence commune sont **provisoires** : des formes simples en gris clair (carrure `average`, cheveux `short` et `long`), générées par un script en attendant les vrais dessins, qui les remplacent sous les mêmes noms. Ceux du gladiateur et du maître du terrain sont dessinés par `art/scripts/draw_gladiator.lua` et `art/scripts/draw_maitre_terrain.lua` (voir « Aseprite »), des bases à reprendre à la main.
 
 ### Personnages uniques
 
@@ -137,6 +154,8 @@ Le script `fighter_template.lua` crée ce fichier pour une apparence (`art/fight
 Dessiner d'abord un personnage complet, puis le répartir en calques à la place des calques provisoires de `assets/fighters/` (même grille, mêmes noms) et créer les variantes.
 
 Pour le gladiateur, `draw_gladiator.lua` dessine une première version sur le `gladiateur.aseprite` ouvert (créé par le gabarit avec l'apparence `gladiateur`) : les 16 images, le corps suivant les mouvements de la tête de `head_frames` (en mort, tout le corps tourne autour du cou comme la tête), les calques de tête sur la première image. Il remplace ce que ses calques contiennent (Ctrl+Z annule).
+
+`draw_maitre_terrain.lua` fait de même pour le maître du terrain sur `maitre-terrain.aseprite` (gabarit avec l'apparence `maitre-terrain`) ; la cape s'envole un peu en arrière quand il marche et lance. Sans l'interface : `Aseprite.exe -b art/fighters/maitre-terrain.aseprite --script-param save=yes --script art/scripts/draw_maitre_terrain.lua`, puis `export_fighter.lua`.
 
 ### Exporter
 
