@@ -1917,6 +1917,8 @@ mod tests {
         // Even a broke club can fight: the first colosseum is free.
         let mut state = game(2, &data);
         state.money = 0;
+        // Past the season's opening, whose melees pay by place, not gate receipts.
+        state.week = 2;
         // Twice as strong as a generated fighter, so that it wins some.
         state.fighters[0].stats = state.fighters[0].stats.map(|v| v * 2);
         state.fighters[0].contract.as_mut().unwrap().win_bonus = 7;

@@ -2682,7 +2682,7 @@ mod tests {
     fn the_market_tells_moves_offers_and_what_is_seen() {
         // A game whose fighter lives through the opening melee, to be sold, and the
         // wanted rival fighter too.
-        let mut screen = screen(0);
+        let mut screen = screen(1);
         let data = Rc::clone(&screen.data);
         let target = RivalId {
             club: 2,
