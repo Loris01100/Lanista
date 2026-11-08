@@ -66,13 +66,13 @@ pub fn window(
             ui.selectable_value(&mut tab, Tab::Audio, tr!("options-audio"));
             ui.selectable_value(&mut tab, Tab::Language, tr!("options-language"));
         });
-        crate::theme::ornament(ui);
+        ui.separator();
         match tab {
             Tab::Graphics => graphics_tab(ui, &mut display),
             Tab::Audio => set |= audio_tab(ui, audio),
             Tab::Language => language = language_tab(ui),
         }
-        crate::theme::ornament(ui);
+        ui.separator();
         close = ui.button(tr!("close")).clicked();
     });
     if close || modal.should_close() {

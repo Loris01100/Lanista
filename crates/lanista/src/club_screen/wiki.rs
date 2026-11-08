@@ -178,7 +178,7 @@ impl ClubScreen {
                 }
             }
         });
-        crate::theme::ornament(ui);
+        ui.separator();
         egui::SidePanel::left("wiki-list")
             .resizable(false)
             .default_width(180.0)
