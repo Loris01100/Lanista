@@ -2,45 +2,53 @@
 source: crates/lanista_core/tests/reference_fights.rs
 expression: "arena_duel(ArenaKind::Sand, 42)"
 ---
-[   48] fighter 1 casts Récolte: 2 elements gathered
+[   48] fighter 1 casts Récolte: 4 elements gathered
 [   54] fighter 1 casts Mine: a mine is laid
 [   60] fighter 1 casts Jette on fighter 0: 10 damage to the left leg
 [   60] fighter 0 loses 15 % accuracy
-[  114] fighter 1 casts Récolte: 2 elements gathered
-[  120] fighter 1 casts Jette on fighter 0: 10 damage to the left arm
-[  120] fighter 0 loses 15 % accuracy
-[  180] fighter 1 casts Récolte: 2 elements gathered
-[  186] fighter 1 casts Jette on fighter 0: 10 damage to the head
-[  186] fighter 0 loses 15 % accuracy
-[  246] fighter 1 casts Récolte: 2 elements gathered
-[  252] fighter 1 casts Jette on fighter 0: 10 damage to the left leg
+[  108] fighter 1 casts Jette on fighter 0: 10 damage to the left arm
+[  108] fighter 0 loses 15 % accuracy
+[  114] fighter 1 casts Récolte: 4 elements gathered
+[  156] fighter 1 casts Jette on fighter 0: 10 damage to the head
+[  156] fighter 0 loses 15 % accuracy
+[  180] fighter 1 casts Récolte: 1 elements gathered
+[  204] fighter 1 casts Jette on fighter 0: 10 damage to the left leg
+[  204] fighter 0 loses 15 % accuracy
+[  246] fighter 1 casts Récolte: 1 elements gathered
+[  252] fighter 0 casts Guillotine on fighter 1: missed
+[  252] fighter 1 casts Jette on fighter 0: 10 damage to the body
 [  252] fighter 0 loses 15 % accuracy
-[  258] fighter 0 casts Guillotine on fighter 1: missed
-[  294] fighter 0 casts Bouclier tranchant on fighter 1: missed
+[  258] fighter 0 casts Bouclier tranchant on fighter 1: 25 damage to the right leg
 [  300] fighter 1 casts Mine: a mine is laid
+[  306] fighter 1 casts Jette on fighter 0: missed
 [  312] fighter 1 casts Récolte: 2 elements gathered
-[  318] fighter 1 casts Jette on fighter 0: 10 damage to the body
-[  318] fighter 0 loses 15 % accuracy
-[  324] fighter 0 casts Slash sanguin on fighter 1: 14 damage to the right leg
-[  378] fighter 1 casts Récolte: 2 elements gathered
-[  384] fighter 0 casts Slash sanguin on fighter 1: 14 damage to the body
-[  384] fighter 1's body bleeds
-[  384] fighter 1 casts Jette on fighter 0: 10 damage to the head
-[  384] fighter 0 loses 15 % accuracy
-[  414] fighter 1 bleeds 1 from the body
-[  444] fighter 1 bleeds 1 from the body
-[  444] fighter 1 casts Récolte: 2 elements gathered
-[  450] fighter 0 casts Bouclier tranchant on fighter 1: 25 damage to the head
+[  330] fighter 0 casts Slash sanguin on fighter 1: 14 damage to the left leg
+[  330] fighter 1's left leg bleeds
+[  354] fighter 1 casts Jette on fighter 0: 10 damage to the head
+[  354] fighter 0 loses 15 % accuracy
+[  360] fighter 1 bleeds 1 from the left leg
+[  378] fighter 1 casts Récolte: 1 elements gathered
+[  384] fighter 0 casts Slash sanguin on fighter 1: missed
+[  390] fighter 1 bleeds 1 from the left leg
+[  402] fighter 1 casts Jette on fighter 0: 10 damage to the head
+[  402] fighter 0 loses 15 % accuracy
+[  420] fighter 1 bleeds 1 from the left leg
+[  450] fighter 1 bleeds 1 from the left leg
 [  450] fighter 1 casts Jette on fighter 0: 10 damage to the body
 [  450] fighter 0 loses 15 % accuracy
-[  474] fighter 1 bleeds 1 from the body
-[  504] fighter 1 bleeds 1 from the body
-[  534] fighter 1 bleeds 1 from the body
+[  456] fighter 0 casts Bouclier tranchant on fighter 1: 25 damage to the head
+[  480] fighter 1 bleeds 1 from the left leg
+[  498] fighter 1 casts Jette on fighter 0: 10 damage to the right arm
+[  498] fighter 0 loses 15 % accuracy
+[  504] fighter 0 casts Slash sanguin on fighter 1: 14 damage to the right leg
+[  504] fighter 1's right leg bleeds
+[  534] fighter 1 bleeds 1 from the right leg
 [  546] fighter 1 casts Mine: a mine is laid
-[  564] fighter 1 bleeds 1 from the body
-[  570] fighter 0 casts Guillotine on fighter 1: 41 damage to the body
-[  570] fighter 1 dies
+[  564] fighter 1 bleeds 1 from the right leg
+[  570] fighter 0 casts Slash sanguin on fighter 1: missed
+[  576] fighter 1 casts Jette on fighter 0: 10 damage to the head
+[  576] fighter 0 dies
 
-over after 571 ticks, winner: fighter 0
-fighter 0: 30/100 HP, dealt 100, taken 70, 6 spells cast, 2 missed
-fighter 1: 0/100 HP, dealt 70, taken 100, 17 spells cast, 0 missed
+over after 577 ticks, winner: fighter 1
+fighter 0: 0/100 HP, dealt 85, taken 100, 7 spells cast, 3 missed
+fighter 1: 15/100 HP, dealt 100, taken 85, 20 spells cast, 1 missed

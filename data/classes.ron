@@ -84,7 +84,7 @@
                 reach: 1.0,
                 power: 70,
                 cooldown: 30,
-                cost: (endurance: 5),
+                cost: (endurance: 8),
                 damage_kind: Cutting,
                 bleed_percent: 25,
             ),
@@ -119,7 +119,7 @@
                     reach: 7.0,
                     power: 50,
                     cooldown: 45,
-                    cost: (endurance: 5, elements: 2),
+                    cost: (endurance: 5, elements: 1),
                     damage_kind: Neutral,
                     thrown: {
                         Sand: (
@@ -150,7 +150,7 @@
                     reach: 7.0,
                     power: 50,
                     cooldown: 45,
-                    cost: (endurance: 5, elements: 2),
+                    cost: (endurance: 5, elements: 1),
                     damage_kind: Neutral,
                     thrown: {
                         Sand: (
@@ -180,7 +180,7 @@
                 cooldown: 60,
                 cost: (endurance: 10),
                 damage_kind: Neutral,
-                gathers: 2,
+                gathers: 4,
             ),
             (
                 name: "Mine",
@@ -214,7 +214,7 @@
                 weapon: "bow",
                 off_hand: BothHands,
                 speed_percent: 115,
-                shot_power_percent: 65,
+                shot_power_percent: 75,
                 shot_cooldown_percent: 70,
             ),
         ],

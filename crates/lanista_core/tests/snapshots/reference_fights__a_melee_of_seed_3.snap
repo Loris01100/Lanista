@@ -6,10 +6,10 @@ expression: reference_melee(3)
 [    0] fighter 5 casts Mine: a mine is laid
 [    0] fighter 3 casts Mine: a mine is laid
 [    0] fighter 1 casts Mine: a mine is laid
-[    6] fighter 3 casts Récolte: 2 elements gathered
-[    6] fighter 7 casts Récolte: 2 elements gathered
-[    6] fighter 5 casts Récolte: 2 elements gathered
-[    6] fighter 1 casts Récolte: 2 elements gathered
+[    6] fighter 3 casts Récolte: 4 elements gathered
+[    6] fighter 7 casts Récolte: 4 elements gathered
+[    6] fighter 5 casts Récolte: 4 elements gathered
+[    6] fighter 1 casts Récolte: 4 elements gathered
 [   12] fighter 5 casts Jette on fighter 6: 10 damage to the body
 [   12] fighter 6 loses 15 % accuracy
 [   12] fighter 3 casts Jette on fighter 4: 10 damage to the body
@@ -19,124 +19,137 @@ expression: reference_melee(3)
 [   12] fighter 7 casts Jette on fighter 6: 10 damage to the body
 [   12] fighter 6 loses 15 % accuracy
 [   54] fighters 0 and 1 make a pact
-[   72] fighter 7 casts Récolte: 2 elements gathered
-[   72] fighter 3 casts Récolte: 2 elements gathered
-[   72] fighter 1 casts Récolte: 2 elements gathered
-[   78] fighter 0 casts Guillotine on fighter 2: 48 damage to the body
-[   78] fighter 2 is stunned
-[   78] fighter 3 casts Jette on fighter 4: 10 damage to the left leg
-[   78] fighter 4 loses 15 % accuracy
-[   78] fighter 5 casts Récolte: 2 elements gathered
-[   78] fighter 7 casts Jette on fighter 6: 10 damage to the head
-[   78] fighter 6 loses 15 % accuracy
-[  102] fighter 1 casts Jette on fighter 7: 10 damage to the head
-[  102] fighter 7 loses 15 % accuracy
-[  120] fighters 3 and 4 make a pact
-[  132] fighters 6 and 7 make a pact
-[  138] fighter 2 is knocked out
-[  138] fighter 7 casts Récolte: 2 elements gathered
-[  138] fighter 5 casts Jette on fighter 6: 10 damage to the right arm
-[  138] fighter 6 loses 15 % accuracy
-[  138] fighter 1 casts Récolte: 2 elements gathered
-[  144] fighter 7 casts Jette on fighter 0: 10 damage to the head
-[  144] fighter 0 loses 15 % accuracy
-[  150] fighter 1 casts Jette on fighter 7: 10 damage to the head
-[  150] fighter 7 loses 15 % accuracy
-[  150] fighter 3 casts Récolte: 2 elements gathered
-[  150] fighter 5 casts Récolte: 2 elements gathered
-[  156] fighter 3 casts Jette on fighter 1: 10 damage to the right arm
-[  156] fighter 1 loses 15 % accuracy
-[  186] fighter 5 casts Jette on fighter 7: 10 damage to the head
-[  186] fighter 7 loses 15 % accuracy
-[  204] fighter 1 casts Récolte: 2 elements gathered
-[  204] fighter 7 casts Récolte: 2 elements gathered
-[  210] fighter 7 casts Jette on fighter 5: 10 damage to the right leg
-[  210] fighter 5 loses 15 % accuracy
-[  210] fighter 1 casts Jette on fighter 4: 10 damage to the body
-[  210] fighter 4 loses 15 % accuracy
-[  216] fighter 3 casts Récolte: 2 elements gathered
-[  216] fighter 5 casts Récolte: 2 elements gathered
-[  222] fighter 3 casts Jette on fighter 1: missed
-[  234] fighter 5 casts Jette on fighter 7: 10 damage to the left leg
-[  234] fighter 7 loses 15 % accuracy
+[   60] fighter 7 casts Jette on fighter 6: 10 damage to the right arm
+[   60] fighter 6 loses 15 % accuracy
+[   60] fighter 3 casts Jette on fighter 4: missed
+[   60] fighter 1 casts Jette on fighter 2: 10 damage to the body
+[   60] fighter 2 loses 15 % accuracy
+[   72] fighter 7 casts Récolte: 4 elements gathered
+[   72] fighter 3 casts Récolte: 4 elements gathered
+[   72] fighter 1 casts Récolte: 4 elements gathered
+[   78] fighter 0 casts Guillotine on fighter 2: missed
+[   78] fighter 2 casts Guillotine on fighter 0: missed
+[   84] fighters 6 and 7 make a pact
+[   84] fighter 0 casts Bouclier tranchant on fighter 2: 25 damage to the body
+[   84] fighter 2 casts Bouclier tranchant on fighter 0: 25 damage to the head
+[   84] fighter 5 casts Jette on fighter 6: 10 damage to the head
+[   84] fighter 6 loses 15 % accuracy
+[   90] fighter 5 casts Récolte: 4 elements gathered
+[  102] fighters 3 and 4 make a pact
+[  108] fighter 1 casts Jette on fighter 2: 10 damage to the left leg
+[  108] fighter 2 loses 15 % accuracy
+[  108] fighter 3 casts Jette on fighter 2: 10 damage to the right arm
+[  108] fighter 2 loses 15 % accuracy
+[  114] fighter 7 casts Jette on fighter 0: 10 damage to the head
+[  114] fighter 0 loses 15 % accuracy
+[  132] fighter 5 casts Jette on fighter 6: 10 damage to the head
+[  132] fighter 6 loses 15 % accuracy
+[  138] fighter 3 casts Récolte: 1 elements gathered
+[  138] fighter 7 casts Récolte: 1 elements gathered
+[  138] fighter 1 casts Récolte: 1 elements gathered
+[  156] fighter 1 casts Jette on fighter 2: 10 damage to the right arm
+[  156] fighter 2 loses 15 % accuracy
+[  156] fighter 3 casts Jette on fighter 2: 10 damage to the head
+[  156] fighter 2 loses 15 % accuracy
+[  156] fighter 5 casts Récolte: 1 elements gathered
+[  162] fighter 7 casts Jette on fighter 0: 10 damage to the body
+[  162] fighter 0 loses 15 % accuracy
+[  180] fighter 5 casts Jette on fighter 6: missed
+[  204] fighter 1 casts Jette on fighter 2: 10 damage to the body
+[  204] fighter 2 loses 15 % accuracy
+[  204] fighter 7 casts Récolte: 1 elements gathered
+[  210] fighter 7 casts Jette on fighter 0: missed
+[  210] fighter 1 casts Récolte: 2 elements gathered
+[  210] fighter 3 casts Récolte: 1 elements gathered
+[  222] fighter 5 casts Récolte: 1 elements gathered
+[  222] fighter 3 casts Jette on fighter 1: 10 damage to the body
+[  222] fighter 1 loses 15 % accuracy
+[  228] fighter 5 casts Jette on fighter 6: 10 damage to the left arm
+[  228] fighter 6 loses 15 % accuracy
 [  246] fighter 7 casts Mine: a mine is laid
 [  246] fighter 1 casts Mine: a mine is laid
 [  246] fighter 5 casts Mine: a mine is laid
-[  246] fighter 3 casts Mine: a mine is laid
-[  258] fighter 6 casts Guillotine on fighter 0: 48 damage to the head
-[  258] fighter 0 casts Bouclier tranchant on fighter 6: 25 damage to the right leg
-[  264] fighter 4 casts Guillotine on fighter 0: 42 damage to the head
-[  264] fighter 0 is beheaded
-[  264] fighter 0 dies
-[  276] fighter 1 casts Récolte: 2 elements gathered
-[  282] fighter 1 casts Jette on fighter 4: 10 damage to the head
-[  282] fighter 4 loses 15 % accuracy
-[  288] fighter 3 casts Récolte: 2 elements gathered
-[  300] fighter 3 casts Jette on fighter 6: 10 damage to the head
-[  300] fighter 6 loses 15 % accuracy
-[  300] fighter 5 casts Récolte: 2 elements gathered
-[  300] fighter 7 casts Récolte: 2 elements gathered
-[  306] fighter 5 casts Jette on fighter 7: 10 damage to the head
-[  306] fighter 7 loses 15 % accuracy
-[  306] fighter 7 casts Jette on fighter 5: missed
-[  336] fighter 4 casts Bouclier tranchant on fighter 6: 25 damage to the body
-[  336] fighter 6 dies
-[  342] fighter 1 casts Récolte: 2 elements gathered
-[  348] fighter 1 casts Jette on fighter 4: 10 damage to the head
-[  348] fighter 4 loses 15 % accuracy
-[  354] fighter 3 casts Récolte: 2 elements gathered
-[  360] fighter 3 casts Jette on fighter 1: 10 damage to the head
-[  360] fighter 1 loses 15 % accuracy
-[  366] fighter 5 casts Récolte: 2 elements gathered
-[  366] fighter 7 casts Récolte: 2 elements gathered
-[  372] fighter 5 casts Jette on fighter 7: missed
-[  372] fighter 7 casts Jette on fighter 5: 10 damage to the head
-[  372] fighter 5 loses 15 % accuracy
-[  408] fighter 1 casts Récolte: 2 elements gathered
-[  414] fighter 1 casts Jette on fighter 3: 10 damage to the head
-[  414] fighter 3 loses 15 % accuracy
-[  420] fighter 1 casts Coup de dague on fighter 3: 6 damage to the body
-[  420] fighter 3 casts Récolte: 2 elements gathered
-[  426] fighters 5 and 7 make a pact
-[  426] fighter 3 casts Jette on fighter 1: 10 damage to the body
-[  426] fighter 1 loses 15 % accuracy
-[  432] fighter 7 casts Récolte: 2 elements gathered
-[  432] fighter 5 casts Récolte: 2 elements gathered
-[  432] fighter 3 casts Coup de dague on fighter 1: 6 damage to the right arm
-[  438] fighter 7 casts Jette on fighter 4: 10 damage to the head
-[  438] fighter 4 loses 15 % accuracy
-[  438] fighter 5 casts Jette on fighter 4: 10 damage to the left leg
-[  438] fighter 4 loses 15 % accuracy
-[  449] fighter 3 is out for dealing too little damage
+[  252] fighter 1 casts Jette on fighter 4: 10 damage to the head
+[  252] fighter 4 loses 15 % accuracy
+[  258] fighter 7 casts Jette on fighter 0: 10 damage to the head
+[  258] fighter 0 loses 15 % accuracy
+[  270] fighter 7 casts Récolte: 2 elements gathered
+[  270] fighter 3 casts Mine: a mine is laid
+[  270] fighter 6 casts Guillotine on fighter 5: missed
+[  276] fighter 3 casts Jette on fighter 1: 10 damage to the right leg
+[  276] fighter 1 loses 15 % accuracy
+[  276] fighter 6 casts Bouclier tranchant on fighter 5: 25 damage to the head
+[  276] fighter 5 casts Jette on fighter 6: 10 damage to the left leg
+[  276] fighter 6 loses 15 % accuracy
+[  282] fighter 3 casts Récolte: 2 elements gathered
+[  282] fighter 6 casts Slash sanguin on fighter 5: 14 damage to the body
+[  288] fighter 4 casts Guillotine on fighter 2: 5 damage to the left leg
+[  288] fighter 2 dies
+[  288] fighter 5 casts Récolte: 2 elements gathered
+[  294] fighter 1 casts Récolte: 1 elements gathered
+[  300] fighter 1 casts Jette on fighter 3: 10 damage to the left arm
+[  300] fighter 3 loses 15 % accuracy
+[  312] fighter 4 casts Bouclier tranchant on fighter 0: missed
+[  312] fighter 0 casts Bouclier tranchant on fighter 4: missed
+[  318] fighter 6 casts Slash sanguin on fighter 5: 14 damage to the left leg
+[  318] fighter 7 casts Jette on fighter 0: 10 damage to the right leg
+[  318] fighter 0 loses 15 % accuracy
+[  318] fighter 4 casts Slash sanguin on fighter 0: 14 damage to the head
+[  318] fighter 0 casts Slash sanguin on fighter 4: 14 damage to the right leg
+[  318] fighter 4's right leg bleeds
+[  324] fighter 3 casts Jette on fighter 1: 10 damage to the right arm
+[  324] fighter 1 loses 15 % accuracy
+[  324] fighter 5 casts Jette on fighter 6: missed
+[  341] fighter 5's Mine blasts: fighter 6 takes 29 damage to the head
+[  341] fighter 6 is stunned
+[  342] fighter 7 casts Récolte: 1 elements gathered
+[  348] fighter 4 bleeds 1 from the right leg
+[  348] fighter 3 casts Récolte: 1 elements gathered
+[  348] fighter 1 casts Jette on fighter 3: 10 damage to the left leg
+[  348] fighter 3 loses 15 % accuracy
+[  354] fighter 4 casts Slash sanguin on fighter 0: 14 damage to the body
+[  354] fighter 0 casts Slash sanguin on fighter 4: 14 damage to the right leg
+[  359] fighter 1's Mine blasts: fighter 3 takes 29 damage to the body
+[  360] fighter 1 casts Récolte: 2 elements gathered
+[  366] fighter 7 casts Jette on fighter 0: 7 damage to the head
+[  366] fighter 0 dies
+[  372] fighter 3 casts Jette on fighter 1: 10 damage to the left arm
+[  372] fighter 1 loses 15 % accuracy
+[  378] fighter 4 bleeds 1 from the right leg
+[  380] fighter 3's Mine blasts: fighter 1 takes 29 damage to the right leg
+[  396] fighter 1 casts Jette on fighter 4: 10 damage to the body
+[  396] fighter 4 loses 15 % accuracy
+[  401] fighter 6 is knocked out
+[  408] fighter 4 bleeds 1 from the right leg
+[  438] fighter 4 bleeds 1 from the right leg
+[  449] fighter 4 is out for dealing too little damage
 [  449] fighter 5 is out for dealing too little damage
 [  449] fighter 7 is out for dealing too little damage
-[  469] fighter 3's Mine blasts: fighter 1 takes 29 damage to the right arm
+[  456] fighter 1 casts Jette on fighter 3: 10 damage to the body
+[  456] fighter 3 loses 15 % accuracy
+[  456] fighter 3 casts Jette on fighter 1: 10 damage to the left arm
+[  456] fighter 1 loses 15 % accuracy
 [  492] fighter 1 casts Mine: a mine is laid
-[  516] fighter 4 casts Bouclier tranchant on fighter 1: missed
-[  546] fighter 1 casts Récolte: 2 elements gathered
-[  552] fighter 4 casts Slash sanguin on fighter 1: missed
-[  636] fighter 1 casts Jette on fighter 4: 10 damage to the right leg
-[  636] fighter 4 loses 15 % accuracy
-[  642] fighter 4 casts Guillotine on fighter 1: missed
-[  738] fighter 4 casts Bouclier tranchant on fighter 1: 25 damage to the body
-[  738] fighter 1 casts Mine: a mine is laid
-[  786] fighter 1 casts Récolte: 2 elements gathered
-[  846] fighter 1 casts Jette on fighter 4: 10 damage to the body
-[  846] fighter 4 loses 15 % accuracy
-[  984] fighter 1 casts Mine: a mine is laid
-[  996] fighter 1 casts Récolte: 2 elements gathered
-[ 1020] fighter 4 casts Bouclier tranchant on fighter 1: 10 damage to the head
-[ 1020] fighter 1 is beheaded
-[ 1020] fighter 1 dies
+[  516] fighter 3 casts Jette on fighter 1: missed
+[  516] fighter 1 casts Coup de dague on fighter 3: 6 damage to the body
+[  522] fighter 3 casts Coup de dague on fighter 1: 6 damage to the body
+[  546] fighter 1 casts Jette on fighter 3: 10 damage to the left arm
+[  546] fighter 3 loses 15 % accuracy
+[  564] fighter 3 casts Jette on fighter 1: 10 damage to the right leg
+[  564] fighter 1 loses 15 % accuracy
+[  576] fighter 1 casts Coup de dague on fighter 3: 6 damage to the head
+[  576] fighter 3 casts Coup de dague on fighter 1: 5 damage to the head
+[  576] fighter 1 is beheaded
+[  576] fighter 1 dies
 
-over after 1021 ticks, winner: fighter 4
-fighter 0: 0/100 HP, dealt 73, taken 100, 2 spells cast, 0 missed, beheaded
-fighter 1: 0/100 HP, dealt 96, taken 100, 25 spells cast, 0 missed, beheaded
-fighter 2: 42/100 HP, dealt 0, taken 58, 0 spells cast, 0 missed, stunned once, knocked out
-fighter 3: 84/100 HP, dealt 95, taken 16, 17 spells cast, 1 missed, eliminated
-fighter 4: 10/100 HP, dealt 102, taken 90, 7 spells cast, 3 missed
-fighter 5: 80/100 HP, dealt 60, taken 20, 16 spells cast, 1 missed, eliminated
-fighter 6: 0/100 HP, dealt 48, taken 100, 1 spells cast, 0 missed
-fighter 7: 50/100 HP, dealt 60, taken 50, 16 spells cast, 1 missed, eliminated
+over after 577 ticks, winner: fighter 3
+fighter 0: 0/100 HP, dealt 57, taken 100, 5 spells cast, 2 missed
+fighter 1: 0/100 HP, dealt 151, taken 100, 22 spells cast, 0 missed, beheaded
+fighter 2: 0/100 HP, dealt 25, taken 100, 2 spells cast, 1 missed
+fighter 3: 19/100 HP, dealt 130, taken 81, 21 spells cast, 2 missed
+fighter 4: 38/100 HP, dealt 33, taken 62, 4 spells cast, 1 missed, eliminated
+fighter 5: 47/100 HP, dealt 79, taken 53, 14 spells cast, 2 missed, eliminated
+fighter 6: 1/100 HP, dealt 53, taken 99, 4 spells cast, 1 missed, stunned once, knocked out
+fighter 7: 100/100 HP, dealt 67, taken 0, 16 spells cast, 1 missed, eliminated
 
-places: [7, 2, 8, 3, 1, 3, 6, 3]
+places: [7, 2, 8, 1, 3, 3, 6, 3]

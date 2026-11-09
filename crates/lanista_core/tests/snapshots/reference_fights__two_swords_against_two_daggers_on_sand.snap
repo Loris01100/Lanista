@@ -2,64 +2,48 @@
 source: crates/lanista_core/tests/reference_fights.rs
 expression: "loadout_duel(ArenaKind::Sand, [(0, 1), (1, 1)], 42)"
 ---
-[   48] fighter 1 casts Récolte: 2 elements gathered
+[   48] fighter 1 casts Récolte: 4 elements gathered
 [   54] fighter 1 casts Mine: a mine is laid
 [   60] fighter 1 casts Jette on fighter 0: 10 damage to the left leg
 [   60] fighter 0 loses 15 % accuracy
-[  114] fighter 1 casts Récolte: 2 elements gathered
-[  120] fighter 1 casts Jette on fighter 0: 10 damage to the left arm
-[  120] fighter 0 loses 15 % accuracy
-[  180] fighter 1 casts Récolte: 2 elements gathered
-[  186] fighter 1 casts Jette on fighter 0: 10 damage to the head
-[  186] fighter 0 loses 15 % accuracy
-[  246] fighter 1 casts Récolte: 2 elements gathered
-[  252] fighter 1 casts Jette on fighter 0: 10 damage to the left leg
+[  108] fighter 1 casts Jette on fighter 0: 10 damage to the left arm
+[  108] fighter 0 loses 15 % accuracy
+[  114] fighter 1 casts Récolte: 4 elements gathered
+[  156] fighter 1 casts Jette on fighter 0: 10 damage to the head
+[  156] fighter 0 loses 15 % accuracy
+[  180] fighter 1 casts Récolte: 1 elements gathered
+[  204] fighter 1 casts Jette on fighter 0: 10 damage to the left leg
+[  204] fighter 0 loses 15 % accuracy
+[  246] fighter 1 casts Récolte: 1 elements gathered
+[  252] fighter 0 casts Guillotine on fighter 1: missed
+[  252] fighter 1 casts Jette on fighter 0: 10 damage to the body
 [  252] fighter 0 loses 15 % accuracy
-[  258] fighter 0 casts Guillotine on fighter 1: missed
-[  294] fighter 0 casts Lacération on fighter 1: missed
+[  258] fighter 0 casts Lacération on fighter 1: 9 damage to the right leg
+[  258] fighter 0 casts Lacération on fighter 1: 9 damage to the head
+[  258] fighter 1's head bleeds
+[  288] fighter 1 bleeds 1 from the head
 [  300] fighter 1 casts Mine: a mine is laid
+[  306] fighter 1 casts Jette on fighter 0: 10 damage to the head
+[  306] fighter 0 loses 15 % accuracy
 [  312] fighter 1 casts Récolte: 2 elements gathered
-[  318] fighter 1 casts Jette on fighter 0: 10 damage to the body
-[  318] fighter 0 loses 15 % accuracy
-[  324] fighter 0 casts Slash sanguin on fighter 1: 14 damage to the right leg
-[  378] fighter 1 casts Récolte: 2 elements gathered
-[  384] fighter 0 casts Slash sanguin on fighter 1: 14 damage to the body
-[  384] fighter 1's body bleeds
-[  384] fighter 1 casts Jette on fighter 0: 10 damage to the head
-[  384] fighter 0 loses 15 % accuracy
-[  414] fighter 1 bleeds 1 from the body
-[  444] fighter 1 bleeds 1 from the body
-[  444] fighter 1 casts Récolte: 2 elements gathered
-[  450] fighter 0 casts Lacération on fighter 1: 9 damage to the head
-[  450] fighter 1's head bleeds
-[  450] fighter 0 casts Lacération on fighter 1: 9 damage to the body
-[  450] fighter 1 casts Jette on fighter 0: 10 damage to the left arm
+[  318] fighter 1 bleeds 1 from the head
+[  330] fighter 0 casts Slash sanguin on fighter 1: 14 damage to the left arm
+[  348] fighter 1 bleeds 1 from the head
+[  354] fighter 1 casts Jette on fighter 0: 10 damage to the head
+[  354] fighter 0 loses 15 % accuracy
+[  378] fighter 1 bleeds 1 from the head
+[  378] fighter 1 casts Récolte: 1 elements gathered
+[  384] fighter 0 casts Lacération on fighter 1: 9 damage to the left leg
+[  384] fighter 0 casts Lacération on fighter 1: 9 damage to the right arm
+[  402] fighter 1 casts Jette on fighter 0: 10 damage to the left leg
+[  402] fighter 0 loses 15 % accuracy
+[  408] fighter 0 casts Slash sanguin on fighter 1: 14 damage to the head
+[  450] fighter 1 casts Jette on fighter 0: 10 damage to the left leg
 [  450] fighter 0 loses 15 % accuracy
-[  474] fighter 1 bleeds 1 from the body
-[  480] fighter 1 bleeds 1 from the head
-[  504] fighter 1 bleeds 1 from the body
-[  510] fighter 1 bleeds 1 from the head
-[  534] fighter 1 bleeds 1 from the body
-[  540] fighter 1 bleeds 1 from the head
-[  546] fighter 1 casts Mine: a mine is laid
-[  564] fighter 1 bleeds 1 from the body
-[  570] fighter 1 bleeds 1 from the head
-[  570] fighter 0 casts Guillotine on fighter 1: missed
-[  576] fighter 1 casts Récolte: 2 elements gathered
-[  582] fighter 0 casts Taille d'épée on fighter 1: 8 damage to the body
-[  636] fighter 1 casts Jette on fighter 0: missed
-[  642] fighter 0 casts Slash sanguin on fighter 1: 14 damage to the left leg
-[  786] fighter 1 casts Récolte: 2 elements gathered
-[  792] fighter 1 casts Mine: a mine is laid
-[  792] fighter 0 casts Slash sanguin on fighter 1: 14 damage to the head
-[  876] fighter 1 casts Jette on fighter 0: 10 damage to the left arm
-[  876] fighter 0 loses 15 % accuracy
-[  882] fighter 0 casts Lacération on fighter 1: missed
-[ 1026] fighter 1 casts Récolte: 2 elements gathered
-[ 1032] fighter 0 casts Slash sanguin on fighter 1: 8 damage to the head
-[ 1032] fighter 1 is beheaded
-[ 1032] fighter 1 dies
+[  456] fighter 0 casts Slash sanguin on fighter 1: 14 damage to the left arm
+[  498] fighter 1 casts Jette on fighter 0: 10 damage to the right leg
+[  498] fighter 0 dies
 
-over after 1033 ticks, winner: fighter 0
-fighter 0: 20/100 HP, dealt 100, taken 80, 11 spells cast, 4 missed
-fighter 1: 0/100 HP, dealt 80, taken 100, 23 spells cast, 1 missed, beheaded
+over after 499 ticks, winner: fighter 1
+fighter 0: 0/100 HP, dealt 82, taken 100, 6 spells cast, 1 missed
+fighter 1: 18/100 HP, dealt 100, taken 82, 18 spells cast, 0 missed

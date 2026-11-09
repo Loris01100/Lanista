@@ -95,7 +95,7 @@
             cooldown: 45,
             cost: (endurance: 1),
             damage_kind: Cutting,
-            accuracy_percent: 70,
+            accuracy_percent: 80,
         ),
     },
     // Each colosseum's arena kind (data/world.ron) sets its floor: a size in meters,

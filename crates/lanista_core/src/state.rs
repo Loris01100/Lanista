@@ -2334,7 +2334,7 @@ mod tests {
     #[test]
     fn a_rival_fighter_is_bought_by_negotiation() {
         let data = data();
-        let mut state = game(7, &data);
+        let mut state = game(1, &data);
         state.money = 10_000;
         let target = RivalId {
             club: 2,
@@ -3251,7 +3251,7 @@ mod tests {
     #[test]
     fn three_seasons_live_without_the_player() {
         let data = DesignData::load().unwrap();
-        let mut state = GameState::new(1, &data);
+        let mut state = GameState::new(8, &data);
         state.fighters[0].status = Status::Retired;
         let start = state.clone();
         let season = u64::from(data.calendar.season_weeks());
