@@ -1,27 +1,35 @@
 ---
 source: crates/lanista_core/tests/reference_fights.rs
-expression: standard_duel(259)
+expression: standard_duel(11)
 ---
-[   24] fighter 1 casts Tir précis on fighter 0: 28 damage to the left leg
-[   30] fighter 1 casts Pluie de flèches on fighter 0: missed
-[   36] fighter 1 casts Piège à ours: a trap is laid
-[  174] fighter 0 casts Guillotine on fighter 1: 48 damage to the body
-[  180] fighter 0 casts Bouclier tranchant on fighter 1: missed
+[   24] fighter 1 casts Récolte: 4 elements gathered
+[   30] fighter 1 casts Jette on fighter 0: 10 damage to the head
+[   36] fighter 1 casts Mine: a mine is laid
+[   78] fighter 1 casts Jette on fighter 0: 10 damage to the body
+[   90] fighter 1 casts Récolte: 4 elements gathered
+[  126] fighter 1 casts Jette on fighter 0: 10 damage to the right leg
+[  138] fighter 0 casts Guillotine on fighter 1: missed
+[  144] fighter 0 casts Bouclier tranchant on fighter 1: 25 damage to the body
+[  150] fighter 0 casts Slash sanguin on fighter 1: 14 damage to the body
+[  156] fighter 1 casts Récolte: 1 elements gathered
+[  174] fighter 1 casts Jette on fighter 0: 10 damage to the head
 [  186] fighter 0 casts Slash sanguin on fighter 1: 14 damage to the head
 [  186] fighter 1's head bleeds
-[  198] fighter 1 casts Tir précis on fighter 0: 28 damage to the body
 [  216] fighter 1 bleeds 1 from the head
-[  222] fighter 0 casts Slash sanguin on fighter 1: 14 damage to the right arm
-[  222] fighter 1's right arm bleeds
+[  222] fighter 1 casts Jette on fighter 0: 10 damage to the left arm
+[  222] fighter 0 casts Slash sanguin on fighter 1: 14 damage to the body
+[  228] fighter 1 casts Récolte: 2 elements gathered
 [  246] fighter 1 bleeds 1 from the head
-[  252] fighter 1 bleeds 1 from the right arm
 [  258] fighter 0 casts Slash sanguin on fighter 1: 14 damage to the head
+[  270] fighter 1 casts Jette on fighter 0: 10 damage to the body
 [  276] fighter 1 bleeds 1 from the head
-[  282] fighter 1 bleeds 1 from the right arm
-[  294] fighter 0 casts Slash sanguin on fighter 1: 5 damage to the head
-[  294] fighter 1 is beheaded
-[  294] fighter 1 dies
+[  282] fighter 1 casts Mine: a mine is laid
+[  294] fighter 1 casts Récolte: 1 elements gathered
+[  306] fighter 1 bleeds 1 from the head
+[  318] fighter 0 casts Bouclier tranchant on fighter 1: 15 damage to the head
+[  318] fighter 1 is beheaded
+[  318] fighter 1 dies
 
-over after 295 ticks, winner: fighter 0
-fighter 0: 44/100 HP, dealt 100, taken 56, 6 spells cast, 1 missed
-fighter 1: 0/100 HP, dealt 56, taken 100, 4 spells cast, 1 missed, beheaded
+over after 319 ticks, winner: fighter 0
+fighter 0: 40/100 HP, dealt 100, taken 60, 7 spells cast, 1 missed
+fighter 1: 0/100 HP, dealt 60, taken 100, 13 spells cast, 0 missed, beheaded

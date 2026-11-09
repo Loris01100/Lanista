@@ -1136,6 +1136,9 @@ impl ClubScreen {
                         orders.activity = duty;
                     }
                 }
+                if let Some(orders) = self.decisions.orders.get_mut(index) {
+                    surrender_picker(ui, orders, f, data);
+                }
                 challenge_picker(ui, plan, index, &self.state, data);
                 let key = (self.state.week, index, plan.activity);
                 fight_preview(ui, key, &mut self.likely, &self.state, data);
@@ -1797,6 +1800,37 @@ fn fight_preview(
             ui.end_row();
         }
     });
+}
+
+/// When the club's `fighter` gives up, a standing order: at its own threshold, from its
+/// temperament, or at one of `PersonalityRules::surrender_orders`.
+fn surrender_picker(
+    ui: &mut egui::Ui,
+    orders: &mut Orders,
+    fighter: &CareerFighter,
+    data: &DesignData,
+) {
+    let name = |order: Option<u32>| match order {
+        None => tr!(
+            "plan-surrender-own",
+            percent = fighter
+                .personality
+                .surrender_hp(100, &data.fighter.personality)
+        ),
+        Some(0) => tr!("plan-surrender-never"),
+        Some(percent) => tr!("plan-surrender-at", percent = percent),
+    };
+    let chosen = name(orders.surrender);
+    egui::ComboBox::from_id_salt("surrender")
+        .selected_text(tr!("plan-surrender", choice = chosen.as_str()))
+        .show_ui(ui, |ui| {
+            ui.selectable_value(&mut orders.surrender, None, name(None));
+            for &percent in &data.fighter.personality.surrender_orders {
+                ui.selectable_value(&mut orders.surrender, Some(percent), name(Some(percent)));
+            }
+        })
+        .response
+        .on_hover_text(tr!("plan-surrender-hint"));
 }
 
 /// The challenges the club's fighter `i` may send, one list per colosseum of the club's

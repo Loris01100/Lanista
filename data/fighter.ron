@@ -48,7 +48,7 @@
         // Highest percentage of a stat all injuries together can take off.
         max_malus: 80,
         // Chance that a fighter brought to 0 HP survives, with a severe injury.
-        fatal_blow_survival: 0.5,
+        fatal_blow_survival: 0.7,
         // Chance that a fighter stunned in a fight, got up or knocked out, comes out of it
         // with a severe head injury instead of the usual draw.
         stun_wound_chance: 0.3,
@@ -89,6 +89,9 @@
         // threshold against a weaker opponent (0: never gives up).
         spread: 15,
         proud_surrender_percent: 50,
+        // The surrender thresholds the player may order a fighter instead of its own,
+        // in percent of its max HP, highest first: 0 fights to the death.
+        surrender_orders: [50, 30, 15, 0],
         temperaments: (
             // The standard duel's and the tests', never drawn.
             balanced: (weight: 0, boldness: 50, ego: 50, fame_percent: 100, morale_percent: 100, injury_percent: 100),

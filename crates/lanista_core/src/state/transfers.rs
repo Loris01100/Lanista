@@ -8,7 +8,7 @@ use rand::RngExt;
 use crate::colosseum::Contender;
 use crate::design_data::DesignData;
 use crate::economy::{Flow, Terms, Transaction, Wealth};
-use crate::fighter::career::Status;
+use crate::fighter::career::{Orders, Status};
 use crate::fighter::morale::MoraleEvent;
 use crate::fighter::percent_of;
 use crate::market::{self, MarketNews, Move, SaleOffer, estimated_potential, value};
@@ -61,6 +61,7 @@ pub(super) fn market_moves(
                 let mut sold = state.fighters[fighter].clone();
                 sold.joined = Some(state.week);
                 sold.contract = None;
+                sold.orders = Orders::default();
                 state.fighters[fighter].status = Status::Sold;
                 state.rivals[rival].fighters.push(sold);
                 let to = RivalId {
@@ -150,6 +151,7 @@ fn renew(state: &mut GameState, i: usize, terms: Terms, data: &DesignData) -> Ma
 fn release(state: &mut GameState, i: usize, data: &DesignData) {
     let mut released = state.fighters[i].clone();
     released.contract = None;
+    released.orders = Orders::default();
     state.fighters[i].status = Status::Released;
     state.free_agents.push(released);
     let to = Contender::FreeAgent(state.free_agents.len() - 1);

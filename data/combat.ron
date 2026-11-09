@@ -32,8 +32,8 @@
     // fight alive, with a permanent injury there; the body, never.
     cut: (
         limb_hundredths: 75,
-        head_hundredths: 17,
-        fatal_head_percent: 100,
+        head_hundredths: 10,
+        fatal_head_percent: 25,
     ),
     // Where a hit lands, by relative chances; the side of an arm or leg is drawn 50/50.
     // The model draws a lost limb's arm or leg by these weights too.
@@ -55,8 +55,11 @@
     // blast_radius with the spell's power and damage kind, never missed; gone after
     // life_ticks. Past max_per_fighter, a fighter's oldest mine is gone. Provisional.
     // A fighter giving up runs for the arena's door (see arenas) at this percentage of
-    // its speed, hit until through it.
+    // its speed, hit until through it, but rarely killed (flee_lethal_percent).
     flee_speed_percent: 300,
+    // Chance, in percent, that a blow bringing a fighter on the run to 0 HP kills it;
+    // else it is struck down, out of the fight alive, given up.
+    flee_lethal_percent: 10,
     mines: (
         arm_ticks: 45,
         life_ticks: 900,

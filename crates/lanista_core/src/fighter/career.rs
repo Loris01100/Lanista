@@ -374,6 +374,17 @@ impl CareerFighter {
         self.combat_fighter_at(id, (refused, 100), data, position)
     }
 
+    /// Hit points at or below which it gives up, out of `max_hp`: at the percentage its
+    /// orders give, else at its own threshold, from its boldness
+    /// (`Personality::surrender_hp`).
+    #[must_use]
+    pub fn surrender_hp(&self, max_hp: u32, rules: &FighterRules) -> u32 {
+        match self.orders.surrender {
+            Some(percent) => percent_of(max_hp, percent.min(100)),
+            None => self.personality.surrender_hp(max_hp, &rules.personality),
+        }
+    }
+
     /// As [`CareerFighter::combat_fighter`], with `percent` of every stat.
     pub(crate) fn combat_fighter_at(
         &self,
@@ -398,7 +409,7 @@ impl CareerFighter {
         if fighter.off_hand == OffHand::Shield {
             fighter.shield_percent = equipment.shield_defense_percent;
         }
-        fighter.surrender_hp = self.personality.surrender_hp(stats.hp, &rules.personality);
+        fighter.surrender_hp = self.surrender_hp(stats.hp, rules);
         fighter.appearance = self.appearance.clone();
         fighter.refused = refused;
         let models = usize::try_from(self.class.0)
@@ -650,6 +661,7 @@ impl CareerFighter {
         let percent = self.trait_percent(kind, grudge, &data.fighter);
         let mut fighter = self.combat_fighter_at(id, (refused, percent), data, position);
         if self.personality.temperament == Temperament::Proud
+            && self.orders.surrender.is_none()
             && self.stronger_than(opponent, &data.fighter)
         {
             let percent = data.fighter.personality.proud_surrender_percent;
@@ -1310,6 +1322,11 @@ pub struct Orders {
     pub refused: Refused,
     /// Lets its titles go rather than defend them before their deadline.
     pub forfeit: bool,
+    /// The percentage of its max HP at which it gives up, one of
+    /// `PersonalityRules::surrender_orders`; None: at its own threshold
+    /// ([`CareerFighter::surrender_hp`]).
+    #[serde(default)]
+    pub surrender: Option<u32>,
 }
 
 /// The activity of a fighter's [`Orders`].
@@ -1991,6 +2008,34 @@ mod tests {
         let mut leaderless = vec![gone, with_traits(&[])];
         CareerFighter::follow_pack_leaders(&mut leaderless, rules);
         assert_eq!(leaderless[1].morale.value(), neutral);
+    }
+
+    #[test]
+    fn orders_set_the_surrender_threshold_even_for_a_proud_fighter() {
+        let data = data();
+        let mut proud = fighter(1);
+        proud.personality.temperament = Temperament::Proud;
+        let mut weak = fighter(2);
+        weak.stats = Stats::from_array(weak.stats.to_array().map(|v| v / 2));
+        assert!(proud.stronger_than(&weak, &data.fighter));
+        let floor = Floor::new(ArenaKind::Sand, Element::Sand);
+        let threshold = |f: &CareerFighter| {
+            let arena = f.duel_arena(&weak, (floor, Refused::NONE), 0, &data);
+            (arena.fighters[0].surrender_hp, arena.fighters[0].stats.hp)
+        };
+        // Its own threshold, lowered by pride against a weaker opponent.
+        let (own, hp) = threshold(&proud);
+        let personality = &data.fighter.personality;
+        let pride = personality.proud_surrender_percent;
+        assert_eq!(
+            own,
+            percent_of(proud.personality.surrender_hp(hp, personality), pride)
+        );
+        // Ordered: the threshold the player chose, pride or not.
+        for percent in [30, 0] {
+            proud.orders.surrender = Some(percent);
+            assert_eq!(threshold(&proud), (percent_of(hp, percent), hp));
+        }
     }
 
     #[test]

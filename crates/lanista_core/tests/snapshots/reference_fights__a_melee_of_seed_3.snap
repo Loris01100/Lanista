@@ -139,12 +139,11 @@ expression: reference_melee(3)
 [  564] fighter 1 loses 15 % accuracy
 [  576] fighter 1 casts Coup de dague on fighter 3: 6 damage to the head
 [  576] fighter 3 casts Coup de dague on fighter 1: 5 damage to the head
-[  576] fighter 1 is beheaded
 [  576] fighter 1 dies
 
 over after 577 ticks, winner: fighter 3
 fighter 0: 0/100 HP, dealt 57, taken 100, 5 spells cast, 2 missed
-fighter 1: 0/100 HP, dealt 151, taken 100, 22 spells cast, 0 missed, beheaded
+fighter 1: 0/100 HP, dealt 151, taken 100, 22 spells cast, 0 missed
 fighter 2: 0/100 HP, dealt 25, taken 100, 2 spells cast, 1 missed
 fighter 3: 19/100 HP, dealt 130, taken 81, 21 spells cast, 2 missed
 fighter 4: 38/100 HP, dealt 33, taken 62, 4 spells cast, 1 missed, eliminated

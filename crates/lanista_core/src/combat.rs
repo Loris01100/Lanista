@@ -85,6 +85,9 @@ pub struct Arena {
     /// Percentage of its speed a fighter running for the door walks at: 100, unless set
     /// with [`Arena::with_rules`].
     pub flee_speed_percent: u32,
+    /// Chance, in percent, that a blow bringing a fighter on the run to 0 HP kills it
+    /// (`wound`): 100, unless set with [`Arena::with_rules`].
+    pub flee_lethal_percent: u32,
     /// How mines wait, last and blast; laid mines vanish at once, unless set with
     /// [`Arena::with_rules`].
     pub mine_rules: MineRules,
@@ -121,6 +124,9 @@ pub struct CombatRules {
     pub mines: MineRules,
     /// Percentage of its speed a fighter running for the door walks at (`Arena::door`).
     pub flee_speed_percent: u32,
+    /// Chance, in percent, that a blow bringing a fighter on the run to 0 HP kills it;
+    /// else it is struck down, out of the fight alive (`Arena::flee_lethal_percent`).
+    pub flee_lethal_percent: u32,
     /// Each weapon type's auto attack, by key: what a fighter strikes with once none of
     /// its spells is both affordable and of use (`can_cast_on`, `ClassData::weapon`).
     pub weapons: BTreeMap<String, SpellData>,
@@ -410,6 +416,7 @@ impl Arena {
             element: None,
             door: None,
             flee_speed_percent: 100,
+            flee_lethal_percent: 100,
             mine_rules: MineRules::NEVER,
             mines: Vec::new(),
             pact_rules: PactRules::NEVER,
@@ -446,6 +453,7 @@ impl Arena {
         self.bleed = rules.bleed;
         self.mine_rules = rules.mines;
         self.flee_speed_percent = rules.flee_speed_percent;
+        self.flee_lethal_percent = rules.flee_lethal_percent;
         self
     }
 
@@ -1128,10 +1136,8 @@ fn spring(arena: &mut Arena, mine: Mine, t: usize, trap: TrapData) {
     let (owner, target) = (&arena.fighters[o], &arena.fighters[t]);
     let amount = spell_damage(&owner.stats, &target.stats, &owner.spells[mine.spell]);
     let part = arena.hits.map(|w| roll_location(&mut arena.rng, &w));
-    let target = &mut arena.fighters[t];
-    let hp_before = target.hp;
-    target.take_damage(amount);
-    let (damage, id) = (hp_before - target.hp, target.id);
+    let (damage, down) = wound(arena, t, amount);
+    let id = arena.fighters[t].id;
     arena.log.push(Event {
         tick: arena.tick,
         kind: EventKind::Blast {
@@ -1142,7 +1148,13 @@ fn spring(arena: &mut Arena, mine: Mine, t: usize, trap: TrapData) {
             part,
         },
     });
-    strike(arena, (id, t), (damage, false), DamageKind::Neutral, None);
+    strike(
+        arena,
+        (id, t),
+        (damage, false, down),
+        DamageKind::Neutral,
+        None,
+    );
     if t != o {
         let owner = &mut arena.fighters[o];
         owner.round_damage = owner.round_damage.saturating_add(damage);
@@ -1218,10 +1230,8 @@ fn blast(arena: &mut Arena, mine: Mine) {
         let amount = spell_damage(&owner.stats, &target.stats, &owner.spells[mine.spell]);
         let amount = on_trapped(target, amount);
         let part = arena.hits.map(|w| roll_location(&mut arena.rng, &w));
-        let target = &mut arena.fighters[t];
-        let hp_before = target.hp;
-        target.take_damage(amount);
-        let (damage, id) = (hp_before - target.hp, target.id);
+        let (damage, down) = wound(arena, t, amount);
+        let id = arena.fighters[t].id;
         arena.log.push(Event {
             tick: arena.tick,
             kind: EventKind::Blast {
@@ -1234,7 +1244,7 @@ fn blast(arena: &mut Arena, mine: Mine) {
         });
         free(arena, t, damage);
         let cut = part.filter(|_| kind == DamageKind::Cutting);
-        strike(arena, (id, t), (damage, false), kind, cut);
+        strike(arena, (id, t), (damage, false, down), kind, cut);
         afflict(
             arena,
             (mine.owner, t),
@@ -1328,11 +1338,9 @@ fn hit(arena: &mut Arena, i: usize, spell: usize, (target, t): (FighterId, usize
             Some(weights) if !missed => Some(roll_location(&mut arena.rng, &weights)),
             _ => None,
         };
+        let amount = on_trapped(&arena.fighters[t], amount);
+        let (damage, down) = wound(arena, t, amount);
         let defender = &mut arena.fighters[t];
-        let hp_before = defender.hp;
-        let amount = on_trapped(defender, amount);
-        defender.take_damage(amount);
-        let damage = hp_before - defender.hp;
         let sure = sure_cut_hits.is_some_and(|hits| {
             defender.cleaving_hits += 1;
             defender.cleaving_hits >= hits
@@ -1350,7 +1358,7 @@ fn hit(arena: &mut Arena, i: usize, spell: usize, (target, t): (FighterId, usize
         });
         free(arena, t, damage);
         let cut = part.filter(|_| kind == DamageKind::Cutting);
-        strike(arena, (target, t), (damage, sure), kind, cut);
+        strike(arena, (target, t), (damage, sure, down), kind, cut);
         if !missed {
             afflict(
                 arena,
@@ -1472,11 +1480,15 @@ fn wear_off(arena: &mut Arena) {
             if !f.is_fighting() {
                 break;
             }
-            let hp_before = f.hp;
-            f.take_damage(percent_of(f.stats.hp, percent).max(1));
-            let damage = hp_before - f.hp;
+            let amount = percent_of(f.stats.hp, percent).max(1);
+            let (damage, down) = wound(arena, t, amount);
+            let f = &arena.fighters[t];
             let (fighter, died) = (f.id, !f.is_alive());
-            let gave_up = give_up(arena, t);
+            let gave_up = if down {
+                Some(EventKind::Surrender { fighter })
+            } else {
+                give_up(arena, t)
+            };
             if let Some(s) = usize::try_from(source.0)
                 .ok()
                 .and_then(|s| arena.fighters.get_mut(s))
@@ -1507,16 +1519,50 @@ fn wear_off(arena: &mut Arena) {
     }
 }
 
-/// The effects of a hit on the target: a cut on its head may sever it, killing, or on a
-/// limb, taking it out of the fight alive (`severs`, for sure if `sure`); it dies at 0 HP, gives up at its
-/// surrender threshold, or else may be stunned with `stun_chance`, drawn only above 0.
+/// Takes `amount` HP off fighter `t` (`Fighter::take_damage`), but a blow that would
+/// bring a fighter on the run to 0 HP kills it only with `Arena::flee_lethal_percent`,
+/// drawn only below 100: else it is struck down at 1 HP, out of the fight alive, given
+/// up. The HP taken, and whether it was struck down.
+fn wound(arena: &mut Arena, t: usize, amount: u32) -> (u32, bool) {
+    let lethal = arena.flee_lethal_percent;
+    let f = &arena.fighters[t];
+    let down = f.fleeing
+        && f.is_fighting()
+        && amount >= f.hp
+        && lethal < 100
+        && arena.rng.random_range(0..100) >= lethal;
+    let f = &mut arena.fighters[t];
+    let hp_before = f.hp;
+    if down {
+        f.hp = 1;
+        f.fleeing = false;
+        f.surrendered = true;
+        f.action = Action::Wait;
+    } else {
+        f.take_damage(amount);
+    }
+    (hp_before - f.hp, down)
+}
+
+/// The effects of a hit on the target: struck down on the run (`down`, see `wound`), it
+/// is out, given up, and nothing else follows; else a cut on its head may sever it,
+/// killing, or on a limb, taking it out of the fight alive (`severs`, for sure if
+/// `sure`); it dies at 0 HP, gives up at its surrender threshold, or else may be
+/// stunned with `stun_chance`, drawn only above 0.
 fn strike(
     arena: &mut Arena,
     (target, t): (FighterId, usize),
-    (damage, sure): (u32, bool),
+    (damage, sure, down): (u32, bool, bool),
     kind: DamageKind,
     cut: Option<Location>,
 ) {
+    if down {
+        arena.log.push(Event {
+            tick: arena.tick,
+            kind: EventKind::Surrender { fighter: target },
+        });
+        return;
+    }
     let defender = &mut arena.fighters[t];
     let severed =
         cut.filter(|&part| severs(&mut arena.rng, (damage, sure), defender, part, &arena.cut));
@@ -2533,6 +2579,38 @@ mod tests {
         assert_eq!(report.winner, Some(FighterId(0)));
         assert_eq!(report.fighters[1].severed, out.severed);
         assert!(crate::log::log_text(&arena).contains("fighter 1 loses its "));
+    }
+
+    #[test]
+    fn a_blow_that_would_kill_a_fighter_on_the_run_strikes_it_down_unless_lethal() {
+        let run = |lethal: u32| {
+            let mut arena = cutting_duel(SURE, landing(1, 0, 0, 0));
+            arena.flee_lethal_percent = lethal;
+            arena.fighters[1].hp = HIT_DAMAGE / 2;
+            arena.fighters[1].fleeing = true;
+            play(&mut arena, &[HIT, Action::Wait], 1);
+            arena
+        };
+        // Spared: left at 1 HP, out of the fight alive, given up, its head kept.
+        let arena = run(0);
+        let down = &arena.fighters[1];
+        assert_eq!((down.hp, down.severed), (1, None));
+        assert!(down.surrendered && !down.fleeing && !down.is_fighting());
+        assert_eq!(
+            arena.log.last().map(|e| e.kind),
+            Some(EventKind::Surrender {
+                fighter: FighterId(1)
+            })
+        );
+        // Lethal: the fatal blow, as for anyone.
+        let dead = &run(100).fighters[1];
+        assert_eq!((dead.hp, dead.severed), (0, Some(Location::Head)));
+        // A fighter not on the run is never spared.
+        let mut arena = duel(0.5);
+        arena.flee_lethal_percent = 0;
+        arena.fighters[1].hp = HIT_DAMAGE / 2;
+        play(&mut arena, &[HIT, Action::Wait], 1);
+        assert!(!arena.fighters[1].is_alive());
     }
 
     #[test]

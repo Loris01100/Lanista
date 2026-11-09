@@ -664,6 +664,11 @@ plan-focus = Entraîner : { $stat }
 plan-focus-all = toutes les stats
 plan-no-armour = Sans armure
 plan-no-armour-effect = Défenses très réduites, renommée +{ $fame }
+plan-surrender = Abandon : { $choice }
+plan-surrender-own = selon son tempérament ({ $percent } % de ses PV)
+plan-surrender-at = à { $percent } % de ses PV
+plan-surrender-never = jamais, jusqu'à la mort
+plan-surrender-hint = Sa consigne pour chaque combat, jusqu'à nouvel ordre. Qui abandonne court vers la porte : on l'y frappe encore, mais on l'achève rarement. Qui tient plus longtemps risque davantage le coup fatal.
 plan-fight-ill-advised = Combat déconseillé
 plan-likely-opponent = Adversaire probable : { $name }, { $class }{ $others ->
     [0] {""}

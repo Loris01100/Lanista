@@ -1,5 +1,6 @@
 //! Personality: a temperament, fixed for life, and two hidden axes drawn around it.
-//! Boldness sets the surrender threshold, which the player never controls; ego, the
+//! Boldness sets the surrender threshold, unless the player orders another one
+//! (`Orders::surrender`); ego, the
 //! taste for the crowd. The temperament is what the player sees, and each brings its
 //! own trade-off ([`TemperamentRules`]); the berserker and the proud also fight their way.
 
@@ -121,8 +122,11 @@ pub struct PersonalityRules {
     /// Largest gap between an axis and its temperament's value, either way.
     pub spread: u32,
     /// Percentage of its surrender threshold a proud fighter keeps against a weaker
-    /// opponent; 0 never gives up.
+    /// opponent; 0 never gives up. Not under the player's orders.
     pub proud_surrender_percent: u32,
+    /// The surrender thresholds the player may order a fighter (`Orders::surrender`), in
+    /// percent of its max HP, highest first.
+    pub surrender_orders: Vec<u32>,
     pub temperaments: Temperaments,
 }
 
