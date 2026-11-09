@@ -5,14 +5,26 @@ expression: "arena_duel(ArenaKind::Pillars, 42)"
 [   42] fighter 1 casts Mine: a mine is laid
 [   48] fighter 1 casts Récolte: 2 elements gathered
 [   54] fighter 1 casts Jette on fighter 0: 21 damage to the left leg
-[   84] fighter 0 casts Guillotine on fighter 1: 48 damage to the right arm
-[   90] fighter 0 casts Bouclier tranchant on fighter 1: 25 damage to the head
-[   96] fighter 0 casts Slash sanguin on fighter 1: 14 damage to the body
 [  114] fighter 1 casts Récolte: 2 elements gathered
-[  120] fighter 1 casts Jette on fighter 0: missed
-[  132] fighter 0 casts Slash sanguin on fighter 1: 13 damage to the body
-[  132] fighter 1 dies
+[  120] fighter 1 casts Jette on fighter 0: 21 damage to the right arm
+[  180] fighter 1 casts Récolte: 2 elements gathered
+[  186] fighter 0 casts Guillotine on fighter 1: 48 damage to the head
+[  186] fighter 1 casts Jette on fighter 0: 21 damage to the body
+[  192] fighter 0 casts Bouclier tranchant on fighter 1: 25 damage to the right leg
+[  228] fighter 0 casts Slash sanguin on fighter 1: missed
+[  246] fighter 1 casts Récolte: 2 elements gathered
+[  252] fighter 1 casts Jette on fighter 0: 21 damage to the left leg
+[  288] fighter 1 casts Mine: a mine is laid
+[  306] fighter 0 casts Slash sanguin on fighter 1: 14 damage to the body
+[  306] fighter 1's body bleeds
+[  312] fighter 1 casts Récolte: 2 elements gathered
+[  318] fighter 1 casts Jette on fighter 0: missed
+[  336] fighter 1 bleeds 1 from the body
+[  366] fighter 1 bleeds 1 from the body
+[  378] fighter 1 casts Récolte: 2 elements gathered
+[  384] fighter 1 casts Jette on fighter 0: 16 damage to the left arm
+[  384] fighter 0 dies
 
-over after 133 ticks, winner: fighter 0
-fighter 0: 79/100 HP, dealt 100, taken 21, 4 spells cast, 0 missed
-fighter 1: 0/100 HP, dealt 21, taken 100, 5 spells cast, 1 missed
+over after 385 ticks, winner: fighter 1
+fighter 0: 0/100 HP, dealt 89, taken 100, 4 spells cast, 1 missed
+fighter 1: 11/100 HP, dealt 100, taken 89, 14 spells cast, 1 missed

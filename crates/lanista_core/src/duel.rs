@@ -10,6 +10,7 @@ use crate::ai::{CombatAi, UtilityAi};
 use crate::combat::{Arena, Element, Floor, Vec2, run};
 use crate::design_data::DesignData;
 use crate::fighter::appearance::Appearance;
+use crate::fighter::equipment::OffHand;
 use crate::fighter::{ClassId, Fighter, FighterId, Stats};
 use crate::learned::LearnedAi;
 
@@ -59,8 +60,10 @@ pub fn random_duel(data: &DesignData, seed: u64) -> Arena {
 }
 
 /// The duel of class `sides[0].0` in its loadout `sides[0].1` against class `sides[1].0`
-/// in its loadout `sides[1].1`, on `floor`, both with the standard [`STATS`]: set up as a
-/// colosseum's duel (`CareerFighter::duel_arena`), at 15 % and 85 % of the width,
+/// in its loadout `sides[1].1`, on `floor`, both with the standard [`STATS`] changed by
+/// their loadout (`LoadoutData::stats`, neither ambidextrous, both at ease with it, a
+/// shield guarding): set up as a colosseum's duel (`CareerFighter::duel_arena`), at 15 %
+/// and 85 % of the width,
 /// mid-height, the fighters' throwing spells hitting with the floor's element. What
 /// `batch` measures the balance with.
 ///
@@ -82,7 +85,16 @@ pub fn loadout_duel(
         .map(|((x, (class, loadout)), id)| {
             let class_data = data.class(class).expect("one of the loaded classes");
             let position = Vec2::new(width * x, middle);
-            Fighter::in_loadout(FighterId(id), class, (class_data, loadout), STATS, position)
+            let equipment = &data.fighter.equipment;
+            let stats = class_data
+                .loadout(loadout)
+                .map_or(STATS, |l| l.stats(STATS, false, equipment));
+            let mut fighter =
+                Fighter::in_loadout(FighterId(id), class, (class_data, loadout), stats, position);
+            if fighter.off_hand == OffHand::Shield {
+                fighter.shield_percent = equipment.shield_defense_percent;
+            }
+            fighter
         })
         .collect();
     Arena::new(width, layout.height, fighters, seed)

@@ -41,6 +41,9 @@ const THREAT_MARGIN: f64 = 1.0;
 const PRESS_SCORE: f64 = 0.05;
 /// Closer than this, in meters, there is nothing left to press.
 const PRESS_MIN_DISTANCE: f64 = 0.1;
+/// Score of a shooter stepping back from an enemy it outranges while no spell is ready:
+/// above a showman's wait would be a choice, any positive value works otherwise.
+const KITE_SCORE: f64 = 0.05;
 /// Ticks a showman at ego 100 waits for its strongest spell instead of a weaker hit.
 const SHOW_WAIT_TICKS: f64 = 60.0;
 /// Share of the strongest spell's value a showman gives to waiting for it.
@@ -52,7 +55,7 @@ const GATHER_VALUE: f64 = 0.9;
 /// Utility AI: gives every possible action a score and plays the best one.
 /// Its condition (personality, morale, form, injuries, illness) changes the scores,
 /// so an injured or fearful fighter fights differently; a neutral one ignores it.
-// ponytail: aims at the nearest enemy only, and ranged fighters do not keep their distance.
+// ponytail: aims at the nearest enemy only; a shooter backs straight away, not along a wall.
 #[derive(Debug, Default)]
 pub struct UtilityAi;
 
@@ -154,8 +157,16 @@ pub fn score_actions(arena: &Arena, me: FighterId) -> Vec<(Action, f64)> {
     // Out of the target's reach once backed away by this much, in meters; 0 or less
     // when not threatened.
     let escape = longest_reach(target) + THREAT_MARGIN - distance;
+    // A shooter outranging the target in its reach keeps away while its spells cool down.
+    let kite = (!can_cast
+        && distance <= usable_reach
+        && usable_reach > longest_reach(target) + THREAT_MARGIN)
+        .then(|| kite_direction(arena, me, away))
+        .flatten();
     if retreat > RETREAT_MIN && escape >= 0.0 && can_back_off(arena, me, away, escape) {
         scored.push((Action::Move(away), retreat));
+    } else if let Some(direction) = kite {
+        scored.push((Action::Move(direction), KITE_SCORE));
     } else if distance > usable_reach {
         scored.push((Action::Move(toward), MOVE_SCORE));
     } else if !can_cast && distance > PRESS_MIN_DISTANCE {
@@ -272,9 +283,14 @@ fn show_wait_value(me: &Fighter, target: &Fighter, distance: f64, rules: &Accura
 /// meters away, and at least half a meter, before a wall: a fighter that cannot get out
 /// of reach fights instead, rather than wait against a wall to be hit.
 fn can_back_off(arena: &Arena, me: &Fighter, direction: Vec2, escape: f64) -> bool {
+    room(arena, me, direction) >= escape.max(0.5)
+}
+
+/// Meters `me` can walk along `direction` before a wall; 0 for no direction.
+fn room(arena: &Arena, me: &Fighter, direction: Vec2) -> f64 {
     let length = direction.length();
     if length <= 0.0 {
-        return false;
+        return 0.0;
     }
     let (low, high) = arena.reachable();
     let room = |position: f64, step: f64, low: f64, high: f64| {
@@ -287,8 +303,31 @@ fn can_back_off(arena: &Arena, me: &Fighter, direction: Vec2, escape: f64) -> bo
         }
     };
     let (dx, dy) = (direction.x / length, direction.y / length);
-    let room = room(me.position.x, dx, low.x, high.x).min(room(me.position.y, dy, low.y, high.y));
-    room >= escape.max(0.5)
+    room(me.position.x, dx, low.x, high.x).min(room(me.position.y, dy, low.y, high.y))
+}
+
+/// Cosine and sine of the turns a shooter tries, in order, to back away from its
+/// target: straight, then 30, 60 and 90 degrees to either side.
+const KITE_TURNS: [(f64, f64); 7] = [
+    (1.0, 0.0),
+    (0.866_025_403_784_438_6, 0.5),
+    (0.866_025_403_784_438_6, -0.5),
+    (0.5, 0.866_025_403_784_438_6),
+    (0.5, -0.866_025_403_784_438_6),
+    (0.0, 1.0),
+    (0.0, -1.0),
+];
+/// Room, in meters, a shooter wants ahead to back away that way.
+const KITE_ROOM: f64 = 2.0;
+
+/// Which way a shooter backs away from its target, `away` from it: the first of
+/// `KITE_TURNS` with `KITE_ROOM` ahead before a wall, so that it slides along the walls
+/// instead of pinning itself against one; none without such room.
+fn kite_direction(arena: &Arena, me: &Fighter, away: Vec2) -> Option<Vec2> {
+    KITE_TURNS
+        .iter()
+        .map(|&(cos, sin)| Vec2::new(away.x * cos - away.y * sin, away.x * sin + away.y * cos))
+        .find(|&direction| room(arena, me, direction) >= KITE_ROOM)
 }
 
 /// The highest-scored action; on a tie, the first one.
@@ -427,8 +466,12 @@ mod tests {
         arena.mines.clear();
         let spell = &mut arena.fighters[0].spells[0];
         (spell.mine, spell.reach) = (true, 8.0);
-        // 1.5 m between centers: its own mine would blast it too.
-        assert_eq!(UtilityAi.decide(&arena, FighterId(0)), Action::Wait);
+        // 1.5 m between centers: its own mine would blast it too, so it backs away to
+        // lay it, out of the reach of the enemy's blow.
+        assert_eq!(
+            UtilityAi.decide(&arena, FighterId(0)),
+            Action::Move(Vec2::new(-1.5, 0.0))
+        );
         arena.fighters[1].position = Vec2::new(10.0, 5.0);
         assert_eq!(
             UtilityAi.decide(&arena, FighterId(0)),
@@ -437,6 +480,33 @@ mod tests {
                 target: FighterId(1)
             }
         );
+    }
+
+    #[test]
+    fn a_shooter_keeps_away_from_a_melee_fighter_while_its_spells_cool_down() {
+        let shooter = |x| {
+            let mut f = test_fighter(0, x, 10.0);
+            (f.spells[0].range, f.spells[0].reach) = (Range::Ranged, 8.0);
+            f
+        };
+        let fighters = vec![shooter(10.0), test_fighter(1, 13.0, 10.0)];
+        let mut arena = Arena::new(20.0, 20.0, fighters, 0);
+        assert_eq!(UtilityAi.decide(&arena, FighterId(0)), hit());
+        arena.fighters[0].cooldowns[0] = 10;
+        assert_eq!(
+            UtilityAi.decide(&arena, FighterId(0)),
+            Action::Move(Vec2::new(-3.0, 0.0))
+        );
+        // Against a wall, it slides along it rather than pin itself there.
+        arena.fighters[0].position = Vec2::new(1.0, 10.0);
+        arena.fighters[1].position = Vec2::new(4.0, 10.0);
+        assert_eq!(
+            UtilityAi.decide(&arena, FighterId(0)),
+            Action::Move(Vec2::new(0.0, -3.0))
+        );
+        // A shooter that does not outrange its target waits for its spell.
+        arena.fighters[1].spells[0].reach = 8.0;
+        assert_eq!(UtilityAi.decide(&arena, FighterId(0)), Action::Wait);
     }
 
     #[test]

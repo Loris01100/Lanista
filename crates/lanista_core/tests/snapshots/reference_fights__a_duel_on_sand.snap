@@ -9,22 +9,38 @@ expression: "arena_duel(ArenaKind::Sand, 42)"
 [  114] fighter 1 casts Récolte: 2 elements gathered
 [  120] fighter 1 casts Jette on fighter 0: 10 damage to the left arm
 [  120] fighter 0 loses 15 % accuracy
-[  126] fighter 0 casts Guillotine on fighter 1: missed
-[  132] fighter 0 casts Bouclier tranchant on fighter 1: 25 damage to the body
-[  138] fighter 0 casts Slash sanguin on fighter 1: 14 damage to the right arm
-[  174] fighter 0 casts Slash sanguin on fighter 1: 14 damage to the body
 [  180] fighter 1 casts Récolte: 2 elements gathered
-[  186] fighter 1 casts Jette on fighter 0: 10 damage to the body
+[  186] fighter 1 casts Jette on fighter 0: 10 damage to the head
 [  186] fighter 0 loses 15 % accuracy
-[  210] fighter 0 casts Slash sanguin on fighter 1: 14 damage to the head
 [  246] fighter 1 casts Récolte: 2 elements gathered
-[  246] fighter 0 casts Slash sanguin on fighter 1: 14 damage to the left arm
-[  252] fighter 1 casts Jette on fighter 0: 10 damage to the head
+[  252] fighter 1 casts Jette on fighter 0: 10 damage to the left leg
 [  252] fighter 0 loses 15 % accuracy
-[  282] fighter 0 casts Slash sanguin on fighter 1: 14 damage to the left leg
-[  288] fighter 0 casts Bouclier tranchant on fighter 1: 5 damage to the body
-[  288] fighter 1 dies
+[  258] fighter 0 casts Guillotine on fighter 1: missed
+[  294] fighter 0 casts Bouclier tranchant on fighter 1: missed
+[  300] fighter 1 casts Mine: a mine is laid
+[  312] fighter 1 casts Récolte: 2 elements gathered
+[  318] fighter 1 casts Jette on fighter 0: 10 damage to the body
+[  318] fighter 0 loses 15 % accuracy
+[  324] fighter 0 casts Slash sanguin on fighter 1: 14 damage to the right leg
+[  378] fighter 1 casts Récolte: 2 elements gathered
+[  384] fighter 0 casts Slash sanguin on fighter 1: 14 damage to the body
+[  384] fighter 1's body bleeds
+[  384] fighter 1 casts Jette on fighter 0: 10 damage to the head
+[  384] fighter 0 loses 15 % accuracy
+[  414] fighter 1 bleeds 1 from the body
+[  444] fighter 1 bleeds 1 from the body
+[  444] fighter 1 casts Récolte: 2 elements gathered
+[  450] fighter 0 casts Bouclier tranchant on fighter 1: 25 damage to the head
+[  450] fighter 1 casts Jette on fighter 0: 10 damage to the body
+[  450] fighter 0 loses 15 % accuracy
+[  474] fighter 1 bleeds 1 from the body
+[  504] fighter 1 bleeds 1 from the body
+[  534] fighter 1 bleeds 1 from the body
+[  546] fighter 1 casts Mine: a mine is laid
+[  564] fighter 1 bleeds 1 from the body
+[  570] fighter 0 casts Guillotine on fighter 1: 41 damage to the body
+[  570] fighter 1 dies
 
-over after 289 ticks, winner: fighter 0
-fighter 0: 60/100 HP, dealt 100, taken 40, 8 spells cast, 1 missed
-fighter 1: 0/100 HP, dealt 40, taken 100, 9 spells cast, 0 missed
+over after 571 ticks, winner: fighter 0
+fighter 0: 30/100 HP, dealt 100, taken 70, 6 spells cast, 2 missed
+fighter 1: 0/100 HP, dealt 70, taken 100, 17 spells cast, 0 missed

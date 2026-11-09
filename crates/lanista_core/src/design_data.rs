@@ -11,7 +11,6 @@ use crate::combat::{
     ArenaKind, ArenaLayout, CombatRules, DamageKind, Element, Pillar, RADIUS, Range,
 };
 use crate::economy::EconomyRules;
-use crate::fighter::ClassId;
 use crate::fighter::appearance::{AppearanceRules, LayerRule};
 use crate::fighter::care::CareRules;
 use crate::fighter::career::CareerRules;
@@ -25,6 +24,7 @@ use crate::fighter::personality::PersonalityRules;
 use crate::fighter::progression::ProgressionRules;
 use crate::fighter::retirement::RetirementRules;
 use crate::fighter::traits::TraitRules;
+use crate::fighter::{ClassId, Stats, percent_of};
 use crate::learned::{ClassModels, MODELS_DIR};
 use crate::melee::MeleeRules;
 use crate::names::Culture;
@@ -147,6 +147,15 @@ pub struct LoadoutData {
 }
 
 impl LoadoutData {
+    /// `stats` in this loadout: with what its off hand brings (`OffHand::stats`), its
+    /// speed at `speed_percent`.
+    #[must_use]
+    pub fn stats(&self, stats: Stats, ambidextrous: bool, rules: &EquipmentRules) -> Stats {
+        let mut stats = self.off_hand.stats(stats, ambidextrous, rules);
+        stats.speed = percent_of(stats.speed, self.speed_percent);
+        stats
+    }
+
     /// `spell` as this loadout fires it: a shot, a ranged spell that hits (neither
     /// gathering nor laying a mine), with `shot_power_percent` of its power and
     /// `shot_cooldown_percent` of its cooldown, rounded up; any other spell unchanged.

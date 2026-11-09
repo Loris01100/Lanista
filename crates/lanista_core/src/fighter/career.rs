@@ -387,8 +387,7 @@ impl CareerFighter {
         let equipment = &rules.equipment;
         let mut stats = self.fighting_stats(rules);
         if let Some(loadout) = class_data.loadout(self.loadout) {
-            stats = loadout.off_hand.stats(stats, self.ambidextrous, equipment);
-            stats.speed = percent_of(stats.speed, loadout.speed_percent);
+            stats = loadout.stats(stats, self.ambidextrous, equipment);
         }
         let stats = rules.ease.stats(stats, self.ease_with(self.loadout));
         let stats = refused
