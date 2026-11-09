@@ -26,7 +26,7 @@ Before implementing a feature, read the roadmap's README and the file of the pha
 cargo build                          # whole workspace
 cargo run -p lanista                 # the game executable
 cargo run --release -p tools --bin simulate -- --seed 42    # one duel, log and report
-cargo run --release -p tools --bin batch -- --fights 10000  # win rate per class, average duration
+cargo run --release -p tools --bin batch -- --seeds 100     # every loadout against every other, in each arena and floor; fails out of 40-60 %
 cargo run --release -p tools --bin career -- --seed 7 --weeks 10  # one fighter's weeks
 cargo run --release -p tools --bin temperaments -- --worlds 8     # careers by temperament and trait, clubs closed, in worlds without the player
 cargo run --release -p tools --bin calibrate -- --fights 20000    # fit data/stat_model.ron on real duels

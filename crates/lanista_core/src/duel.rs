@@ -1,5 +1,5 @@
 //! The standard duel, set up from a seed: the same in the game, the tools
-//! (`simulate`, `batch`) and the tests.
+//! (`simulate`, `calibrate`) and the tests; [`loadout_duel`] sets up `batch`'s.
 
 use std::sync::Arc;
 
@@ -7,7 +7,7 @@ use rand::{RngExt, SeedableRng};
 use rand_chacha::ChaCha8Rng;
 
 use crate::ai::{CombatAi, UtilityAi};
-use crate::combat::{Arena, Element, Vec2, run};
+use crate::combat::{Arena, Element, Floor, Vec2, run};
 use crate::design_data::DesignData;
 use crate::fighter::appearance::Appearance;
 use crate::fighter::{ClassId, Fighter, FighterId, Stats};
@@ -58,6 +58,38 @@ pub fn random_duel(data: &DesignData, seed: u64) -> Arena {
     arena
 }
 
+/// The duel of class `sides[0].0` in its loadout `sides[0].1` against class `sides[1].0`
+/// in its loadout `sides[1].1`, on `floor`, both with the standard [`STATS`]: set up as a
+/// colosseum's duel (`CareerFighter::duel_arena`), at 15 % and 85 % of the width,
+/// mid-height, the fighters' throwing spells hitting with the floor's element. What
+/// `batch` measures the balance with.
+///
+/// # Panics
+/// If a class is not among `data`'s: a bug, not a data error.
+#[must_use]
+pub fn loadout_duel(
+    data: &DesignData,
+    sides: [(ClassId, usize); 2],
+    floor: Floor,
+    seed: u64,
+) -> Arena {
+    let layout = data.combat.arenas.get(floor.kind);
+    let (width, middle) = (layout.width, layout.height / 2.0);
+    let fighters = [0.15, 0.85]
+        .into_iter()
+        .zip(sides)
+        .zip(0..)
+        .map(|((x, (class, loadout)), id)| {
+            let class_data = data.class(class).expect("one of the loaded classes");
+            let position = Vec2::new(width * x, middle);
+            Fighter::in_loadout(FighterId(id), class, (class_data, loadout), STATS, position)
+        })
+        .collect();
+    Arena::new(width, layout.height, fighters, seed)
+        .with_rules(&data.combat)
+        .with_layout(layout, floor.element)
+}
+
 /// The AI of every fighter of `arena`: its learned model's ([`LearnedAi`]), the utility
 /// AI without one.
 #[must_use]
@@ -83,11 +115,36 @@ pub fn play(arena: &mut Arena) {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::combat::ArenaKind;
 
     #[test]
     fn same_seed_same_duel() {
         let data = DesignData::load().unwrap();
         assert_eq!(random_duel(&data, 3), random_duel(&data, 3));
         assert_ne!(random_duel(&data, 3), random_duel(&data, 4));
+    }
+
+    #[test]
+    fn a_loadout_duel_throws_what_its_floor_holds() {
+        let data = DesignData::load().unwrap();
+        let (class, loadout, thrown) = (0..data.classes.len())
+            .flat_map(|c| (0..data.classes[c].loadouts.len()).map(move |l| (c, l)))
+            .find_map(|(c, l)| {
+                let spells = data.classes[c].spells_in(l);
+                let thrown = spells
+                    .into_iter()
+                    .find_map(|s| s.thrown.get(&Element::Stone).map(|t| t.power))?;
+                Some((ClassId(u32::try_from(c).unwrap()), l, thrown))
+            })
+            .expect("a loadout throwing stone");
+        let floor = Floor::new(ArenaKind::Narrow, Element::Stone);
+        let arena = loadout_duel(&data, [(class, loadout), (ClassId(0), 0)], floor, 5);
+        assert!(arena.fighters[0].spells.iter().any(|s| s.power == thrown));
+        assert_eq!(arena.width, data.combat.arenas.narrow.width);
+        assert!(arena.fighters[0].position.x < arena.fighters[1].position.x);
+        assert_eq!(
+            arena,
+            loadout_duel(&data, [(class, loadout), (ClassId(0), 0)], floor, 5)
+        );
     }
 }
