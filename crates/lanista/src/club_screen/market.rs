@@ -225,6 +225,7 @@ impl ClubScreen {
     /// the search and the filters; on the right the card of the fighter whose row was
     /// clicked, the list's first until one is.
     pub(super) fn market(&mut self, ui: &mut egui::Ui) {
+        dense(ui.style_mut());
         let panel = |fill| {
             egui::Frame::new()
                 .fill(fill)
@@ -1025,7 +1026,7 @@ const CARD_WIDTH: f32 = 440.0;
 const RECORD_BAR_WIDTH: f32 = 132.0;
 
 /// Size of a record's figures in the lists, between the small print and the body.
-const RECORD_TEXT_SIZE: f32 = 15.0;
+const RECORD_TEXT_SIZE: f32 = 13.0;
 
 /// A record's wins in figures, lighter than the bar's to read on wood.
 const LIGHT_LAUREL: egui::Color32 = egui::Color32::from_rgb(0x9D, 0xBA, 0x62);
@@ -1043,10 +1044,27 @@ const BAND_TEXT_WIDTH: f32 = 60.0;
 const BAND_FILL: egui::Color32 = egui::Color32::from_rgb(0x8C, 0x6A, 0x33);
 
 /// Height of a row of the market's lists: a name over its class.
-const ROW_HEIGHT: f32 = 50.0;
+const ROW_HEIGHT: f32 = 42.0;
 
 /// Height of the titles' row of the market's lists.
-const HEADER_HEIGHT: f32 = 30.0;
+const HEADER_HEIGHT: f32 = 26.0;
+
+/// Shrinks the text and the widgets of the market to the mockup's sizes, smaller
+/// than the other screens' so that its list, filters and card hold more.
+fn dense(style: &mut egui::Style) {
+    for (text, size) in [
+        (egui::TextStyle::Small, 12.0),
+        (egui::TextStyle::Body, 15.0),
+        (egui::TextStyle::Button, 15.0),
+    ] {
+        if let Some(font) = style.text_styles.get_mut(&text) {
+            font.size = size;
+        }
+    }
+    style.spacing.interact_size.y = 26.0;
+    style.spacing.item_spacing.y = 6.0;
+    style.spacing.button_padding.y = 4.0;
+}
 
 /// Every other row of the market's lists.
 const ROW_STRIPE: egui::Color32 = egui::Color32::from_rgb(0x29, 0x22, 0x1C);
