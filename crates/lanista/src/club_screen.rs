@@ -175,6 +175,8 @@ pub struct ClubScreen {
     market_tab: MarketTab,
     /// The fighter whose card the market shows, if it is in the tab shown.
     market_shown: Option<Contender>,
+    /// The text the market's names and clubs are searched for.
+    market_search: String,
     /// The post the staff view shows.
     shown_role: Role,
     /// The plot the ludus view shows; `None`, the club's starting one.
@@ -234,6 +236,7 @@ impl ClubScreen {
             market_sort: MarketSort::default(),
             market_tab: MarketTab::FreeAgents,
             market_shown: None,
+            market_search: String::new(),
             shown_role: Role::Trainer,
             shown_plot: None,
             wiki_search: String::new(),
@@ -4197,6 +4200,7 @@ mod tests {
             losses: 1,
             draws: 0,
         };
+        let filter_shows = |filter: MarketFilter, f: &CareerFighter| filter.shows(f);
         let shows = |filter: MarketFilter| filter.shows(&f);
         assert!(shows(MarketFilter::default()));
         assert!(!shows(MarketFilter::new((26, 99), 0, 0, 0)));
@@ -4205,6 +4209,16 @@ mod tests {
         assert!(shows(MarketFilter::new((25, 25), 0, 3, 75)));
         assert!(!shows(MarketFilter::new((0, 99), 0, 4, 0)));
         assert!(!shows(MarketFilter::new((0, 99), 0, 0, 76)));
+        let mut other = MarketFilter::default();
+        other.class = Some(lanista_core::fighter::ClassId(f.class.0 + 1));
+        assert!(!shows(other));
+        other.class = Some(f.class);
+        assert!(shows(other));
+        f.observed_weeks = 0;
+        other.seen = true;
+        assert!(!filter_shows(other, &f));
+        f.observed_weeks = 1;
+        assert!(filter_shows(other, &f));
     }
 
     #[test]

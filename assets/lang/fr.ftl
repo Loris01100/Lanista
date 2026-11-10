@@ -786,7 +786,18 @@ reign-no-club = sans club
 
 ## Marché (vue)
 
-market-roster = Effectif { $active } / { $max }
+market-roster = Effectif { $active } / { $max } · { $free ->
+        [0] aucune place libre
+        [1] une place libre
+       *[other] { $free } places libres
+    }
+market-count = { $count ->
+        [one] { $count } combattant
+       *[other] { $count } combattants
+    }
+market-count-of = sur { $total }
+market-search = Rechercher
+market-search-hint = Nom, club…
 market-rules = Une observation et une offre par semaine ; le club rival répond à une offre en fin de semaine, puis le combattant. Un nom montre le combattant à droite.
 market-no-move = aucune décision
 market-pick = Cliquez un nom de la liste pour voir le combattant ici.
@@ -855,6 +866,9 @@ filter-fame = Renommée min.
 filter-wins = Victoires min.
 filter-win-rate = Taux de victoires min.
 filter-clear = Tout montrer
+filter-class = Classe
+filter-every-class = Toutes
+filter-seen = Déjà observés
 outside-club = Club : { $club }
 compare-with = Comparer avec
 compare-none = Personne

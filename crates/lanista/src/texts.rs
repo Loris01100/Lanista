@@ -99,6 +99,11 @@ pub fn class_name(fighter: &CareerFighter, data: &DesignData) -> String {
         .map_or_else(|| "?".into(), |c| data_name("class", &c.key))
 }
 
+/// The name of the class whose key is `key`.
+pub fn class_key_name(key: &str) -> String {
+    data_name("class", key)
+}
+
 /// The name of loadout `loadout` of the fighter's class (`ClassData::loadout`).
 pub fn loadout_name(fighter: &CareerFighter, loadout: usize, data: &DesignData) -> String {
     data.class(fighter.class)
