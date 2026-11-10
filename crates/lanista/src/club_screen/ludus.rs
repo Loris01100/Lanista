@@ -373,14 +373,8 @@ fn catalog(
             .inner_margin(Margin::symmetric(12, 8))
             .show(ui, |ui| {
                 ui.set_width(ui.available_width());
-                ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
-                    if ui
-                        .add_enabled(allowed, bronze_button(tr!("ludus-build")))
-                        .clicked()
-                    {
-                        chosen.push(m);
-                    }
-                    ui.with_layout(Layout::top_down(Align::Min), |ui| {
+                let text = ui
+                    .vertical(|ui| {
                         ui.spacing_mut().item_spacing.y = 2.0;
                         let name = RichText::new(building_name(b, data)).heading().size(16.0);
                         ui.label(name);
@@ -401,7 +395,19 @@ fn catalog(
                             weeks = building.weeks
                         );
                         ui.label(RichText::new(terms).small().weak());
-                    });
+                    })
+                    .response
+                    .rect;
+                // The button centered on the text's height, not the panel's.
+                let row = egui::Rect::from_x_y_ranges(ui.max_rect().x_range(), text.y_range());
+                let layout = Layout::right_to_left(Align::Center);
+                ui.scope_builder(egui::UiBuilder::new().max_rect(row).layout(layout), |ui| {
+                    if ui
+                        .add_enabled(allowed, bronze_button(tr!("ludus-build")))
+                        .clicked()
+                    {
+                        chosen.push(m);
+                    }
                 });
             });
     }
