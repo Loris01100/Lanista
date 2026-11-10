@@ -1770,42 +1770,61 @@ impl WeekKind {
 /// Width of a fighter's page under which its three columns no longer fit side by side.
 const SHEET_WIDE: f32 = PROFILE_WIDTH + WEEK_WIDTH + 380.0;
 /// Width of a fighter's stats column, its bars, names and values.
-const PROFILE_WIDTH: f32 = 360.0;
+const PROFILE_WIDTH: f32 = 400.0;
 /// Width of a fighter's week column.
-const WEEK_WIDTH: f32 = 460.0;
+const WEEK_WIDTH: f32 = 480.0;
 /// Width of the gauges across the top of a fighter's page.
 const GAUGE_WIDTH: f32 = 100.0;
 /// Room a place's fee keeps on the right of its row.
 const FEE_WIDTH: f32 = 70.0;
 
 /// `profile`, `history` and `week` side by side down the rest of the page, the history
-/// taking what the two others leave.
+/// taking what the two others leave; each kept to its own strip, what overflows it
+/// cut, so that none pushes the next out of the window.
 fn three_columns(
     ui: &mut egui::Ui,
     profile: impl FnOnce(&mut egui::Ui),
     history: impl FnOnce(&mut egui::Ui),
     week: impl FnOnce(&mut egui::Ui),
 ) {
-    let height = ui.available_height();
-    ui.horizontal_top(|ui| {
-        let spacing = ui.spacing().item_spacing.x;
-        // Two separators, each between two spacings.
-        let middle = ui.available_width() - PROFILE_WIDTH - WEEK_WIDTH - 6.0 * spacing;
-        column(ui, PROFILE_WIDTH, height, profile);
-        ui.separator();
-        column(ui, middle, height, history);
-        ui.separator();
-        column(ui, WEEK_WIDTH, height, week);
+    let all = ui.available_rect_before_wrap();
+    // Room on each side of a separator.
+    let gap = 12.0;
+    let middle = all.width() - PROFILE_WIDTH - WEEK_WIDTH - 4.0 * gap;
+    let stroke = ui.visuals().widgets.noninteractive.bg_stroke;
+    let rect = |left: f32, width: f32| {
+        egui::Rect::from_min_size(egui::pos2(left, all.top()), egui::vec2(width, all.height()))
+    };
+    let mut left = all.left();
+    strip(ui, rect(left, PROFILE_WIDTH), profile);
+    left += PROFILE_WIDTH + gap;
+    ui.painter().vline(left, all.y_range(), stroke);
+    left += gap;
+    strip(ui, rect(left, middle), history);
+    left += middle + gap;
+    ui.painter().vline(left, all.y_range(), stroke);
+    left += gap;
+    strip(ui, rect(left, WEEK_WIDTH), week);
+    ui.allocate_rect(all, egui::Sense::hover());
+}
+
+/// `add` drawn within `rect`, what overflows it cut.
+fn strip(ui: &mut egui::Ui, rect: egui::Rect, add: impl FnOnce(&mut egui::Ui)) {
+    ui.scope_builder(egui::UiBuilder::new().max_rect(rect), |ui| {
+        ui.set_clip_rect(rect.intersect(ui.clip_rect()));
+        add(ui);
     });
 }
 
-/// A column `width` wide and `height` high, filled by `add` from its top.
-fn column(ui: &mut egui::Ui, width: f32, height: f32, add: impl FnOnce(&mut egui::Ui)) {
+/// A block `width` wide as high as the row, filled by `add` from its top.
+fn column(ui: &mut egui::Ui, width: f32, add: impl FnOnce(&mut egui::Ui)) -> egui::Response {
     let layout = egui::Layout::top_down(egui::Align::Min);
-    ui.allocate_ui_with_layout(egui::vec2(width, height), layout, |ui| {
+    let size = egui::vec2(width, ui.available_height());
+    ui.allocate_ui_with_layout(size, layout, |ui| {
         ui.set_width(width);
         add(ui);
-    });
+    })
+    .response
 }
 
 /// The club's fighters before and after the active fighter `index`, as the roster
@@ -1849,12 +1868,27 @@ fn sheet_header(
                 goto = after.as_ref().map(|(i, _)| *i);
             }
             ui.separator();
-            ui.vertical(|ui| {
-                for (period, record) in [
-                    (tr!("sheet-career"), f.record),
-                    (tr!("sheet-season"), f.season_record),
-                ] {
-                    ui.label(record_line(&period, record));
+            // A right-to-left row lays a block across all its room unless told how wide.
+            let lines = [
+                record_line(&tr!("sheet-career"), f.record),
+                record_line(&tr!("sheet-season"), f.season_record),
+            ];
+            let font = egui::TextStyle::Body.resolve(ui.style());
+            let width = lines
+                .iter()
+                .map(|line| {
+                    ui.fonts(|fonts| {
+                        let color = egui::Color32::PLACEHOLDER;
+                        fonts
+                            .layout_no_wrap(line.clone(), font.clone(), color)
+                            .size()
+                            .x
+                    })
+                })
+                .fold(0.0, f32::max);
+            column(ui, width + 1.0, |ui| {
+                for line in lines {
+                    ui.add(egui::Label::new(line).extend());
                 }
             });
             ui.separator();
@@ -1921,15 +1955,13 @@ fn condition_gauges(ui: &mut egui::Ui, f: &CareerFighter) {
         ),
     ];
     for (name, value, max, color, shown, hint) in gauges.into_iter().rev() {
-        let response = ui
-            .vertical(|ui| {
-                ui.horizontal(|ui| {
-                    ui.label(egui::RichText::new(name).small().weak());
-                    ui.label(shown);
-                });
-                meter_sized(ui, GAUGE_WIDTH, value, max, color, None);
-            })
-            .response;
+        let response = column(ui, GAUGE_WIDTH, |ui| {
+            ui.horizontal(|ui| {
+                ui.label(egui::RichText::new(name).small().weak());
+                ui.label(shown);
+            });
+            meter_sized(ui, GAUGE_WIDTH, value, max, color, None);
+        });
         if let Some(hint) = hint {
             response.on_hover_text(hint);
         }
@@ -2065,6 +2097,8 @@ fn kind_buttons(
 ) -> Option<WeekKind> {
     let mut clicked = None;
     ui.horizontal(|ui| {
+        // Tighter than other buttons, for the four and their keys to fit the column.
+        ui.spacing_mut().button_padding.x = 4.0;
         let spacing = ui.spacing().item_spacing.x;
         let count = WeekKind::ALL.len();
         #[expect(clippy::cast_precision_loss, reason = "four buttons")]
