@@ -173,6 +173,8 @@ pub struct ClubScreen {
     market_sort: MarketSort,
     /// The market's tab shown.
     market_tab: MarketTab,
+    /// The fighter whose card the market shows, if it is in the tab shown.
+    market_shown: Option<Contender>,
     /// The post the staff view shows.
     shown_role: Role,
     /// The plot the ludus view shows; `None`, the club's starting one.
@@ -231,6 +233,7 @@ impl ClubScreen {
             market_filter: MarketFilter::default(),
             market_sort: MarketSort::default(),
             market_tab: MarketTab::FreeAgents,
+            market_shown: None,
             shown_role: Role::Trainer,
             shown_plot: None,
             wiki_search: String::new(),
@@ -414,6 +417,9 @@ impl ClubScreen {
         self.forward.dedup();
         if free_agent(&before) && self.view == before {
             self.view = View::Market;
+        }
+        if matches!(self.market_shown, Some(Contender::FreeAgent(_))) {
+            self.market_shown = None;
         }
         self.view = self.followed(self.view);
         self.decisions = self.state.suggested_decisions(&self.data);
@@ -4326,6 +4332,21 @@ mod tests {
         let views: Vec<View> = views.into_iter().chain(pages.map(View::Wiki)).collect();
         for view in views {
             screen.view = view;
+            draw(&mut screen);
+        }
+        // The market's card, in each tab.
+        screen.view = View::Market;
+        let rival = RivalId {
+            club: 0,
+            fighter: 0,
+        };
+        for (tab, shown) in [
+            (MarketTab::FreeAgents, Contender::FreeAgent(0)),
+            (MarketTab::Rivals, Contender::Rival(rival)),
+            (MarketTab::Yours, Contender::Club(0)),
+        ] {
+            screen.market_tab = tab;
+            screen.market_shown = Some(shown);
             draw(&mut screen);
         }
         screen.view = View::Staff;

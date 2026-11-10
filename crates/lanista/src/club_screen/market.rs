@@ -4,7 +4,7 @@ use lanista_core::colosseum::{ColosseumId, Contender};
 use lanista_core::design_data::DesignData;
 use lanista_core::economy::Terms;
 use lanista_core::fighter::career::{CareerFighter, Status};
-use lanista_core::market::{Move, SaleOffer, Target, stat_ranges, value};
+use lanista_core::market::{Move, SaleOffer, Target, personality_seen, stat_ranges, value};
 use lanista_core::rivals::RivalId;
 use lanista_core::staff::Scouting;
 use lanista_core::state::GameState;
@@ -14,8 +14,9 @@ use super::colosseums::{arrow, not_ranked, ranked_name};
 use super::{ClubScreen, View, chip, face_row, half_bar};
 use crate::lang::tr;
 use crate::texts::{
-    class_name, club_name, colosseum_name, fighter_name, free_agent_name, move_text, range_texts,
-    record_text, rival_fighter_name, stat_names, terms_text, unsellable_text, weeks,
+    class_name, club_name, colosseum_name, fighter_name, free_agent_name, move_text,
+    potential_text, range_texts, record_text, rival_fighter_name, stat_names, temperament_name,
+    terms_text, unsellable_text, weeks,
 };
 use crate::theme::{self, Icon};
 
@@ -65,34 +66,38 @@ impl MarketFilter {
             && rate >= self.win_rate
     }
 
-    /// The filters' row: age, fame, wins, share of wins, and a button clearing them.
-    fn row(&mut self, ui: &mut egui::Ui) {
-        ui.horizontal_wrapped(|ui| {
+    /// The filters, one under the other: age, fame, wins, share of wins, and a button
+    /// clearing them.
+    fn column(&mut self, ui: &mut egui::Ui) {
+        egui::Grid::new("market filters").show(ui, |ui| {
             ui.label(tr!("filter-age"));
-            ui.add(egui::DragValue::new(&mut self.age.0).range(0..=self.age.1));
-            ui.label(tr!("filter-to"));
-            ui.add(egui::DragValue::new(&mut self.age.1).range(self.age.0..=99));
-            ui.separator();
+            ui.horizontal(|ui| {
+                ui.add(egui::DragValue::new(&mut self.age.0).range(0..=self.age.1));
+                ui.label(tr!("filter-to"));
+                ui.add(egui::DragValue::new(&mut self.age.1).range(self.age.0..=99));
+            });
+            ui.end_row();
             ui.label(tr!("filter-fame"));
             ui.add(egui::DragValue::new(&mut self.fame).range(0..=100));
-            ui.separator();
+            ui.end_row();
             ui.label(tr!("filter-wins"));
             ui.add(egui::DragValue::new(&mut self.wins).range(0..=999));
-            ui.separator();
+            ui.end_row();
             ui.label(tr!("filter-win-rate"));
             ui.add(
                 egui::DragValue::new(&mut self.win_rate)
                     .range(0..=100)
                     .suffix(" %"),
             );
-            let default = Self::default();
-            if ui
-                .add_enabled(*self != default, egui::Button::new(tr!("filter-clear")))
-                .clicked()
-            {
-                *self = default;
-            }
+            ui.end_row();
         });
+        let default = Self::default();
+        if ui
+            .add_enabled(*self != default, egui::Button::new(tr!("filter-clear")))
+            .clicked()
+        {
+            *self = default;
+        }
     }
 }
 
@@ -182,8 +187,12 @@ impl MarketSort {
 
 /// What a click on the market asks for.
 enum Pick {
+    /// Show this fighter in the market's card.
+    Show(Contender),
     /// Open the sheet of this fighter.
     Open(Target),
+    /// Open the sheet of the club's fighter.
+    Sheet(usize),
     /// Write an offer for this rival fighter, starting from this price.
     Negotiate(RivalId, u32),
     /// Open the page of this rival club.
@@ -195,61 +204,38 @@ enum Pick {
 }
 
 impl ClubScreen {
-    /// The market: the roster's room and the rules, this week's moves with the answer
-    /// to the last offer and the offer being written, then one tab at a time the free
-    /// agents, the rival fighters to observe or negotiate for, or the club's fighters to
-    /// sell or release. A fighter out of the club shows only its age, fame and record,
-    /// if it passes the filters; its name opens what the club sees of it.
+    /// The market, in three columns over this week's moves: on the left the roster's
+    /// room, the tabs and the filters; in the middle the free agents, the rival fighters
+    /// or the club's fighters, a fighter out of the club only if it passes the filters;
+    /// on the right the card of the fighter whose name was clicked, with its moves.
     pub(super) fn market(&mut self, ui: &mut egui::Ui) {
-        let active = self.state.active_fighters();
-        let max = self.data.economy.max_fighters;
-        ui.horizontal(|ui| {
-            ui.heading(tr!("view-market"));
-            let full = u32::try_from(active).is_ok_and(|n| n >= max);
-            let icon = if full { Icon::Full } else { Icon::Class };
-            chip(ui, icon, tr!("market-roster", active = active, max = max));
+        egui::TopBottomPanel::bottom("market week").show_inside(ui, |ui| self.week_moves(ui));
+        egui::SidePanel::left("market tabs")
+            .resizable(false)
+            .default_width(200.0)
+            .show_inside(ui, |ui| self.market_side(ui));
+        let mut pick = None;
+        egui::SidePanel::right("market card")
+            .resizable(false)
+            .default_width(360.0)
+            .show_inside(ui, |ui| pick = self.market_card(ui));
+        egui::CentralPanel::default().show_inside(ui, |ui| {
+            let filter = self.market_filter;
+            let sort = &mut self.market_sort;
+            let (data, state) = (&self.data, &self.state);
+            let listed = (&self.decisions.moves[..], self.market_shown);
+            let tab = self.market_tab;
+            let grid = egui::ScrollArea::vertical().show(ui, |ui| match tab {
+                MarketTab::FreeAgents => free_agent_grid(ui, state, listed, (filter, sort), data),
+                MarketTab::Rivals => rival_grid(ui, state, listed, (filter, sort), data),
+                MarketTab::Yours => sale_grid(ui, state, listed.1, data),
+            });
+            pick = pick.take().or(grid.inner);
         });
-        ui.label(egui::RichText::new(tr!("market-rules")).small().weak());
-        ui.add_space(4.0);
-        self.week_moves(ui);
-        ui.add_space(4.0);
-        let filter = self.market_filter;
-        let sort = &mut self.market_sort;
-        let counts = market_counts(&self.state, filter);
-        ui.horizontal(|ui| {
-            let tab = &mut self.market_tab;
-            let [free, rivals, yours] = counts;
-            ui.selectable_value(
-                tab,
-                MarketTab::FreeAgents,
-                tr!("market-tab-free", count = free),
-            );
-            ui.selectable_value(
-                tab,
-                MarketTab::Rivals,
-                tr!("market-tab-rivals", count = rivals),
-            );
-            ui.selectable_value(
-                tab,
-                MarketTab::Yours,
-                tr!("market-tab-yours", count = yours),
-            );
-        });
-        if self.market_tab != MarketTab::Yours {
-            self.market_filter.row(ui);
-        }
-        ui.separator();
-        let data = &self.data;
-        let state = &self.state;
-        let moves = &mut self.decisions.moves;
-        let tab = self.market_tab;
-        let pick = egui::ScrollArea::vertical().show(ui, |ui| match tab {
-            MarketTab::FreeAgents => free_agent_grid(ui, state, moves, (filter, sort), data),
-            MarketTab::Rivals => rival_grid(ui, state, moves, (filter, sort), data),
-            MarketTab::Yours => sale_grid(ui, state, moves, data),
-        });
-        match pick.inner {
+        match pick {
+            Some(Pick::Show(shown)) => self.market_shown = Some(shown),
             Some(Pick::Open(target)) => self.go_to(View::Outside(target)),
+            Some(Pick::Sheet(i)) => self.go_to(View::Sheet(i)),
             Some(Pick::Negotiate(id, price)) => self.offer_draft = Some((id, price)),
             Some(Pick::Club(club)) => self.go_to(View::Rival(club)),
             Some(Pick::Terms(m)) => self.terms_draft = Some(m),
@@ -265,81 +251,233 @@ impl ClubScreen {
         }
     }
 
-    /// A card with this week's moves, each to cancel, the price a rival club asked for
-    /// its fighter and the offer being written; nothing when there is none of them.
+    /// The bar under the market: this week's moves, each to cancel, the price a rival
+    /// club asked for its fighter and the offer being written.
     fn week_moves(&mut self, ui: &mut egui::Ui) {
         let data = &self.data;
         let state = &self.state;
         let moves = &mut self.decisions.moves;
-        if moves.is_empty() && state.counter_offer.is_none() && self.offer_draft.is_none() {
-            return;
-        }
         let mut close = false;
         let mut cancel = None;
-        egui::Frame::group(ui.style())
-            .fill(ui.visuals().extreme_bg_color)
-            .show(ui, |ui| {
-                ui.set_width(ui.available_width());
-                let title = egui::RichText::new(tr!("market-this-week"));
-                ui.label(title.strong().color(theme::BRONZE));
-                if let Some((id, price)) = state.counter_offer {
-                    ui.horizontal(|ui| {
-                        ui.label(tr!(
-                            "market-counter-offer",
-                            club = club_name(id.club, state),
-                            price = price,
-                            fighter = rival_fighter_name(id, state, data)
-                        ));
-                        if ui.button(tr!("market-offer-this-price")).clicked() {
-                            set_offer(moves, id, price);
-                        }
-                    });
+        ui.horizontal_wrapped(|ui| {
+            let title = egui::RichText::new(tr!("market-this-week"));
+            ui.label(title.strong().color(theme::BRONZE));
+            if moves.is_empty() && state.counter_offer.is_none() && self.offer_draft.is_none() {
+                ui.label(egui::RichText::new(tr!("market-no-move")).weak());
+            }
+            if let Some((id, price)) = state.counter_offer {
+                ui.separator();
+                ui.label(tr!(
+                    "market-counter-offer",
+                    club = club_name(id.club, state),
+                    price = price,
+                    fighter = rival_fighter_name(id, state, data)
+                ));
+                if ui.button(tr!("market-offer-this-price")).clicked() {
+                    set_offer(moves, id, price);
                 }
-                if let Some((id, price)) = &mut self.offer_draft {
-                    ui.horizontal_wrapped(|ui| {
-                        ui.label(tr!(
-                            "market-offer-for",
-                            fighter = rival_fighter_name(*id, state, data)
-                        ));
-                        ui.add(egui::DragValue::new(price).speed(5));
-                        let allowed = state.may_move(Move::Offer(*id, *price), data);
-                        if ui
-                            .add_enabled(allowed, egui::Button::new(tr!("market-make-offer")))
-                            .clicked()
-                        {
-                            set_offer(moves, *id, *price);
-                            close = true;
-                        }
-                        close |= ui.button(tr!("cancel")).clicked();
-                        if let Some(text) = state
-                            .rival_fighter(*id)
-                            .and_then(|f| unsellable_text(f, state, data))
-                        {
-                            ui.colored_label(theme::BLOOD, text);
-                        }
-                        let standing = state.standing(id.club, data);
-                        if !data.world.relations.standings.get(standing).deals {
-                            let refuses =
-                                tr!("market-rival-refuses", club = club_name(id.club, state));
-                            ui.colored_label(theme::BLOOD, refuses);
-                        }
-                    });
+            }
+            if let Some((id, price)) = &mut self.offer_draft {
+                ui.separator();
+                ui.label(tr!(
+                    "market-offer-for",
+                    fighter = rival_fighter_name(*id, state, data)
+                ));
+                ui.add(egui::DragValue::new(price).speed(5));
+                let allowed = state.may_move(Move::Offer(*id, *price), data);
+                if ui
+                    .add_enabled(allowed, egui::Button::new(tr!("market-make-offer")))
+                    .clicked()
+                {
+                    set_offer(moves, *id, *price);
+                    close = true;
                 }
-                for (n, &m) in moves.iter().enumerate() {
-                    ui.horizontal(|ui| {
-                        ui.label(move_text(m, state, data));
-                        if ui.small_button(tr!("cancel")).clicked() {
-                            cancel = Some(n);
-                        }
-                    });
+                close |= ui.button(tr!("cancel")).clicked();
+                if let Some(text) = state
+                    .rival_fighter(*id)
+                    .and_then(|f| unsellable_text(f, state, data))
+                {
+                    ui.colored_label(theme::BLOOD, text);
                 }
-            });
+                let standing = state.standing(id.club, data);
+                if !data.world.relations.standings.get(standing).deals {
+                    let refuses = tr!("market-rival-refuses", club = club_name(id.club, state));
+                    ui.colored_label(theme::BLOOD, refuses);
+                }
+            }
+            for (n, &m) in moves.iter().enumerate() {
+                ui.separator();
+                ui.label(move_text(m, state, data));
+                if ui.small_button(tr!("cancel")).clicked() {
+                    cancel = Some(n);
+                }
+            }
+        });
         if close {
             self.offer_draft = None;
         }
         if let Some(n) = cancel {
             self.decisions.moves.remove(n);
         }
+    }
+
+    /// The market's left column: the roster's room, the tabs, the filters but on the
+    /// club's own tab, and the rules.
+    fn market_side(&mut self, ui: &mut egui::Ui) {
+        let active = self.state.active_fighters();
+        let max = self.data.economy.max_fighters;
+        ui.heading(tr!("view-market"));
+        let full = u32::try_from(active).is_ok_and(|n| n >= max);
+        let icon = if full { Icon::Full } else { Icon::Class };
+        chip(ui, icon, tr!("market-roster", active = active, max = max));
+        ui.add_space(8.0);
+        let [free, rivals, yours] = market_counts(&self.state, self.market_filter);
+        let tab = &mut self.market_tab;
+        for (shown, text) in [
+            (MarketTab::FreeAgents, tr!("market-tab-free", count = free)),
+            (MarketTab::Rivals, tr!("market-tab-rivals", count = rivals)),
+            (MarketTab::Yours, tr!("market-tab-yours", count = yours)),
+        ] {
+            ui.selectable_value(tab, shown, text);
+        }
+        ui.separator();
+        if self.market_tab != MarketTab::Yours {
+            self.market_filter.column(ui);
+            ui.separator();
+        }
+        ui.label(egui::RichText::new(tr!("market-rules")).small().weak());
+    }
+
+    /// The market's right column: the card of the fighter picked in the list shown, or
+    /// a word to pick one; returns what was clicked.
+    fn market_card(&mut self, ui: &mut egui::Ui) -> Option<Pick> {
+        let shown = self.market_shown.filter(|&c| {
+            let tab = match c {
+                Contender::FreeAgent(_) => MarketTab::FreeAgents,
+                Contender::Rival(_) => MarketTab::Rivals,
+                Contender::Club(_) => MarketTab::Yours,
+            };
+            tab == self.market_tab
+        });
+        let target = match shown {
+            Some(Contender::FreeAgent(a)) => Target::FreeAgent(a),
+            Some(Contender::Rival(id)) => Target::Rival(id),
+            Some(Contender::Club(i)) => {
+                let moves = &mut self.decisions.moves;
+                return club_card(ui, i, &self.state, moves, &self.data);
+            }
+            None => {
+                ui.label(egui::RichText::new(tr!("market-pick")).weak());
+                return None;
+            }
+        };
+        let mut moves = std::mem::take(&mut self.decisions.moves);
+        let mut compared = self.compared;
+        let pick = egui::ScrollArea::vertical()
+            .id_salt("market card")
+            .show(ui, |ui| {
+                self.outside_card(ui, target, &mut moves, &mut compared)
+            })
+            .inner;
+        self.decisions.moves = moves;
+        self.compared = compared;
+        pick
+    }
+
+    /// The card of a free agent or a rival club's fighter: its club, who it is, how
+    /// long it was observed, what the recruiter sees of it face to face with one of the
+    /// club's, its standings, then its moves; returns what was clicked.
+    fn outside_card(
+        &self,
+        ui: &mut egui::Ui,
+        target: Target,
+        moves: &mut Vec<Move>,
+        compared: &mut Option<usize>,
+    ) -> Option<Pick> {
+        let data = &self.data;
+        let state = &self.state;
+        let (f, name, contender) = match target {
+            Target::FreeAgent(a) => {
+                let f = state.free_agents.get(a)?;
+                (f, free_agent_name(a, f, data), Contender::FreeAgent(a))
+            }
+            Target::Rival(id) => {
+                let f = state.rival_fighter(id)?;
+                (f, rival_fighter_name(id, state, data), Contender::Rival(id))
+            }
+        };
+        if f.status != Status::Active {
+            ui.label(egui::RichText::new(tr!("market-pick")).weak());
+            return None;
+        }
+        let mut pick = None;
+        match target {
+            Target::FreeAgent(_) => {
+                ui.label(
+                    egui::RichText::new(tr!("market-free-agents"))
+                        .small()
+                        .weak(),
+                );
+            }
+            Target::Rival(id) => {
+                let club = tr!("outside-club", club = club_name(id.club, state));
+                if ui.link(club).clicked() {
+                    pick = Some(Pick::Club(id.club));
+                }
+            }
+        }
+        ui.heading(name);
+        ui.label(tr!(
+            "market-card-profile",
+            class = class_name(f, data),
+            age = f.age,
+            fame = f.fame.value()
+        ));
+        super::record_chips(ui, f.record);
+        ui.label(observed_text(f));
+        let estimate = estimate(f, data);
+        if let Target::Rival(_) = target {
+            ui.colored_label(theme::BRONZE, tr!("estimated-value-of", value = estimate));
+        }
+        ui.add_space(8.0);
+        let scouting = state.scouting();
+        comparison(ui, compared, f, (state, &scouting), data);
+        let temperament = if personality_seen(f, &scouting) {
+            temperament_name(f.personality.temperament)
+        } else {
+            "?".into()
+        };
+        for (label, text) in [
+            (tr!("potential"), potential_text(f, &scouting)),
+            (tr!("personality-title"), temperament),
+        ] {
+            ui.label(tr!("labelled", label = label, text = text));
+        }
+        ui.add_space(8.0);
+        self.outside_standings(ui, contender);
+        ui.add_space(8.0);
+        ui.horizontal_wrapped(|ui| {
+            match target {
+                Target::FreeAgent(a) => {
+                    let sign = Move::Sign(a, GameState::asked_terms(f, data));
+                    let allowed = state.may_move(sign, data) && state.can_hire(data);
+                    let label = tr!("sign-for", wage = asked_wage_text(f, data));
+                    if let Some(m) = terms_button(ui, moves, sign, &label, allowed) {
+                        pick = Some(Pick::Terms(m));
+                    }
+                }
+                Target::Rival(id) => {
+                    if ui.button(tr!("negotiate")).clicked() {
+                        pick = Some(Pick::Negotiate(id, estimate));
+                    }
+                }
+            }
+            toggle(ui, moves, Move::Observe(target), &observe_label(f), true);
+            if ui.button(tr!("market-full-sheet")).clicked() {
+                pick = Some(Pick::Open(target));
+            }
+        });
+        pick
     }
 
     /// What the club sees of a free agent or a rival club's fighter: its sheet as the
@@ -753,15 +891,34 @@ fn market_counts(state: &GameState, filter: MarketFilter) -> [usize; 3] {
     [free, rivals, state.active_fighters()]
 }
 
-/// A fighter's name, its class in small print beside it; returns whether the name was
-/// clicked.
-fn name_cell(ui: &mut egui::Ui, name: egui::RichText, class: String) -> bool {
+/// A fighter's name, in bronze when `picked` and selected when `shown`, its class in
+/// small print beside it; returns whether the name was clicked.
+fn name_cell(
+    ui: &mut egui::Ui,
+    name: String,
+    class: String,
+    (shown, picked): (bool, bool),
+) -> bool {
     ui.horizontal(|ui| {
-        let clicked = ui.link(name).clicked();
+        let mut name = egui::RichText::new(name).strong();
+        if picked {
+            name = name.color(theme::BRONZE);
+        }
+        let clicked = ui.selectable_label(shown, name).clicked();
         ui.label(egui::RichText::new(class).small().weak());
         clicked
     })
     .inner
+}
+
+/// Whether one of the week's `moves` is on `target`.
+fn picked(moves: &[Move], target: Target) -> bool {
+    moves.iter().any(|&m| match (m, target) {
+        (Move::Observe(t), _) => t == target,
+        (Move::Sign(a, _), Target::FreeAgent(b)) => a == b,
+        (Move::Offer(a, _), Target::Rival(b)) => a == b,
+        _ => false,
+    })
 }
 
 /// Age, fame and record: wins in green, losses in red, draws faded.
@@ -776,8 +933,17 @@ fn record_cells(ui: &mut egui::Ui, fighter: &CareerFighter) {
     });
 }
 
+/// How many weeks the fighter was observed, faded when never.
+fn seen_cell(ui: &mut egui::Ui, fighter: &CareerFighter) {
+    match fighter.observed_weeks {
+        0 => ui.label(egui::RichText::new("—").weak()),
+        n => ui.colored_label(theme::BRONZE, weeks(n)),
+    };
+}
+
 /// A grid's titles: those of a fighter out of the club, then `last`, each clicked to
-/// sort by its column; `club` adds the club's column after the name.
+/// sort by its column, then the weeks observed; `club` adds the club's column after
+/// the name.
 fn outside_header(ui: &mut egui::Ui, club: bool, last: &[(String, SortBy)], sort: &mut MarketSort) {
     ui.strong(tr!("roster-fighter"));
     if club {
@@ -791,6 +957,7 @@ fn outside_header(ui: &mut egui::Ui, club: bool, last: &[(String, SortBy)], sort
     for (title, by) in titles.iter().chain(last) {
         sort.title(ui, title, *by);
     }
+    ui.strong(tr!("market-seen"));
     ui.end_row();
 }
 
@@ -799,21 +966,16 @@ fn market_grid(id: &str) -> egui::Grid {
     egui::Grid::new(id).striped(true).spacing([18.0, 6.0])
 }
 
-/// The free agents on the market `filter` shows; returns the one to open.
+/// The free agents on the market `filter` shows, the one `shown` selected, those the
+/// week's `moves` are on in bronze; returns the one clicked.
 fn free_agent_grid(
     ui: &mut egui::Ui,
     state: &GameState,
-    moves: &mut Vec<Move>,
+    (moves, shown): (&[Move], Option<Contender>),
     (filter, sort): (MarketFilter, &mut MarketSort),
     data: &DesignData,
 ) -> Option<Pick> {
     let mut pick = None;
-    ui.label(
-        egui::RichText::new(tr!("market-free-agents"))
-            .small()
-            .weak(),
-    );
-    let room = state.can_hire(data);
     market_grid("free agents").show(ui, |ui| {
         outside_header(ui, false, &[(tr!("market-asked-wage"), SortBy::Wage)], sort);
         let mut rows: Vec<_> = (state.free_agents.iter().enumerate())
@@ -821,33 +983,30 @@ fn free_agent_grid(
             .collect();
         sort.apply(&mut rows, |(_, f)| f, data);
         for (a, f) in rows {
-            let (name, class) = ranked_name(Contender::FreeAgent(a), state, data);
-            if name_cell(ui, egui::RichText::new(name).strong(), class) {
-                pick = Some(Pick::Open(Target::FreeAgent(a)));
+            let contender = Contender::FreeAgent(a);
+            let (name, class) = ranked_name(contender, state, data);
+            let marks = (
+                shown == Some(contender),
+                picked(moves, Target::FreeAgent(a)),
+            );
+            if name_cell(ui, name, class, marks) {
+                pick = Some(Pick::Show(contender));
             }
             record_cells(ui, f);
             ui.label(asked_wage_text(f, data));
-            ui.horizontal(|ui| {
-                let observe = Move::Observe(Target::FreeAgent(a));
-                toggle(ui, moves, observe, &observe_label(f), true);
-                let sign = Move::Sign(a, GameState::asked_terms(f, data));
-                let allowed = state.may_move(sign, data);
-                if let Some(m) = terms_button(ui, moves, sign, &tr!("sign"), allowed && room) {
-                    pick = Some(Pick::Terms(m));
-                }
-            });
+            seen_cell(ui, f);
             ui.end_row();
         }
     });
     pick
 }
 
-/// The rival clubs' fighters in activity `filter` shows; returns the one to open or to
-/// negotiate for, with a first price.
+/// The rival clubs' fighters in activity `filter` shows, the one `shown` selected,
+/// those the week's `moves` are on in bronze; returns the one or the club clicked.
 fn rival_grid(
     ui: &mut egui::Ui,
     state: &GameState,
-    moves: &mut Vec<Move>,
+    (moves, shown): (&[Move], Option<Contender>),
     (filter, sort): (MarketFilter, &mut MarketSort),
     data: &DesignData,
 ) -> Option<Pick> {
@@ -867,38 +1026,31 @@ fn rival_grid(
             .collect();
         sort.apply(&mut rows, |(_, f)| f, data);
         for (id, f) in rows {
-            let (name, class) = ranked_name(Contender::Rival(id), state, data);
-            if name_cell(ui, egui::RichText::new(name).strong(), class) {
-                pick = Some(Pick::Open(Target::Rival(id)));
+            let contender = Contender::Rival(id);
+            let (name, class) = ranked_name(contender, state, data);
+            let marks = (shown == Some(contender), picked(moves, Target::Rival(id)));
+            if name_cell(ui, name, class, marks) {
+                pick = Some(Pick::Show(contender));
             }
             if ui.link(club_name(id.club, state)).clicked() {
                 pick = Some(Pick::Club(id.club));
             }
             record_cells(ui, f);
-            let estimate = estimate(f, data);
-            ui.colored_label(theme::BRONZE, tr!("estimate", value = estimate));
+            ui.colored_label(theme::BRONZE, tr!("estimate", value = estimate(f, data)));
             ui.label(asked_wage_text(f, data));
-            ui.horizontal(|ui| {
-                let observe = Move::Observe(Target::Rival(id));
-                toggle(ui, moves, observe, &observe_label(f), true);
-                if ui.button(tr!("negotiate")).clicked() {
-                    pick = Some(Pick::Negotiate(id, estimate));
-                }
-            });
+            seen_cell(ui, f);
             ui.end_row();
         }
     });
     pick
 }
 
-/// The club's fighters in activity, each with its contract and whether it is for sale,
-/// to put on the transfer list or take off it, to make not for sale or for sale again,
-/// with the rival clubs' offers to accept or refuse, to renew in its contract's last
-/// season on terms to offer, or to release.
+/// The club's fighters in activity, the one `shown` selected, each with its contract
+/// and whether it is for sale; returns the one clicked.
 fn sale_grid(
     ui: &mut egui::Ui,
     state: &GameState,
-    moves: &mut Vec<Move>,
+    shown: Option<Contender>,
     data: &DesignData,
 ) -> Option<Pick> {
     let mut pick = None;
@@ -909,34 +1061,63 @@ fn sale_grid(
         }
         ui.strong(tr!("market-contract"));
         ui.strong(tr!("market-sale-status"));
-        ui.strong(tr!("market-actions"));
         ui.end_row();
         let season = state.date(data).season;
         for (i, f) in state.fighters.iter().enumerate() {
             if f.status != Status::Active {
                 continue;
             }
-            let (name, class) = ranked_name(Contender::Club(i), state, data);
-            ui.horizontal(|ui| {
-                ui.label(egui::RichText::new(name).strong().color(theme::BRONZE));
-                ui.label(egui::RichText::new(class).small().weak());
-            });
+            let contender = Contender::Club(i);
+            let (name, class) = ranked_name(contender, state, data);
+            if name_cell(ui, name, class, (shown == Some(contender), false)) {
+                pick = Some(Pick::Show(contender));
+            }
             record_cells(ui, f);
             contract_cell(ui, f, season);
-            let unsellable = unsellable_text(f, state, data);
-            sale_status_cell(ui, i, unsellable.as_deref(), state);
-            // Not wrapped: a grid's cell starts with no width, a wrapped row there would
-            // break after each letter.
-            let row = ui.horizontal(|ui| {
-                sale_actions(ui, (i, f), unsellable.is_none(), state, moves, data)
-            });
-            if row.inner.is_some() {
-                pick = row.inner;
-            }
+            sale_status_cell(ui, i, unsellable_text(f, state, data).as_deref(), state);
             ui.end_row();
         }
     });
     pick
+}
+
+/// The card of the club's fighter `i`: who it is, its contract, whether it is for
+/// sale, then its moves: to put on the transfer list or take off it, to make not for
+/// sale or for sale again, the rival clubs' offers to accept or refuse, to renew in its
+/// contract's last season on terms to offer, or to release; returns what was clicked.
+fn club_card(
+    ui: &mut egui::Ui,
+    i: usize,
+    state: &GameState,
+    moves: &mut Vec<Move>,
+    data: &DesignData,
+) -> Option<Pick> {
+    let Some(f) = state.fighters.get(i).filter(|f| f.status == Status::Active) else {
+        ui.label(egui::RichText::new(tr!("market-pick")).weak());
+        return None;
+    };
+    ui.heading(fighter_name(i, f, data));
+    ui.label(tr!(
+        "market-card-profile",
+        class = class_name(f, data),
+        age = f.age,
+        fame = f.fame.value()
+    ));
+    super::record_chips(ui, f.record);
+    ui.add_space(8.0);
+    ui.strong(tr!("market-contract"));
+    contract_cell(ui, f, state.date(data).season);
+    let unsellable = unsellable_text(f, state, data);
+    sale_status_cell(ui, i, unsellable.as_deref(), state);
+    ui.add_space(8.0);
+    let row = ui.horizontal_wrapped(|ui| {
+        sale_actions(ui, (i, f), unsellable.is_none(), state, moves, data)
+    });
+    ui.add_space(8.0);
+    if ui.button(tr!("market-full-sheet")).clicked() {
+        return Some(Pick::Sheet(i));
+    }
+    row.inner
 }
 
 /// A fighter's contract, in blood in its last season.
