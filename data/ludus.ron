@@ -2,8 +2,8 @@
 (
     // Plots a club starts with.
     plots: 3,
-    // The price of each neighboring parcel in turn, one more plot each.
-    parcel_prices: [3000, 6000, 12000, 24000],
+    // The price of each neighboring parcel in turn, one more plot each: 12 plots at most.
+    parcel_prices: [3000, 5000, 8000, 12000, 17000, 23000, 30000, 38000, 47000],
     // Share of its effect each copy of a building gives, in percent: three at most.
     copy_percents: [100, 60, 30],
     // Three buildings of a family give the club its specialty (`specialty-<key>`).

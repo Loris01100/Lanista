@@ -31,6 +31,6 @@ Une fois riche, un club n'a plus grand-chose à acheter : sans sponsor ni équip
 
 **Points encore ouverts.**
 - Les mots `school` de chaque culture, à vérifier (Dún, Loge, Kancha surtout).
-- Les chiffres : terrains au départ, nombre et prix des parcelles, liste des bâtiments, prix, durées et effets.
+- Les chiffres : 12 terrains au plus (3 au départ, 9 parcelles), à garder ; prix des parcelles, liste des bâtiments, prix, durées et effets.
 
 **Jalon :** trois saisons où le joueur bâtit une École renommée sur plusieurs terrains, puis en démolit un et perd le titre, pendant qu'un club pauvre et un club riche de l'ordinateur bâtissent des ludus différents.
