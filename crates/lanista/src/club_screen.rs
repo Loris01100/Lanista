@@ -6,6 +6,7 @@
 //! the player asks.
 
 mod colosseums;
+mod ludus;
 mod market;
 mod roster;
 mod staff;
@@ -55,11 +56,11 @@ use crate::texts::{
     Article, activity_name, against_text, arena_effect, arena_name, challenger_text, change,
     class_name, club_name, colosseum_name, colosseum_rules_name, contender_name, continent_in,
     date_in_sentence, date_text, fight_text, fighter_name, free_agent_name, illness_effect,
-    illness_text, injury_effect, injury_text, loadout_name, market_news_text, money_line,
-    move_text, named_club, origin_place, potential_text, priced, range_texts, result_text,
-    rival_fighter_name, staff_move_text, staff_news_text, stage_name, stat_names, temperament_name,
-    temperament_text, title_article, title_changed, trait_memory, trait_name, trait_text,
-    wealth_name, wealth_text, week_lines, world_article, year_text,
+    illness_text, injury_effect, injury_text, loadout_name, ludus_move_text, market_news_text,
+    money_line, move_text, named_club, origin_place, potential_text, priced, range_texts,
+    result_text, rival_fighter_name, school_name, staff_move_text, staff_news_text, stage_name,
+    stat_names, temperament_name, temperament_text, title_article, title_changed, trait_memory,
+    trait_name, trait_text, wealth_name, wealth_text, week_lines, world_article, year_text,
 };
 use crate::theme::{self, Icon};
 use crate::title_screen::{Slot, read_slots, slot_text};
@@ -99,6 +100,8 @@ enum View {
     Market,
     /// The trainer, the doctor and the recruiter, hired and dismissed.
     Staff,
+    /// The club's plots and their buildings, named after its culture.
+    Ludus,
     /// What the club sees of a free agent or a rival club's fighter.
     Outside(Target),
     /// The rival club at this index: profile, money, titles and fighters.
@@ -171,6 +174,8 @@ pub struct ClubScreen {
     market_tab: MarketTab,
     /// The post the staff view shows.
     shown_role: Role,
+    /// The plot the ludus view shows.
+    shown_plot: usize,
     /// What the encyclopedia's search looks for; empty, the pages of the category shown.
     wiki_search: String,
     /// The week of the newspaper's issue shown; `None` shows the last one.
@@ -226,6 +231,7 @@ impl ClubScreen {
             market_sort: MarketSort::default(),
             market_tab: MarketTab::FreeAgents,
             shown_role: Role::Trainer,
+            shown_plot: 0,
             wiki_search: String::new(),
             shown_issue: None,
             options_open: false,
@@ -436,6 +442,7 @@ impl ClubScreen {
                     View::Colosseums => self.colosseums(ui),
                     View::Market => self.market(ui),
                     View::Staff => self.staff(ui),
+                    View::Ludus => self.ludus(ui),
                     View::Outside(target) => self.outside(ui, target),
                     View::Rival(club) => self.rival_club(ui, club),
                     View::Wiki(entry) => self.wiki(ui, entry),
@@ -499,15 +506,15 @@ impl ClubScreen {
             }
             ui.separator();
             let views = [
-                (View::Menu, "view-menu"),
-                (View::Roster, "view-roster"),
-                (View::Fights, "view-fights"),
-                (View::Paper, "view-paper"),
-                (View::Colosseums, "view-colosseums"),
-                (View::Market, "view-market"),
-                (View::Staff, "view-staff"),
-            ]
-            .map(|(view, key)| (view, tr!(key)));
+                (View::Menu, tr!("view-menu")),
+                (View::Roster, tr!("view-roster")),
+                (View::Fights, tr!("view-fights")),
+                (View::Paper, tr!("view-paper")),
+                (View::Colosseums, tr!("view-colosseums")),
+                (View::Market, tr!("view-market")),
+                (View::Staff, tr!("view-staff")),
+                (View::Ludus, school_name(&self.state, &self.data)),
+            ];
             let shown = views.iter().find(|(view, _)| *view == self.view);
             let shown = shown.map_or_else(|| tr!("view-go"), |(_, name)| name.clone());
             let mut tabs = |ui: &mut egui::Ui| {
@@ -954,7 +961,15 @@ impl ClubScreen {
                 fighter = rival_fighter_name(id, &self.state, &self.data)
             )
         });
-        moves.chain(staff).chain(counter).collect()
+        let school = school_name(&self.state, &self.data);
+        let ludus = self.decisions.ludus.iter().map(|&m| {
+            tr!(
+                "pending-ludus",
+                school = school.as_str(),
+                what = ludus_move_text(m, &self.data)
+            )
+        });
+        moves.chain(staff).chain(ludus).chain(counter).collect()
     }
 
     /// The world's news grouped by week, newest first; the last week played leaves out
@@ -3662,6 +3677,32 @@ mod tests {
             screen.shown_role = role;
             draw(&mut screen);
         }
+        // The ludus: a free plot's catalog, a building decided, a plot past the last.
+        screen.view = View::Ludus;
+        draw(&mut screen);
+        screen.state.money = 100_000;
+        screen.decisions.ludus = vec![
+            lanista_core::ludus::LudusMove::Build {
+                plot: 0,
+                building: 0,
+            },
+            lanista_core::ludus::LudusMove::BuyParcel,
+        ];
+        for plot in [0, 99] {
+            screen.shown_plot = plot;
+            draw(&mut screen);
+        }
+        assert!(
+            screen
+                .pending_lines()
+                .iter()
+                .any(|l| l.contains("Terrain d'entraînement"))
+        );
+        // Named after the club's culture.
+        screen.state.culture = "grece".into();
+        assert_eq!(school_name(&screen.state, &screen.data), "Palestre");
+        screen.state.culture = String::new();
+        assert_eq!(school_name(&screen.state, &screen.data), "Ludus");
         // A fight on the sheet shows its likely opponent.
         screen.decisions.plans[0].activity = Activity::Fight(ColosseumId(0));
         screen.view = View::Sheet(0);

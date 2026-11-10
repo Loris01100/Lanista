@@ -15,6 +15,9 @@ pub struct Culture {
     pub key: String,
     /// Where its clubs are at home.
     pub continent: Continent,
+    /// What it calls a club's training ground, its ludus (`school-<key>` in the
+    /// language files).
+    pub school: String,
     /// Names a club may take; at least one.
     pub names: Vec<String>,
     /// Keys of the patterns of a club's name (`club-<pattern>` in the language files);
@@ -126,6 +129,7 @@ mod tests {
         Culture {
             key: "test".into(),
             continent: Continent::Europe,
+            school: "ludus".into(),
             names: names.iter().map(|&n| n.into()).collect(),
             clubs: clubs.iter().map(|&c| c.into()).collect(),
             fighters: vec!["Flamma".into(), "Spiculus".into()],

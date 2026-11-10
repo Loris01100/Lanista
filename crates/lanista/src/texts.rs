@@ -16,6 +16,7 @@ use lanista_core::fighter::injury::{Injury, Location, Severity, Side};
 use lanista_core::fighter::personality::Temperament;
 use lanista_core::fighter::traits::Trait;
 use lanista_core::journal::{FightLine, FighterWeek, Retired};
+use lanista_core::ludus::{Effect, LudusMove};
 use lanista_core::market::{MarketNews, Move, Target, potential_range, stat_ranges};
 use lanista_core::names::{ClubName, FighterName};
 use lanista_core::relations::{Change, Reason, Standing};
@@ -363,6 +364,50 @@ pub fn staff_move_text(m: StaffMove, market: &[Candidate]) -> String {
             None => tr!("staff-move-hire-gone"),
         },
         StaffMove::Dismiss(role) => tr!("staff-move-dismiss", role = role_key(role)),
+    }
+}
+
+/// What the club's culture calls its ludus; « Ludus » for a club without a culture.
+pub fn school_name(state: &GameState, data: &DesignData) -> String {
+    let school = data
+        .culture(&state.culture)
+        .map_or("ludus", |c| c.school.as_str());
+    tr!(&format!("school-{school}"))
+}
+
+/// The name of the building at index `building` of `data/ludus.ron`.
+pub fn building_name(building: usize, data: &DesignData) -> String {
+    data.ludus
+        .buildings
+        .get(building)
+        .map_or_else(String::new, |b| tr!(&format!("building-{}", b.key)))
+}
+
+/// What a building does at `percent` of its effect, rounded down.
+pub fn effect_text(effect: Effect, percent: u32) -> String {
+    let (key, value) = match effect {
+        Effect::Training(v) => ("effect-training", v),
+        Effect::Youth(v) => ("effect-youth", v),
+        Effect::Healing(v) => ("effect-healing", v),
+        Effect::Rest(v) => ("effect-rest", v),
+        Effect::Morale(v) => ("effect-morale", v),
+        Effect::Upkeep(v) => ("effect-upkeep", v),
+        Effect::BigFights(v) => ("effect-big-fights", v),
+    };
+    let value = u64::from(value) * u64::from(percent) / 100;
+    tr!(key, value = value)
+}
+
+/// A move on the ludus decided for the week; plots counted from 1.
+pub fn ludus_move_text(m: LudusMove, data: &DesignData) -> String {
+    match m {
+        LudusMove::Build { plot, building } => tr!(
+            "ludus-move-build",
+            building = building_name(building, data),
+            plot = plot + 1
+        ),
+        LudusMove::Demolish(plot) => tr!("ludus-move-demolish", plot = plot + 1),
+        LudusMove::BuyParcel => tr!("ludus-move-parcel"),
     }
 }
 

@@ -572,6 +572,7 @@ menu-language = Langue :
 
 pending-market = Marché : { $what }
 pending-staff = Personnel : { $what }
+pending-ludus = { $school } : { $what }
 pending-counter-offer = Marché : { $club } demande { $price } pour { $fighter }
 
 alert-debts = Dettes : { $money }
@@ -1074,6 +1075,21 @@ culture-mesoamerique = Mésoamérique
 culture-amerique_sud = Tribus d'Amérique du Sud
 culture-oceanie = Tribus d'Océanie
 
+school-ludus = Ludus
+school-palestre = Palestre
+school-dun = Dún
+school-halle = Halle
+school-ordu = Ordu
+school-dojo = Dōjō
+school-akhara = Akhara
+school-zourkhaneh = Zourkhaneh
+school-dar = Dar
+school-kraal = Kraal
+school-loge = Loge
+school-calmecac = Calmecac
+school-kancha = Kancha
+school-whare = Whare
+
 # « de » devant un nom de club ou de combattant, élidé devant une voyelle ou un h muet ($vowel).
 club-de = { $vowel ->
         [true] d'
@@ -1110,3 +1126,48 @@ club-ayllu = Ayllu { club-de }{ $name }
 club-whare = Whare { $name }
 club-pa = Pā { club-de }{ $name }
 club-numbered = { $club } { $number }
+
+ludus-intro = Chaque terrain accueille un bâtiment. Un même bâtiment peut être bâti sur trois terrains au plus, chaque exemplaire rapportant moins que le précédent : tout son effet, puis 60 %, puis 30 %. La construction est payée quand elle est décidée ; le bâtiment agit à la fin des travaux, et son entretien est payé chaque semaine, même à crédit. Démolir libère le terrain sans rien rembourser.
+ludus-plot = Terrain { $plot }
+ludus-free = libre
+ludus-copy = { $building } { $rank ->
+    [1] {""}
+   *[other] ({ $rank }e)
+}
+ludus-in-works = { $what }, en travaux
+ludus-buy-parcel = Acheter une parcelle ({ $price })
+ludus-no-parcel = Plus de parcelle à acheter
+ludus-catalog = Bâtiments possibles
+ludus-build = Bâtir
+ludus-demolish = Démolir
+ludus-price = Prix { $price }
+ludus-upkeep = Entretien { $upkeep } / sem.
+ludus-weeks = Travaux { $weeks } sem.
+ludus-standing = Debout
+ludus-works-left = Travaux : encore { $weeks } sem.
+ludus-copies = Exemplaires { $copies } / { $most }
+ludus-share = Part de l'effet { $share } %
+ludus-left = Argent après ces décisions : { $money }
+ludus-move-build = Bâtir : { $building }, terrain { $plot }
+ludus-move-demolish = Démolir le terrain { $plot }
+ludus-move-parcel = Acheter une parcelle
+
+family-entrainement = Entraînement
+family-soins = Soins
+family-intendance = Intendance
+
+building-terrain_entrainement = Terrain d'entraînement
+building-ecole_recrues = École des recrues
+building-infirmerie = Infirmerie
+building-bains = Bains
+building-dortoirs = Dortoirs
+building-grenier = Grenier
+building-sanctuaire = Sanctuaire
+
+effect-training = Entraînement +{ $value } %
+effect-youth = Progression des moins de 23 ans +{ $value } %
+effect-healing = Convalescence −{ $value } points, avec un médecin
+effect-rest = Forme au repos +{ $value } %
+effect-morale = Moral +{ $value } / sem.
+effect-upkeep = Entretien des combattants −{ $value } %
+effect-big-fights = Moral avant les grands combats +{ $value }

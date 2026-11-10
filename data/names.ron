@@ -9,6 +9,7 @@
     (
         key: "rome",
         continent: Europe,
+        school: "ludus",
         names: [
             "Magnus", "Gallicus", "Dacicus", "Matutinus", "Maximus", "Flavius", "Aurelius",
             "Varro", "Crassus", "Scaurus", "Tullius", "Cornelius", "Septimius", "Valerius",
@@ -31,6 +32,7 @@
     (
         key: "grece",
         continent: Europe,
+        school: "palestre",
         names: [
             "Achille", "Ajax", "Léonidas", "Milon", "Théagène", "Diagoras", "Polydamas",
             "Arrhichion", "Créugas", "Damoxène", "Mélankomas", "Kléomédès", "Phayllos",
@@ -49,6 +51,7 @@
     (
         key: "celtes",
         continent: Europe,
+        school: "dun",
         names: [
             "Vercingétorix", "Ambiorix", "Brennus", "Dumnorix", "Orgétorix",
             "Cassivellaunos", "Boudicca", "Commios", "Indutiomare", "Lugotorix",
@@ -68,6 +71,7 @@
     (
         key: "germains",
         continent: Europe,
+        school: "halle",
         names: [
             "Arminius", "Marbod", "Arioviste", "Ségeste", "Civilis", "Thusnelda",
             "Fritigern", "Alaric", "Genséric", "Odoacre", "Thorgrim", "Hrolf",
@@ -85,6 +89,7 @@
     (
         key: "steppe",
         continent: Asia,
+        school: "ordu",
         names: [
             "Temüjin", "Subötaï", "Djebé", "Batu", "Kubilaï", "Tolui", "Ögödei", "Bayan",
             "Toghril", "Mukhali", "Börte", "Khutulun",
@@ -101,6 +106,7 @@
     (
         key: "asie_est",
         continent: Asia,
+        school: "dojo",
         names: [
             "Guan Yu", "Zhao Yun", "Lü Bu", "Xiang Yu", "Miyamoto", "Tomoe", "Minamoto",
             "Taira", "Kusunoki", "Gyebaek", "Eulji", "Gwanggaeto",
@@ -119,6 +125,7 @@
     (
         key: "inde",
         continent: Asia,
+        school: "akhara",
         names: [
             "Arjuna", "Bhima", "Karna", "Drona", "Chandragupta", "Ashoka", "Poros",
             "Vikrama", "Rudra", "Abhimanyu", "Ghatotkacha", "Prithviraj",
@@ -136,6 +143,7 @@
     (
         key: "asie_ouest",
         continent: Asia,
+        school: "zourkhaneh",
         names: [
             "Rostam", "Sohrab", "Esfandiyar", "Kaveh", "Arash", "Babak", "Gilgamesh",
             "Enkidu", "Tigrane", "Mithridate", "Cyrus", "Darius",
@@ -153,6 +161,7 @@
     (
         key: "arabe",
         continent: Asia,
+        school: "dar",
         names: [
             "Antar", "Khalid", "Hamza", "Zubayr", "Saladin", "Baybars", "Tariq", "Amr",
             "Zénobie", "Qutuz", "Sayf", "Khawla",
@@ -169,6 +178,7 @@
     (
         key: "afrique",
         continent: Africa,
+        school: "kraal",
         names: [
             "Soundiata", "Chaka", "Mwata", "Lueji", "Chibinda", "Ilunga", "Nzinga", "Kimpa",
             "Askia", "Sonni", "Moshoeshoe", "Makeda", "Ezana", "Dingane",
@@ -196,6 +206,7 @@
     (
         key: "amerindiens",
         continent: Americas,
+        school: "loge",
         names: [
             "Tecumseh", "Pontiac", "Tatanka", "Tashunka", "Goyathlay", "Cochise", "Osceola",
             "Metacom", "Hiawatha", "Mangas", "Ouray", "Sequoyah",
@@ -213,6 +224,7 @@
     (
         key: "mesoamerique",
         continent: Americas,
+        school: "calmecac",
         names: [
             "Cuauhtémoc", "Moctezuma", "Ahuitzotl", "Itzcóatl", "Tlacaélel",
             "Nezahualcóyotl", "Pakal", "Xicoténcatl", "Cuitláhuac", "Axayácatl", "Tízoc",
@@ -232,6 +244,7 @@
     (
         key: "amerique_sud",
         continent: Americas,
+        school: "kancha",
         names: [
             "Pachacutec", "Túpac", "Atahualpa", "Manco", "Rumiñahui", "Lautaro",
             "Caupolicán", "Galvarino", "Pelantaro", "Sepé", "Cunhambebe", "Arariboia",
@@ -250,6 +263,7 @@
     (
         key: "oceanie",
         continent: Oceania,
+        school: "whare",
         names: [
             "Hongi Hika", "Te Rauparaha", "Kamehameha", "Hōne Heke", "Kiwa", "Tāwhaki",
             "Māui", "Rata", "Tangaroa", "Malietoa", "Kahekili", "Hinemoa",

@@ -125,6 +125,16 @@ impl Ludus {
             .count()
     }
 
+    /// Which copy of its building the one on `plot` is, from 0, in the order of the
+    /// plots; `None` on a free plot. Its share of the effect is
+    /// `LudusRules::copy_percents` at that rank.
+    #[must_use]
+    pub fn copy_rank(&self, plot: usize) -> Option<usize> {
+        let site = self.plots.get(plot).copied().flatten()?;
+        let before = self.plots[..plot].iter().flatten();
+        Some(before.filter(|s| s.building == site.building).count())
+    }
+
     /// What `m` costs; `None` if it may not be made now: a building on a plot not
     /// free, past its most copies, a parcel when none is left, a plot to demolish
     /// with nothing on it.
@@ -247,5 +257,8 @@ mod tests {
         assert_eq!(ludus.make(LudusMove::Demolish(1), 0, &rules), Some(0));
         assert_eq!(ludus.make(LudusMove::Demolish(1), 0, &rules), None);
         assert_eq!(ludus.make(build(2), 1000, &rules), Some(50));
+        assert_eq!(ludus.copy_rank(0), Some(0));
+        assert_eq!(ludus.copy_rank(1), None);
+        assert_eq!(ludus.copy_rank(2), Some(1));
     }
 }

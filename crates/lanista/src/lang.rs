@@ -180,7 +180,16 @@ mod tests {
         for culture in &data.cultures {
             keys.push(format!("culture-{}", culture.key));
             keys.extend(culture.clubs.iter().map(|p| format!("club-{p}")));
+            keys.push(format!("school-{}", culture.school));
         }
+        let ludus = &data.ludus;
+        keys.extend(ludus.families.iter().map(|f| format!("family-{}", f.key)));
+        keys.extend(
+            ludus
+                .buildings
+                .iter()
+                .map(|b| format!("building-{}", b.key)),
+        );
         assert_in_every_language(&keys);
     }
 
