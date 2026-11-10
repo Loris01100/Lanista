@@ -276,6 +276,8 @@ Le personnel s'engage au marché parmi des candidats, les mêmes pour le joueur 
 
 Le ludus est l'école du club : un plan de terrains, chacun accueillant un bâtiment. C'est la dépense de long terme, celle qui donne un sens à l'argent d'un club riche, et ce qui donne une identité au club : le joueur bâtit selon ce qu'il veut privilégier. Les bâtiments et leurs familles sont des données (un fichier RON), pour en ajouter sans toucher au code.
 
+Le ludus porte le nom que la culture du club donne à son lieu d'entraînement : Ludus à Rome, Palestre en Grèce, Ordu dans la steppe, Dōjō en Asie de l'Est, Kraal en Afrique… Les bâtiments, eux, ont des noms communs à toutes les cultures.
+
 - **Terrains et parcelles.** Le club commence avec quelques terrains. Il achète des parcelles voisines pour en avoir plus, chacune plus chère que la précédente. Les bâtiments possibles sont plus nombreux que les terrains, pour que chaque terrain soit un choix.
 - **Pas de niveaux, des exemplaires.** Un bâtiment est construit ou non. Le même bâtiment peut être bâti sur plusieurs terrains, trois fois au plus, avec un rendement décroissant : le premier exemplaire donne tout son effet, le deuxième 60 %, le troisième 30 %. Se spécialiser reste payant sans qu'un seul bâtiment écrase les autres.
 - **Construction.** Le prix est payé quand le joueur décide, la construction dure quelques semaines, puis le bâtiment agit et son entretien est payé chaque semaine, même à crédit. Démolir libère le terrain sans rembourser la construction ; c'est ainsi que le club change d'orientation.
@@ -283,13 +285,13 @@ Le ludus est l'école du club : un plan de terrains, chacun accueillant un bâti
 
 | Famille | Bâtiments (exemples) | Effet d'un bâtiment | Spécialité à trois |
 | --- | --- | --- | --- |
-| Entraînement | Palestre, Schola | Gains d'entraînement ; progression des moins de 23 ans | École renommée : les rookies rejoignent plus volontiers le club, le recruteur voit mieux leur potentiel |
-| Soins | Valetudinarium, Thermes | Guérison plus rapide (avec un médecin) ; forme regagnée au repos | Ludus des médecins : moins de séquelles |
-| Intendance | Cellae, Horreum, Lararium | Moral ; entretien des combattants moins cher ; moral avant les grands combats | Ludus bien tenu : à préciser |
+| Entraînement | Terrain d'entraînement, école des recrues | Gains d'entraînement ; progression des moins de 23 ans | École renommée : les rookies rejoignent plus volontiers le club, le recruteur voit mieux leur potentiel |
+| Soins | Infirmerie, bains | Guérison plus rapide (avec un médecin) ; forme regagnée au repos | Club des médecins : moins de séquelles |
+| Intendance | Dortoirs, grenier, sanctuaire | Moral ; entretien des combattants moins cher ; moral avant les grands combats | Club bien tenu : à préciser |
 
 Le personnel et le ludus se complètent sans se remplacer : l'infirmerie ne sert à rien sans médecin. L'équipement restant fourni par les colisées, il n'y a pas d'armurerie, et l'effectif reste de 3 combattants en activité quel que soit le ludus.
 
-Les clubs rivaux bâtissent aussi, selon leur niveau de richesse : un club pauvre mise sur l'entraînement et la Schola, un club riche sur les soins. Le modèle statistique des combats entre clubs de l'ordinateur doit alors tenir compte de leurs bâtiments. Un premier prototype peut se passer des rivaux, mais pas l'équilibrage.
+Les clubs rivaux bâtissent aussi, selon leur niveau de richesse : un club pauvre mise sur l'entraînement et l'école des recrues, un club riche sur les soins. Le modèle statistique des combats entre clubs de l'ordinateur doit alors tenir compte de leurs bâtiments. Un premier prototype peut se passer des rivaux, mais pas l'équilibrage.
 
 ## Colisées, classements et compétitions
 
