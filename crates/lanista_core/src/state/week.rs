@@ -62,6 +62,9 @@ pub struct WeekSummary {
     /// in the order of their first fight there: set against the ranking after the week.
     #[serde(default)]
     pub rankings_before: Vec<(ColosseumId, Vec<Rating>)>,
+    /// The ludus's plots whose construction ended this week.
+    #[serde(default)]
+    pub built: Vec<usize>,
 }
 
 /// Plays one week for the whole club: the fighters' new orders, the market moves and the change of staff before
@@ -89,7 +92,7 @@ pub fn next_week(state: &mut GameState, decisions: &Decisions, data: &DesignData
     let mut ledger = Vec::new();
     let mut market = market_moves(state, &decisions.moves, data, &mut ledger);
     let staff = staff_week(state, &decisions.staff, data, &mut ledger);
-    ludus_week(state, &decisions.ludus, data, &mut ledger);
+    let built = ludus_week(state, &decisions.ludus, data, &mut ledger);
     let effects = state.staff_effects();
     // A training session's price, and the doctor's for care.
     let costs = (state.training_cost(data), effects.medicine);
@@ -178,6 +181,7 @@ pub fn next_week(state: &mut GameState, decisions: &Decisions, data: &DesignData
         staff,
         wealth,
         rankings_before,
+        built,
     };
     let played = (before.as_slice(), state.fighters.as_slice());
     let money = (money, state.money);
@@ -186,13 +190,14 @@ pub fn next_week(state: &mut GameState, decisions: &Decisions, data: &DesignData
 }
 
 /// The club's `moves` on its ludus, each paid when made, then the upkeep of its
-/// buildings standing, even into debt, and a week of work on its constructions.
+/// buildings standing, even into debt, and a week of work on its constructions;
+/// returns the plots whose construction ended.
 fn ludus_week(
     state: &mut GameState,
     moves: &[LudusMove],
     data: &DesignData,
     ledger: &mut Vec<Transaction>,
-) {
+) -> Vec<usize> {
     let mut pay = |state: &mut GameState, flow, amount: u32| {
         if amount > 0 {
             let amount = -i64::from(amount);
@@ -213,8 +218,9 @@ fn ludus_week(
             pay(state, flow, cost);
         }
     }
-    let (upkeep, _finished) = state.ludus.week(&data.ludus);
+    let (upkeep, finished) = state.ludus.week(&data.ludus);
     pay(state, Flow::Maintenance, upkeep);
+    finished
 }
 
 /// What the club's fighter `i` costs for its week `report`, into `ledger`: the upkeep,

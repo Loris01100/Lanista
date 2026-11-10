@@ -582,6 +582,7 @@ alert-unpaid = { $fighter } : pas assez d'argent pour sa semaine
 alert-title-defense = { $fighter } : titre de { $place } à défendre d'ici la { $week }
 alert-title-forfeit = { $fighter } renonce au titre de { $place } : il le perdra après la { $week }
 alert-sale-offer = { $club } veut acheter { $fighter } pour { $price } (à accepter au marché cette semaine)
+alert-built = Fin des travaux sur le terrain { $plot } : { $building }
 alert-rival = { $club } est votre rival depuis la { $since } : recettes à { $receipts } %, renommée +{ $fame } par combat
 alert-no-fighter = Plus aucun combattant : recrutez un free agent au marché
 

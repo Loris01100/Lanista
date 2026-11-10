@@ -53,14 +53,15 @@ use crate::lang::tr;
 use crate::options;
 use crate::saves;
 use crate::texts::{
-    Article, activity_name, against_text, arena_effect, arena_name, challenger_text, change,
-    class_name, club_name, colosseum_name, colosseum_rules_name, contender_name, continent_in,
-    date_in_sentence, date_text, fight_text, fighter_name, free_agent_name, illness_effect,
-    illness_text, injury_effect, injury_text, loadout_name, ludus_move_text, market_news_text,
-    money_line, move_text, named_club, origin_place, potential_text, priced, range_texts,
-    result_text, rival_fighter_name, school_name, staff_move_text, staff_news_text, stage_name,
-    stat_names, temperament_name, temperament_text, title_article, title_changed, trait_memory,
-    trait_name, trait_text, wealth_name, wealth_text, week_lines, world_article, year_text,
+    Article, activity_name, against_text, arena_effect, arena_name, building_name, challenger_text,
+    change, class_name, club_name, colosseum_name, colosseum_rules_name, contender_name,
+    continent_in, date_in_sentence, date_text, fight_text, fighter_name, free_agent_name,
+    illness_effect, illness_text, injury_effect, injury_text, loadout_name, ludus_move_text,
+    market_news_text, money_line, move_text, named_club, origin_place, potential_text, priced,
+    range_texts, result_text, rival_fighter_name, school_name, staff_move_text, staff_news_text,
+    stage_name, stat_names, temperament_name, temperament_text, title_article, title_changed,
+    trait_memory, trait_name, trait_text, wealth_name, wealth_text, week_lines, world_article,
+    year_text,
 };
 use crate::theme::{self, Icon};
 use crate::title_screen::{Slot, read_slots, slot_text};
@@ -1085,10 +1086,28 @@ impl ClubScreen {
                 alerts.push((text, View::Rival(club)));
             }
         }
+        alerts.extend(self.built_alerts());
         if self.state.active_fighters() == 0 {
             alerts.push((tr!("alert-no-fighter"), View::Market));
         }
         alerts
+    }
+
+    /// The constructions finished last week, on the ludus.
+    fn built_alerts(&self) -> Vec<(String, View)> {
+        let last = self.state.journal.last.iter();
+        let built = last.flat_map(|w| &w.summary.built);
+        built
+            .filter_map(|&plot| {
+                let site = self.state.ludus.plots.get(plot).copied().flatten()?;
+                let text = tr!(
+                    "alert-built",
+                    building = building_name(site.building, &self.data),
+                    plot = plot + 1
+                );
+                Some((text, View::Ludus))
+            })
+            .collect()
     }
 
     /// The title fights the club's fighter `i` may have this week and, in the season's
@@ -3628,6 +3647,25 @@ mod tests {
         assert!(arm.starts_with("Bras droit"), "{arm}");
         // The alert leads to the fighter's sheet.
         assert_eq!(screen.alerts()[0].1, View::Sheet(0));
+    }
+
+    #[test]
+    fn an_alert_tells_a_construction_is_finished() {
+        let mut screen = screen(7);
+        let site = lanista_core::ludus::Site {
+            building: 0,
+            weeks_left: 1,
+        };
+        screen.state.ludus.plots[1] = Some(site);
+        screen.next_week();
+        let name = building_name(0, &screen.data);
+        let built = (
+            format!("Fin des travaux sur le terrain 2 : {name}"),
+            View::Ludus,
+        );
+        assert!(screen.alerts().contains(&built), "{:?}", screen.alerts());
+        screen.next_week();
+        assert!(!screen.alerts().contains(&built));
     }
 
     /// Every view drawn once, headless, on a screen wide enough for three cards a row,
