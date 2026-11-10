@@ -33,6 +33,11 @@ enum Action {
     Skip,
     /// Play the club's next week.
     NextWeek,
+    /// On a fighter's sheet, the club's fighter before or after it.
+    PreviousFighter,
+    NextFighter,
+    /// On a fighter's sheet, its week's kind: rest, training, fight or melee, in order.
+    Week(usize),
 }
 
 fn window() -> Conf {
@@ -87,6 +92,12 @@ async fn main() {
         (Action::FastSpeed, Button::Key(KeyCode::Key3)),
         (Action::Skip, Button::Key(KeyCode::Enter)),
         (Action::NextWeek, Button::Key(KeyCode::Space)),
+        (Action::PreviousFighter, Button::Key(KeyCode::Left)),
+        (Action::NextFighter, Button::Key(KeyCode::Right)),
+        (Action::Week(0), Button::Key(KeyCode::Key1)),
+        (Action::Week(1), Button::Key(KeyCode::Key2)),
+        (Action::Week(2), Button::Key(KeyCode::Key3)),
+        (Action::Week(3), Button::Key(KeyCode::Key4)),
     ]);
     let mut audio = Audio::default();
     let display = folder

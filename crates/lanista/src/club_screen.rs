@@ -22,7 +22,7 @@ use std::rc::Rc;
 use wiki::Entry;
 
 use lanista_core::calendar::{CalendarRules, Date, SeasonPhase};
-use lanista_core::colosseum::{ColosseumId, Contender, Continent};
+use lanista_core::colosseum::{ColosseumData, ColosseumId, Contender, Continent};
 use lanista_core::design_data::DesignData;
 use lanista_core::economy::Flow;
 use lanista_core::fighter::care::CareRules;
@@ -1135,61 +1135,70 @@ impl ClubScreen {
         melees.chain(titles).collect()
     }
 
+    /// The page of the club's fighter `index`: who it is and how it stands across the
+    /// top, between the fighters before and after it; then its stats, its history and
+    /// its week side by side. ← and → go to the fighters before and after, 1 to 4 pick
+    /// its week's kind.
     fn sheet(&mut self, ui: &mut egui::Ui, index: usize) {
-        let data = &self.data;
-        let Some(f) = self.state.fighters.get(index) else {
+        let data = Rc::clone(&self.data);
+        let data = &*data;
+        if self.state.fighters.get(index).is_none() {
             self.view = View::Roster;
             return;
-        };
-        let special = self.special_fights(index);
-        if ui.button(tr!("back-to-list")).clicked() {
-            // As `go_to`, which the borrowed fighter keeps from being called.
-            self.history.push(self.view);
-            self.forward.clear();
-            self.view = View::Roster;
         }
-        let name = fighter_name(index, f, data);
-        let best = best_stats(&self.state);
-        let left = |ui: &mut egui::Ui| sheet(ui, &name, f, (best, None), data);
-        side_by_side(ui, left, |ui| {
-            ui.heading(tr!("sheet-this-week"));
-            if f.status == Status::Active
-                && let Some(plan) = self.decisions.plans.get_mut(index)
-            {
-                let care = self.state.care_rules(data);
-                plan_editor(ui, plan, f, &special, (&self.state, &care), data);
-                let club = (&self.state, &care);
-                if let Some(orders) = self.decisions.orders.get_mut(index)
-                    && let Some(duty) = Duty::repeating(plan.activity)
-                    && exception(plan, *orders, index, &special, club, data)
-                {
-                    let button = ui.button(tr!("sheet-make-orders"));
-                    if button
-                        .on_hover_text(tr!("sheet-make-orders-hint"))
-                        .clicked()
-                    {
-                        orders.activity = duty;
-                    }
-                }
-                if let Some(orders) = self.decisions.orders.get_mut(index) {
-                    surrender_picker(ui, orders, f, data);
-                }
-                challenge_picker(ui, plan, index, &self.state, data);
-                let key = (self.state.week, index, plan.activity);
-                fight_preview(ui, key, &mut self.likely, &self.state, data);
-            } else {
-                ui.label(tr!("sheet-career-over"));
-            }
-            ui.separator();
-            ui.heading(tr!("sheet-history"));
+        let special = self.special_fights(index);
+        let neighbours = neighbours(&self.state, index);
+        let free = self.keys_free();
+        let pressed = |action: Action| free && self.bindings.pressed(ui.ctx(), &action);
+        let mut goto = if pressed(Action::PreviousFighter) {
+            neighbours[0]
+        } else if pressed(Action::NextFighter) {
+            neighbours[1]
+        } else {
+            None
+        };
+        let picked = (0..WeekKind::ALL.len())
+            .find(|&n| pressed(Action::Week(n)))
+            .map(|n| WeekKind::ALL[n]);
+        let state = &self.state;
+        let f = &state.fighters[index];
+        let named = neighbours.map(|n| n.map(|i| (i, fighter_name(i, &state.fighters[i], data))));
+        let (list, clicked) = sheet_header(ui, index, f, named, data);
+        goto = goto.or(clicked);
+        let best = best_stats(state);
+        let profile = |ui: &mut egui::Ui| {
             egui::ScrollArea::vertical()
-                .id_salt("history")
-                .show(ui, |ui| {
-                    for (week, lines) in self.histories.get(index).into_iter().flatten() {
-                        week_card(ui, *week, lines);
-                    }
-                });
-        });
+                .id_salt("profile")
+                .show(ui, |ui| profile(ui, f, (best, None), data));
+        };
+        let weeks = self.histories.get(index).map_or(&[][..], Vec::as_slice);
+        let week = SheetWeek {
+            i: index,
+            plan: self.decisions.plans.get_mut(index),
+            orders: self.decisions.orders.get_mut(index),
+            special: &special,
+            likely: &mut self.likely,
+        };
+        let week = |ui: &mut egui::Ui| {
+            egui::ScrollArea::vertical()
+                .id_salt("week")
+                .show(ui, |ui| week_panel(ui, f, week, picked, state, data));
+        };
+        if ui.available_width() >= SHEET_WIDE {
+            three_columns(ui, profile, |ui| history(ui, weeks), week);
+        } else {
+            let left = |ui: &mut egui::Ui| {
+                profile(ui);
+                history(ui, weeks);
+            };
+            side_by_side(ui, left, week);
+        }
+        if list {
+            self.go_to(View::Roster);
+        } else if let Some(i) = goto {
+            // Another sheet in place of this one: going through them fills no history.
+            self.view = View::Sheet(i);
+        }
     }
 
     /// The fight summary, a card per fight, two side by side; returns the seed of a
@@ -1259,6 +1268,16 @@ impl ClubScreen {
         }
     }
 
+    /// Whether the screen's keys reach it: Échap, Espace and the sheet's keys belong to
+    /// the windows laid over the screen while they are open.
+    fn keys_free(&self) -> bool {
+        !self.options_open
+            && !self.game_open
+            && !self.no_fighter_open
+            && self.state.starters.is_empty()
+            && self.terms_draft.is_none()
+    }
+
     /// Watches all the week's `fights` at once.
     fn watch(&self, fights: Vec<Watched>) -> Transition {
         let data = Rc::clone(&self.data);
@@ -1274,12 +1293,7 @@ impl Screen for ClubScreen {
             let fights = std::mem::take(&mut self.to_watch);
             return self.watch(fights);
         }
-        // Échap and Espace belong to the windows laid over the screen while they are open.
-        let keys = !self.options_open
-            && !self.game_open
-            && !self.no_fighter_open
-            && self.state.starters.is_empty()
-            && self.terms_draft.is_none();
+        let keys = self.keys_free();
         if keys && self.bindings.pressed(ui, &Action::Quit) {
             if self.view == View::Menu {
                 return Transition::Pop;
@@ -1686,33 +1700,665 @@ fn ordered(
     plan
 }
 
-/// A fighter's week in a few words, for the roster: "Repos, Double épée, avec soins".
-/// A fighter's week: rest, training, a fight at home or, in a list, abroad, a title
-/// fight or a melee (in `special`, with their names), and care at the
-/// price of the club's `care`, all within the money of the club's `state`.
-fn plan_editor(
+/// The kinds of week a sheet's four buttons choose between, keys 1 to 4 in this order.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum WeekKind {
+    Rest,
+    Train,
+    /// A duel: in a colosseum, a challenge or a title fight.
+    Fight,
+    Melee,
+}
+
+impl WeekKind {
+    const ALL: [Self; 4] = [Self::Rest, Self::Train, Self::Fight, Self::Melee];
+
+    fn of(activity: Activity) -> Self {
+        match activity {
+            Activity::Rest => Self::Rest,
+            Activity::Train => Self::Train,
+            Activity::Fight(_) | Activity::TitleFight(_) | Activity::Challenge(..) => Self::Fight,
+            Activity::Melee(_) => Self::Melee,
+        }
+    }
+
+    fn name(self) -> String {
+        match self {
+            Self::Rest => tr!("week-kind-rest"),
+            Self::Train => tr!("week-kind-train"),
+            Self::Fight => tr!("week-kind-fight"),
+            Self::Melee => tr!("week-kind-melee"),
+        }
+    }
+
+    /// The week of this kind a click turns `current` into: `current` itself if of this
+    /// kind, else a fight in the first colosseum the club can pay for, at home first, or
+    /// the first melee of `special`; `None` if there is none.
+    fn week(
+        self,
+        current: Activity,
+        special: &[(Activity, String)],
+        state: &GameState,
+        data: &DesignData,
+    ) -> Option<Activity> {
+        if Self::of(current) == self {
+            return Some(current);
+        }
+        match self {
+            Self::Rest => Some(Activity::Rest),
+            Self::Train => Some(Activity::Train),
+            Self::Fight => {
+                let affordable = |&(id, _): &(ColosseumId, &ColosseumData)| {
+                    state
+                        .entry_fee(id, data)
+                        .is_some_and(|fee| i64::from(fee) <= state.money)
+                };
+                let all = || (0..).map(ColosseumId).zip(&data.world.colosseums);
+                let home = all().filter(|(_, r)| r.continent == state.continent);
+                home.chain(all())
+                    .find(affordable)
+                    .map(|(id, _)| Activity::Fight(id))
+            }
+            Self::Melee => special
+                .iter()
+                .map(|&(a, _)| a)
+                .find(|a| matches!(a, Activity::Melee(_))),
+        }
+    }
+}
+
+/// Width of a fighter's page under which its three columns no longer fit side by side.
+const SHEET_WIDE: f32 = PROFILE_WIDTH + WEEK_WIDTH + 380.0;
+/// Width of a fighter's stats column, its bars, names and values.
+const PROFILE_WIDTH: f32 = 360.0;
+/// Width of a fighter's week column.
+const WEEK_WIDTH: f32 = 460.0;
+/// Width of the gauges across the top of a fighter's page.
+const GAUGE_WIDTH: f32 = 100.0;
+/// Room a place's fee keeps on the right of its row.
+const FEE_WIDTH: f32 = 70.0;
+
+/// `profile`, `history` and `week` side by side down the rest of the page, the history
+/// taking what the two others leave.
+fn three_columns(
+    ui: &mut egui::Ui,
+    profile: impl FnOnce(&mut egui::Ui),
+    history: impl FnOnce(&mut egui::Ui),
+    week: impl FnOnce(&mut egui::Ui),
+) {
+    let height = ui.available_height();
+    ui.horizontal_top(|ui| {
+        let spacing = ui.spacing().item_spacing.x;
+        // Two separators, each between two spacings.
+        let middle = ui.available_width() - PROFILE_WIDTH - WEEK_WIDTH - 6.0 * spacing;
+        column(ui, PROFILE_WIDTH, height, profile);
+        ui.separator();
+        column(ui, middle, height, history);
+        ui.separator();
+        column(ui, WEEK_WIDTH, height, week);
+    });
+}
+
+/// A column `width` wide and `height` high, filled by `add` from its top.
+fn column(ui: &mut egui::Ui, width: f32, height: f32, add: impl FnOnce(&mut egui::Ui)) {
+    let layout = egui::Layout::top_down(egui::Align::Min);
+    ui.allocate_ui_with_layout(egui::vec2(width, height), layout, |ui| {
+        ui.set_width(width);
+        add(ui);
+    });
+}
+
+/// The club's fighters before and after the active fighter `index`, as the roster
+/// lists them.
+fn neighbours(state: &GameState, index: usize) -> [Option<usize>; 2] {
+    let active = |&i: &usize| state.fighters[i].status == Status::Active;
+    let before = (0..index).rev().find(active);
+    let after = (index + 1..state.fighters.len()).find(active);
+    [before, after]
+}
+
+/// The top of a fighter's page: back to the list, the fighter before it, who it is,
+/// its gauges, its record, the fighter after it. Returns whether the list was asked
+/// for, and the fighter clicked on either side.
+fn sheet_header(
+    ui: &mut egui::Ui,
+    index: usize,
+    f: &CareerFighter,
+    [before, after]: [Option<(usize, String)>; 2],
+    data: &DesignData,
+) -> (bool, Option<usize>) {
+    let mut list = false;
+    let mut goto = None;
+    ui.horizontal(|ui| {
+        list = ui.button(tr!("back-to-list")).clicked();
+        let name = |n: &Option<(usize, String)>| {
+            n.as_ref().map_or("", |(_, name)| name.as_str()).to_owned()
+        };
+        let hint = tr!("sheet-previous", fighter = name(&before));
+        if neighbour(ui, before.as_ref(), egui::vec2(-1.0, 0.0), &hint) {
+            goto = before.as_ref().map(|(i, _)| *i);
+        }
+        ui.vertical(|ui| {
+            let name = fighter_name(index, f, data);
+            ui.heading(tr!("sheet-title", fighter = name, age = f.age));
+            identity(ui, f, data);
+        });
+        ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+            let hint = tr!("sheet-next", fighter = name(&after));
+            if neighbour(ui, after.as_ref(), egui::vec2(1.0, 0.0), &hint) {
+                goto = after.as_ref().map(|(i, _)| *i);
+            }
+            ui.separator();
+            ui.vertical(|ui| {
+                for (period, record) in [
+                    (tr!("sheet-career"), f.record),
+                    (tr!("sheet-season"), f.season_record),
+                ] {
+                    ui.label(record_line(&period, record));
+                }
+            });
+            ui.separator();
+            condition_gauges(ui, f);
+        });
+    });
+    ui.separator();
+    (list, goto)
+}
+
+/// The fighter on one side of a page, an arrow along `dir` and its name, the arrow
+/// faded without one, `hint` on hover; returns whether the arrow or the name was
+/// clicked. In a right-to-left layout the arrow comes first too, on the outside.
+fn neighbour(
+    ui: &mut egui::Ui,
+    fighter: Option<&(usize, String)>,
+    dir: egui::Vec2,
+    hint: &str,
+) -> bool {
+    let name = fighter.map_or("", |(_, name)| name.as_str());
+    let arrow = arrow_link(ui, fighter.is_some(), dir, hint.to_owned());
+    let label = egui::Label::new(egui::RichText::new(name).weak()).sense(egui::Sense::click());
+    let named = ui.add(label).on_hover_text(hint).clicked();
+    arrow || named
+}
+
+/// The fighter's form, morale, fame and tie to the club: a small bar each under its
+/// name and value, right to left as laid in the page's top.
+fn condition_gauges(ui: &mut egui::Ui, f: &CareerFighter) {
+    let tie = f.tie(Club::Player);
+    let filled = u32::try_from(tie + MAX_SCORE).unwrap_or(0);
+    let gauges = [
+        (
+            tr!("roster-form"),
+            f.form.value(),
+            Form::MAX,
+            theme::LAUREL,
+            f.form.value().to_string(),
+            None,
+        ),
+        (
+            tr!("roster-morale"),
+            f.morale.value(),
+            Morale::MAX,
+            theme::SEA,
+            f.morale.value().to_string(),
+            None,
+        ),
+        (
+            tr!("roster-fame"),
+            f.fame.value(),
+            Fame::MAX,
+            theme::BRONZE,
+            f.fame.value().to_string(),
+            Some(tr!("roster-fame-hint")),
+        ),
+        (
+            tr!("sheet-tie"),
+            filled,
+            2 * MAX_SCORE.unsigned_abs(),
+            theme::SEA,
+            tie.to_string(),
+            Some(tr!("sheet-tie-hint")),
+        ),
+    ];
+    for (name, value, max, color, shown, hint) in gauges.into_iter().rev() {
+        let response = ui
+            .vertical(|ui| {
+                ui.horizontal(|ui| {
+                    ui.label(egui::RichText::new(name).small().weak());
+                    ui.label(shown);
+                });
+                meter_sized(ui, GAUGE_WIDTH, value, max, color, None);
+            })
+            .response;
+        if let Some(hint) = hint {
+            response.on_hover_text(hint);
+        }
+    }
+}
+
+/// "Carrière 3 V · 1 D · 0 N".
+fn record_line(period: &str, record: Record) -> String {
+    tr!(
+        "sheet-record",
+        period = period,
+        wins = record.wins,
+        losses = record.losses,
+        draws = record.draws
+    )
+}
+
+/// The fighter's weeks, newest first, a card each.
+fn history(ui: &mut egui::Ui, weeks: &[(u64, Vec<String>)]) {
+    section(ui, &tr!("sheet-history"));
+    if weeks.is_empty() {
+        ui.label(egui::RichText::new(tr!("sheet-no-history")).weak());
+    }
+    egui::ScrollArea::vertical()
+        .id_salt("history")
+        .show(ui, |ui| {
+            for (week, lines) in weeks {
+                week_card(ui, *week, lines);
+            }
+        });
+}
+
+/// What the week column of a fighter's page changes: the club's fighter `i`'s plan and
+/// orders, with the special fights it may have and the likely opponents found so far.
+struct SheetWeek<'a> {
+    i: usize,
+    plan: Option<&'a mut WeekPlan>,
+    orders: Option<&'a mut Orders>,
+    special: &'a [(Activity, String)],
+    likely: &'a mut Option<Likely>,
+}
+
+/// A fighter's week: its kind among four buttons (or `picked` by its key), where, against
+/// whom, its orders, then what the week should leave it with.
+fn week_panel(
+    ui: &mut egui::Ui,
+    f: &CareerFighter,
+    week: SheetWeek,
+    picked: Option<WeekKind>,
+    state: &GameState,
+    data: &DesignData,
+) {
+    ui.heading(tr!("sheet-this-week"));
+    let SheetWeek {
+        i,
+        plan: Some(plan),
+        orders,
+        special,
+        likely,
+    } = week
+    else {
+        return;
+    };
+    if f.status != Status::Active {
+        ui.label(tr!("sheet-career-over"));
+        return;
+    }
+    let care = state.care_rules(data);
+    settle_plan(plan, f, special, (state, &care));
+    let clicked = kind_buttons(ui, plan.activity, special, state, data);
+    if let Some(kind) = picked.or(clicked)
+        && let Some(activity) = kind.week(plan.activity, special, state, data)
+    {
+        plan.activity = activity;
+        settle_plan(plan, f, special, (state, &care));
+    }
+    match WeekKind::of(plan.activity) {
+        WeekKind::Fight => {
+            small_section(ui, &tr!("plan-where"));
+            fight_places(ui, plan, special, state, data);
+            small_section(ui, &tr!("plan-opponent"));
+            opponent(ui, plan, (i, likely), state, data);
+        }
+        WeekKind::Melee => {
+            small_section(ui, &tr!("plan-where"));
+            melee_places(ui, plan, special, state, data);
+            ui.label(egui::RichText::new(tr!("plan-melee-opponents")).weak());
+        }
+        WeekKind::Rest | WeekKind::Train => {}
+    }
+    if let Some(id) = plan.activity.colosseum() {
+        let arena = data.world.arena(id);
+        ui.label(tr!("colosseum-arena-chip", arena = arena_name(arena)))
+            .on_hover_text(arena_effect(arena));
+    }
+    small_section(ui, &tr!("plan-orders"));
+    week_orders(ui, plan, f, (state, &care), data);
+    if let Some(orders) = orders {
+        if plan.activity.fights() {
+            surrender_picker(ui, orders, f, data);
+        }
+        if let Some(duty) = Duty::repeating(plan.activity)
+            && exception(plan, *orders, i, special, (state, &care), data)
+        {
+            let button = ui.button(tr!("sheet-make-orders"));
+            if button
+                .on_hover_text(tr!("sheet-make-orders-hint"))
+                .clicked()
+            {
+                orders.activity = duty;
+            }
+        }
+    }
+    ui.add_space(8.0);
+    forecast(ui, plan, f, (state, &care), data);
+}
+
+/// A sheet's small heading: its name in small capitals of bronze.
+fn small_section(ui: &mut egui::Ui, name: &str) {
+    ui.add_space(6.0);
+    ui.label(egui::RichText::new(name).small().color(theme::BRONZE));
+}
+
+/// The four kinds of week, the `current` one's lit, each with its key; one with no
+/// week to have (no melee this week, no fight to pay for) faded. Returns the one
+/// clicked.
+fn kind_buttons(
+    ui: &mut egui::Ui,
+    current: Activity,
+    special: &[(Activity, String)],
+    state: &GameState,
+    data: &DesignData,
+) -> Option<WeekKind> {
+    let mut clicked = None;
+    ui.horizontal(|ui| {
+        let spacing = ui.spacing().item_spacing.x;
+        let count = WeekKind::ALL.len();
+        #[expect(clippy::cast_precision_loss, reason = "four buttons")]
+        let width = (ui.available_width() - spacing * (count - 1) as f32) / count as f32;
+        for (n, kind) in WeekKind::ALL.into_iter().enumerate() {
+            let button = egui::Button::new(kind.name())
+                .selected(WeekKind::of(current) == kind)
+                .shortcut_text((n + 1).to_string())
+                .min_size(egui::vec2(width, 32.0));
+            let possible = kind.week(current, special, state, data).is_some();
+            if ui.add_enabled(possible, button).clicked() {
+                clicked = Some(kind);
+            }
+        }
+    });
+    clicked
+}
+
+/// A place to fight in, a row the width of the column: its `name` lit when `selected`,
+/// faded unless `enabled`, then its entry `fee`. Returns whether it was clicked.
+fn place_row(ui: &mut egui::Ui, selected: bool, enabled: bool, name: String, fee: u32) -> bool {
+    ui.horizontal(|ui| {
+        let width = (ui.available_width() - FEE_WIDTH).max(0.0);
+        let button = egui::Button::new(name)
+            .selected(selected)
+            .min_size(egui::vec2(width, 0.0));
+        let clicked = ui.add_enabled(enabled, button).clicked();
+        fee_label(ui, fee);
+        clicked
+    })
+    .inner
+}
+
+/// An entry fee, money the club pays: the coin and its amount, or « gratuit ».
+fn fee_label(ui: &mut egui::Ui, fee: u32) {
+    let response = if fee == 0 {
+        ui.label(egui::RichText::new(tr!("plan-free")).weak())
+    } else {
+        ui.horizontal(|ui| {
+            ui.spacing_mut().item_spacing.x = CHIP_ICON_GAP;
+            ui.add(Icon::Money.image(ui.ctx()));
+            ui.label(fee.to_string());
+        })
+        .response
+    };
+    response.on_hover_text(tr!("plan-fee-hint"));
+}
+
+/// Where the fighter duels: a row per colosseum of the club's continent, then its title
+/// fights, then the colosseums abroad in a list, each with its fee, those the club
+/// cannot pay for faded.
+fn fight_places(
+    ui: &mut egui::Ui,
+    plan: &mut WeekPlan,
+    special: &[(Activity, String)],
+    state: &GameState,
+    data: &DesignData,
+) {
+    let money = state.money;
+    let mut abroad = Vec::new();
+    for (id, rules) in (0..).map(ColosseumId).zip(&data.world.colosseums) {
+        let fee = state.entry_fee(id, data).unwrap_or(0);
+        let affordable = i64::from(fee) <= money;
+        if rules.continent != state.continent {
+            abroad.push((id, fee, affordable));
+            continue;
+        }
+        let here =
+            matches!(plan.activity, Activity::Fight(c) | Activity::Challenge(c, _) if c == id);
+        if place_row(ui, here, affordable, colosseum_name(id, data), fee) && !here {
+            plan.activity = Activity::Fight(id);
+        }
+    }
+    for &(activity, ref name) in special {
+        if let Activity::TitleFight(id) = activity {
+            let fee = state.entry_fee(id, data).unwrap_or(0);
+            if place_row(ui, plan.activity == activity, true, name.clone(), fee) {
+                plan.activity = activity;
+            }
+        }
+    }
+    let chosen = abroad.iter().find(|(id, ..)| {
+        plan.activity.colosseum() == Some(*id) && WeekKind::of(plan.activity) == WeekKind::Fight
+    });
+    let text = chosen.map_or_else(
+        || tr!("plan-other-continent"),
+        |&(id, fee, _)| {
+            tr!(
+                "plan-abroad-place",
+                place = colosseum_name(id, data),
+                fee = fee
+            )
+        },
+    );
+    egui::ComboBox::from_id_salt("abroad")
+        .selected_text(text)
+        .width(ui.available_width() - FEE_WIDTH)
+        .show_ui(ui, |ui| {
+            for (id, fee, affordable) in abroad {
+                let name = tr!(
+                    "plan-abroad-place",
+                    place = colosseum_name(id, data),
+                    fee = fee
+                );
+                ui.add_enabled_ui(affordable, |ui| {
+                    ui.selectable_value(&mut plan.activity, Activity::Fight(id), name);
+                });
+            }
+        })
+        .response
+        .on_hover_text(tr!("plan-abroad-hint", travel = data.world.travel_fee));
+}
+
+/// Where the fighter fights the season's opening melee: a row per melee of `special`,
+/// each with its fee.
+fn melee_places(
+    ui: &mut egui::Ui,
+    plan: &mut WeekPlan,
+    special: &[(Activity, String)],
+    state: &GameState,
+    data: &DesignData,
+) {
+    for &(activity, _) in special {
+        let Activity::Melee(id) = activity else {
+            continue;
+        };
+        let fee = state.entry_fee(id, data).unwrap_or(0);
+        let affordable = i64::from(fee) <= state.money;
+        let selected = plan.activity == activity;
+        if place_row(
+            ui,
+            selected,
+            affordable || selected,
+            colosseum_name(id, data),
+            fee,
+        ) {
+            plan.activity = activity;
+        }
+    }
+}
+
+/// The week, the club's fighter and its activity its likely opponents are found for.
+type LikelyKey = (u64, usize, Activity);
+
+/// The likely opponents found for a key (`GameState::likely_opponents`).
+type Likely = (LikelyKey, Option<(usize, Vec<Contender>)>);
+
+/// Whom the club's fighter `i` duels: in a colosseum, the opponent its rating likely
+/// brings, as the recruiter sees it, or a rival it challenges; in a title fight, the
+/// one it meets. The likely opponents are found again in `cache` only when the key
+/// changes, as it takes a while.
+fn opponent(
+    ui: &mut egui::Ui,
+    plan: &mut WeekPlan,
+    (i, cache): (usize, &mut Option<Likely>),
+    state: &GameState,
+    data: &DesignData,
+) {
+    let Some(id) = plan.activity.colosseum() else {
+        return;
+    };
+    let title = matches!(plan.activity, Activity::TitleFight(_));
+    let rated = if title {
+        plan.activity
+    } else {
+        Activity::Fight(id)
+    };
+    let key = (state.week, i, rated);
+    if cache.as_ref().is_none_or(|(k, _)| *k != key) {
+        *cache = Some((key, state.likely_opponents(i, rated, data)));
+    }
+    let rosters = state.rosters();
+    let likely = cache
+        .as_ref()
+        .and_then(|(_, l)| l.as_ref())
+        .map_or(&[][..], |(_, l)| l.as_slice());
+    let first = likely
+        .first()
+        .and_then(|&o| rosters.fighter(o).map(|f| (o, f)));
+    let likely_text = first.map_or_else(
+        || tr!("plan-opponent-ranking"),
+        |(o, f)| {
+            tr!(
+                "plan-opponent-likely",
+                name = contender_name(o, state, data),
+                class = class_name(f, data)
+            )
+        },
+    );
+    if title {
+        ui.label(likely_text);
+    } else {
+        opponent_list(ui, plan, (i, id), likely_text, state, data);
+    }
+    if plan.activity != rated {
+        return;
+    }
+    let Some((_, f)) = first else {
+        return;
+    };
+    let others = likely.len() - 1;
+    if others > 0 {
+        ui.label(egui::RichText::new(tr!("plan-likely-others", others = others)).weak());
+    }
+    let scouting = state.scouting();
+    egui::Grid::new("likely opponent").show(ui, |ui| {
+        for (stat, seen) in stat_names()
+            .into_iter()
+            .zip(range_texts(f, &scouting, data))
+        {
+            ui.label(stat);
+            ui.label(seen);
+            ui.end_row();
+        }
+    });
+}
+
+/// The opponents the club's fighter `i` may duel in colosseum `id`: the one its rating
+/// brings (`likely`), then, at home or where it is ranked, the residents it may
+/// challenge, best ranked first, those who would refuse faded.
+fn opponent_list(
+    ui: &mut egui::Ui,
+    plan: &mut WeekPlan,
+    (i, id): (usize, ColosseumId),
+    likely: String,
+    state: &GameState,
+    data: &DesignData,
+) {
+    let chosen = match plan.activity {
+        Activity::Challenge(at, rival) if at == id => challenger_text(id, rival, state, data),
+        _ => likely.clone(),
+    };
+    let home = data
+        .world
+        .colosseum(id)
+        .is_some_and(|r| r.continent == state.continent);
+    let colosseum = usize::try_from(id.0)
+        .ok()
+        .and_then(|c| state.colosseums.get(c));
+    let ranked =
+        colosseum.is_some_and(|c| c.ranking.iter().any(|r| r.contender == Contender::Club(i)));
+    egui::ComboBox::from_id_salt("opponent")
+        .selected_text(chosen)
+        .width(ui.available_width())
+        .show_ui(ui, |ui| {
+            ui.selectable_value(&mut plan.activity, Activity::Fight(id), likely);
+            let Some(colosseum) = colosseum.filter(|_| home || ranked) else {
+                return;
+            };
+            for rating in colosseum.active_ranking(state.rosters()) {
+                let Contender::Rival(r) = rating.contender else {
+                    continue;
+                };
+                let name = contender_name(rating.contender, state, data);
+                let accepts = state.may_challenge(i, id, r, data);
+                let grudge = state.rival_fighter(r).is_some_and(|o| {
+                    state
+                        .fighters
+                        .get(i)
+                        .is_some_and(|me| me.bears_grudge(o.id))
+                });
+                let text = tr!(
+                    "plan-challenge-rival",
+                    name = name,
+                    elo = rating.elo,
+                    grudge = if grudge { "true" } else { "false" },
+                    accepts = if accepts { "true" } else { "false" }
+                );
+                ui.add_enabled_ui(accepts, |ui| {
+                    ui.selectable_value(&mut plan.activity, Activity::Challenge(id, r), text);
+                });
+            }
+        });
+}
+
+/// What the fighter takes into its week: its loadout, what it trains, care at the
+/// price of the club's `care`, the colosseum's armour refused in a fight, what it
+/// gains and risks beside it.
+fn week_orders(
     ui: &mut egui::Ui,
     plan: &mut WeekPlan,
     fighter: &CareerFighter,
-    special: &[(Activity, String)],
-    club: (&GameState, &CareRules),
+    (state, care): (&GameState, &CareRules),
     data: &DesignData,
 ) {
-    settle_plan(plan, fighter, special, club);
-    let (state, care) = club;
     // The loadout, changed freely from one week to the next.
     let loadouts = data.class(fighter.class).map_or(0, |c| c.loadouts.len());
-    ui.horizontal(|ui| {
-        ui.label(tr!("plan-loadout"));
+    ui.horizontal_wrapped(|ui| {
+        ui.label(tr!("plan-weapons"));
         for loadout in 0..loadouts {
             let name = loadout_name(fighter, loadout, data);
             ui.selectable_value(&mut plan.loadout, loadout, name);
         }
     });
-    let money = state.money;
-    for activity in [Activity::Rest, Activity::Train] {
-        ui.selectable_value(&mut plan.activity, activity, activity_name(activity, data));
-    }
     if plan.activity == Activity::Train {
         // The stat its training aims at, kept from one week to the next.
         let names = stat_names();
@@ -1727,42 +2373,10 @@ fn plan_editor(
                 }
             });
     }
-    let mut abroad = Vec::new();
-    for (id, rules) in (0..).map(ColosseumId).zip(&data.world.colosseums) {
-        let activity = Activity::Fight(id);
-        let fee = state.entry_fee(id, data).unwrap_or(0);
-        let name = priced(activity, fee, data);
-        let affordable = i64::from(fee) <= money;
-        if rules.continent == state.continent {
-            ui.add_enabled_ui(affordable, |ui| {
-                ui.selectable_value(&mut plan.activity, activity, name);
-            });
-        } else {
-            abroad.push((activity, name, affordable));
-        }
-    }
-    let chosen = abroad.iter().find(|(a, ..)| *a == plan.activity);
-    let text = chosen.map_or_else(
-        || tr!("plan-abroad", travel = data.world.travel_fee),
-        |(_, name, _)| name.clone(),
-    );
-    egui::ComboBox::from_id_salt("abroad")
-        .selected_text(text)
-        .show_ui(ui, |ui| {
-            for (activity, name, affordable) in abroad {
-                ui.add_enabled_ui(affordable, |ui| {
-                    ui.selectable_value(&mut plan.activity, activity, name);
-                });
-            }
-        });
-    // A challenge the fighter sent is chosen in its sheet.
-    for (activity, name) in special {
-        ui.selectable_value(&mut plan.activity, *activity, name);
-    }
     let cost = fighter.care_cost(care);
     if cost == 0 {
         // Nothing to heal.
-    } else if i64::from(cost) > money {
+    } else if i64::from(cost) > state.money {
         let text = tr!("plan-care-unaffordable", cost = cost);
         ui.add_enabled(false, egui::Checkbox::new(&mut plan.care, text));
     } else {
@@ -1772,8 +2386,11 @@ fn plan_editor(
     // The colosseum's armour, refused for fame; nothing to refuse without a fight.
     if fights {
         let fame = data.fighter.fame.refused_armour;
-        ui.checkbox(&mut plan.refused.armour, tr!("plan-no-armour"))
-            .on_hover_text(tr!("plan-no-armour-effect", fame = fame));
+        ui.horizontal_wrapped(|ui| {
+            ui.checkbox(&mut plan.refused.armour, tr!("plan-no-armour"));
+            ui.colored_label(theme::LAUREL, tr!("plan-no-armour-gain", fame = fame));
+            ui.colored_label(theme::BLOOD, tr!("plan-no-armour-risk"));
+        });
     }
     let ill = fighter.illness.is_some_and(|i| !i.fight_advised());
     if ill && fights {
@@ -1781,60 +2398,50 @@ fn plan_editor(
     }
 }
 
-/// The week, the club's fighter and its activity its likely opponents are found for.
-type LikelyKey = (u64, usize, Activity);
-
-/// The likely opponents found for a key (`GameState::likely_opponents`).
-type Likely = (LikelyKey, Option<(usize, Vec<Contender>)>);
-
-/// What the club's fighter `i` would find in its fight (`activity`) of the week: the
-/// colosseum's arena and, but in a melee, its likely opponent as the recruiter sees
-/// it, found again in `cache` only when the key changes, as it takes a while.
-fn fight_preview(
+/// What the week should leave the fighter with, in a frame: its form after it and, in
+/// a fight, its risk of injury and the entry fee; the care's price if it is cared for.
+fn forecast(
     ui: &mut egui::Ui,
-    key: LikelyKey,
-    cache: &mut Option<Likely>,
-    state: &GameState,
+    plan: &WeekPlan,
+    f: &CareerFighter,
+    (state, care): (&GameState, &CareRules),
     data: &DesignData,
 ) {
-    let (_, i, activity) = key;
-    let Some(id) = activity.colosseum() else {
-        return;
-    };
-    let arena = data.world.arena(id);
-    ui.label(tr!("colosseum-arena-chip", arena = arena_name(arena)))
-        .on_hover_text(arena_effect(arena));
-    if cache.as_ref().is_none_or(|(k, _)| *k != key) {
-        *cache = Some((key, state.likely_opponents(i, activity, data)));
-    }
-    let Some((_, Some((_, likely)))) = cache.as_ref() else {
-        return;
-    };
-    let rosters = state.rosters();
-    let Some((first, f)) = likely
-        .first()
-        .and_then(|&o| rosters.fighter(o).map(|f| (o, f)))
-    else {
-        return;
-    };
-    let others = likely.len() - 1;
-    ui.label(tr!(
-        "plan-likely-opponent",
-        name = contender_name(first, state, data),
-        class = class_name(f, data),
-        others = others
-    ));
-    let scouting = state.scouting();
-    egui::Grid::new("likely opponent").show(ui, |ui| {
-        for (stat, seen) in stat_names()
-            .into_iter()
-            .zip(range_texts(f, &scouting, data))
-        {
-            ui.label(stat);
-            ui.label(seen);
-            ui.end_row();
-        }
-    });
+    egui::Frame::group(ui.style())
+        .fill(ui.visuals().extreme_bg_color)
+        .show(ui, |ui| {
+            ui.set_width(ui.available_width());
+            ui.label(
+                egui::RichText::new(tr!("plan-forecast"))
+                    .strong()
+                    .color(theme::BRONZE),
+            );
+            let coaching = state.staff_effects().coaching;
+            let before = f.form.value();
+            let after = f
+                .form_after_week(plan.activity, coaching, &data.fighter)
+                .value();
+            let color = match after.cmp(&before) {
+                std::cmp::Ordering::Less => theme::BLOOD,
+                std::cmp::Ordering::Equal => ui.visuals().text_color(),
+                std::cmp::Ordering::Greater => theme::LAUREL,
+            };
+            ui.colored_label(color, change(&tr!("roster-form"), before, after));
+            if let Some(id) = plan.activity.colosseum() {
+                let risk = format!("{:.0}", f.injury_risk(&data.fighter) * 100.0);
+                ui.label(tr!("plan-forecast-injury", percent = risk))
+                    .on_hover_text(tr!("plan-forecast-injury-hint"));
+                let fee = state.entry_fee(id, data).unwrap_or(0);
+                ui.horizontal(|ui| {
+                    ui.label(tr!("plan-forecast-fee"));
+                    fee_label(ui, fee);
+                });
+            }
+            let cost = f.care_cost(care);
+            if plan.care && cost > 0 {
+                ui.label(tr!("plan-forecast-care", cost = cost));
+            }
+        });
 }
 
 /// When the club's `fighter` gives up, a standing order: at its own threshold, from its
@@ -1866,75 +2473,6 @@ fn surrender_picker(
         })
         .response
         .on_hover_text(tr!("plan-surrender-hint"));
-}
-
-/// The challenges the club's fighter `i` may send, one list per colosseum of the club's
-/// continent or where it is ranked: the residents, best ranked first, those who would
-/// refuse greyed.
-fn challenge_picker(
-    ui: &mut egui::Ui,
-    plan: &mut WeekPlan,
-    i: usize,
-    state: &GameState,
-    data: &DesignData,
-) {
-    ui.horizontal(|ui| {
-        ui.label(tr!("plan-challenge"));
-        for (c, colosseum) in (0..).zip(&state.colosseums) {
-            let id = ColosseumId(c);
-            let home = data
-                .world
-                .colosseum(id)
-                .is_some_and(|r| r.continent == state.continent);
-            let ranked = colosseum
-                .ranking
-                .iter()
-                .any(|r| r.contender == Contender::Club(i));
-            if !home && !ranked {
-                continue;
-            }
-            let fee = state.entry_fee(id, data).unwrap_or(0);
-            let chosen = match plan.activity {
-                Activity::Challenge(at, rival) if at == id => {
-                    challenger_text(id, rival, state, data)
-                }
-                _ => colosseum_name(id, data),
-            };
-            ui.add_enabled_ui(i64::from(fee) <= state.money, |ui| {
-                egui::ComboBox::from_id_salt(("challenge", c))
-                    .selected_text(chosen)
-                    .show_ui(ui, |ui| {
-                        for rating in colosseum.active_ranking(state.rosters()) {
-                            let Contender::Rival(r) = rating.contender else {
-                                continue;
-                            };
-                            let name = contender_name(rating.contender, state, data);
-                            let accepts = state.may_challenge(i, id, r, data);
-                            let grudge = state.rival_fighter(r).is_some_and(|o| {
-                                state
-                                    .fighters
-                                    .get(i)
-                                    .is_some_and(|me| me.bears_grudge(o.id))
-                            });
-                            let text = tr!(
-                                "plan-challenge-rival",
-                                name = name,
-                                elo = rating.elo,
-                                grudge = if grudge { "true" } else { "false" },
-                                accepts = if accepts { "true" } else { "false" }
-                            );
-                            ui.add_enabled_ui(accepts, |ui| {
-                                ui.selectable_value(
-                                    &mut plan.activity,
-                                    Activity::Challenge(id, r),
-                                    text,
-                                );
-                            });
-                        }
-                    });
-            });
-        }
-    });
 }
 
 /// A fighter's sheet, drawn more than written: tags for who it is, bars for its
@@ -1989,37 +2527,47 @@ pub(super) fn sheet(
                     ui.end_row();
                 }
             });
-            section(ui, &tr!("sheet-stats"));
-            if let Some(scouting) = scouting {
-                egui::Grid::new("stats").show(ui, |ui| {
-                    for (stat, seen) in stat_names().into_iter().zip(range_texts(f, scouting, data))
-                    {
-                        ui.label(stat);
-                        ui.label(seen);
-                        ui.end_row();
-                    }
-                    ui.label(tr!("potential"));
-                    ui.label(potential_text(f, scouting));
-                    ui.end_row();
-                });
-            } else {
-                stat_meters(ui, f, best, data);
-            }
-            section(ui, &tr!("sheet-ease-title"));
-            if scouting.is_some_and(|s| !ease_seen(f, s)) {
-                ui.label("?");
-            } else {
-                ease_meters(ui, f, data);
-            }
-            section(ui, &tr!("personality-title"));
-            if scouting.is_some_and(|s| !personality_seen(f, s)) {
-                ui.label("?");
-            } else {
-                personality(ui, f);
-            }
-            section(ui, &tr!("sheet-health"));
-            health(ui, f, data);
+            profile(ui, f, (best, scouting), data);
         });
+}
+
+/// A fighter's stats (as ranges and a potential with `scouting`, for a fighter out of
+/// the club), its ease with each loadout, its personality and its health.
+fn profile(
+    ui: &mut egui::Ui,
+    f: &CareerFighter,
+    (best, scouting): (Stats, Option<&Scouting>),
+    data: &DesignData,
+) {
+    section(ui, &tr!("sheet-stats"));
+    if let Some(scouting) = scouting {
+        egui::Grid::new("stats").show(ui, |ui| {
+            for (stat, seen) in stat_names().into_iter().zip(range_texts(f, scouting, data)) {
+                ui.label(stat);
+                ui.label(seen);
+                ui.end_row();
+            }
+            ui.label(tr!("potential"));
+            ui.label(potential_text(f, scouting));
+            ui.end_row();
+        });
+    } else {
+        stat_meters(ui, f, best, data);
+    }
+    section(ui, &tr!("sheet-ease-title"));
+    if scouting.is_some_and(|s| !ease_seen(f, s)) {
+        ui.label("?");
+    } else {
+        ease_meters(ui, f, data);
+    }
+    section(ui, &tr!("personality-title"));
+    if scouting.is_some_and(|s| !personality_seen(f, s)) {
+        ui.label("?");
+    } else {
+        personality(ui, f);
+    }
+    section(ui, &tr!("sheet-health"));
+    health(ui, f, data);
 }
 
 /// A bar for the fighter's ease with each loadout of its class, its own in bold.
@@ -2461,7 +3009,19 @@ fn meter(
     color: egui::Color32,
     behind: Option<u32>,
 ) -> egui::Response {
-    let size = egui::vec2(METER_WIDTH, 12.0);
+    meter_sized(ui, METER_WIDTH, value, max, color, behind)
+}
+
+/// A bar as `meter` draws it, `width` wide.
+fn meter_sized(
+    ui: &mut egui::Ui,
+    width: f32,
+    value: u32,
+    max: u32,
+    color: egui::Color32,
+    behind: Option<u32>,
+) -> egui::Response {
+    let size = egui::vec2(width, 12.0);
     let (rect, response) = ui.allocate_exact_size(size, egui::Sense::hover());
     let painter = ui.painter();
     painter.rect_filled(rect, 4.0, ui.visuals().extreme_bg_color);
@@ -2794,6 +3354,28 @@ mod tests {
         let unseen = &state.free_agents[0];
         assert!(!personality_seen(unseen, &scouting));
         assert!(!ease_seen(unseen, &scouting));
+    }
+
+    #[test]
+    fn the_sheet_s_buttons_lead_to_a_week_and_to_the_fighters_around() {
+        let mut screen = screen(7);
+        let (state, data) = (&screen.state, &*screen.data);
+        let rest = Activity::Rest;
+        let fight = WeekKind::Fight.week(rest, &[], state, data).unwrap();
+        let home = fight.colosseum().and_then(|id| data.world.colosseum(id));
+        assert!(home.is_some_and(|c| c.continent == state.continent));
+        assert_eq!(WeekKind::Fight.week(fight, &[], state, data), Some(fight));
+        assert_eq!(WeekKind::Melee.week(rest, &[], state, data), None);
+        let melee = (Activity::Melee(ColosseumId(0)), String::new());
+        let found = WeekKind::Melee.week(rest, std::slice::from_ref(&melee), state, data);
+        assert_eq!(found, Some(melee.0));
+        // A former fighter between two others is passed over.
+        let mut second = screen.state.fighters[0].clone();
+        second.status = Status::Retired;
+        screen.state.fighters.push(second);
+        screen.state.fighters.push(screen.state.fighters[0].clone());
+        assert_eq!(neighbours(&screen.state, 0), [None, Some(2)]);
+        assert_eq!(neighbours(&screen.state, 2), [Some(0), None]);
     }
 
     #[test]

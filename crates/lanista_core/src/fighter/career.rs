@@ -32,7 +32,7 @@ use crate::log::{Report, places};
 use crate::names::FighterName;
 use crate::relations::{Club, MAX_SCORE, Tie, TieRules};
 use crate::rivals::RivalId;
-use crate::staff::{Medicine, StaffEffects};
+use crate::staff::{Coaching, Medicine, StaffEffects};
 use crate::stat_model::Ending;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -433,6 +433,57 @@ impl CareerFighter {
         fighter
     }
 
+    /// Its form after a week of rest, an illness slowing it down.
+    fn rested_form(&self, rules: &FighterRules) -> Form {
+        match &self.illness {
+            Some(illness) => illness.rest(self.form, &rules.illness, &rules.form),
+            None => self.form.after(FormEvent::Rest, &rules.form),
+        }
+    }
+
+    /// The form a week of training costs it, less with the trainer's `coaching`, more
+    /// when nonchalant.
+    fn training_form_lost(&self, coaching: Coaching, rules: &FighterRules) -> u32 {
+        let lost = rules.form.training.saturating_sub(coaching.form_spared);
+        if self.has(Trait::Nonchalant) {
+            percent_of(lost, rules.traits.nonchalant.training_form_percent)
+        } else {
+            lost
+        }
+    }
+
+    /// Its form at the end of a week of `activity`, as [`CareerFighter::play_week`] and
+    /// the melee change it, the trainer's `coaching` sparing a training: what its sheet
+    /// foretells before the week is played.
+    #[must_use]
+    pub fn form_after_week(
+        &self,
+        activity: Activity,
+        coaching: Coaching,
+        rules: &FighterRules,
+    ) -> Form {
+        let event = match activity {
+            Activity::Rest => return self.rested_form(rules),
+            Activity::Train => {
+                let lost = self.training_form_lost(coaching, rules);
+                return Form::new(self.form.value().saturating_sub(lost));
+            }
+            Activity::Fight(_) | Activity::Challenge(..) => FormEvent::Fight,
+            Activity::TitleFight(_) => FormEvent::TitleDefense,
+            Activity::Melee(_) => FormEvent::Melee,
+        };
+        self.form.after(event, &rules.form)
+    }
+
+    /// The chance a fight injures it once over, at its form now, beyond the wounds the
+    /// fight itself deals ([`roll_injury`]).
+    #[must_use]
+    pub fn injury_risk(&self, rules: &FighterRules) -> f64 {
+        let percent = self.temperament(rules).injury_percent;
+        let base = rules.injury.chance_per_fight * f64::from(percent) / 100.0;
+        self.form.risk(base, &rules.form)
+    }
+
     /// Plays one week following `plan`; `None`, and nothing changes, if the fighter
     /// is retired or dead. In order: care, the week's activity, then healing and
     /// the illness draw; ageing is the off-season's ([`CareerFighter::birthday`]).
@@ -454,24 +505,20 @@ impl CareerFighter {
         let rules = &data.fighter;
         match plan.activity {
             Activity::Rest | Activity::Melee(_) => {
-                self.form = match &self.illness {
-                    Some(illness) => illness.rest(self.form, &rules.illness, &rules.form),
-                    None => self.form.after(FormEvent::Rest, &rules.form),
-                };
+                self.form = self.rested_form(rules);
                 if plan.activity == Activity::Rest {
                     self.take_rest(rules);
                 }
             }
             Activity::Train => {
                 let coaching = staff.coaching;
-                let mut lost = rules.form.training.saturating_sub(coaching.form_spared);
+                let lost = self.training_form_lost(coaching, rules);
                 let mut coaching_percent = coaching.progress_percent;
                 let traits = &rules.traits;
                 if self.has(Trait::Workaholic) {
                     coaching_percent += traits.workaholic.training_percent;
                 }
                 if self.has(Trait::Nonchalant) {
-                    lost = percent_of(lost, traits.nonchalant.training_form_percent);
                     self.feel(
                         MoraleEvent::Lowered(traits.nonchalant.training_morale),
                         rules,
@@ -2065,6 +2112,31 @@ mod tests {
         f.play_week(plan(Activity::Train), None, spared_all, &mut rng, &data)
             .unwrap();
         assert_eq!(f.form.value(), 48);
+    }
+
+    #[test]
+    fn the_form_foretold_is_the_form_the_week_leaves() {
+        let data = data();
+        let staff = StaffEffects {
+            coaching: Coaching {
+                progress_percent: 0,
+                form_spared: 2,
+            },
+            ..StaffEffects::default()
+        };
+        for activity in [
+            Activity::Rest,
+            Activity::Train,
+            Activity::Fight(ColosseumId(0)),
+        ] {
+            let mut f = fighter(7);
+            f.form = Form::new(50);
+            let foretold = f.form_after_week(activity, staff.coaching, &data.fighter);
+            let mut rng = ChaCha8Rng::seed_from_u64(1);
+            f.play_week(plan(activity), None, staff, &mut rng, &data)
+                .unwrap();
+            assert_eq!(f.form, foretold, "{activity:?}");
+        }
     }
 
     #[test]

@@ -622,6 +622,10 @@ sheet-make-orders = En faire sa consigne
 sheet-make-orders-hint = Il refera la même chose chaque semaine, jusqu'à nouvel ordre.
 sheet-career-over = Carrière terminée
 sheet-history = Historique
+sheet-no-history = Pas encore de semaine jouée.
+sheet-record = { $period } { $wins } V · { $losses } D · { $draws } N
+sheet-previous = Combattant précédent : { $fighter } (flèche gauche)
+sheet-next = Combattant suivant : { $fighter } (flèche droite)
 sheet-title = { $fighter }, { $age } ans
 sheet-right-handed = droitier
 sheet-left-handed = gaucher
@@ -661,26 +665,39 @@ summary-stuns = Étourdissements
 summary-hp-left = PV restants
 summary-watch-again = Revoir le combat
 
-plan-abroad = À l'étranger (voyage { $travel })
+week-kind-rest = Repos
+week-kind-train = Entraîner
+week-kind-fight = Combat
+week-kind-melee = Mêlée
+plan-where = Où, frais d'inscription
+plan-free = gratuit
+plan-fee-hint = Frais d'inscription, payés sur l'argent du club.
+plan-other-continent = Autre continent
+plan-abroad-place = { $place }, inscription { $fee }
+plan-abroad-hint = Frais d'inscription, voyage de { $travel } compris.
+plan-opponent = Adversaire
+plan-opponent-likely = Selon la cote : probablement { $name }, { $class }
+plan-opponent-ranking = Selon la cote
+plan-likely-others = { $others ->
+    [one] Ou un autre à la même cote.
+   *[other] Ou l'un des { $others } autres à la même cote.
+}
+plan-melee-opponents = En mêlée, tous contre tous : pas d'adversaire à choisir.
+plan-orders = Consignes
+plan-weapons = Armes :
 plan-care = Soigner ({ $cost })
 plan-care-unaffordable = Soigner ({ $cost }) : pas assez d'argent
-plan-loadout = Configuration :
 plan-focus = Entraîner : { $stat }
 plan-focus-all = toutes les stats
 plan-no-armour = Sans armure
-plan-no-armour-effect = Défenses très réduites, renommée +{ $fame }
+plan-no-armour-gain = renommée +{ $fame }
+plan-no-armour-risk = défenses très réduites
 plan-surrender = Abandon : { $choice }
 plan-surrender-own = selon son tempérament ({ $percent } % de ses PV)
 plan-surrender-at = à { $percent } % de ses PV
 plan-surrender-never = jamais, jusqu'à la mort
 plan-surrender-hint = Sa consigne pour chaque combat, jusqu'à nouvel ordre. Qui abandonne court vers la porte : on l'y frappe encore, mais on l'achève rarement. Qui tient plus longtemps risque davantage le coup fatal.
 plan-fight-ill-advised = Combat déconseillé
-plan-likely-opponent = Adversaire probable : { $name }, { $class }{ $others ->
-    [0] {""}
-    [one] {" "}(ou un autre à la même cote)
-   *[other] {" "}(ou l'un des { $others } autres à la même cote)
-}
-plan-challenge = Défier :
 plan-challenge-rival = { $name }, Elo { $elo }{ $grudge ->
         [true] , revanche à prendre
        *[false] {""}
@@ -688,6 +705,11 @@ plan-challenge-rival = { $name }, Elo { $elo }{ $grudge ->
         [false] {" "}: refuse
        *[true] {""}
     }
+plan-forecast = Effet prévu
+plan-forecast-injury = Risque de blessure : { $percent } %
+plan-forecast-injury-hint = À sa forme d'aujourd'hui, en plus des blessures du combat lui-même. Il monte quand la forme baisse.
+plan-forecast-fee = Inscription :
+plan-forecast-care = Soins : { $cost }
 
 ## Colisées et clubs rivaux
 
