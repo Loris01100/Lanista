@@ -1084,6 +1084,9 @@ const ROW_PADDING: f32 = 8.0;
 /// The least width of the names' column, however narrow the window.
 const NAME_MIN_WIDTH: f32 = 150.0;
 
+/// The most width of the names' column: past it, the other columns share the room.
+const NAME_MAX_WIDTH: f32 = 300.0;
+
 /// A column of a market list after the name's: its width, and whether its figures are
 /// aligned right.
 type Column = (f32, bool);
@@ -1118,7 +1121,8 @@ const SALE_COLUMNS: [Column; 5] = [
 ];
 
 /// A row of a market list across the whole width, `height` high, its name's cell
-/// taking what `columns` leave; striped, framed in bronze when `selected`, clicked
+/// taking what `columns` leave up to `NAME_MAX_WIDTH`, the columns widened alike to
+/// share the rest; striped, framed in bronze when `selected`, clicked
 /// anywhere when `sense` says so, a line under it. Returns its response, the name's
 /// cell and the others; a text too long for its cell is cut.
 fn list_row<const N: usize>(
@@ -1148,8 +1152,11 @@ fn list_row<const N: usize>(
         painter.rect_stroke(rect, 0.0, stroke, egui::StrokeKind::Inside);
     }
     let gaps = COLUMN_GAP * f32::from(u8::try_from(N).unwrap_or(u8::MAX));
-    let fixed: f32 = columns.iter().map(|c| c.0).sum::<f32>() + gaps;
-    let first = (width - fixed - 2.0 * ROW_PADDING).max(NAME_MIN_WIDTH);
+    let widths: f32 = columns.iter().map(|c| c.0).sum();
+    let room = width - widths - gaps - 2.0 * ROW_PADDING;
+    let first = room.clamp(NAME_MIN_WIDTH, NAME_MAX_WIDTH);
+    let stretch = 1.0 + (room - first).max(0.0) / widths;
+    let columns = columns.map(|(w, right)| (w * stretch, right));
     let mut x = rect.left() + ROW_PADDING;
     let mut cell = |ui: &mut egui::Ui, w: f32, layout: egui::Layout| {
         let rect = egui::Rect::from_x_y_ranges(x..=x + w, rect.y_range());
