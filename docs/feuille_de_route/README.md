@@ -179,7 +179,7 @@ La logique avance à cadence fixe (par exemple 30 ticks par seconde), l'IA déci
 
 ## Feuille de route
 
-Le développement se fait en onze phases (0 à 10), plus les phases 5 bis et 6 bis, chacune terminée par un jalon vérifiable. Par rapport au plan Godot, une phase est ajoutée (phase 2 : le socle du moteur). À la fin de la phase 6, le jeu est complet avec l'IA scriptée ; le machine learning arrive ensuite comme amélioration.
+Le développement se fait en onze phases (0 à 10), plus les phases 5 bis, 6 bis et 7 bis, chacune terminée par un jalon vérifiable. Par rapport au plan Godot, une phase est ajoutée (phase 2 : le socle du moteur). À la fin de la phase 6, le jeu est complet avec l'IA scriptée ; le machine learning arrive ensuite comme amélioration.
 
 | Phase | Contenu | Jalon |
 | --- | --- | --- |
@@ -193,6 +193,7 @@ Le développement se fait en onze phases (0 à 10), plus les phases 5 bis et 6 b
 | 6. Formats et spectacle | Mêlée (King of the hill) d'ouverture de saison, équipement refusable, types d'arène, apparence, vue multi-combats | Regarder 3 combats du joueur en même temps, dont une mêlée à 20 |
 | 6 bis. Un monde vivant | Des dizaines de clubs générés aux influences du monde entier, colisées sur cinq continents, relations entre clubs, rivalités déclarées | Trois saisons où un club devient rival du joueur par ce qui s'est passé entre eux, et où un club ferme et un autre se crée |
 | 7. IA apprenante | PyO3, Gymnasium, PPO en self-play, export et inférence ONNX | Le modèle appris bat nettement l'IA scriptée |
+| 7 bis. Le ludus | Terrains et parcelles, bâtiments en exemplaires au rendement décroissant, construction et démolition, spécialités par famille, ludus des clubs de l'ordinateur | Trois saisons où le joueur bâtit une École renommée puis la perd en démolissant, pendant que deux clubs de l'ordinateur bâtissent des ludus différents |
 | 8. Grands événements | Championnat du monde, Inter-Coliseum, succès, tutoriel | Un cycle complet de 4 saisons avec les deux événements |
 | 9. Contenu et équilibrage | Classes, sorts, arènes, simulations de masse, finitions | Taux de victoire par classe entre 45 et 55 % |
 | 10. Publication Steam | Steamworks, page du magasin, builds, test Steam Deck | Le jeu est disponible gratuitement sur Steam |
@@ -211,6 +212,7 @@ Chaque phase a son fichier : ce qu'elle contient, comment elle est faite, son ja
 - [Phase 6 — Formats et spectacle](phase-6.md)
 - [Phase 6 bis — Un monde vivant](phase-6-bis.md)
 - [Phase 7 — IA apprenante](phase-7.md)
+- [Phase 7 bis — Le ludus](phase-7-bis.md)
 - [Phase 8 — Grands événements](phase-8.md)
 - [Phase 9 — Contenu et équilibrage](phase-9.md)
 - [Phase 10 — Publication Steam](phase-10.md)

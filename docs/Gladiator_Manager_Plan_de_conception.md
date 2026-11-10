@@ -406,7 +406,7 @@ Le plan Godot (C#, Godot RL Agents) est abandonné pour un moteur maison en Rust
 
 - [ ] Taille du monde : nombre de colisées et de clubs rivaux (13 colisées sur cinq continents et 40 clubs générés pour l'instant).
 - [ ] Liste des classes et de leurs sorts.
-- [ ] Ludus : nombre de terrains au départ et de parcelles, liste des bâtiments, prix, durées et effets, effet de la spécialité Intendance, et la phase de la feuille de route qui l'accueille.
+- [ ] Ludus : nombre de terrains au départ et de parcelles, liste des bâtiments, prix, durées et effets, effet de la spécialité Intendance (construit en [phase 7 bis](feuille_de_route/phase-7-bis.md)).
 - [ ] Calendrier des grands événements : confirmer l'Inter-Coliseum aux saisons impaires, ou revenir à la règle du report.
 
 ### Risques
