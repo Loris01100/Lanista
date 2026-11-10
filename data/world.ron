@@ -162,10 +162,10 @@
                 // the first one out: the same for every fighter, whatever its fame.
                 melee_prize: 150,
             ),
-            // Its place on the world map, in percent of its width from the left and of its
-            // height from the top: points spread to be read, placeholders until the
-            // drawn map.
-            map: (45, 27),
+            // Where it stands, in whole degrees: its longitude, east of Greenwich, and
+            // its latitude, north of the equator (negative to the west and south); the
+            // world map draws it there.
+            place: (5, 44),
         ),
         (
             key: "rome",
@@ -174,7 +174,7 @@
             prestige: 3,
             residents: 10,
             purses: (entry_fee: 20, win_prize: 150, receipts_base: 40, receipts_per_fame: 1, champion_bonus: 100, melee_prize: 450),
-            map: (50, 29),
+            place: (12, 42),
         ),
         (
             key: "merida",
@@ -183,7 +183,7 @@
             prestige: 2,
             residents: 8,
             purses: (entry_fee: 10, win_prize: 100, receipts_base: 30, receipts_per_fame: 1, champion_bonus: 60, melee_prize: 300),
-            map: (40, 33),
+            place: (-6, 39),
         ),
         (
             key: "samarcande",
@@ -192,7 +192,7 @@
             prestige: 1,
             residents: 8,
             purses: (entry_fee: 0, win_prize: 50, receipts_base: 20, receipts_per_fame: 1, champion_bonus: 30, melee_prize: 150),
-            map: (66, 31),
+            place: (67, 40),
         ),
         (
             key: "chang_an",
@@ -201,7 +201,7 @@
             prestige: 2,
             residents: 8,
             purses: (entry_fee: 10, win_prize: 100, receipts_base: 30, receipts_per_fame: 1, champion_bonus: 60, melee_prize: 300),
-            map: (80, 33),
+            place: (109, 34),
         ),
         (
             key: "karakorum",
@@ -210,7 +210,7 @@
             prestige: 3,
             residents: 10,
             purses: (entry_fee: 20, win_prize: 150, receipts_base: 40, receipts_per_fame: 1, champion_bonus: 100, melee_prize: 450),
-            map: (75, 22),
+            place: (103, 47),
         ),
         (
             key: "cahokia",
@@ -219,7 +219,7 @@
             prestige: 1,
             residents: 8,
             purses: (entry_fee: 0, win_prize: 50, receipts_base: 20, receipts_per_fame: 1, champion_bonus: 30, melee_prize: 150),
-            map: (22, 28),
+            place: (-90, 39),
         ),
         (
             key: "cuzco",
@@ -228,7 +228,7 @@
             prestige: 2,
             residents: 8,
             purses: (entry_fee: 10, win_prize: 100, receipts_base: 30, receipts_per_fame: 1, champion_bonus: 60, melee_prize: 300),
-            map: (27, 64),
+            place: (-72, -14),
         ),
         (
             key: "tenochtitlan",
@@ -237,7 +237,7 @@
             prestige: 3,
             residents: 10,
             purses: (entry_fee: 20, win_prize: 150, receipts_base: 40, receipts_per_fame: 1, champion_bonus: 100, melee_prize: 450),
-            map: (17, 42),
+            place: (-99, 19),
         ),
         (
             key: "mbanza_kongo",
@@ -246,7 +246,7 @@
             prestige: 1,
             residents: 8,
             purses: (entry_fee: 0, win_prize: 50, receipts_base: 20, receipts_per_fame: 1, champion_bonus: 30, melee_prize: 150),
-            map: (50, 62),
+            place: (14, -6),
         ),
         (
             key: "grand_zimbabwe",
@@ -255,7 +255,7 @@
             prestige: 1,
             residents: 8,
             purses: (entry_fee: 0, win_prize: 50, receipts_base: 20, receipts_per_fame: 1, champion_bonus: 30, melee_prize: 150),
-            map: (58, 72),
+            place: (31, -20),
         ),
         (
             key: "musumba",
@@ -264,7 +264,7 @@
             prestige: 3,
             residents: 10,
             purses: (entry_fee: 20, win_prize: 150, receipts_base: 40, receipts_per_fame: 1, champion_bonus: 100, melee_prize: 450),
-            map: (56, 58),
+            place: (23, -8),
         ),
         (
             key: "nan_madol",
@@ -273,7 +273,7 @@
             prestige: 1,
             residents: 8,
             purses: (entry_fee: 0, win_prize: 50, receipts_base: 20, receipts_per_fame: 1, champion_bonus: 30, melee_prize: 150),
-            map: (87, 49),
+            place: (158, 7),
         ),
         (
             key: "rapa_nui",
@@ -282,7 +282,7 @@
             prestige: 1,
             residents: 8,
             purses: (entry_fee: 0, win_prize: 50, receipts_base: 20, receipts_per_fame: 1, champion_bonus: 30, melee_prize: 150),
-            map: (80, 76),
+            place: (-109, -27),
         ),
         (
             key: "ngapuhi",
@@ -291,7 +291,7 @@
             prestige: 3,
             residents: 10,
             purses: (entry_fee: 20, win_prize: 150, receipts_base: 40, receipts_per_fame: 1, champion_bonus: 100, melee_prize: 450),
-            map: (94, 80),
+            place: (174, -35),
         ),
     ],
 )

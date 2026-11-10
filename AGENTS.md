@@ -29,6 +29,7 @@ cargo run --release -p tools --bin simulate -- --seed 42    # one duel, log and 
 cargo run --release -p tools --bin batch -- --seeds 100     # every loadout against every other, in each arena and floor; fails out of 40-60 %
 cargo run --release -p tools --bin career -- --seed 7 --weeks 10  # one fighter's weeks
 cargo run --release -p tools --bin temperaments -- --worlds 8     # careers by temperament and trait, clubs closed, in worlds without the player
+cargo run --release -p tools --bin world_map                      # redraw the world map's land (assets/ui/world_*.png) from crates/tools/geo
 cargo run --release -p tools --bin calibrate -- --fights 20000    # fit data/stat_model.ron on real duels
 cargo run --release -p tools --bin compare -- --fights 20000      # real duels against the model, fails on a gap over --tolerance points
 cargo test                           # all crates
@@ -62,7 +63,7 @@ The roadmap uses placeholder names; the actual crates are:
 | `gladiator` | `lanista` | Game binary; wires core + engine |
 | `gladiator_py` | `lanista_py` | PyO3 module for RL training (the `Environment` class) |
 | `gladiator_ia_onnx` | `lanista_ia_onnx` | ONNX inference with `tract`, for tests only; the game plays the learned AI in `lanista_core::learned` |
-| `tools` | `tools` | Command-line binaries (`simulate`, `batch`, `career`, `calibrate`, `compare`, `temperaments`) |
+| `tools` | `tools` | Command-line binaries (`simulate`, `batch`, `career`, `calibrate`, `compare`, `temperaments`, `world_map`) |
 
 The workspace picks up any `crates/*` automatically.
 

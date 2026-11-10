@@ -442,6 +442,14 @@ impl ClubScreen {
         let mut play = false;
         let mut again = None;
         egui::TopBottomPanel::top("club").show(ui, |ui| play = self.top_bar(ui));
+        // The map takes the whole panel, to its edges.
+        if matches!(self.view, View::Map) {
+            let frame = egui::Frame::central_panel(&ui.style()).inner_margin(0.0);
+            egui::CentralPanel::default()
+                .frame(frame)
+                .show(ui, |ui| self.world_map(ui));
+            return (play, again);
+        }
         egui::CentralPanel::default().show(ui, |ui| {
             // Sideways when a table is wider than the window, at a large interface;
             // each view scrolls down on its own.
@@ -462,7 +470,7 @@ impl ClubScreen {
                     View::Outside(target) => self.outside(ui, target),
                     View::Rival(club) => self.rival_club(ui, club),
                     View::Wiki(entry) => self.wiki(ui, entry),
-                    View::Map => self.world_map(ui),
+                    View::Map => {}
                 });
         });
         (play, again)

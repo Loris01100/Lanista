@@ -147,9 +147,9 @@ impl Continent {
 pub struct ColosseumData {
     /// Names it in the language files (`colosseum-<key>`) and the tools.
     pub key: String,
-    /// Its place on the world map, in percent of its width from the left and of its
-    /// height from the top.
-    pub map: (u32, u32),
+    /// Where it stands, in whole degrees: its longitude, east of Greenwich, and its
+    /// latitude, north of the equator; negative to the west and the south.
+    pub place: (i32, i32),
     pub continent: Continent,
     pub arena: ArenaKind,
     /// From 1 to 5: the higher, the stronger the fighters generated for it.

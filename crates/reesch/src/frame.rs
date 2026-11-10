@@ -14,10 +14,26 @@ use macroquad::texture::Image;
 /// # Errors
 /// If the bytes are not an image.
 pub fn load_texture(ui: &egui::Context, name: &str, bytes: &[u8]) -> Result<TextureHandle, Error> {
+    Ok(ui.load_texture(name, decoded(bytes)?, TextureOptions::NEAREST))
+}
+
+/// Decodes `bytes` (PNG…) into an egui texture named `name`, smoothed when scaled: for
+/// drawn images rather than pixel art, such as a map shown at any size.
+///
+/// # Errors
+/// If the bytes are not an image.
+pub fn load_smooth_texture(
+    ui: &egui::Context,
+    name: &str,
+    bytes: &[u8],
+) -> Result<TextureHandle, Error> {
+    Ok(ui.load_texture(name, decoded(bytes)?, TextureOptions::LINEAR))
+}
+
+fn decoded(bytes: &[u8]) -> Result<ColorImage, Error> {
     let image = Image::from_file_with_format(bytes, None)?;
     let size = [usize::from(image.width), usize::from(image.height)];
-    let image = ColorImage::from_rgba_unmultiplied(size, &image.bytes);
-    Ok(ui.load_texture(name, image, TextureOptions::NEAREST))
+    Ok(ColorImage::from_rgba_unmultiplied(size, &image.bytes))
 }
 
 /// A 9-slice texture: an image whose `border` pixels on each side are its frame.

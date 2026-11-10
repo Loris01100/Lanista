@@ -24,6 +24,11 @@ pub const WOOD_LIGHTEST: Color32 = Color32::from_rgb(0x75, 0x59, 0x3F);
 
 /// Roman capitals for the titles.
 const DISPLAY: &str = "display";
+
+/// The display face (Cinzel), for titles drawn by hand.
+pub fn display_family() -> FontFamily {
+    FontFamily::Name(DISPLAY.into())
+}
 /// The body text.
 const BODY: &str = "body";
 
