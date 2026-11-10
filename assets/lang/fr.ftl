@@ -605,7 +605,7 @@ roster-defend = Défendre le titre de { $place } d'ici la { $week } ({ $left ->
     })
 roster-defend-hint = Coché, il défend le titre dans les deux dernières semaines, sauf s'il est blessé, malade ou fatigué. Décoché, il ne se présente pas et le titre passe au mieux classé. Un combat pour le titre peut aussi se choisir dans sa fiche.
 roster-unpaid = faute d'argent
-roster-unpaid-hint = La caisse ne suffira pas à payer sa semaine, une fois payés les salaires et les combattants avant lui dans la liste : il se reposera ou ne sera pas soigné. Les gains des combats ne sont pas comptés.
+roster-unpaid-hint = La caisse ne suffira pas à payer sa semaine, une fois payés les salaires, les travaux et l'entretien des bâtiments, et les combattants avant lui dans la liste : il se reposera ou ne sera pas soigné. Les gains des combats ne sont pas comptés.
 roster-age-years = { $age } ans
 roster-fit = En forme
 roster-fame-chip = Renommée { $fame }

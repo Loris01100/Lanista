@@ -994,7 +994,8 @@ impl ClubScreen {
     /// Which of the club's fighters the money will not pay the week of, as decided
     /// (`GameState::unpaid`).
     fn unpaid(&self) -> Vec<bool> {
-        self.state.unpaid(&self.decisions.plans, &self.data)
+        self.state
+            .unpaid(&self.decisions.plans, &self.decisions.ludus, &self.data)
     }
 
     /// What needs the player's attention before the week, each with the view where

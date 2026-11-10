@@ -47,7 +47,7 @@ impl ClubScreen {
                 }
             });
         ui.add_space(4.0);
-        let unpaid = state.unpaid(&self.decisions.plans, data);
+        let unpaid = state.unpaid(&self.decisions.plans, &self.decisions.ludus, data);
         let decisions = &mut self.decisions;
         let mut cards: Vec<_> = state
             .fighters

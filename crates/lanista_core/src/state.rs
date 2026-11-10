@@ -21,7 +21,7 @@ use crate::fighter::fame::{Fame, FightResult};
 use crate::fighter::traits::Trait;
 use crate::fighter::{ClassId, percent_of};
 use crate::journal::Journal;
-use crate::ludus::Ludus;
+use crate::ludus::{Ludus, LudusMove};
 use crate::market::{self, Move, SaleOffer, Target, value};
 use crate::names::{self, ClubName, FighterName};
 use crate::relations::{Club, Reason, Relation, Standing, StandingRules, TieRules};
@@ -933,13 +933,19 @@ impl GameState {
 
     /// Which of the club's fighters `next_week` would cut the week of (`plans`, in club
     /// order) for want of money: no care, or rest instead. Paid one after the other as
-    /// the week does, the salaries first, each fighter's upkeep and wage after its week;
-    /// no fight's earnings are counted, so the forecast errs on the safe side.
+    /// the week does, the salaries first, then the `ludus` moves and the buildings'
+    /// upkeep, each fighter's upkeep and wage after its week; no fight's earnings are
+    /// counted, so the forecast errs on the safe side.
     #[must_use]
-    pub fn unpaid(&self, plans: &[WeekPlan], data: &DesignData) -> Vec<bool> {
+    pub fn unpaid(&self, plans: &[WeekPlan], ludus: &[LudusMove], data: &DesignData) -> Vec<bool> {
         let costs = (self.training_cost(data), self.staff_effects().medicine);
         let care = self.care_rules(data);
         let mut left = self.money - self.staff.salaries().map(i64::from).sum::<i64>();
+        let mut site = self.ludus.clone();
+        for &m in ludus {
+            left -= site.make(m, left, &data.ludus).map_or(0, i64::from);
+        }
+        left -= i64::from(site.week(&data.ludus).0);
         self.fighters
             .iter()
             .zip(plans)
@@ -1722,12 +1728,22 @@ mod tests {
         let wage = i64::from(state.fighters[0].contract.unwrap().wage);
         // The first trains and is paid for, the second is left a coin short.
         state.money = cost + upkeep + wage + cost - 1;
-        assert_eq!(state.unpaid(&plans, &data), [false, true]);
+        assert_eq!(state.unpaid(&plans, &[], &data), [false, true]);
         state.money += 1;
-        assert_eq!(state.unpaid(&plans, &data), [false, false]);
+        assert_eq!(state.unpaid(&plans, &[], &data), [false, false]);
         // As the week does it.
         state.money = cost - 1;
-        assert_eq!(state.unpaid(&plans, &data), [true, true]);
+        assert_eq!(state.unpaid(&plans, &[], &data), [true, true]);
+        // A construction decided this week is paid before the fighters.
+        let price = i64::from(data.ludus.buildings[0].price);
+        state.money = price + cost + upkeep + wage + cost - 1;
+        let build = LudusMove::Build {
+            plot: 0,
+            building: 0,
+        };
+        assert_eq!(state.unpaid(&plans, &[build], &data), [false, true]);
+        assert_eq!(state.unpaid(&plans, &[], &data), [false, false]);
+        state.money = cost - 1;
         let decisions = Decisions {
             plans: plans.to_vec(),
             ..state.suggested_decisions(&data)
