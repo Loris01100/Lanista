@@ -220,7 +220,7 @@ Chaque combat a une graine (seed). Pour que la même graine redonne exactement l
 
 ## Économie, marché et personnel
 
-L'argent ne vient que des combattants : leurs combats et leur vente. Il sert à entretenir, soigner, entraîner et inscrire les combattants. Il n'y a pas de sponsor, et l'équipement est gratuit.
+L'argent ne vient que des combattants : leurs combats et leur vente. Il sert à entretenir, soigner, entraîner et inscrire les combattants, et à bâtir le ludus. Il n'y a pas de sponsor, et l'équipement est gratuit.
 
 ### Niveaux de richesse
 
@@ -246,6 +246,9 @@ Un club ne vend qu'à un club au moins aussi riche que lui, et n'achète qu'en g
 | Sortie | Inscription | Un frais par combattant inscrit, plus le voyage sur un autre continent |
 | Sortie | Salaires du personnel | Hebdomadaire, une fois par tranche de 3 combattants en activité |
 | Sortie | Achat d'un combattant | Prix du marché |
+| Sortie | Construction | Prix du bâtiment, payé à la décision |
+| Sortie | Parcelle | Plus chère à chaque parcelle achetée |
+| Sortie | Entretien du ludus | Hebdomadaire, par bâtiment debout |
 
 ### Filet de sécurité
 
@@ -268,6 +271,25 @@ Le prix d'un combattant dépend de ses stats, de sa renommée et de son bilan (v
 | Recruteur | Fourchettes plus précises, estimation du potentiel, détection de la personnalité | Niveaux 1 à 5 |
 
 Le personnel s'engage au marché parmi des candidats, les mêmes pour le joueur et les clubs rivaux, qui repartent au bout de quelques semaines. Chaque candidat a un niveau ; ses stats et son salaire varient autour de ceux de ce niveau. À niveau égal, l'un coûte moins cher, un autre soigne mieux mais coûte plus. Ses stats se voient sans observation.
+
+### Ludus
+
+Le ludus est l'école du club : un plan de terrains, chacun accueillant un bâtiment. C'est la dépense de long terme, celle qui donne un sens à l'argent d'un club riche, et ce qui donne une identité au club : le joueur bâtit selon ce qu'il veut privilégier. Les bâtiments et leurs familles sont des données (un fichier RON), pour en ajouter sans toucher au code.
+
+- **Terrains et parcelles.** Le club commence avec quelques terrains. Il achète des parcelles voisines pour en avoir plus, chacune plus chère que la précédente. Les bâtiments possibles sont plus nombreux que les terrains, pour que chaque terrain soit un choix.
+- **Pas de niveaux, des exemplaires.** Un bâtiment est construit ou non. Le même bâtiment peut être bâti sur plusieurs terrains, trois fois au plus, avec un rendement décroissant : le premier exemplaire donne tout son effet, le deuxième 60 %, le troisième 30 %. Se spécialiser reste payant sans qu'un seul bâtiment écrase les autres.
+- **Construction.** Le prix est payé quand le joueur décide, la construction dure quelques semaines, puis le bâtiment agit et son entretien est payé chaque semaine, même à crédit. Démolir libère le terrain sans rembourser la construction ; c'est ainsi que le club change d'orientation.
+- **Familles et spécialités.** Chaque bâtiment appartient à une famille. Trois bâtiments d'une même famille donnent au club un titre de spécialité, avec un effet sur le monde plutôt qu'un pourcentage de plus, et l'Acta Diurna en parle.
+
+| Famille | Bâtiments (exemples) | Effet d'un bâtiment | Spécialité à trois |
+| --- | --- | --- | --- |
+| Entraînement | Palestre, Schola | Gains d'entraînement ; progression des moins de 23 ans | École renommée : les rookies rejoignent plus volontiers le club, le recruteur voit mieux leur potentiel |
+| Soins | Valetudinarium, Thermes | Guérison plus rapide (avec un médecin) ; forme regagnée au repos | Ludus des médecins : moins de séquelles |
+| Intendance | Cellae, Horreum, Lararium | Moral ; entretien des combattants moins cher ; moral avant les grands combats | Ludus bien tenu : à préciser |
+
+Le personnel et le ludus se complètent sans se remplacer : l'infirmerie ne sert à rien sans médecin. L'équipement restant fourni par les colisées, il n'y a pas d'armurerie, et l'effectif reste de 3 combattants en activité quel que soit le ludus.
+
+Les clubs rivaux bâtissent aussi, selon leur niveau de richesse : un club pauvre mise sur l'entraînement et la Schola, un club riche sur les soins. Le modèle statistique des combats entre clubs de l'ordinateur doit alors tenir compte de leurs bâtiments. Un premier prototype peut se passer des rivaux, mais pas l'équilibrage.
 
 ## Colisées, classements et compétitions
 
@@ -344,6 +366,7 @@ L'interface compte une douzaine d'écrans ; dans un jeu de management, elle repr
 | Marché | Rookies et free agents, fourchettes d'observation, achat et vente |
 | Combattant extérieur | Ce que le club voit d'un free agent ou d'un combattant rival |
 | Personnel | Entraîneur, médecin, recruteur : niveau, salaire, embauche |
+| Ludus | Plan des terrains, construction, démolition, achat de parcelles, spécialités du club |
 | Combat | Combat principal et vignettes des autres, contrôles de vitesse |
 | Résumé de combat | Compte rendu détaillé |
 | Encyclopédie | Classes, sorts, colisées et règles du jeu |
@@ -358,7 +381,7 @@ Une sauvegarde automatique après chaque semaine, plus une sauvegarde manuelle. 
 
 ### Tutoriel et manuel
 
-Chaque fonctionnalité est débloquée progressivement, présentée par une pop-up à sa première apparition, puis inscrite dans le manuel du jeu. Ordre de déblocage proposé : combat et compte rendu, repos et entraînement, blessures et soins, marché, personnel, défis, mêlées, titres de champion, puis les grands événements.
+Chaque fonctionnalité est débloquée progressivement, présentée par une pop-up à sa première apparition, puis inscrite dans le manuel du jeu. Ordre de déblocage proposé : combat et compte rendu, repos et entraînement, blessures et soins, marché, personnel, ludus, défis, mêlées, titres de champion, puis les grands événements.
 
 ## Architecture technique et feuille de route
 
@@ -383,6 +406,7 @@ Le plan Godot (C#, Godot RL Agents) est abandonné pour un moteur maison en Rust
 
 - [ ] Taille du monde : nombre de colisées et de clubs rivaux (13 colisées sur cinq continents et 40 clubs générés pour l'instant).
 - [ ] Liste des classes et de leurs sorts.
+- [ ] Ludus : nombre de terrains au départ et de parcelles, liste des bâtiments, prix, durées et effets, effet de la spécialité Intendance, et la phase de la feuille de route qui l'accueille.
 - [ ] Calendrier des grands événements : confirmer l'Inter-Coliseum aux saisons impaires, ou revenir à la règle du report.
 
 ### Risques
