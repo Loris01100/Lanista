@@ -17,7 +17,7 @@ const DASH: Color32 = Color32::from_rgb(0xA8, 0x91, 0x6C);
 /// The text of the button demolishing, on the wood.
 const DEMOLISH: Color32 = Color32::from_rgb(0xE8, 0x83, 0x6F);
 /// Plots in a row of the plan.
-const COLUMNS: u8 = 4;
+const COLUMNS: u8 = 3;
 const TILE_HEIGHT: f32 = 120.0;
 const GAP: f32 = 10.0;
 
