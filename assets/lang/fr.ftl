@@ -1128,33 +1128,42 @@ club-whare = Whare { $name }
 club-pa = Pā { club-de }{ $name }
 club-numbered = { $club } { $number }
 
-ludus-intro = Chaque terrain accueille un bâtiment. Un même bâtiment peut être bâti sur trois terrains au plus, chaque exemplaire rapportant moins que le précédent : tout son effet, puis 60 %, puis 30 %. La construction est payée quand elle est décidée ; le bâtiment agit à la fin des travaux, et son entretien est payé chaque semaine, même à crédit. Démolir libère le terrain sans rien rembourser.
-ludus-plot = Terrain { $plot }
-ludus-free = libre
-ludus-copy = { $building } { $rank ->
-    [1] {""}
-   *[other] ({ $rank }e)
-}
-ludus-in-works = { $what }, en travaux
-ludus-buy-parcel = Acheter une parcelle ({ $price })
-ludus-no-parcel = Plus de parcelle à acheter
-ludus-catalog = Bâtiments possibles
-ludus-build = Bâtir
-ludus-demolish = Démolir
-ludus-price = Prix { $price }
-ludus-upkeep = Entretien { $upkeep } / sem.
-ludus-weeks = Travaux { $weeks } sem.
-ludus-standing = Debout
+ludus-intro = Chaque terrain accueille un bâtiment, jusqu'à trois fois le même. Chaque exemplaire rapporte moins que le précédent : tout son effet, puis 60 %, puis 30 %. La construction est payée quand elle est décidée, l'entretien chaque semaine une fois le bâtiment debout.
+ludus-entrance = Entrée
+ludus-free-plot = Terrain libre
+ludus-parcel = Parcelle voisine
+ludus-copy-share = Exemplaire { $rank } · { $share } %
+ludus-works = En construction
+ludus-family-copies = { $family } · { $copies ->
+    [one] { $copies } exemplaire
+   *[other] { $copies } exemplaires
+} sur { $most }
+ludus-total = Effet de tous les exemplaires
+ludus-next = Un exemplaire de plus : { $effect } au total ({ $share } % de l'effet).
+ludus-most = { $most } exemplaires : le maximum.
 ludus-works-left = Travaux : encore { $weeks } sem.
-ludus-copies = Exemplaires { $copies } / { $most }
-ludus-share = Part de l'effet { $share } %
+ludus-upkeep-week = Entretien : { $upkeep } / semaine
+ludus-demolish = Démolir
+ludus-cancel-build = Annuler la construction
+ludus-demolish-note = Démolir libère le terrain ; la construction n'est pas remboursée.
+ludus-catalog = Ce que rapporterait un exemplaire de plus.
+ludus-terms = Prix { $price } · entretien { $upkeep } / sem. · travaux { $weeks } sem.
+ludus-build = Bâtir
+ludus-parcel-subtitle = Hors des terrains du club pour l'instant.
+ludus-parcel-text = L'acheter ajoute un terrain libre. Chaque parcelle achetée rend la suivante plus chère.
+ludus-buy = Acheter ({ $price })
+ludus-no-parcel = Plus de parcelle à acheter
+ludus-cost = −{ $cost }
+ludus-works-line = { $building } : construction, encore { $weeks } sem.
+ludus-no-works = Aucuns travaux prévus
+ludus-upkeep-total = Entretien des bâtiments
+ludus-per-week = { $upkeep } / semaine
 ludus-left = Argent après ces décisions : { $money }
 ludus-move-build = Bâtir : { $building }, terrain { $plot }
 ludus-move-demolish = Démolir le terrain { $plot }
 ludus-move-parcel = Acheter une parcelle
 ludus-specialties = Spécialités
-ludus-family-progress = { $family } : { $standing } / { $needed }, vers { $specialty }
-ludus-family-done = { $family } : { $specialty }
+ludus-specialty-at = { $specialty } à { $needed }
 
 family-entrainement = Entraînement
 family-soins = Soins
@@ -1171,6 +1180,14 @@ building-bains = Bains
 building-dortoirs = Dortoirs
 building-grenier = Grenier
 building-sanctuaire = Sanctuaire
+
+building-terrain_entrainement-desc = La cour de sable où l'on s'entraîne : chaque séance rapporte plus.
+building-ecole_recrues-desc = Des maîtres d'armes pour les jeunes : les combattants de moins de 23 ans progressent plus vite.
+building-infirmerie-desc = Des lits et des instruments pour le médecin. Sans médecin, l'infirmerie ne sert à rien.
+building-bains-desc = Bains chauds et massages : un combattant au repos retrouve plus de forme dans la semaine.
+building-dortoirs-desc = Les quartiers des combattants : mieux logés, ils gardent le moral.
+building-grenier-desc = Des réserves achetées en gros : nourrir les combattants coûte moins cher.
+building-sanctuaire-desc = Un lieu de prière, où l'on se recueille avant les grands combats.
 
 effect-training = Entraînement +{ $value } %
 effect-youth = Progression des moins de 23 ans +{ $value } %

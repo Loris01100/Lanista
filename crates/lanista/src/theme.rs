@@ -16,11 +16,11 @@ const WOOD_DARKEST: Color32 = Color32::from_rgb(0x1A, 0x15, 0x12);
 pub const INK: Color32 = WOOD_DARKEST;
 /// Red ink on parchment: the newspaper's sections, the player's club in it.
 pub const RED_INK: Color32 = Color32::from_rgb(0x8A, 0x24, 0x1C);
-const WOOD_DARK: Color32 = Color32::from_rgb(0x24, 0x1E, 0x19);
-const WOOD: Color32 = Color32::from_rgb(0x2E, 0x26, 0x20);
-const WOOD_LIGHT: Color32 = Color32::from_rgb(0x4A, 0x3B, 0x2E);
-const WOOD_LIGHTER: Color32 = Color32::from_rgb(0x5E, 0x4A, 0x38);
-const WOOD_LIGHTEST: Color32 = Color32::from_rgb(0x75, 0x59, 0x3F);
+pub const WOOD_DARK: Color32 = Color32::from_rgb(0x24, 0x1E, 0x19);
+pub const WOOD: Color32 = Color32::from_rgb(0x2E, 0x26, 0x20);
+pub const WOOD_LIGHT: Color32 = Color32::from_rgb(0x4A, 0x3B, 0x2E);
+pub const WOOD_LIGHTER: Color32 = Color32::from_rgb(0x5E, 0x4A, 0x38);
+pub const WOOD_LIGHTEST: Color32 = Color32::from_rgb(0x75, 0x59, 0x3F);
 
 /// Roman capitals for the titles.
 const DISPLAY: &str = "display";

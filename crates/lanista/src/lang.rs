@@ -187,12 +187,10 @@ mod tests {
             keys.push(format!("family-{}", family.key));
             keys.push(format!("specialty-{}", family.specialty));
         }
-        keys.extend(
-            ludus
-                .buildings
-                .iter()
-                .map(|b| format!("building-{}", b.key)),
-        );
+        for building in &ludus.buildings {
+            keys.push(format!("building-{}", building.key));
+            keys.push(format!("building-{}-desc", building.key));
+        }
         assert_in_every_language(&keys);
     }
 
