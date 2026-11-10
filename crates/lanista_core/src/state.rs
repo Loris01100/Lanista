@@ -293,6 +293,7 @@ impl GameState {
         staff::fill_market(&mut self.staff_market, &data.economy.staff, &mut self.rng);
         self.name_the_nameless(data);
         self.name_the_club(data);
+        self.place_the_unplaced(data);
         for i in 0..self.fighters.len() {
             let fighter = &self.fighters[i];
             if fighter.status == Status::Active && fighter.contract.is_none() {
@@ -346,7 +347,8 @@ impl GameState {
 
     /// `fighter` named as it comes into the world: the next `id`, a culture drawn on
     /// `continent` (on any without one, `rivals::culture_on`), then one of its
-    /// fighters' names that no fighter in activity bears (`names::fighter_name`).
+    /// fighters' names that no fighter in activity bears (`names::fighter_name`); it is
+    /// on `continent`, or else its culture's.
     fn named(
         &mut self,
         mut fighter: CareerFighter,
@@ -355,10 +357,12 @@ impl GameState {
     ) -> CareerFighter {
         self.last_fighter_id += 1;
         fighter.id = self.last_fighter_id;
+        fighter.location = continent;
         let culture = rivals::culture_on(&mut self.rng, continent, data);
         let Some(culture) = culture.and_then(|key| data.culture(&key)) else {
             return fighter;
         };
+        fighter.location = Some(continent.unwrap_or(culture.continent));
         let rivals = self.rivals.iter().flat_map(|r| &r.fighters);
         let taken: Vec<&FighterName> = self
             .fighters
@@ -403,6 +407,24 @@ impl GameState {
         }
     }
 
+    /// Puts the fighters in activity of a game saved before they had a place where they
+    /// would have come into the world: at their club's home, a free agent on its
+    /// culture's continent.
+    fn place_the_unplaced(&mut self, data: &DesignData) {
+        let unplaced = |f: &CareerFighter| f.location.is_none() && f.moved_to.is_none();
+        for f in self.fighters.iter_mut().filter(|f| unplaced(f)) {
+            f.location = Some(self.continent);
+        }
+        for rival in &mut self.rivals {
+            for f in rival.fighters.iter_mut().filter(|f| unplaced(f)) {
+                f.location = Some(rival.continent);
+            }
+        }
+        for f in self.free_agents.iter_mut().filter(|f| unplaced(f)) {
+            f.location = data.culture(&f.culture).map(|c| c.continent);
+        }
+    }
+
     /// Every fighter in the game, for the colosseums.
     #[must_use]
     pub fn rosters(&self) -> Rosters<'_> {
@@ -436,11 +458,18 @@ impl GameState {
     /// gone to another club or to the market. A rival club's fighter or a free agent
     /// leaves only a moved entry behind; the player's club keeps its own whole. Gone
     /// from a club, its tie with it moves by `TieRules::released` to the market, by
-    /// `sold` to another club.
+    /// `sold` to another club. Gone to a club of another continent than the one it is
+    /// on, it travels there the next week (`CareerFighter::homebound`); a free agent
+    /// stays where it is.
     fn transfer(&mut self, from: Contender, to: Contender, rules: &TieRules) {
         for colosseum in &mut self.colosseums {
             colosseum.transfer(from, to);
         }
+        let home = match to {
+            Contender::Club(_) => Some(self.continent),
+            Contender::Rival(to) => self.rivals.get(to.club).map(|r| r.continent),
+            Contender::FreeAgent(_) => None,
+        };
         let club = match from {
             Contender::Club(_) => Some(Club::Player),
             Contender::Rival(id) => Some(Club::Rival(id.club)),
@@ -454,12 +483,15 @@ impl GameState {
                 .and_then(|r| r.fighters.get_mut(to.fighter)),
             Contender::FreeAgent(a) => self.free_agents.get_mut(a),
         };
-        if let (Some(club), Some(fighter)) = (club, arrived) {
-            let points = match to {
-                Contender::FreeAgent(_) => rules.released,
-                _ => rules.sold,
-            };
-            fighter.change_tie(club, points);
+        if let Some(fighter) = arrived {
+            fighter.homebound = home.is_some_and(|home| !fighter.is_on(home));
+            if let Some(club) = club {
+                let points = match to {
+                    Contender::FreeAgent(_) => rules.released,
+                    _ => rules.sold,
+                };
+                fighter.change_tie(club, points);
+            }
         }
         let left = match from {
             Contender::Club(_) => None,
@@ -513,15 +545,15 @@ impl GameState {
     }
 
     /// Each colosseum as `contender` sees it, in their order: the chance Elo gives it
-    /// there (`odds`, see `Colosseum::chance`), and the fee from `home`, its club's continent, the
-    /// journey included; a free agent, `None`, travels for nothing and is at home
-    /// everywhere; whether `fighter`, the contender, finds its lucky floor there, or a
-    /// fighter it bears a grudge against in the ranking.
+    /// there (`odds`, see `Colosseum::chance`), and the fee from `here`, the continent it
+    /// is on, the journey included (`None`: on every continent, it travels for nothing);
+    /// whether `fighter`, the contender, finds its lucky floor there, or a fighter it
+    /// bears a grudge against in the ranking.
     fn venues(
         &self,
         odds: &[Odds],
         (contender, fighter): (Contender, &CareerFighter),
-        home: Option<Continent>,
+        here: Option<Continent>,
         data: &DesignData,
     ) -> Vec<Venue> {
         let world = &data.world;
@@ -529,13 +561,17 @@ impl GameState {
         odds.iter()
             .zip(&world.colosseums)
             .zip(&self.colosseums)
-            .zip(0..)
-            .map(|(((odds, rules), colosseum), id)| Venue {
+            .map(|((odds, rules), colosseum)| {
+                let home = here.is_none_or(|here| here == rules.continent);
+                (odds, rules, colosseum, home)
+            })
+            .map(|(odds, rules, colosseum, home)| Venue {
                 chance: odds.chance(contender),
-                fee: home
-                    .and_then(|home| world.entry_fee(ColosseumId(id), home))
-                    .unwrap_or(rules.purses.entry_fee),
-                home: home.is_none_or(|home| home == rules.continent),
+                fee: rules
+                    .purses
+                    .entry_fee
+                    .saturating_add(if home { 0 } else { world.travel_fee }),
+                home,
                 lucky: fighter.has(Trait::Superstitious)
                     && fighter.lucky_floor == Some(rules.arena),
                 revenge: colosseum.ranking.iter().any(|r| {
@@ -547,11 +583,11 @@ impl GameState {
             .collect()
     }
 
-    /// What the club pays to register a fighter in colosseum `id`, the journey
-    /// included (`WorldRules::entry_fee`).
+    /// What the club pays to register a fighter in colosseum `id`
+    /// (`WorldRules::entry_fee`).
     #[must_use]
     pub fn entry_fee(&self, id: ColosseumId, data: &DesignData) -> Option<u32> {
-        data.world.entry_fee(id, self.continent)
+        data.world.entry_fee(id)
     }
 
     /// The rival fighter `id`.
@@ -561,8 +597,9 @@ impl GameState {
     }
 
     /// Each rival fighter's plan this week, by club, from its club's rules
-    /// (`rivals::plan`); each club's money, but the week's upkeep, goes to its fighters
-    /// in roster order.
+    /// (`rivals::plan`) where it is ([`located`]): it goes home rather than train
+    /// abroad. Each club's money, but the week's upkeep, goes to its fighters in roster
+    /// order.
     #[must_use]
     pub fn rival_plans(&self, data: &DesignData) -> Vec<Vec<WeekPlan>> {
         let odds = self.odds(data);
@@ -578,9 +615,15 @@ impl GameState {
                     .map(|(fighter, f)| match profile {
                         Some(profile) if f.status == Status::Active => {
                             let me = Contender::Rival(RivalId { club, fighter });
-                            let venues = self.venues(&odds, (me, f), Some(rival.continent), data);
+                            let home = rival.continent;
+                            let here = f.location.unwrap_or(home);
+                            let venues = self.venues(&odds, (me, f), Some(here), data);
                             let rules = (profile, &rival.staff, true);
-                            rivals::plan(f, &venues, &mut left, rules, data)
+                            let mut plan = rivals::plan(f, &venues, &mut left, rules, data);
+                            if plan.activity == Activity::Train && here != home {
+                                plan.activity = Activity::Travel(home);
+                            }
+                            located(plan, f, home, data)
                         }
                         _ => REST,
                     })
@@ -591,8 +634,8 @@ impl GameState {
 
     /// Each free agent's plan this week, in market order: it plays by the free agents'
     /// profile (`WorldRules::free_agents`) as a manager without money, so it fights
-    /// only where entry is free, to show its worth, and is neither trained nor cared
-    /// for (`rivals::plan`).
+    /// only where entry is free on the continent it is on, to show its worth, and is
+    /// neither trained nor cared for (`rivals::plan`).
     #[must_use]
     pub fn free_agent_plans(&self, data: &DesignData) -> Vec<WeekPlan> {
         let profile = data.world.profiles.get(data.world.free_agents);
@@ -603,7 +646,7 @@ impl GameState {
                 if f.status != Status::Active {
                     return REST;
                 }
-                let venues = self.venues(&odds, (Contender::FreeAgent(a), f), None, data);
+                let venues = self.venues(&odds, (Contender::FreeAgent(a), f), f.location, data);
                 rivals::plan(
                     f,
                     &venues,
@@ -672,7 +715,7 @@ impl GameState {
     /// (`WorldRules::first_colosseum`), the season opened with the melee where it would
     /// have fought, and who defends a title instead of fighting or training in the last
     /// two weeks before its deadline, unless its orders let the title go
-    /// (`Orders::forfeit`).
+    /// (`Orders::forfeit`); all of it where the fighter is ([`located`]).
     #[must_use]
     pub fn ordered_plan(&self, i: usize, orders: Orders, data: &DesignData) -> WeekPlan {
         let Some(fighter) = self.fighters.get(i) else {
@@ -696,11 +739,12 @@ impl GameState {
         {
             plan.activity = Activity::TitleFight(ColosseumId(c));
         }
-        plan
+        located(plan, fighter, self.continent, data)
     }
 
     /// Whether the club's fighter `i` may fight `rival` in colosseum `id` in a
-    /// challenge: the rival fighter still fights and its club accepts the challenge.
+    /// challenge: the rival fighter still fights, is on that colosseum's continent, and
+    /// its club accepts the challenge.
     #[must_use]
     pub fn may_challenge(
         &self,
@@ -709,9 +753,10 @@ impl GameState {
         rival: RivalId,
         data: &DesignData,
     ) -> bool {
+        let continent = data.world.continent(id);
         let active = self
             .rival_fighter(rival)
-            .is_some_and(|f| f.status == Status::Active);
+            .is_some_and(|f| f.status == Status::Active && continent.is_some_and(|c| f.is_on(c)));
         let accepts = || {
             let colosseum = usize::try_from(id.0)
                 .ok()
@@ -737,10 +782,11 @@ impl GameState {
         data: &DesignData,
     ) -> Option<(usize, Contender)> {
         let c = usize::try_from(id.0).ok()?;
-        let rival = self
-            .colosseums
-            .get(c)?
-            .title_opponent(i, self.rosters(), &data.world)?;
+        let continent = data.world.continent(id)?;
+        let rival =
+            self.colosseums
+                .get(c)?
+                .title_opponent(i, (self.rosters(), continent), &data.world)?;
         Some((c, rival))
     }
 
@@ -953,14 +999,8 @@ impl GameState {
                 if f.status != Status::Active {
                     return false;
                 }
-                let paid = affordable(plan, f, (left, self.continent), costs, data);
-                let activity = match paid.activity {
-                    Activity::Train => costs.0,
-                    Activity::Fight(id) | Activity::Challenge(id, _) | Activity::Melee(id) => {
-                        data.world.entry_fee(id, self.continent).unwrap_or(0)
-                    }
-                    Activity::Rest | Activity::TitleFight(_) => 0,
-                };
+                let paid = affordable(plan, f, left, costs, data);
+                let activity = cost(paid.activity, f, costs.0, data).unwrap_or(0);
                 let care = if paid.care { f.care_cost(&care) } else { 0 };
                 let wage = f.contract.unwrap_or_default().wage;
                 left -= [activity, care, data.economy.upkeep, wage]
@@ -1053,6 +1093,9 @@ fn week_plans(
                 .get(i)
                 .copied()
                 .unwrap_or_else(|| state.suggested_plan(i, data));
+            if let Some(fighter) = state.fighters.get(i) {
+                plan = located(plan, fighter, state.continent, data);
+            }
             let mut meeting = match plan.activity {
                 Activity::TitleFight(id) => state.title_opponent(i, id, data),
                 _ => None,
@@ -1080,13 +1123,69 @@ fn week_plans(
         .unzip()
 }
 
-/// What a club of `home` pays to register a fighter in colosseum `c`, the journey
-/// included; nothing for a colosseum missing from the data.
-fn entry_fee(c: usize, home: Continent, data: &DesignData) -> u32 {
+/// What a club pays to register a fighter in colosseum `c`; nothing for a colosseum
+/// missing from the data.
+fn entry_fee(c: usize, data: &DesignData) -> u32 {
     u32::try_from(c)
         .ok()
-        .and_then(|c| data.world.entry_fee(ColosseumId(c), home))
+        .and_then(|c| data.world.entry_fee(ColosseumId(c)))
         .unwrap_or(0)
+}
+
+/// `plan` where `fighter`, of a club of `home`, is: the journey home first once it
+/// joined a club of another continent (`CareerFighter::homebound`), the journey to a
+/// colosseum's continent before fighting there, rest rather than a journey to where
+/// it is; away from home, far from its ludus, rest rather than training, and no care.
+#[must_use]
+pub fn located(
+    mut plan: WeekPlan,
+    fighter: &CareerFighter,
+    home: Continent,
+    data: &DesignData,
+) -> WeekPlan {
+    let elsewhere = plan
+        .activity
+        .colosseum()
+        .and_then(|id| data.world.continent(id))
+        .filter(|&c| !fighter.is_on(c));
+    let away = !fighter.is_on(home);
+    if fighter.homebound {
+        plan.activity = Activity::Travel(home);
+    } else if let Some(continent) = elsewhere {
+        plan.activity = Activity::Travel(continent);
+    } else {
+        let idle = match plan.activity {
+            Activity::Travel(to) => fighter.is_on(to),
+            Activity::Train => away,
+            _ => false,
+        };
+        if idle {
+            plan.activity = Activity::Rest;
+        }
+    }
+    plan.care &= !away && !fighter.homebound;
+    plan
+}
+
+/// What `activity` costs `fighter`'s club, a training session at `training_cost`;
+/// `None` for a colosseum missing from the data. The title is fought for free, and
+/// the journey to a club just joined is on the club's account already.
+fn cost(
+    activity: Activity,
+    fighter: &CareerFighter,
+    training_cost: u32,
+    data: &DesignData,
+) -> Option<u32> {
+    match activity {
+        Activity::Rest => Some(0),
+        Activity::Train => Some(training_cost),
+        Activity::Fight(id) | Activity::Challenge(id, _) | Activity::Melee(id) => {
+            data.world.entry_fee(id)
+        }
+        Activity::TitleFight(id) => data.world.colosseum(id).map(|_| 0),
+        Activity::Travel(_) if fighter.homebound => Some(0),
+        Activity::Travel(_) => Some(data.world.travel_fee),
+    }
 }
 
 /// The other side's result in a duel.
@@ -1099,12 +1198,12 @@ fn opposite(result: FightResult) -> FightResult {
 }
 
 /// `plan` without what `money` cannot pay for: care first, at the price of the doctor's
-/// `medicine`, then the activity, a training session costing `training_cost`, a fight
-/// its entry fee from the club's `home` (`WorldRules::entry_fee`).
+/// `medicine`, then the activity at its [`cost`], a training session costing
+/// `training_cost`.
 fn affordable(
     mut plan: WeekPlan,
     fighter: &CareerFighter,
-    (money, home): (i64, Continent),
+    money: i64,
     (training_cost, medicine): (u32, Medicine),
     data: &DesignData,
 ) -> WeekPlan {
@@ -1118,16 +1217,9 @@ fn affordable(
             left -= cost;
         }
     }
-    let cost = match plan.activity {
-        Activity::Rest => Some(0),
-        Activity::Train => Some(training_cost),
-        Activity::Fight(id) | Activity::Challenge(id, _) | Activity::Melee(id) => {
-            data.world.entry_fee(id, home)
-        }
-        // The title is fought for free.
-        Activity::TitleFight(id) => data.world.colosseum(id).map(|_| 0),
-    };
+    let cost = cost(plan.activity, fighter, training_cost, data);
     // A colosseum missing from the data cannot be entered.
+
     if cost.is_none_or(|cost| i64::from(cost) > left) {
         plan.activity = Activity::Rest;
     }
@@ -1382,6 +1474,7 @@ mod tests {
         fighter.id = named.id;
         fighter.name.clone_from(&named.name);
         fighter.culture.clone_from(&named.culture);
+        fighter.location = Some(state.continent);
         // Under contract until the third season's off-season.
         fighter.contract = Some(state.contract_for(&fighter, &data));
         assert_eq!(named.contract.map(|c| c.ends), Some(3));
@@ -1551,7 +1644,7 @@ mod tests {
     }
 
     #[test]
-    fn a_club_fights_at_home_and_pays_the_journey_abroad() {
+    fn a_fighter_travels_a_week_to_fight_abroad_and_pays_the_journey() {
         let data = DesignData::load().unwrap();
         let world = &data.world;
         let state = GameState::start(7, (Wealth::Modest, Continent::Asia), None, &data);
@@ -1570,26 +1663,52 @@ mod tests {
             .map(|s| s.suggested_plan(0, &data).activity)
             .find(|&a| a != Activity::Train);
         assert!(matches!(fit, Some(Activity::Fight(id) | Activity::Melee(id)) if id == samarkand));
-        // Rome costs the journey on top of its fee, Capoue the journey alone.
-        let (capua, rome) = (ColosseumId(0), ColosseumId(1));
-        assert_eq!(state.entry_fee(capua, &data), Some(world.travel_fee));
-        assert_eq!(
-            state.entry_fee(rome, &data),
-            Some(world.colosseums[1].purses.entry_fee + world.travel_fee)
+        // Capoue, in Europe, at its fee alone: first a week on the way, as a rest, the
+        // journey paid.
+        let capua = ColosseumId(0);
+        assert_eq!(state.entry_fee(capua, &data), Some(0));
+        let mut state = state;
+        assert_eq!(state.fighters[0].location, Some(Continent::Asia));
+        let to_capua = plan(Activity::Fight(capua), false);
+        let summary = next_week(&mut state, &to_capua, &data);
+        let week = summary.reports[0].as_ref().unwrap();
+        assert_eq!(week.plan.activity, Activity::Travel(Continent::Europe));
+        assert!(week.fight.is_none());
+        assert!(flows(&summary).contains(&(Flow::Travel, -i64::from(world.travel_fee))));
+        assert_eq!(state.fighters[0].location, Some(Continent::Europe));
+        // There, it fights in Capoue, but neither trains nor is cared for, far from its
+        // ludus.
+        let summary = next_week(&mut state, &to_capua, &data);
+        let week = summary.reports[0].as_ref().unwrap();
+        assert_eq!(week.plan.activity, Activity::Fight(capua));
+        assert!(week.fight.is_some());
+        let summary = next_week(&mut state, &plan(Activity::Train, true), &data);
+        let week = summary.reports[0].as_ref().unwrap().plan;
+        assert_eq!((week.activity, week.care), (Activity::Rest, false));
+        // Back home, a week again.
+        let home = located(
+            WeekPlan {
+                activity: Activity::Fight(samarkand),
+                ..week
+            },
+            &state.fighters[0],
+            Continent::Asia,
+            &data,
         );
-        assert_eq!(state.entry_fee(samarkand, &data), Some(0));
-        // The rival clubs plan their fights at home.
+        assert_eq!(home.activity, Activity::Travel(Continent::Asia));
+        // The rival clubs plan their fights where their fighters are, and seldom travel.
         let plans = state.rival_plans(&data);
         let mut home_fights = 0;
         let mut abroad = 0;
         for (rival, plans) in state.rivals.iter().zip(&plans) {
-            for plan in plans {
-                if let Activity::Fight(id) = plan.activity {
-                    if world.colosseum(id).unwrap().continent == rival.continent {
+            for (fighter, plan) in rival.fighters.iter().zip(plans) {
+                match plan.activity {
+                    Activity::Fight(id) => {
+                        assert!(fighter.is_on(world.colosseum(id).unwrap().continent));
                         home_fights += 1;
-                    } else {
-                        abroad += 1;
                     }
+                    Activity::Travel(_) => abroad += 1,
+                    _ => {}
                 }
             }
         }
@@ -2223,8 +2342,8 @@ mod tests {
                 .filter(|(_, n)| matches!(n, TitleNews::Fight { .. }))
                 .count();
         }
-        // Two colosseums, a defense every four weeks: weeks 5 and 9.
-        assert_eq!(fights, 4);
+        // Two colosseums, a defense every ten weeks: week 11.
+        assert_eq!(fights, 2);
     }
 
     #[test]
@@ -2364,6 +2483,25 @@ mod tests {
         // Off the market, its entry kept.
         assert_eq!(state.free_agents[2].status, Status::Sold);
         assert!(!state.may_move(sign(&state, 2, &data), &data));
+    }
+
+    #[test]
+    fn a_fighter_from_another_continent_travels_to_its_new_club_for_nothing() {
+        let data = data();
+        let mut state = game(7, &data);
+        state.free_agents[2].location = Some(Continent::Asia);
+        let signing = moves(&[sign(&state, 2, &data)]);
+        let summary = next_week(&mut state, &signing, &data);
+        let week = summary.reports[1].as_ref().unwrap();
+        assert_eq!(week.plan.activity, Activity::Travel(state.continent));
+        assert!(
+            flows(&summary)
+                .iter()
+                .all(|&(flow, _)| flow != Flow::Travel)
+        );
+        let arrived = &state.fighters[1];
+        assert_eq!(arrived.location, Some(state.continent));
+        assert!(!arrived.homebound);
     }
 
     #[test]

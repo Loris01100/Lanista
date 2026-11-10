@@ -79,8 +79,8 @@ fn melee_lineup(
     data: &DesignData,
 ) -> Option<Vec<Vec<Contender>>> {
     let world = &data.world;
-    world.colosseums.get(c)?;
-    let fee = entry_fee(c, state.continent, data);
+    let continent = world.colosseums.get(c)?.continent;
+    let fee = entry_fee(c, data);
     let most = usize::try_from(data.combat.melee.max_fighters).unwrap_or(usize::MAX);
     let here = Activity::Melee(ColosseumId(u32::try_from(c).ok()?));
     // The club's money promised to fees and care, before anyone is paid.
@@ -91,7 +91,7 @@ fn melee_lineup(
             continue;
         }
         let money = state.money - promised;
-        let plan = affordable(wanted[i], f, (money, state.continent), costs, data);
+        let plan = affordable(wanted[i], f, money, costs, data);
         if plan.activity == here {
             let care = costs.1.care_rules(&data.fighter.care);
             let care = if plan.care { f.care_cost(&care) } else { 0 };
@@ -120,6 +120,7 @@ fn melee_lineup(
             .map(|r| r.contender)
             .filter(|&o| !o.is_club() && available(&o) && !registered.contains(&o) && active(o))
             .filter(|&o| plans.of(o).is_some_and(|p| p.activity == Activity::Train))
+            .filter(|&o| state.rosters().is_on(o, continent))
             .take(room - registered.len())
             .collect();
         registered.extend(filling);
@@ -201,7 +202,7 @@ fn settle_melee(
     for (club, why) in melee.pacts.iter().filter_map(|&p| pact_reason(entries, p)) {
         relate(state, club, why, data);
     }
-    let fee = |home| i64::from(entry_fee(c, home, data));
+    let fee = i64::from(entry_fee(c, data));
     for (k, &entry) in entries.iter().enumerate() {
         let side = &melee.sides[k];
         let place = melee.places.get(k).copied().unwrap_or(1);
@@ -214,7 +215,7 @@ fn settle_melee(
                 };
                 for (flow, amount) in [
                     (Flow::Care, -i64::from(report.care_cost)),
-                    (Flow::EntryFee, -fee(state.continent)),
+                    (Flow::EntryFee, -fee),
                     (Flow::Receipts, receipts),
                 ] {
                     if amount != 0 {
@@ -233,10 +234,7 @@ fn settle_melee(
                 weeks[i] = Some(report);
             }
             Contender::Rival(id) => {
-                let Some(home) = state.rivals.get(id.club).map(|r| r.continent) else {
-                    continue;
-                };
-                pay_rival(&mut state.rivals, id.club, receipts - fee(home));
+                pay_rival(&mut state.rivals, id.club, receipts - fee);
                 fought.push(entry);
             }
             Contender::FreeAgent(_) => fought.push(entry),

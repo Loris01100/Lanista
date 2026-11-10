@@ -119,6 +119,7 @@ pub fn activity_name(activity: Activity, data: &DesignData) -> String {
         Activity::TitleFight(id) => tr!("activity-title-fight", place = colosseum_name(id, data)),
         Activity::Challenge(id, _) => tr!("activity-challenge", place = colosseum_name(id, data)),
         Activity::Melee(id) => tr!("activity-melee", place = colosseum_name(id, data)),
+        Activity::Travel(to) => tr!("activity-travel", continent = continent_in(to)),
     }
 }
 
@@ -1183,6 +1184,7 @@ pub fn money_line(before: i64, after: i64, ledger: &[Transaction]) -> String {
                 Flow::Construction => tr!("flow-construction"),
                 Flow::Parcel => tr!("flow-parcel"),
                 Flow::Maintenance => tr!("flow-maintenance"),
+                Flow::Travel => tr!("flow-travel"),
             };
             format!("{name} {amount:+}")
         })

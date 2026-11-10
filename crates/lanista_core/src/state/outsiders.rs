@@ -128,7 +128,8 @@ pub(super) fn outsiders<'a>(
 /// paired in Elo order, but a spiteful one with a fighter it bears a grudge against
 /// registered there too ([`pairs`]), each pair fighting a fight the statistical model resolves,
 /// which moves both Elo; one left without an opponent trains instead, or rests if it
-/// is a free agent, who cannot pay for training. The others rest or train as planned,
+/// is a free agent, who cannot pay for training, or away from its ludus. The others
+/// rest, train or travel as planned,
 /// those met by the club's fighters end their week, and each rival club pays its
 /// fighters' costs and upkeep and takes their receipts and prizes; a free agent pays
 /// and earns nothing.
@@ -143,9 +144,17 @@ pub(super) fn outsider_weeks(
     for c in 0..state.colosseums.len().min(data.world.colosseums.len()) {
         let (pairs, alone) = colosseum_pairs(state, &plans, &done, c, data);
         if let Some(alone) = alone {
-            let instead = match alone {
-                Contender::Rival(_) => Activity::Train,
-                _ => Activity::Rest,
+            let at_home = match alone {
+                Contender::Rival(id) => state
+                    .rivals
+                    .get(id.club)
+                    .is_some_and(|r| state.rosters().is_on(alone, r.continent)),
+                _ => false,
+            };
+            let instead = if at_home {
+                Activity::Train
+            } else {
+                Activity::Rest
             };
             plans.set_activity(alone, instead);
         }
@@ -256,10 +265,7 @@ fn prize(c: usize, result: FightResult, data: &DesignData) -> i64 {
 
 /// Pays rival club `club` what it `earned` in colosseum `c`, less the entry fee.
 fn pay_fight(state: &mut GameState, club: usize, c: usize, earned: i64, data: &DesignData) {
-    let Some(home) = state.rivals.get(club).map(|r| r.continent) else {
-        return;
-    };
-    let fee = i64::from(entry_fee(c, home, data));
+    let fee = i64::from(entry_fee(c, data));
     pay_rival(&mut state.rivals, club, earned - fee);
 }
 
@@ -285,7 +291,8 @@ fn pairs(
 }
 
 /// The planned weeks of the outsiders not in `done`, each rival club paying its
-/// fighters' care and training at its staff's prices, its staff's effects with them.
+/// fighters' care and training at its staff's prices, its staff's effects with them,
+/// and their journeys but to the club just joined; a journey over, the fighter is there.
 fn planned_weeks(
     state: &mut GameState,
     plans: &OutsiderPlans,
@@ -301,19 +308,25 @@ fn planned_weeks(
                 continue;
             };
             if let Some(report) = f.play_week(plan, None, effects, &mut state.rng, data) {
-                let training = if plan.activity == Activity::Train {
-                    session
-                } else {
-                    0
+                let paid = match plan.activity {
+                    Activity::Train => session,
+                    Activity::Travel(_) if !f.homebound => data.world.travel_fee,
+                    _ => 0,
                 };
-                rival.money -= i64::from(report.care_cost) + i64::from(training);
+                rival.money -= i64::from(report.care_cost) + i64::from(paid);
+                if let Activity::Travel(to) = plan.activity {
+                    f.arrive(to);
+                }
             }
         }
     }
     for (a, f) in state.free_agents.iter_mut().enumerate() {
         let me = Contender::FreeAgent(a);
         if let Some(plan) = plans.of(me).filter(|_| !done.contains(&me)) {
-            f.play_week(plan, None, StaffEffects::default(), &mut state.rng, data);
+            let played = f.play_week(plan, None, StaffEffects::default(), &mut state.rng, data);
+            if let (Some(_), Activity::Travel(to)) = (played, plan.activity) {
+                f.arrive(to);
+            }
         }
     }
 }
@@ -349,7 +362,7 @@ pub(super) fn opponent(
 /// may have killed it earlier in the week), otherwise the closest in Elo there, all
 /// those equally close, among those registered there (in `plans`) who have not
 /// `fought` yet, those `me` bears a grudge against first, or else among those ranked
-/// there, or else among anyone.
+/// there, or else among anyone; all on the colosseum's continent and not on a journey.
 pub(super) fn likely_opponents(
     (colosseums, rivals, free_agents, rules): (
         &[Colosseum],
@@ -374,9 +387,17 @@ pub(super) fn likely_opponents(
     if let Some(rival) = chosen.filter(active) {
         return Some((c, vec![rival]));
     }
+    let continent = rules.continent(id)?;
+    let here = |o: &Contender| {
+        outsider(rivals, free_agents, *o).is_some_and(|f| f.is_on(continent))
+            && !plans
+                .of(*o)
+                .is_some_and(|p| matches!(p.activity, Activity::Travel(_)))
+    };
     let everyone: Vec<Contender> = outsiders(rivals, free_agents)
-        .filter(|o| !fought.contains(o))
+        .filter(|o| !fought.contains(o) && here(o))
         .collect();
+
     let registered: Vec<Contender> = everyone
         .iter()
         .copied()

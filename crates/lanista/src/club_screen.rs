@@ -11,6 +11,7 @@ mod market;
 mod roster;
 mod staff;
 mod wiki;
+mod world_map;
 
 use std::path::PathBuf;
 
@@ -22,7 +23,7 @@ use std::rc::Rc;
 use wiki::Entry;
 
 use lanista_core::calendar::{CalendarRules, Date, SeasonPhase};
-use lanista_core::colosseum::{ColosseumData, ColosseumId, Contender, Continent};
+use lanista_core::colosseum::{ColosseumId, Contender, Continent};
 use lanista_core::design_data::DesignData;
 use lanista_core::economy::Flow;
 use lanista_core::fighter::care::CareRules;
@@ -55,13 +56,13 @@ use crate::saves;
 use crate::texts::{
     Article, activity_name, against_text, arena_effect, arena_name, building_name, challenger_text,
     change, class_name, club_name, colosseum_name, colosseum_rules_name, contender_name,
-    continent_in, date_in_sentence, date_text, fight_text, fighter_name, free_agent_name,
-    illness_effect, illness_text, injury_effect, injury_text, loadout_name, ludus_move_text,
-    market_news_text, money_line, move_text, named_club, origin_place, potential_text, priced,
-    range_texts, result_text, rival_fighter_name, school_name, staff_move_text, staff_news_text,
-    stage_name, stat_names, temperament_name, temperament_text, title_article, title_changed,
-    trait_memory, trait_name, trait_text, wealth_name, wealth_text, week_lines, world_article,
-    year_text,
+    continent_in, continent_name, date_in_sentence, date_text, fight_text, fighter_name,
+    free_agent_name, illness_effect, illness_text, injury_effect, injury_text, loadout_name,
+    ludus_move_text, market_news_text, money_line, move_text, named_club, origin_place,
+    potential_text, priced, range_texts, result_text, rival_fighter_name, school_name,
+    staff_move_text, staff_news_text, stage_name, stat_names, temperament_name, temperament_text,
+    title_article, title_changed, trait_memory, trait_name, trait_text, wealth_name, wealth_text,
+    week_lines, world_article, year_text,
 };
 use crate::theme::{self, Icon};
 use crate::title_screen::{Slot, read_slots, slot_text};
@@ -109,6 +110,8 @@ enum View {
     Rival(usize),
     /// The game's encyclopedia, open on this page.
     Wiki(Entry),
+    /// The world's colosseums where they stand, and the club's fighters sent to them.
+    Map,
 }
 
 /// One of the club's fights, as the fight summary shows it.
@@ -198,6 +201,8 @@ pub struct ClubScreen {
     shown_prestige: Option<u32>,
     /// Whether the colosseums view shows the continent's colosseums or its rival clubs.
     shown_part: ContinentPart,
+    /// The colosseum chosen on the world map, where the club's fighters may be sent.
+    map_chosen: Option<ColosseumId>,
     bindings: Bindings<Action>,
 }
 
@@ -215,6 +220,7 @@ impl ClubScreen {
             shown_continent: state.continent,
             shown_prestige: None,
             shown_part: ContinentPart::Colosseums,
+            map_chosen: None,
             slots: read_slots(saves.as_deref(), &data),
             data,
             state,
@@ -456,6 +462,7 @@ impl ClubScreen {
                     View::Outside(target) => self.outside(ui, target),
                     View::Rival(club) => self.rival_club(ui, club),
                     View::Wiki(entry) => self.wiki(ui, entry),
+                    View::Map => self.world_map(ui),
                 });
         });
         (play, again)
@@ -1121,13 +1128,18 @@ impl ClubScreen {
     }
 
     /// The title fights the club's fighter `i` may have this week and, in the season's
-    /// opening week, the melee of each colosseum of the
-    /// club's continent, with their names.
+    /// opening week, the melee of each colosseum of the continent it is on, with their
+    /// names.
     fn special_fights(&self, i: usize) -> Vec<(Activity, String)> {
         let data = &self.data;
+        let here = self
+            .state
+            .fighters
+            .get(i)
+            .map_or(self.state.continent, |f| here(f, &self.state));
         let melees = data
             .world
-            .colosseums_of(self.state.continent)
+            .colosseums_of(here)
             .filter(|_| self.state.opens_season(data))
             .map(|id| {
                 let activity = Activity::Melee(id);
@@ -1709,7 +1721,7 @@ fn ordered(
     plan
 }
 
-/// The kinds of week a sheet's four buttons choose between, keys 1 to 4 in this order.
+/// The kinds of week a sheet's five buttons choose between, keys 1 to 5 in this order.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum WeekKind {
     Rest,
@@ -1717,10 +1729,17 @@ enum WeekKind {
     /// A duel: in a colosseum, a challenge or a title fight.
     Fight,
     Melee,
+    Travel,
 }
 
 impl WeekKind {
-    const ALL: [Self; 4] = [Self::Rest, Self::Train, Self::Fight, Self::Melee];
+    const ALL: [Self; 5] = [
+        Self::Rest,
+        Self::Train,
+        Self::Fight,
+        Self::Melee,
+        Self::Travel,
+    ];
 
     fn of(activity: Activity) -> Self {
         match activity {
@@ -1728,6 +1747,7 @@ impl WeekKind {
             Activity::Train => Self::Train,
             Activity::Fight(_) | Activity::TitleFight(_) | Activity::Challenge(..) => Self::Fight,
             Activity::Melee(_) => Self::Melee,
+            Activity::Travel(_) => Self::Travel,
         }
     }
 
@@ -1737,43 +1757,60 @@ impl WeekKind {
             Self::Train => tr!("week-kind-train"),
             Self::Fight => tr!("week-kind-fight"),
             Self::Melee => tr!("week-kind-melee"),
+            Self::Travel => tr!("week-kind-travel"),
         }
     }
 
-    /// The week of this kind a click turns `current` into: `current` itself if of this
-    /// kind, else a fight in the first colosseum the club can pay for, at home first, or
-    /// the first melee of `special`; `None` if there is none.
+    /// The week of this kind a click turns `current` into, for fighter `f`: `current`
+    /// itself if of this kind, else training only at home, a fight in the first
+    /// colosseum the club can pay for on the continent `f` is on, the first melee of
+    /// `special`, or the journey home, from home to the first other continent, if the
+    /// club can pay for it; `None` if there is none.
     fn week(
         self,
         current: Activity,
         special: &[(Activity, String)],
-        state: &GameState,
+        (state, f): (&GameState, &CareerFighter),
         data: &DesignData,
     ) -> Option<Activity> {
         if Self::of(current) == self {
             return Some(current);
         }
+        let here = here(f, state);
         match self {
             Self::Rest => Some(Activity::Rest),
-            Self::Train => Some(Activity::Train),
-            Self::Fight => {
-                let affordable = |&(id, _): &(ColosseumId, &ColosseumData)| {
+            Self::Train => (here == state.continent).then_some(Activity::Train),
+            Self::Fight => data
+                .world
+                .colosseums_of(here)
+                .find(|&id| {
                     state
                         .entry_fee(id, data)
                         .is_some_and(|fee| i64::from(fee) <= state.money)
-                };
-                let all = || (0..).map(ColosseumId).zip(&data.world.colosseums);
-                let home = all().filter(|(_, r)| r.continent == state.continent);
-                home.chain(all())
-                    .find(affordable)
-                    .map(|(id, _)| Activity::Fight(id))
-            }
+                })
+                .map(Activity::Fight),
             Self::Melee => special
                 .iter()
                 .map(|&(a, _)| a)
                 .find(|a| matches!(a, Activity::Melee(_))),
+            Self::Travel => destinations(here, state.continent)
+                .next()
+                .filter(|_| i64::from(data.world.travel_fee) <= state.money)
+                .map(Activity::Travel),
         }
     }
+}
+
+/// The continent the club's fighter `f` is on: its club's if it has no place.
+fn here(f: &CareerFighter, state: &GameState) -> Continent {
+    f.location.unwrap_or(state.continent)
+}
+
+/// Where a fighter on `here` may travel, `home` first: every other continent.
+fn destinations(here: Continent, home: Continent) -> impl Iterator<Item = Continent> {
+    std::iter::once(home)
+        .chain(Continent::ALL.into_iter().filter(move |&c| c != home))
+        .filter(move |&c| c != here)
 }
 
 /// Width of a fighter's page under which its three columns no longer fit side by side.
@@ -2040,9 +2077,9 @@ fn week_panel(
     }
     let care = state.care_rules(data);
     settle_plan(plan, f, special, (state, &care));
-    let clicked = kind_buttons(ui, plan.activity, special, state, data);
-    if let Some(kind) = picked.or(clicked)
-        && let Some(activity) = kind.week(plan.activity, special, state, data)
+    let clicked = kind_buttons(ui, plan.activity, special, (state, f), data);
+    if let Some(kind) = picked.or(clicked).filter(|_| !f.homebound)
+        && let Some(activity) = kind.week(plan.activity, special, (state, f), data)
     {
         plan.activity = activity;
         settle_plan(plan, f, special, (state, &care));
@@ -2050,7 +2087,7 @@ fn week_panel(
     match WeekKind::of(plan.activity) {
         WeekKind::Fight => {
             small_section(ui, &tr!("plan-where"));
-            fight_places(ui, plan, special, state, data);
+            fight_places(ui, plan, (f, special), state, data);
             small_section(ui, &tr!("plan-opponent"));
             opponent(ui, plan, (i, likely), state, data);
         }
@@ -2058,6 +2095,10 @@ fn week_panel(
             small_section(ui, &tr!("plan-where"));
             melee_places(ui, plan, special, state, data);
             ui.label(egui::RichText::new(tr!("plan-melee-opponents")).weak());
+        }
+        WeekKind::Travel => {
+            small_section(ui, &tr!("plan-where-to"));
+            travel_places(ui, plan, f, state, data);
         }
         WeekKind::Rest | WeekKind::Train => {}
     }
@@ -2094,30 +2135,30 @@ fn small_section(ui: &mut egui::Ui, name: &str) {
     ui.label(egui::RichText::new(name).small().color(theme::BRONZE));
 }
 
-/// The four kinds of week, the `current` one's lit, each with its key; one with no
-/// week to have (no melee this week, no fight to pay for) faded. Returns the one
-/// clicked.
+/// The five kinds of week, the `current` one's lit, each with its key; one with no
+/// week to have (no melee this week, no fight to pay for) faded, all of them for a
+/// fighter on its way to the club it just joined. Returns the one clicked.
 fn kind_buttons(
     ui: &mut egui::Ui,
     current: Activity,
     special: &[(Activity, String)],
-    state: &GameState,
+    (state, f): (&GameState, &CareerFighter),
     data: &DesignData,
 ) -> Option<WeekKind> {
     let mut clicked = None;
     ui.horizontal(|ui| {
-        // Tighter than other buttons, for the four and their keys to fit the column.
+        // Tighter than other buttons, for the five and their keys to fit the column.
         ui.spacing_mut().button_padding.x = 4.0;
         let spacing = ui.spacing().item_spacing.x;
         let count = WeekKind::ALL.len();
-        #[expect(clippy::cast_precision_loss, reason = "four buttons")]
+        #[expect(clippy::cast_precision_loss, reason = "five buttons")]
         let width = (ui.available_width() - spacing * (count - 1) as f32) / count as f32;
         for (n, kind) in WeekKind::ALL.into_iter().enumerate() {
             let button = egui::Button::new(kind.name())
                 .selected(WeekKind::of(current) == kind)
                 .shortcut_text((n + 1).to_string())
                 .min_size(egui::vec2(width, 32.0));
-            let possible = kind.week(current, special, state, data).is_some();
+            let possible = !f.homebound && kind.week(current, special, (state, f), data).is_some();
             if ui.add_enabled(possible, button).clicked() {
                 clicked = Some(kind);
             }
@@ -2156,25 +2197,20 @@ fn fee_label(ui: &mut egui::Ui, fee: u32) {
     response.on_hover_text(tr!("plan-fee-hint"));
 }
 
-/// Where the fighter duels: a row per colosseum of the club's continent, then its title
-/// fights, then the colosseums abroad in a list, each with its fee, those the club
-/// cannot pay for faded.
+/// Where the fighter `f` duels: a row per colosseum of the continent it is on, then its
+/// title fights, each with its fee, those the club cannot pay for faded; elsewhere is
+/// a journey first (`travel_places`).
 fn fight_places(
     ui: &mut egui::Ui,
     plan: &mut WeekPlan,
-    special: &[(Activity, String)],
+    (f, special): (&CareerFighter, &[(Activity, String)]),
     state: &GameState,
     data: &DesignData,
 ) {
     let money = state.money;
-    let mut abroad = Vec::new();
-    for (id, rules) in (0..).map(ColosseumId).zip(&data.world.colosseums) {
+    for id in data.world.colosseums_of(here(f, state)) {
         let fee = state.entry_fee(id, data).unwrap_or(0);
         let affordable = i64::from(fee) <= money;
-        if rules.continent != state.continent {
-            abroad.push((id, fee, affordable));
-            continue;
-        }
         let here =
             matches!(plan.activity, Activity::Fight(c) | Activity::Challenge(c, _) if c == id);
         if place_row(ui, here, affordable, colosseum_name(id, data), fee) && !here {
@@ -2189,36 +2225,38 @@ fn fight_places(
             }
         }
     }
-    let chosen = abroad.iter().find(|(id, ..)| {
-        plan.activity.colosseum() == Some(*id) && WeekKind::of(plan.activity) == WeekKind::Fight
-    });
-    let text = chosen.map_or_else(
-        || tr!("plan-other-continent"),
-        |&(id, fee, _)| {
-            tr!(
-                "plan-abroad-place",
-                place = colosseum_name(id, data),
-                fee = fee
-            )
-        },
-    );
-    egui::ComboBox::from_id_salt("abroad")
-        .selected_text(text)
-        .width(ui.available_width() - FEE_WIDTH)
-        .show_ui(ui, |ui| {
-            for (id, fee, affordable) in abroad {
-                let name = tr!(
-                    "plan-abroad-place",
-                    place = colosseum_name(id, data),
-                    fee = fee
-                );
-                ui.add_enabled_ui(affordable, |ui| {
-                    ui.selectable_value(&mut plan.activity, Activity::Fight(id), name);
-                });
-            }
-        })
-        .response
-        .on_hover_text(tr!("plan-abroad-hint", travel = data.world.travel_fee));
+}
+
+/// Where the fighter `f` travels: a row per other continent, home first, each with the
+/// journey's price, faded if the club cannot pay for it; or, on its way to the club it
+/// just joined, where it goes.
+fn travel_places(
+    ui: &mut egui::Ui,
+    plan: &mut WeekPlan,
+    f: &CareerFighter,
+    state: &GameState,
+    data: &DesignData,
+) {
+    if f.homebound {
+        ui.label(tr!(
+            "plan-homebound",
+            continent = continent_in(state.continent)
+        ));
+        return;
+    }
+    let fee = data.world.travel_fee;
+    let affordable = i64::from(fee) <= state.money;
+    for to in destinations(here(f, state), state.continent) {
+        let mut name = continent_name(to);
+        if to == state.continent {
+            name = tr!("continent-home", continent = name);
+        }
+        let chosen = plan.activity == Activity::Travel(to);
+        if place_row(ui, chosen, affordable, name, fee) {
+            plan.activity = Activity::Travel(to);
+        }
+    }
+    ui.label(egui::RichText::new(tr!("plan-travel-hint")).small().weak());
 }
 
 /// Where the fighter fights the season's opening melee: a row per melee of `special`,
@@ -3403,15 +3441,32 @@ mod tests {
     fn the_sheet_s_buttons_lead_to_a_week_and_to_the_fighters_around() {
         let mut screen = screen(7);
         let (state, data) = (&screen.state, &*screen.data);
+        let club = (state, &state.fighters[0]);
         let rest = Activity::Rest;
-        let fight = WeekKind::Fight.week(rest, &[], state, data).unwrap();
+        let fight = WeekKind::Fight.week(rest, &[], club, data).unwrap();
         let home = fight.colosseum().and_then(|id| data.world.colosseum(id));
         assert!(home.is_some_and(|c| c.continent == state.continent));
-        assert_eq!(WeekKind::Fight.week(fight, &[], state, data), Some(fight));
-        assert_eq!(WeekKind::Melee.week(rest, &[], state, data), None);
+        assert_eq!(WeekKind::Fight.week(fight, &[], club, data), Some(fight));
+        assert_eq!(WeekKind::Melee.week(rest, &[], club, data), None);
         let melee = (Activity::Melee(ColosseumId(0)), String::new());
-        let found = WeekKind::Melee.week(rest, std::slice::from_ref(&melee), state, data);
+        let found = WeekKind::Melee.week(rest, std::slice::from_ref(&melee), club, data);
         assert_eq!(found, Some(melee.0));
+        // A journey goes elsewhere; abroad, the fights are there, home is the first
+        // journey, and there is no training.
+        let travel = WeekKind::Travel.week(rest, &[], club, data).unwrap();
+        let Activity::Travel(abroad) = travel else {
+            panic!("{travel:?}");
+        };
+        assert_ne!(abroad, state.continent);
+        let mut away = state.fighters[0].clone();
+        away.arrive(abroad);
+        let there = (state, &away);
+        let fight = WeekKind::Fight.week(rest, &[], there, data).unwrap();
+        let place = fight.colosseum().and_then(|id| data.world.colosseum(id));
+        assert!(place.is_some_and(|c| c.continent == abroad));
+        let back = WeekKind::Travel.week(rest, &[], there, data);
+        assert_eq!(back, Some(Activity::Travel(state.continent)));
+        assert_eq!(WeekKind::Train.week(rest, &[], there, data), None);
         // A former fighter between two others is passed over.
         let mut second = screen.state.fighters[0].clone();
         second.status = Status::Retired;
@@ -3702,12 +3757,12 @@ mod tests {
         assert_eq!(
             alert_texts(&screen),
             [format!(
-                "{name} : titre de Rome à défendre d'ici la saison 1, semaine 5"
+                "{name} : titre de Rome à défendre d'ici la saison 1, semaine 11"
             )]
         );
-        // The rival champions defend in week 5, without the player.
+        // The rival champions defend in week 11, without the player.
         let mut screen = self::screen(7);
-        for _ in 0..5 {
+        for _ in 0..11 {
             screen.next_week();
         }
         let titles = &screen.week_titles;
@@ -3881,7 +3936,9 @@ mod tests {
     #[test]
     fn three_seasons_where_a_club_becomes_a_rival_one_closes_and_one_is_founded() {
         let data = Rc::new(DesignData::load().unwrap());
-        let mut screen = screen(1);
+        // Seed 2: the challenges of seed 1 no longer kill early enough since fighters
+        // travel.
+        let mut screen = screen(2);
         let mut rivalry = None;
         let (mut closed, mut founded) = (false, false);
         for _ in 0..3 * u64::from(data.calendar.season_weeks()) {
@@ -4339,6 +4396,7 @@ mod tests {
             View::Colosseums,
             View::Market,
             View::Rival(0),
+            View::Map,
         ];
         let pages = wiki::Entry::CATEGORIES
             .into_iter()

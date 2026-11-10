@@ -134,6 +134,7 @@ fn week_text(
     let activity = match report.plan.activity {
         Activity::Rest => "rest".to_owned(),
         Activity::Train => "training".to_owned(),
+        Activity::Travel(continent) => format!("journey to {continent:?}"),
         Activity::Fight(id) => format!(
             "fight in {}",
             data.world.colosseum(id).map_or("?", |c| c.key.as_str())

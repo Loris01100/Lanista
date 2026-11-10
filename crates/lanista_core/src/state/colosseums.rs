@@ -12,9 +12,9 @@ use super::{GameState, opposite};
 /// The title defenses between outsiders of the week, with the colosseum's index, the
 /// champion and the challenger, settled before anyone plays from the rankings as they
 /// stand: each outsider champion at its deadline against the best-ranked other
-/// outsider. None of them is `taken` (met by the club's fighters this week) nor in
-/// another defense: a fighter has one fight a week, and a champion taken defends the
-/// week after.
+/// outsider, both on the colosseum's continent. None of them is `taken` (met by the
+/// club's fighters this week) nor in another defense: a fighter has one fight a week,
+/// and a champion taken defends the week after.
 pub(super) fn outsider_defenses(
     state: &GameState,
     taken: &[Contender],
@@ -24,10 +24,15 @@ pub(super) fn outsider_defenses(
     let mut taken = taken.to_vec();
     let mut defenses = Vec::new();
     for (c, colosseum) in state.colosseums.iter().enumerate() {
+        let Some(continent) = data.world.colosseums.get(c).map(|r| r.continent) else {
+            continue;
+        };
+        let here = |o: Contender| rosters.is_on(o, continent);
         let Some(champion) = colosseum.champion.filter(|&champion| {
             !champion.is_club()
                 && !taken.contains(&champion)
                 && rosters.active(champion)
+                && here(champion)
                 && state.week >= colosseum.defense_deadline(&data.world)
         }) else {
             continue;
@@ -35,7 +40,7 @@ pub(super) fn outsider_defenses(
         let challenger = colosseum
             .active_ranking(rosters)
             .map(|r| r.contender)
-            .find(|&o| !o.is_club() && o != champion && !taken.contains(&o));
+            .find(|&o| !o.is_club() && o != champion && !taken.contains(&o) && here(o));
         if let Some(challenger) = challenger {
             taken.extend([champion, challenger]);
             defenses.push((c, champion, challenger));
@@ -67,7 +72,10 @@ pub(super) fn end_colosseum_weeks(
             .vacate_if_gone(week, rosters)
             .into_iter()
             .collect();
-        news.extend(colosseum.strip(week, rosters, &data.world));
+        if let Some(rules) = data.world.colosseums.get(c) {
+            news.extend(colosseum.strip(week, (rosters, rules.continent), &data.world));
+        }
+
         // Sold, gone or crowned elsewhere in the week: no defense.
         let defense = defenses
             .iter()

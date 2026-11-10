@@ -513,8 +513,8 @@ fn purses(
         wrapped_chip(ui, Icon::Arena, arena).on_hover_text(arena_effect(rules.arena));
         let fee = state.entry_fee(id, data).unwrap_or(0);
         let fee_chip = wrapped_chip(ui, Icon::Money, tr!("colosseum-fee-chip", fee = fee));
-        if fee > rules.purses.entry_fee {
-            fee_chip.on_hover_text(tr!("colosseum-fee-travel"));
+        if rules.continent != state.continent {
+            fee_chip.on_hover_text(tr!("colosseum-fee-travel", travel = data.world.travel_fee));
         }
         let prize = rules.purses.win_prize;
         wrapped_chip(ui, Icon::Purse, tr!("colosseum-prize-chip", prize = prize));

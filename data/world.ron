@@ -6,8 +6,9 @@
     // Residents' stats grow by this percentage for each prestige level above 1.
     prestige_stats_percent: 10,
     // A champion must defend the title at least once in this many weeks, against a
-    // challenger from the first `challengers` of the ranking.
-    title_defense_weeks: 4,
+    // challenger from the first `challengers` of the ranking; an outsider champion away
+    // from the colosseum's continent at its deadline loses it.
+    title_defense_weeks: 10,
     challengers: 5,
     // The rival managers' weekly thresholds, by profile. A fighter rests below
     // `rest_form` or when badly hurt or ill, cared for if the club keeps `care_reserve`
@@ -76,8 +77,11 @@
             (2, "oceanie"),
         ],
     ),
-    // Added to the entry fee of a colosseum on another continent than the club's: the
-    // journey. A club fights at home, abroad only when no colosseum at home suits it.
+    // A fighter's journey to another continent, a week of rest on the way: it fights
+    // only on the continent it is on, and is neither trained nor cared for away from
+    // home. A club fights where its fighter is, elsewhere only when nothing there suits
+    // it, and brings it home rather than train it abroad. A fighter joining a club of
+    // another continent travels to it for nothing the week after.
     travel_fee: 40,
     // The world's news (titles changing hands, champions bought, clubs closed and
     // founded) are kept this many weeks.
@@ -158,6 +162,10 @@
                 // the first one out: the same for every fighter, whatever its fame.
                 melee_prize: 150,
             ),
+            // Its place on the world map, in percent of its width from the left and of its
+            // height from the top: points spread to be read, placeholders until the
+            // drawn map.
+            map: (53, 36),
         ),
         (
             key: "rome",
@@ -166,6 +174,7 @@
             prestige: 3,
             residents: 10,
             purses: (entry_fee: 20, win_prize: 150, receipts_base: 40, receipts_per_fame: 1, champion_bonus: 100, melee_prize: 450),
+            map: (50, 29),
         ),
         (
             key: "pompei",
@@ -174,6 +183,7 @@
             prestige: 2,
             residents: 8,
             purses: (entry_fee: 10, win_prize: 100, receipts_base: 30, receipts_per_fame: 1, champion_bonus: 60, melee_prize: 300),
+            map: (46, 35),
         ),
         (
             key: "samarcande",
@@ -182,6 +192,7 @@
             prestige: 1,
             residents: 8,
             purses: (entry_fee: 0, win_prize: 50, receipts_base: 20, receipts_per_fame: 1, champion_bonus: 30, melee_prize: 150),
+            map: (66, 31),
         ),
         (
             key: "chang_an",
@@ -190,6 +201,7 @@
             prestige: 2,
             residents: 8,
             purses: (entry_fee: 10, win_prize: 100, receipts_base: 30, receipts_per_fame: 1, champion_bonus: 60, melee_prize: 300),
+            map: (80, 33),
         ),
         (
             key: "karakorum",
@@ -198,6 +210,7 @@
             prestige: 3,
             residents: 10,
             purses: (entry_fee: 20, win_prize: 150, receipts_base: 40, receipts_per_fame: 1, champion_bonus: 100, melee_prize: 450),
+            map: (75, 22),
         ),
         (
             key: "cahokia",
@@ -206,6 +219,7 @@
             prestige: 1,
             residents: 8,
             purses: (entry_fee: 0, win_prize: 50, receipts_base: 20, receipts_per_fame: 1, champion_bonus: 30, melee_prize: 150),
+            map: (22, 28),
         ),
         (
             key: "cuzco",
@@ -214,6 +228,7 @@
             prestige: 2,
             residents: 8,
             purses: (entry_fee: 10, win_prize: 100, receipts_base: 30, receipts_per_fame: 1, champion_bonus: 60, melee_prize: 300),
+            map: (27, 64),
         ),
         (
             key: "tenochtitlan",
@@ -222,6 +237,7 @@
             prestige: 3,
             residents: 10,
             purses: (entry_fee: 20, win_prize: 150, receipts_base: 40, receipts_per_fame: 1, champion_bonus: 100, melee_prize: 450),
+            map: (17, 42),
         ),
         (
             key: "mbanza_kongo",
@@ -230,6 +246,7 @@
             prestige: 1,
             residents: 8,
             purses: (entry_fee: 0, win_prize: 50, receipts_base: 20, receipts_per_fame: 1, champion_bonus: 30, melee_prize: 150),
+            map: (50, 62),
         ),
         (
             key: "grand_zimbabwe",
@@ -238,6 +255,7 @@
             prestige: 1,
             residents: 8,
             purses: (entry_fee: 0, win_prize: 50, receipts_base: 20, receipts_per_fame: 1, champion_bonus: 30, melee_prize: 150),
+            map: (58, 72),
         ),
         (
             key: "musumba",
@@ -246,6 +264,7 @@
             prestige: 3,
             residents: 10,
             purses: (entry_fee: 20, win_prize: 150, receipts_base: 40, receipts_per_fame: 1, champion_bonus: 100, melee_prize: 450),
+            map: (56, 58),
         ),
         (
             key: "nan_madol",
@@ -254,6 +273,7 @@
             prestige: 1,
             residents: 8,
             purses: (entry_fee: 0, win_prize: 50, receipts_base: 20, receipts_per_fame: 1, champion_bonus: 30, melee_prize: 150),
+            map: (87, 49),
         ),
         (
             key: "rapa_nui",
@@ -262,6 +282,7 @@
             prestige: 1,
             residents: 8,
             purses: (entry_fee: 0, win_prize: 50, receipts_base: 20, receipts_per_fame: 1, champion_bonus: 30, melee_prize: 150),
+            map: (80, 76),
         ),
         (
             key: "ngapuhi",
@@ -270,6 +291,7 @@
             prestige: 3,
             residents: 10,
             purses: (entry_fee: 20, win_prize: 150, receipts_base: 40, receipts_per_fame: 1, champion_bonus: 100, melee_prize: 450),
+            map: (94, 80),
         ),
     ],
 )

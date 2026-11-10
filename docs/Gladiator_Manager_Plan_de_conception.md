@@ -243,7 +243,8 @@ Un club ne vend qu'à un club au moins aussi riche que lui, et n'achète qu'en g
 | Sortie | Entretien | Coût hebdomadaire par combattant |
 | Sortie | Soins | Gravité de la blessure ou maladie, niveau du médecin |
 | Sortie | Entraînement | Par séance, niveau de l'entraîneur |
-| Sortie | Inscription | Un frais par combattant inscrit, plus le voyage sur un autre continent |
+| Sortie | Inscription | Un frais par combattant inscrit |
+| Sortie | Voyage | Pour aller sur un autre continent, ou en revenir : une semaine de route |
 | Sortie | Salaires du personnel | Hebdomadaire, une fois par tranche de 3 combattants en activité |
 | Sortie | Achat d'un combattant | Prix du marché |
 | Sortie | Construction | Prix du bâtiment, payé à la décision |
@@ -297,7 +298,7 @@ Les clubs rivaux bâtissent aussi, selon leur niveau de richesse : un club pauvr
 
 Chaque colisée a son type d'arène, son prestige, son classement et son champion. Un même combattant peut figurer dans plusieurs classements et détenir plusieurs titres, au prix de défenses plus fréquentes et donc de plus de fatigue.
 
-Les colisées sont répartis sur cinq continents. Chacun a un colisée majeur, au prestige le plus haut : Rome (Europe), Karakorum (Asie), Tenochtitlan (Amériques), Musumba (Afrique) et Ngāpuhi (Océanie). Autour de lui, un ou deux colisées mineurs, dont un à entrée gratuite : Capoue et Pompéi en Europe, Samarcande et Chang'an en Asie, Cahokia et Cuzco dans les Amériques, Mbanza Kongo et Grand Zimbabwe en Afrique, Nan Madol et Rapa Nui en Océanie. Le joueur choisit son continent en commençant une partie ; chaque club rival a le sien, celui de sa culture. Un club combat surtout chez lui : s'inscrire sur un autre continent coûte en plus le voyage. Un club rival ne part à l'étranger que si aucun colisée de chez lui ne lui convient.
+Les colisées sont répartis sur cinq continents. Chacun a un colisée majeur, au prestige le plus haut : Rome (Europe), Karakorum (Asie), Tenochtitlan (Amériques), Musumba (Afrique) et Ngāpuhi (Océanie). Autour de lui, un ou deux colisées mineurs, dont un à entrée gratuite : Capoue et Pompéi en Europe, Samarcande et Chang'an en Asie, Cahokia et Cuzco dans les Amériques, Mbanza Kongo et Grand Zimbabwe en Afrique, Nan Madol et Rapa Nui en Océanie. Le joueur choisit son continent en commençant une partie ; chaque club rival a le sien, celui de sa culture. Chaque combattant est sur un continent et ne combat que dans ses colisées. Partir sur un autre continent, ou en revenir, prend une semaine de voyage, qui repose comme une semaine de repos, et coûte le voyage ; là-bas, loin du ludus, il combat mais ne s'entraîne pas et n'est pas soigné. Un combattant qui rejoint un club d'un autre continent le rejoint en une semaine. Une carte du monde montre chaque colisée et les combattants du club sur leur continent, et sert à les y envoyer. Un club rival combat là où est son combattant, ne part ailleurs que si rien ne lui convient sur place, et le fait rentrer plutôt que de l'entraîner à l'étranger.
 
 ### Classement
 
@@ -305,7 +306,7 @@ Le classement utilise le système Elo, calculé séparément pour chaque colisé
 
 ### Titre de champion
 
-Le titre est distinct du rang 1. Le champion doit le défendre en duel contre un challenger du top 5 au minimum toutes les 4 semaines ; il est libre de le défendre plus souvent. Une défense coûte plus de forme qu'un combat normal et rapporte le bonus champion.
+Le titre est distinct du rang 1. Le champion doit le défendre en duel contre un challenger du top 5 au minimum toutes les 10 semaines ; il est libre de le défendre plus souvent. Une défense coûte plus de forme qu'un combat normal et rapporte le bonus champion.
 
 ### Défis
 
@@ -399,7 +400,7 @@ Le plan Godot (C#, Godot RL Agents) est abandonné pour un moteur maison en Rust
 | Retraite | Décidée uniquement par le combattant ; le joueur peut le libérer du club |
 | Soins | Choisis par le joueur, jamais automatiques |
 | Durée de la compétition | 22 semaines par saison, puis 4 de grand événement et 4 d'intersaison |
-| Titre de champion | Défense au minimum toutes les 4 semaines, plus souvent si le champion le souhaite |
+| Titre de champion | Défense au minimum toutes les 10 semaines, plus souvent si le champion le souhaite |
 | Combat sans armure | Défenses réduites, bonus de renommée ; les armes ne se refusent pas |
 | Mêlée | Une par colisée et par saison (plusieurs de 20 au plus quand les inscrits sont plus nombreux), plusieurs combattants d'un même club autorisés, sans lien d'office, pactes spontanés en combat |
 | Mort à l'écran | Tâche de sang et petite animation, selon ce qui est faisable |

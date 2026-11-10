@@ -1,6 +1,6 @@
 //! The fighter list: a card per fighter in activity, the former ones below.
 
-use lanista_core::colosseum::{ColosseumId, Contender};
+use lanista_core::colosseum::{ColosseumId, Contender, Continent};
 use lanista_core::design_data::DesignData;
 use lanista_core::fighter::career::{Activity, CareerFighter, Duty, Orders, Status, WeekPlan};
 use lanista_core::fighter::form::Form;
@@ -15,9 +15,9 @@ use super::{
 };
 use crate::lang::tr;
 use crate::texts::{
-    activity_name, class_name, colosseum_rules_name, condition_text, date_in_sentence, duty_name,
-    illness_effect, illness_text, injury_effect, injury_text, loadout_name, record_text,
-    stage_name, unsellable_text,
+    activity_name, class_name, colosseum_rules_name, condition_text, continent_name,
+    date_in_sentence, duty_name, illness_effect, illness_text, injury_effect, injury_text,
+    loadout_name, record_text, stage_name, unsellable_text,
 };
 use crate::theme::{self, Icon};
 
@@ -39,13 +39,19 @@ impl ClubScreen {
             .map(|i| self.special_fights(i))
             .collect();
         let mut all = None;
-        egui::ComboBox::from_id_salt("orders-all")
-            .selected_text(tr!("roster-orders-all"))
-            .show_ui(ui, |ui| {
-                for duty in duties(state, data) {
-                    ui.selectable_value(&mut all, Some(duty), duty_name(duty, data));
-                }
-            });
+        let mut goto = None;
+        ui.horizontal(|ui| {
+            egui::ComboBox::from_id_salt("orders-all")
+                .selected_text(tr!("roster-orders-all"))
+                .show_ui(ui, |ui| {
+                    for duty in duties(state, state.continent, data) {
+                        ui.selectable_value(&mut all, Some(duty), duty_name(duty, data));
+                    }
+                });
+            if ui.button(tr!("roster-map")).clicked() {
+                goto = Some(View::Map);
+            }
+        });
         ui.add_space(4.0);
         let unpaid = state.unpaid(&self.decisions.plans, &self.decisions.ludus, data);
         let decisions = &mut self.decisions;
@@ -64,7 +70,6 @@ impl ClubScreen {
         } else {
             1
         };
-        let mut goto = None;
         egui::ScrollArea::vertical().show(ui, |ui| {
             for row in cards.chunks_mut(per_row) {
                 ui.columns(per_row, |columns| {
@@ -108,13 +113,13 @@ fn short_name(index: usize, fighter: &CareerFighter) -> String {
 }
 
 /// The duties a fighter may be given from the roster: alternate, train, rest, and
-/// alternate or fight every week in each colosseum of the club's continent; one abroad
-/// is given from the sheet.
-fn duties(state: &GameState, data: &DesignData) -> Vec<Duty> {
+/// alternate or fight every week in each colosseum of the club's continent, and of
+/// `here`, the one the fighter is on; one elsewhere is given from the world map.
+fn duties(state: &GameState, here: Continent, data: &DesignData) -> Vec<Duty> {
     let home = (0..)
         .map(ColosseumId)
         .zip(&data.world.colosseums)
-        .filter(|(_, c)| c.continent == state.continent)
+        .filter(|(_, c)| c.continent == state.continent || c.continent == here)
         .flat_map(|(id, _)| [Duty::Alternate(id), Duty::Fight(id)]);
     [Duty::Auto, Duty::Train, Duty::Rest]
         .into_iter()
@@ -161,14 +166,14 @@ fn fighter_card(
                 egui::ComboBox::from_id_salt(("orders", index))
                     .selected_text(duty_name(orders.activity, data))
                     .show_ui(ui, |ui| {
-                        for duty in duties(state, data) {
+                        for duty in duties(state, super::here(fighter, state), data) {
                             let name = duty_name(duty, data);
                             ui.selectable_value(&mut orders.activity, duty, name);
                         }
                     });
             });
             title_boxes(ui, index, orders, state, data);
-            week_chips(ui, fighter, plan, (apart, unpaid), data);
+            week_chips(ui, fighter, plan, (apart, unpaid), (state, data));
         });
     open
 }
@@ -274,22 +279,36 @@ fn health_chips(ui: &mut egui::Ui, fighter: &CareerFighter, state: &GameState, d
     });
 }
 
-/// Its week as tags: the activity, in red for a fight, the loadout and its ease with
-/// it, care, the armour left, whether the week is `apart` from its orders and whether
-/// the money will not pay for it (`unpaid`).
+/// Its week as tags: the continent it is on, away from home, or on its way to the club
+/// it just joined; the activity, in red for a fight, the loadout and its ease with it,
+/// care, the armour left, whether the week is `apart` from its orders and whether the
+/// money will not pay for it (`unpaid`).
 fn week_chips(
     ui: &mut egui::Ui,
     fighter: &CareerFighter,
     plan: &WeekPlan,
     (apart, unpaid): (bool, bool),
-    data: &DesignData,
+    (state, data): (&GameState, &DesignData),
 ) {
     ui.horizontal_wrapped(|ui| {
+        let here = super::here(fighter, state);
+        if fighter.homebound {
+            let text = tr!(
+                "roster-homebound",
+                continent = continent_name(state.continent)
+            );
+            wrapped_chip(ui, Icon::Origin, text).on_hover_text(tr!("roster-homebound-hint"));
+        } else if here != state.continent {
+            let text = tr!("roster-away", continent = continent_name(here));
+            wrapped_chip(ui, Icon::Origin, text).on_hover_text(tr!("roster-away-hint"));
+        }
         let icon = match plan.activity {
             Activity::Rest => Icon::Rest,
             Activity::Train => Icon::Train,
+            Activity::Travel(_) => Icon::Origin,
             _ => Icon::Fight,
         };
+
         wrapped_chip(ui, icon, activity_name(plan.activity, data));
         let loadout = tr!(
             "roster-loadout",

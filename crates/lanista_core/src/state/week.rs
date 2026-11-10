@@ -122,13 +122,7 @@ pub fn next_week(state: &mut GameState, decisions: &Decisions, data: &DesignData
             Some(report)
         } else {
             let fighter = &mut state.fighters[i];
-            let plan = affordable(
-                wanted[i],
-                fighter,
-                (state.money, state.continent),
-                costs,
-                data,
-            );
+            let plan = affordable(wanted[i], fighter, state.money, costs, data);
             let fame = fighter.fame;
             // The colosseum and the outsider met there.
             let meeting = match plan.activity {
@@ -164,6 +158,9 @@ pub fn next_week(state: &mut GameState, decisions: &Decisions, data: &DesignData
         };
         if let Some(report) = &report {
             pay_fighter(state, i, report, &mut ledger, data);
+            if let Activity::Travel(to) = report.plan.activity {
+                state.fighters[i].arrive(to);
+            }
         }
         reports.push(report);
     }
@@ -224,7 +221,7 @@ fn ludus_week(
 }
 
 /// What the club's fighter `i` costs for its week `report`, into `ledger`: the upkeep,
-/// its wage, and its win bonus for a duel won.
+/// its wage, its win bonus for a duel won, and its journey but to a club just joined.
 fn pay_fighter(
     state: &mut GameState,
     i: usize,
@@ -237,10 +234,15 @@ fn pay_fighter(
         .fight
         .as_ref()
         .is_some_and(|f| f.result == FightResult::Won);
+    let journey = match report.plan.activity {
+        Activity::Travel(_) if !state.fighters[i].homebound => data.world.travel_fee,
+        _ => 0,
+    };
     let owed = [
         (Flow::Upkeep, data.economy.upkeep),
         (Flow::Wage, contract.wage),
         (Flow::WinBonus, if won { contract.win_bonus } else { 0 }),
+        (Flow::Travel, journey),
     ];
     for (flow, amount) in owed.into_iter().filter(|&(_, amount)| amount > 0) {
         let amount = -i64::from(amount);
@@ -328,7 +330,8 @@ fn settle_week(
             pay(Flow::ChampionBonus, i64::from(purses.champion_bonus));
         }
     } else {
-        fee = i64::from(entry_fee(c, state.continent, data));
+        fee = i64::from(entry_fee(c, data));
+
         pay(Flow::EntryFee, -fee);
         colosseum.record(club, rival, fight.result, &data.world);
     }

@@ -38,7 +38,8 @@ pub struct WorldRules {
     pub roster: RosterRules,
     /// How the rival clubs are drawn.
     pub clubs: ClubRules,
-    /// Added to the entry fee of a colosseum on another continent than the club's.
+    /// What a fighter's journey to another continent costs its club
+    /// (`Activity::Travel`).
     pub travel_fee: u32,
     /// How many weeks the world's news are kept (`GameState::news`).
     pub news_weeks: u32,
@@ -89,18 +90,17 @@ impl WorldRules {
             .unwrap_or(Element::Stone)
     }
 
-    /// What a club of `home` pays to register a fighter in colosseum `id`: its entry
-    /// fee, and the journey (`travel_fee`) if it is on another continent. `None` for a
+    /// What a club pays to register a fighter in colosseum `id`; `None` for a
     /// colosseum missing from the data.
     #[must_use]
-    pub fn entry_fee(&self, id: ColosseumId, home: Continent) -> Option<u32> {
-        let colosseum = self.colosseum(id)?;
-        let travel = if colosseum.continent == home {
-            0
-        } else {
-            self.travel_fee
-        };
-        Some(colosseum.purses.entry_fee.saturating_add(travel))
+    pub fn entry_fee(&self, id: ColosseumId) -> Option<u32> {
+        Some(self.colosseum(id)?.purses.entry_fee)
+    }
+
+    /// The continent of colosseum `id`.
+    #[must_use]
+    pub fn continent(&self, id: ColosseumId) -> Option<Continent> {
+        Some(self.colosseum(id)?.continent)
     }
 
     /// Where a club of `home` starts: the first colosseum of its continent free to
@@ -147,6 +147,9 @@ impl Continent {
 pub struct ColosseumData {
     /// Names it in the language files (`colosseum-<key>`) and the tools.
     pub key: String,
+    /// Its place on the world map, in percent of its width from the left and of its
+    /// height from the top.
+    pub map: (u32, u32),
     pub continent: Continent,
     pub arena: ArenaKind,
     /// From 1 to 5: the higher, the stronger the fighters generated for it.
@@ -209,6 +212,12 @@ impl<'a> Rosters<'a> {
     pub fn active(self, contender: Contender) -> bool {
         self.fighter(contender)
             .is_some_and(|f| f.status == Status::Active)
+    }
+
+    /// Whether `contender` is on `continent` (`CareerFighter::is_on`).
+    #[must_use]
+    pub fn is_on(self, contender: Contender, continent: Continent) -> bool {
+        self.fighter(contender).is_some_and(|f| f.is_on(continent))
     }
 }
 
@@ -342,26 +351,28 @@ impl Colosseum {
         self.title_since + u64::from(rules.title_defense_weeks)
     }
 
-    /// The outsider the club's fighter `i` meets if it fights for the title here: as
-    /// champion, the best-ranked outsider; from the first `challengers` of the ranking,
-    /// an outsider champion. `None` if it may not fight for the title.
+    /// The outsider the club's fighter `i` meets if it fights for the title here, on
+    /// `continent`: as champion, the best-ranked outsider there; from the first
+    /// `challengers` of the ranking, an outsider champion there. `None` if it may not
+    /// fight for the title.
     // ponytail: an outsider champion only meets outsiders in its own defenses; club
     // fighters ask for their title fight.
     #[must_use]
     pub fn title_opponent(
         &self,
         i: usize,
-        rosters: Rosters,
+        (rosters, continent): (Rosters, Continent),
         rules: &WorldRules,
     ) -> Option<Contender> {
         let me = Contender::Club(i);
         if !rosters.active(me) {
             return None;
         }
+        let here = |c: &Contender| !c.is_club() && rosters.is_on(*c, continent);
         if self.champion == Some(me) {
-            return self.best_outsider(rosters, None);
+            return self.active_ranking(rosters).map(|r| r.contender).find(here);
         }
-        let champion = self.champion.filter(|c| !c.is_club())?;
+        let champion = self.champion.filter(here)?;
         let top = usize::try_from(rules.challengers).unwrap_or(usize::MAX);
         self.active_ranking(rosters)
             .take(top)
@@ -458,14 +469,21 @@ impl Colosseum {
     }
 
     /// A club champion past its deadline in `week` loses the title to the best ranked
-    /// still fighting.
-    pub fn strip(&mut self, week: u64, rosters: Rosters, rules: &WorldRules) -> Option<TitleNews> {
-        let former @ Contender::Club(_) = self.champion? else {
-            return None;
-        };
-        if week < self.defense_deadline(rules) {
+    /// still fighting, and so does an outsider champion away from the colosseum's
+    /// `continent`, which could not defend it.
+    pub fn strip(
+        &mut self,
+        week: u64,
+        (rosters, continent): (Rosters, Continent),
+        rules: &WorldRules,
+    ) -> Option<TitleNews> {
+        let former = self.champion?;
+        if week < self.defense_deadline(rules)
+            || !former.is_club() && rosters.is_on(former, continent)
+        {
             return None;
         }
+
         let to = self
             .active_ranking(rosters)
             .map(|r| r.contender)
@@ -807,12 +825,19 @@ mod tests {
         let champion = world.rome.champion;
         assert!(matches!(champion, Some(Contender::Rival(_))));
         // Not ranked yet: no title fight.
-        assert_eq!(world.rome.title_opponent(0, world.rosters(), rules), None);
+        assert_eq!(
+            world
+                .rome
+                .title_opponent(0, (world.rosters(), Continent::Europe), rules),
+            None
+        );
         world
             .rome
             .record(Contender::Club(0), rival(9), FightResult::Won, rules);
         assert_eq!(
-            world.rome.title_opponent(0, world.rosters(), rules),
+            world
+                .rome
+                .title_opponent(0, (world.rosters(), Continent::Europe), rules),
             champion
         );
         // Out of the top five: no title fight either.
@@ -824,24 +849,38 @@ mod tests {
                 .rome
                 .record(rival(r), rival(13), FightResult::Won, rules);
         }
-        assert_eq!(world.rome.title_opponent(0, world.rosters(), rules), None);
+        assert_eq!(
+            world
+                .rome
+                .title_opponent(0, (world.rosters(), Continent::Europe), rules),
+            None
+        );
         // As champion, against the best-ranked rival fighter still fighting.
         world.rome.champion = Some(Contender::Club(0));
         let best @ Contender::Rival(id) = world.rome.ranking[0].contender else {
             panic!("a rival fighter leads");
         };
         assert_eq!(
-            world.rome.title_opponent(0, world.rosters(), rules),
+            world
+                .rome
+                .title_opponent(0, (world.rosters(), Continent::Europe), rules),
             Some(best)
         );
         world.rivals[0].fighters[id.fighter].status = Status::Dead;
         let second = world.rome.best_outsider(world.rosters(), None).unwrap();
         assert_ne!(second, best);
         assert_eq!(
-            world.rome.title_opponent(0, world.rosters(), rules),
+            world
+                .rome
+                .title_opponent(0, (world.rosters(), Continent::Europe), rules),
             Some(second)
         );
-        assert_eq!(world.rome.title_opponent(1, world.rosters(), rules), None);
+        assert_eq!(
+            world
+                .rome
+                .title_opponent(1, (world.rosters(), Continent::Europe), rules),
+            None
+        );
         // A retired fighter fights no more.
         world.club[0].status = Status::Retired;
         world.rome.champion = champion;
@@ -856,7 +895,12 @@ mod tests {
                 elo: 2000,
             },
         );
-        assert_eq!(world.rome.title_opponent(0, world.rosters(), rules), None);
+        assert_eq!(
+            world
+                .rome
+                .title_opponent(0, (world.rosters(), Continent::Europe), rules),
+            None
+        );
     }
 
     #[test]
@@ -875,9 +919,16 @@ mod tests {
             rivals: &world.rivals,
             free_agents: &[],
         };
-        assert_eq!(world.rome.strip(deadline - 1, rosters, rules), None);
+        assert_eq!(
+            world
+                .rome
+                .strip(deadline - 1, (rosters, Continent::Europe), rules),
+            None
+        );
         assert_eq!(world.rome.champion, Some(club_champion));
-        let news = world.rome.strip(deadline, rosters, rules);
+        let news = world
+            .rome
+            .strip(deadline, (rosters, Continent::Europe), rules);
         let to = world
             .rome
             .ranking
@@ -961,7 +1012,12 @@ mod tests {
         world
             .rome
             .record(Contender::Club(0), rival(2), FightResult::Won, rules);
-        assert_eq!(world.rome.title_opponent(0, rosters, rules), Some(agent));
+        assert_eq!(
+            world
+                .rome
+                .title_opponent(0, (rosters, Continent::Europe), rules),
+            Some(agent)
+        );
         // Against the other outsiders, it is ahead.
         assert!(world.rome.chance(agent, rosters, rules) > 0.5);
         // Signed by the club, it takes its Elo and title along.

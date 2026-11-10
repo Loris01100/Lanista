@@ -98,6 +98,7 @@ async fn main() {
         (Action::Week(1), Button::Key(KeyCode::Key2)),
         (Action::Week(2), Button::Key(KeyCode::Key3)),
         (Action::Week(3), Button::Key(KeyCode::Key4)),
+        (Action::Week(4), Button::Key(KeyCode::Key5)),
     ]);
     let mut audio = Audio::default();
     let display = folder

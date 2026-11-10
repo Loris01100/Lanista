@@ -4,7 +4,7 @@
 use rand::{Rng, RngExt};
 use serde::{Deserialize, Serialize};
 
-use crate::colosseum::{ColosseumId, Contender};
+use crate::colosseum::{ColosseumId, Contender, Continent};
 use crate::combat::{Arena, ArenaKind, Floor, Vec2};
 use crate::design_data::{DesignData, FighterRules};
 use crate::duel::{STATS, play};
@@ -161,6 +161,15 @@ pub struct CareerFighter {
     /// What it feels for the clubs it was in (`TieRules`), none at 0.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub ties: Vec<Tie>,
+    /// The continent it is on, where it fights: its club's as it comes into the world,
+    /// its culture's for a free agent (`GameState::named`), then wherever it travelled
+    /// ([`Activity::Travel`]). `None`, for a fighter out of a game: on every continent.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub location: Option<Continent>,
+    /// Joined a club of another continent than its own: its next week is the journey
+    /// to it (`GameState::ordered_plan`).
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub homebound: bool,
 }
 
 impl CareerFighter {
@@ -231,6 +240,8 @@ impl CareerFighter {
             contract: None,
             moved_to: None,
             ties: Vec::new(),
+            location: None,
+            homebound: false,
         };
         fighter.loadout = fighter.preferred_loadout();
         fighter
@@ -298,6 +309,8 @@ impl CareerFighter {
             contract: None,
             moved_to: Some(to),
             ties: Vec::new(),
+            location: None,
+            homebound: false,
         }
     }
 
@@ -452,6 +465,19 @@ impl CareerFighter {
         }
     }
 
+    /// Whether it is on `continent`, where it may fight; one out of a game is on
+    /// every continent.
+    #[must_use]
+    pub fn is_on(&self, continent: Continent) -> bool {
+        self.location.is_none_or(|here| here == continent)
+    }
+
+    /// Its journey to `continent` is over: it is there.
+    pub fn arrive(&mut self, continent: Continent) {
+        self.location = Some(continent);
+        self.homebound = false;
+    }
+
     /// Its form at the end of a week of `activity`, as [`CareerFighter::play_week`] and
     /// the melee change it, the trainer's `coaching` sparing a training: what its sheet
     /// foretells before the week is played.
@@ -463,7 +489,7 @@ impl CareerFighter {
         rules: &FighterRules,
     ) -> Form {
         let event = match activity {
-            Activity::Rest => return self.rested_form(rules),
+            Activity::Rest | Activity::Travel(_) => return self.rested_form(rules),
             Activity::Train => {
                 let lost = self.training_form_lost(coaching, rules);
                 return Form::new(self.form.value().saturating_sub(lost));
@@ -504,9 +530,9 @@ impl CareerFighter {
         let mut report = self.begin_melee_week(plan, staff, data)?;
         let rules = &data.fighter;
         match plan.activity {
-            Activity::Rest | Activity::Melee(_) => {
+            Activity::Rest | Activity::Travel(_) | Activity::Melee(_) => {
                 self.form = self.rested_form(rules);
-                if plan.activity == Activity::Rest {
+                if !matches!(plan.activity, Activity::Melee(_)) {
                     self.take_rest(rules);
                 }
             }
@@ -1336,20 +1362,23 @@ pub enum Activity {
     Challenge(ColosseumId, RivalId),
     /// The season-opening melee of this colosseum, in the season's first week only.
     Melee(ColosseumId),
+    /// The journey to this continent, a week of rest on the way: the fighter is there
+    /// from the next week on.
+    Travel(Continent),
 }
 
 impl Activity {
     /// Whether the fighter fights this week: a duel or a melee.
     #[must_use]
     pub fn fights(self) -> bool {
-        !matches!(self, Self::Rest | Self::Train)
+        !matches!(self, Self::Rest | Self::Train | Self::Travel(_))
     }
 
     /// The colosseum the fighter fights in this week.
     #[must_use]
     pub fn colosseum(self) -> Option<ColosseumId> {
         match self {
-            Self::Rest | Self::Train => None,
+            Self::Rest | Self::Train | Self::Travel(_) => None,
             Self::Fight(c) | Self::TitleFight(c) | Self::Challenge(c, _) | Self::Melee(c) => {
                 Some(c)
             }
@@ -1400,7 +1429,10 @@ impl Duty {
             Activity::Rest => Some(Self::Rest),
             Activity::Train => Some(Self::Train),
             Activity::Fight(id) => Some(Self::Fight(id)),
-            Activity::TitleFight(_) | Activity::Challenge(..) | Activity::Melee(_) => None,
+            Activity::TitleFight(_)
+            | Activity::Challenge(..)
+            | Activity::Melee(_)
+            | Activity::Travel(_) => None,
         }
     }
 }

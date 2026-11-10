@@ -270,6 +270,8 @@ pub enum Flow {
     Parcel,
     /// The weekly upkeep of the ludus's buildings standing.
     Maintenance,
+    /// A fighter's journey to another continent.
+    Travel,
 }
 
 /// Money in (positive) or out (negative) for one of the club's fighters, or for the club.
