@@ -1,7 +1,7 @@
 //! The ludus view.
 
 use lanista_core::design_data::DesignData;
-use lanista_core::ludus::{Ludus, LudusMove, Site};
+use lanista_core::ludus::{Ludus, LudusMove, SPECIALTY_BUILDINGS, Site};
 use reesch::egui;
 
 use super::{ClubScreen, wrapped_chip};
@@ -60,6 +60,7 @@ impl ClubScreen {
                 }
             }
         });
+        specialties(ui, &planned, data);
         ui.add_space(4.0);
         let plot = self.shown_plot.min(planned.plots.len().saturating_sub(1));
         egui::ScrollArea::vertical().show(ui, |ui| {
@@ -74,6 +75,30 @@ impl ClubScreen {
                 });
         });
     }
+}
+
+/// Each family's buildings standing, toward its specialty.
+fn specialties(ui: &mut egui::Ui, ludus: &Ludus, data: &DesignData) {
+    ui.horizontal_wrapped(|ui| {
+        ui.label(egui::RichText::new(tr!("ludus-specialties")).strong());
+        for family in &data.ludus.families {
+            let standing = ludus.family_standing(&family.key, &data.ludus);
+            let name = tr!(&format!("family-{}", family.key));
+            let specialty = tr!(&format!("specialty-{}", family.specialty));
+            let text = if standing >= SPECIALTY_BUILDINGS {
+                tr!("ludus-family-done", family = name, specialty = specialty)
+            } else {
+                tr!(
+                    "ludus-family-progress",
+                    family = name,
+                    standing = standing,
+                    needed = SPECIALTY_BUILDINGS,
+                    specialty = specialty
+                )
+            };
+            wrapped_chip(ui, None, text);
+        }
+    });
 }
 
 /// The club's `ludus` and `money` once `moves` are made, each in turn if it may be.

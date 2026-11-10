@@ -183,7 +183,10 @@ mod tests {
             keys.push(format!("school-{}", culture.school));
         }
         let ludus = &data.ludus;
-        keys.extend(ludus.families.iter().map(|f| format!("family-{}", f.key)));
+        for family in &ludus.families {
+            keys.push(format!("family-{}", family.key));
+            keys.push(format!("specialty-{}", family.specialty));
+        }
         keys.extend(
             ludus
                 .buildings

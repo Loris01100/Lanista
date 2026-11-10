@@ -1151,10 +1151,17 @@ ludus-left = Argent après ces décisions : { $money }
 ludus-move-build = Bâtir : { $building }, terrain { $plot }
 ludus-move-demolish = Démolir le terrain { $plot }
 ludus-move-parcel = Acheter une parcelle
+ludus-specialties = Spécialités
+ludus-family-progress = { $family } : { $standing } / { $needed }, vers { $specialty }
+ludus-family-done = { $family } : { $specialty }
 
 family-entrainement = Entraînement
 family-soins = Soins
 family-intendance = Intendance
+
+specialty-ecole_renommee = École renommée
+specialty-club_medecins = Club des médecins
+specialty-club_bien_tenu = Club bien tenu
 
 building-terrain_entrainement = Terrain d'entraînement
 building-ecole_recrues = École des recrues

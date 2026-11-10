@@ -69,6 +69,9 @@ pub enum Effect {
     BigFights(u32),
 }
 
+/// Buildings of a family standing that give the club its specialty.
+pub const SPECIALTY_BUILDINGS: usize = 3;
+
 /// The club's ludus.
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Ludus {
@@ -122,6 +125,23 @@ impl Ludus {
             .iter()
             .flatten()
             .filter(|s| s.building == building)
+            .count()
+    }
+
+    /// Buildings of the family `family` (its key) standing, copies included; one
+    /// being built does not count.
+    #[must_use]
+    pub fn family_standing(&self, family: &str, rules: &LudusRules) -> usize {
+        self.plots
+            .iter()
+            .flatten()
+            .filter(|s| s.weeks_left == 0)
+            .filter(|s| {
+                rules
+                    .buildings
+                    .get(s.building)
+                    .is_some_and(|b| b.family == family)
+            })
             .count()
     }
 
@@ -222,8 +242,11 @@ mod tests {
         assert_eq!(ludus.make(build(2), 1000, &rules), None);
         // No upkeep while it is built.
         assert_eq!(ludus.week(&rules), (0, vec![]));
+        assert_eq!(ludus.family_standing("entrainement", &rules), 0);
         assert_eq!(ludus.week(&rules), (0, vec![0]));
         assert_eq!(ludus.week(&rules), (10, vec![]));
+        assert_eq!(ludus.family_standing("entrainement", &rules), 1);
+        assert_eq!(ludus.family_standing("soins", &rules), 0);
         // A building of no weeks stands at once.
         ludus.make(LudusMove::Demolish(0), 0, &rules).unwrap();
         ludus
