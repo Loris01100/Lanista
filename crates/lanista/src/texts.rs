@@ -1130,6 +1130,9 @@ pub fn money_line(before: i64, after: i64, ledger: &[Transaction]) -> String {
                 Flow::Salary => tr!("flow-salary"),
                 Flow::Wage => tr!("flow-wage"),
                 Flow::WinBonus => tr!("flow-win-bonus"),
+                Flow::Construction => tr!("flow-construction"),
+                Flow::Parcel => tr!("flow-parcel"),
+                Flow::Maintenance => tr!("flow-maintenance"),
             };
             format!("{name} {amount:+}")
         })

@@ -7,6 +7,7 @@ use crate::economy::{Flow, Transaction, Wealth};
 use crate::fighter::career::{Activity, CareerFighter, Orders, Status, WeekPlan, WeekReport};
 use crate::fighter::fame::{Fame, FightResult};
 use crate::fighter::percent_of;
+use crate::ludus::LudusMove;
 use crate::market::{MarketNews, Move};
 use crate::relations::{Club, Reason};
 use crate::staff::{StaffMove, StaffNews};
@@ -37,6 +38,9 @@ pub struct Decisions {
     /// Changes of staff, each made before the week if `GameState::may_staff` allows it
     /// at its turn; only the first for each post counts.
     pub staff: Vec<StaffMove>,
+    /// Moves on the ludus, made in order before the week, each paid when made if the
+    /// club has the money at its turn (`Ludus::make`), else dropped.
+    pub ludus: Vec<LudusMove>,
 }
 
 /// What a week did to the club.
@@ -61,7 +65,7 @@ pub struct WeekSummary {
 }
 
 /// Plays one week for the whole club: the fighters' new orders, the market moves and the change of staff before
-/// the week, the staff's salaries, then each fighter's week in
+/// the week, the staff's salaries, the ludus's moves and upkeep, then each fighter's week in
 /// club order, paid for (`pay_fighter`), then the week of the rival clubs and
 /// the free agents, the answer to the player's offer, the contracts ending and
 /// everyone a year older at the start of the off-season,
@@ -85,6 +89,7 @@ pub fn next_week(state: &mut GameState, decisions: &Decisions, data: &DesignData
     let mut ledger = Vec::new();
     let mut market = market_moves(state, &decisions.moves, data, &mut ledger);
     let staff = staff_week(state, &decisions.staff, data, &mut ledger);
+    ludus_week(state, &decisions.ludus, data, &mut ledger);
     let effects = state.staff_effects();
     // A training session's price, and the doctor's for care.
     let costs = (state.training_cost(data), effects.medicine);
@@ -178,6 +183,38 @@ pub fn next_week(state: &mut GameState, decisions: &Decisions, data: &DesignData
     let money = (money, state.money);
     state.journal.record(week, played, money, &summary, data);
     summary
+}
+
+/// The club's `moves` on its ludus, each paid when made, then the upkeep of its
+/// buildings standing, even into debt, and a week of work on its constructions.
+fn ludus_week(
+    state: &mut GameState,
+    moves: &[LudusMove],
+    data: &DesignData,
+    ledger: &mut Vec<Transaction>,
+) {
+    let mut pay = |state: &mut GameState, flow, amount: u32| {
+        if amount > 0 {
+            let amount = -i64::from(amount);
+            state.money += amount;
+            ledger.push(Transaction {
+                fighter: None,
+                flow,
+                amount,
+            });
+        }
+    };
+    for &m in moves {
+        if let Some(cost) = state.ludus.make(m, state.money, &data.ludus) {
+            let flow = match m {
+                LudusMove::BuyParcel => Flow::Parcel,
+                LudusMove::Build { .. } | LudusMove::Demolish(_) => Flow::Construction,
+            };
+            pay(state, flow, cost);
+        }
+    }
+    let (upkeep, _finished) = state.ludus.week(&data.ludus);
+    pay(state, Flow::Maintenance, upkeep);
 }
 
 /// What the club's fighter `i` costs for its week `report`, into `ledger`: the upkeep,

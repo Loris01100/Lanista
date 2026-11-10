@@ -10,6 +10,7 @@ pub mod journal;
 pub mod learned;
 pub mod learning;
 pub mod log;
+pub mod ludus;
 pub mod market;
 pub mod melee;
 pub mod names;

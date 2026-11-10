@@ -264,12 +264,18 @@ pub enum Flow {
     Wage,
     /// A fighter's bonus for a duel won, by its contract.
     WinBonus,
+    /// A building started on the ludus.
+    Construction,
+    /// A parcel bought for the ludus.
+    Parcel,
+    /// The weekly upkeep of the ludus's buildings standing.
+    Maintenance,
 }
 
 /// Money in (positive) or out (negative) for one of the club's fighters, or for the club.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Transaction {
-    /// Index of the fighter in the club; `None` for the club's own: its staff.
+    /// Index of the fighter in the club; `None` for the club's own: its staff, its ludus.
     pub fighter: Option<usize>,
     pub flow: Flow,
     pub amount: i64,

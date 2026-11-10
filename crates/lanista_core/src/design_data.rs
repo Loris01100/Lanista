@@ -26,6 +26,7 @@ use crate::fighter::retirement::RetirementRules;
 use crate::fighter::traits::TraitRules;
 use crate::fighter::{ClassId, Stats, percent_of};
 use crate::learned::{ClassModels, MODELS_DIR};
+use crate::ludus::LudusRules;
 use crate::melee::MeleeRules;
 use crate::names::Culture;
 use crate::relations::{MAX_SCORE, Standing};
@@ -43,6 +44,7 @@ pub struct DesignData {
     /// The world's cultures, from `data/names.ron`.
     pub cultures: Vec<Culture>,
     pub stat_model: StatModels,
+    pub ludus: LudusRules,
     /// Each class's learned models, in the order of `classes`, read by
     /// [`DesignData::load`] from `assets/ai/`; none from [`DesignData::from_ron`].
     pub models: Vec<ClassModels>,
@@ -342,6 +344,7 @@ const WORLD_FILE: &str = "data/world.ron";
 const NAMES_FILE: &str = "data/names.ron";
 /// Written by the `calibrate` tool.
 pub const STAT_MODEL_FILE: &str = "data/stat_model.ron";
+const LUDUS_FILE: &str = "data/ludus.ron";
 
 /// Why the design data could not be loaded; `file` is the file at fault.
 #[derive(Debug)]
@@ -390,7 +393,7 @@ impl std::error::Error for LoadError {
 impl DesignData {
     /// Reads the content of `data/classes.ron`, `data/combat.ron`, `data/fighter.ron`,
     /// `data/calendar.ron`, `data/economy.ron`, `data/world.ron`, `data/names.ron` and
-    /// `data/stat_model.ron`.
+    /// `data/stat_model.ron` and `data/ludus.ron`.
     ///
     /// # Errors
     /// If a text is not valid RON or does not match the expected fields, or if a value
@@ -407,6 +410,7 @@ impl DesignData {
         world: &str,
         names: &str,
         stat_model: &str,
+        ludus: &str,
     ) -> Result<Self, LoadError> {
         let mut data = Self {
             classes: ron::from_str(classes).map_err(|source| LoadError::Ron {
@@ -439,6 +443,10 @@ impl DesignData {
             })?,
             stat_model: ron::from_str(stat_model).map_err(|source| LoadError::Ron {
                 file: STAT_MODEL_FILE,
+                source,
+            })?,
+            ludus: ron::from_str(ludus).map_err(|source| LoadError::Ron {
+                file: LUDUS_FILE,
                 source,
             })?,
             models: Vec::new(),
@@ -481,6 +489,7 @@ impl DesignData {
             &read(WORLD_FILE)?,
             &read(NAMES_FILE)?,
             &read(STAT_MODEL_FILE)?,
+            &read(LUDUS_FILE)?,
         )?;
         data.models = ClassModels::load(MODELS_DIR, &data);
         Ok(data)
@@ -532,7 +541,29 @@ impl DesignData {
             });
         }
         self.validate_combat()?;
+        self.validate_ludus()?;
         self.validate_fighter()
+    }
+
+    /// A ludus with plots, shares of copies from 0 to 100 %, buildings of known families.
+    fn validate_ludus(&self) -> Result<(), LoadError> {
+        let invalid = |field, problem| LoadError::Invalid {
+            file: LUDUS_FILE,
+            field,
+            problem,
+        };
+        let ludus = &self.ludus;
+        if ludus.plots == 0 {
+            return Err(invalid("plots", "a ludus without a plot"));
+        }
+        if ludus.copy_percents.iter().any(|&p| p > 100) {
+            return Err(invalid("copy_percents", "a share above 100 %"));
+        }
+        let known = |key: &String| ludus.families.iter().any(|f| &f.key == key);
+        if !ludus.buildings.iter().all(|b| known(&b.family)) {
+            return Err(invalid("buildings", "a family not in families"));
+        }
+        Ok(())
     }
 
     /// The world's colosseums and clubs, and the cultures that name them.
@@ -974,11 +1005,12 @@ mod tests {
     const WORLD: &str = include_str!("../../../data/world.ron");
     const NAMES: &str = include_str!("../../../data/names.ron");
     const STAT_MODEL: &str = include_str!("../../../data/stat_model.ron");
+    const LUDUS: &str = include_str!("../../../data/ludus.ron");
 
     #[test]
     fn shipped_data_loads() {
         let data = DesignData::from_ron(
-            CLASSES, COMBAT, FIGHTER, CALENDAR, ECONOMY, WORLD, NAMES, STAT_MODEL,
+            CLASSES, COMBAT, FIGHTER, CALENDAR, ECONOMY, WORLD, NAMES, STAT_MODEL, LUDUS,
         )
         .unwrap();
         assert_eq!(data.classes.len(), 3);
@@ -1039,7 +1071,7 @@ mod tests {
     #[test]
     fn finds_a_class_by_id() {
         let data = DesignData::from_ron(
-            CLASSES, COMBAT, FIGHTER, CALENDAR, ECONOMY, WORLD, NAMES, STAT_MODEL,
+            CLASSES, COMBAT, FIGHTER, CALENDAR, ECONOMY, WORLD, NAMES, STAT_MODEL, LUDUS,
         )
         .unwrap();
         assert_eq!(data.class(ClassId(2)), data.classes.get(2));
@@ -1051,7 +1083,7 @@ mod tests {
         let typo = r#"[(name: "X", max_mana: 0, max_endurance: 0, mana_per_second: 0, endurance_per_second: 0, spels: [])]"#;
         assert!(matches!(
             DesignData::from_ron(
-                typo, COMBAT, FIGHTER, CALENDAR, ECONOMY, WORLD, NAMES, STAT_MODEL
+                typo, COMBAT, FIGHTER, CALENDAR, ECONOMY, WORLD, NAMES, STAT_MODEL, LUDUS
             ),
             Err(LoadError::Ron {
                 file: CLASSES_FILE,
@@ -1063,7 +1095,7 @@ mod tests {
     #[test]
     fn rejects_values_the_game_would_panic_on() {
         let field = |classes: &str, fighter: &str| match DesignData::from_ron(
-            classes, COMBAT, fighter, CALENDAR, ECONOMY, WORLD, NAMES, STAT_MODEL,
+            classes, COMBAT, fighter, CALENDAR, ECONOMY, WORLD, NAMES, STAT_MODEL, LUDUS,
         ) {
             Err(LoadError::Invalid { field, .. }) => field,
             other => panic!("expected an invalid field, got {other:?}"),
@@ -1111,7 +1143,7 @@ mod tests {
             "(competition_weeks: 0, great_event_weeks: 0, off_season_weeks: 0, first_year: 680)";
         assert!(matches!(
             DesignData::from_ron(
-                CLASSES, COMBAT, FIGHTER, no_week, ECONOMY, WORLD, NAMES, STAT_MODEL
+                CLASSES, COMBAT, FIGHTER, no_week, ECONOMY, WORLD, NAMES, STAT_MODEL, LUDUS
             ),
             Err(LoadError::Invalid {
                 field: "season",
@@ -1128,7 +1160,8 @@ mod tests {
                 ECONOMY,
                 WORLD,
                 NAMES,
-                STAT_MODEL
+                STAT_MODEL,
+                LUDUS
             ),
             Err(LoadError::Invalid {
                 field: "accuracy",
@@ -1136,7 +1169,7 @@ mod tests {
             })
         ));
         let combat_field = |combat: &str| match DesignData::from_ron(
-            CLASSES, combat, FIGHTER, CALENDAR, ECONOMY, WORLD, NAMES, STAT_MODEL,
+            CLASSES, combat, FIGHTER, CALENDAR, ECONOMY, WORLD, NAMES, STAT_MODEL, LUDUS,
         ) {
             Err(LoadError::Invalid { field, .. }) => field,
             other => panic!("expected an invalid field, got {other:?}"),
@@ -1160,7 +1193,7 @@ mod tests {
         let not_free = WORLD.replacen("entry_fee: 0", "entry_fee: 5", 1);
         assert!(matches!(
             DesignData::from_ron(
-                CLASSES, COMBAT, FIGHTER, CALENDAR, ECONOMY, &not_free, NAMES, STAT_MODEL
+                CLASSES, COMBAT, FIGHTER, CALENDAR, ECONOMY, &not_free, NAMES, STAT_MODEL, LUDUS
             ),
             Err(LoadError::Invalid {
                 field: "colosseums",
@@ -1168,7 +1201,7 @@ mod tests {
             })
         ));
         let world_field = |world: &str, names: &str| match DesignData::from_ron(
-            CLASSES, COMBAT, FIGHTER, CALENDAR, ECONOMY, world, names, STAT_MODEL,
+            CLASSES, COMBAT, FIGHTER, CALENDAR, ECONOMY, world, names, STAT_MODEL, LUDUS,
         ) {
             Err(LoadError::Invalid { field, .. }) => field,
             other => panic!("expected an invalid field, got {other:?}"),
@@ -1211,6 +1244,7 @@ mod tests {
         assert!(
             DesignData::from_ron(
                 CLASSES, COMBAT, FIGHTER, CALENDAR, ECONOMY, &nowhere, &uprooted, STAT_MODEL,
+                LUDUS,
             )
             .is_ok()
         );
@@ -1219,9 +1253,24 @@ mod tests {
     #[test]
     fn shipped_form_rules_triple_risk_at_form_0() {
         let data = DesignData::from_ron(
-            CLASSES, COMBAT, FIGHTER, CALENDAR, ECONOMY, WORLD, NAMES, STAT_MODEL,
+            CLASSES, COMBAT, FIGHTER, CALENDAR, ECONOMY, WORLD, NAMES, STAT_MODEL, LUDUS,
         )
         .unwrap();
         assert!((data.fighter.form.risk_factor - 2.0).abs() < f64::EPSILON);
+    }
+
+    #[test]
+    fn rejects_a_ludus_the_game_could_not_play() {
+        let field = |ludus: &str| match DesignData::from_ron(
+            CLASSES, COMBAT, FIGHTER, CALENDAR, ECONOMY, WORLD, NAMES, STAT_MODEL, ludus,
+        ) {
+            Err(LoadError::Invalid { field, .. }) => field,
+            other => panic!("expected an invalid field, got {other:?}"),
+        };
+        assert_eq!(field(&LUDUS.replacen("plots: 3", "plots: 0", 1)), "plots");
+        let generous = LUDUS.replacen("[100, 60, 30]", "[100, 160, 30]", 1);
+        assert_eq!(field(&generous), "copy_percents");
+        let orphan = LUDUS.replacen(r#"family: "soins""#, r#"family: "forge""#, 1);
+        assert_eq!(field(&orphan), "buildings");
     }
 }

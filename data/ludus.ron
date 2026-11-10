@@ -1,0 +1,26 @@
+// The ludus: placeholder values, to tune while balancing (phase 9).
+(
+    // Plots a club starts with.
+    plots: 3,
+    // The price of each neighboring parcel in turn, one more plot each.
+    parcel_prices: [3000, 6000, 12000, 24000],
+    // Share of its effect each copy of a building gives, in percent: three at most.
+    copy_percents: [100, 60, 30],
+    // Three buildings of a family give the club its specialty (`specialty-<key>`).
+    families: [
+        (key: "entrainement", specialty: "ecole_renommee"),
+        (key: "soins", specialty: "club_medecins"),
+        (key: "intendance", specialty: "club_bien_tenu"),
+    ],
+    // Price paid on deciding, upkeep each week once standing, weeks of construction,
+    // and what the first copy does (crates/lanista_core/src/ludus.rs, `Effect`).
+    buildings: [
+        (key: "terrain_entrainement", family: "entrainement", price: 1500, upkeep: 15, weeks: 4, effect: Training(15)),
+        (key: "ecole_recrues", family: "entrainement", price: 1200, upkeep: 10, weeks: 3, effect: Youth(20)),
+        (key: "infirmerie", family: "soins", price: 2500, upkeep: 25, weeks: 5, effect: Healing(10)),
+        (key: "bains", family: "soins", price: 1800, upkeep: 15, weeks: 4, effect: Rest(20)),
+        (key: "dortoirs", family: "intendance", price: 1000, upkeep: 10, weeks: 3, effect: Morale(2)),
+        (key: "grenier", family: "intendance", price: 1200, upkeep: 5, weeks: 3, effect: Upkeep(20)),
+        (key: "sanctuaire", family: "intendance", price: 2000, upkeep: 15, weeks: 5, effect: BigFights(10)),
+    ],
+)

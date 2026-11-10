@@ -21,6 +21,7 @@ use crate::fighter::fame::{Fame, FightResult};
 use crate::fighter::traits::Trait;
 use crate::fighter::{ClassId, percent_of};
 use crate::journal::Journal;
+use crate::ludus::Ludus;
 use crate::market::{self, Move, SaleOffer, Target, value};
 use crate::names::{self, ClubName, FighterName};
 use crate::relations::{Club, Reason, Relation, Standing, StandingRules, TieRules};
@@ -95,6 +96,10 @@ pub struct GameState {
     /// The staff candidates on the market, for the club and the rival clubs alike;
     /// one hired leaves it.
     pub staff_market: Vec<Candidate>,
+    /// Its plots and their buildings; given its starting plots when the world opens,
+    /// in a save from before it had one too.
+    #[serde(default)]
+    pub ludus: Ludus,
     /// What happened in the world, oldest first, over the last `WorldRules::news_weeks`.
     pub news: Vec<News>,
     /// Each rival club's relation with the player's club, by its index; a club
@@ -204,6 +209,7 @@ impl GameState {
             counter_offer: None,
             staff: Staff::default(),
             staff_market: Vec::new(),
+            ludus: Ludus::default(),
             news: Vec::new(),
             relations: BTreeMap::new(),
             journal: Journal::default(),
@@ -226,7 +232,11 @@ impl GameState {
     /// for each post. Last, names the fighters in activity who have none, and the
     /// player's club if it has none (`name_the_club`), and gives a contract to the
     /// club's fighters in activity who have none: the first one, those of an older save.
+    /// First of all, the club's ludus gets its starting plots if it has none.
     pub fn open_world(&mut self, data: &DesignData) {
+        if self.ludus.plots.is_empty() {
+            self.ludus = Ludus::new(&data.ludus);
+        }
         let drawn = self.rivals.len();
         let count = usize::try_from(data.world.clubs.count).unwrap_or(0);
         while self.rivals.len() < count {
@@ -646,8 +656,7 @@ impl GameState {
                 .map(|i| self.suggested_plan(i, data))
                 .collect(),
             orders: self.fighters.iter().map(|f| f.orders).collect(),
-            moves: Vec::new(),
-            staff: Vec::new(),
+            ..Decisions::default()
         }
     }
 
@@ -1132,6 +1141,7 @@ mod tests {
     use crate::economy::Flow;
     use crate::fighter::injury::{Injury, Location, Severity};
     use crate::fighter::melee::Pact;
+    use crate::ludus::LudusMove;
     use crate::market::MarketNews;
     use crate::rivals::Profile;
     use crate::staff::{Person, Role, StaffNews};
@@ -1200,7 +1210,7 @@ mod tests {
             plans: vec![REST],
             orders: Vec::new(),
             moves: moves.to_vec(),
-            staff: Vec::new(),
+            ..Decisions::default()
         }
     }
 
@@ -1792,6 +1802,51 @@ mod tests {
         assert!(state.money < 0);
         let second = offered(&mut state, Role::Trainer, 2, &data);
         assert!(!state.may_staff(StaffMove::Hire(second), &data));
+    }
+
+    #[test]
+    fn the_ludus_is_paid_when_decided_then_its_upkeep_each_week() {
+        let data = data();
+        let mut state = game(7, &data);
+        let rules = &data.ludus;
+        assert_eq!(
+            state.ludus.plots.len(),
+            usize::try_from(rules.plots).unwrap()
+        );
+        let building = &rules.buildings[0];
+        let build = LudusMove::Build {
+            plot: 0,
+            building: 0,
+        };
+        // Too poor to build: the move is dropped.
+        state.money = i64::from(building.price) - 1;
+        let mut week = plan(Activity::Rest, false);
+        week.ludus = vec![build];
+        let summary = next_week(&mut state, &week, &data);
+        assert!(
+            flows(&summary)
+                .iter()
+                .all(|&(f, _)| f != Flow::Construction)
+        );
+        assert_eq!(state.ludus.plots[0], None);
+        state.money = i64::from(building.price + rules.parcel_prices[0]);
+        week.ludus = vec![build, LudusMove::BuyParcel, LudusMove::BuyParcel];
+        let summary = next_week(&mut state, &week, &data);
+        let paid = flows(&summary);
+        assert!(paid.contains(&(Flow::Construction, -i64::from(building.price))));
+        assert!(paid.contains(&(Flow::Parcel, -i64::from(rules.parcel_prices[0]))));
+        assert_eq!(
+            state.ludus.plots.len(),
+            usize::try_from(rules.plots).unwrap() + 1
+        );
+        // Its upkeep once it stands, even into debt.
+        for _ in 1..building.weeks {
+            next_week(&mut state, &plan(Activity::Rest, false), &data);
+        }
+        state.money = 0;
+        let summary = next_week(&mut state, &plan(Activity::Rest, false), &data);
+        assert!(flows(&summary).contains(&(Flow::Maintenance, -i64::from(building.upkeep))));
+        assert!(state.money < 0);
     }
 
     #[test]
@@ -2408,7 +2463,7 @@ mod tests {
             }],
             orders: Vec::new(),
             moves: list.moves.clone(),
-            staff: Vec::new(),
+            ..Decisions::default()
         };
         // A merchant in debt cannot keep its reserve.
         state.rivals[2].money = -1000;

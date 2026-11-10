@@ -206,6 +206,9 @@ flow-sale = vente
 flow-salary = salaires
 flow-wage = gages
 flow-win-bonus = primes de victoire
+flow-construction = constructions
+flow-parcel = parcelles
+flow-maintenance = entretien du ludus
 
 wealth = Club { $wealth }
 wealth-poor = pauvre
