@@ -1,9 +1,12 @@
 // The ludus: placeholder values, to tune while balancing (phase 9).
 (
-    // Plots a club starts with.
-    plots: 3,
-    // The price of each neighboring parcel in turn, one more plot each: 12 plots at most.
-    parcel_prices: [3000, 5000, 8000, 12000, 17000, 23000, 30000, 38000, 47000],
+    // The plan: 3 plots to a row, 4 rows.
+    columns: 3,
+    rows: 4,
+    // The plot a club starts with, row by row from the top left: the 2nd of the 2nd row.
+    start: 4,
+    // The price of each parcel in turn, one more plot each, next to one owned.
+    parcel_prices: [3000, 5000, 8000, 12000, 17000, 23000, 30000, 38000, 47000, 57000, 68000],
     // Share of its effect each copy of a building gives, in percent: three at most.
     copy_percents: [100, 60, 30],
     // Three buildings of a family give the club its specialty (`specialty-<key>`).

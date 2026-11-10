@@ -1,4 +1,5 @@
-//! The ludus: the club's plots, each free or holding a building, built or being built.
+//! The ludus: a plan of plots, those the club owns each free or holding a building,
+//! built or being built; it buys the parcels next to them.
 //! Its rules ([`LudusRules`]) are in `data/ludus.ron`; the week plays the player's
 //! [`LudusMove`]s, then pays the upkeep of the buildings standing and moves the
 //! constructions on ([`Ludus::week`]).
@@ -9,10 +10,12 @@ use serde::{Deserialize, Serialize};
 #[derive(Debug, Clone, PartialEq, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct LudusRules {
-    /// Plots a club starts with.
-    pub plots: u32,
-    /// The price of each neighboring parcel in turn, one more plot each: as many parcels
-    /// to buy as prices.
+    /// Plots in a row of the plan.
+    pub columns: u32,
+    pub rows: u32,
+    /// The plot a club starts with, row by row from the top left.
+    pub start: u32,
+    /// The price of each parcel in turn, one more plot each; past the last, none is sold.
     pub parcel_prices: Vec<u32>,
     /// The share of its effect each copy of a building gives, in percent, the first
     /// copy first: as many copies at most as shares.
@@ -20,6 +23,14 @@ pub struct LudusRules {
     pub families: Vec<Family>,
     /// `Site::building` is an index here.
     pub buildings: Vec<BuildingData>,
+}
+
+impl LudusRules {
+    /// Plots in the plan, owned or not.
+    #[must_use]
+    pub fn plot_count(&self) -> usize {
+        usize::try_from(self.columns * self.rows).unwrap_or(0)
+    }
 }
 
 /// A family of buildings; three of them give the club its specialty.
@@ -75,8 +86,11 @@ pub const SPECIALTY_BUILDINGS: usize = 3;
 /// The club's ludus.
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Ludus {
-    /// The starting plots, then the parcels bought, in order.
+    /// Each plot of the plan, row by row from the top left; `None` on one free or not owned.
     pub plots: Vec<Option<Site>>,
+    /// Whether the club owns each plot: its starting one, then the parcels bought.
+    #[serde(default)]
+    pub owned: Vec<bool>,
 }
 
 /// A building on a plot.
@@ -95,27 +109,44 @@ pub enum LudusMove {
     Build { plot: usize, building: usize },
     /// Frees this plot, refunding nothing, a construction stopped as well.
     Demolish(usize),
-    /// Buys the next parcel.
-    BuyParcel,
+    /// Buys this plot, next to one owned.
+    BuyParcel(usize),
 }
 
 impl Ludus {
-    /// A new club's ludus: its starting plots, all free.
+    /// A new club's ludus: its starting plot, free.
     #[must_use]
     pub fn new(rules: &LudusRules) -> Self {
+        let cells = rules.plot_count();
+        let mut owned = vec![false; cells];
+        if let Some(start) = owned.get_mut(usize::try_from(rules.start).unwrap_or(usize::MAX)) {
+            *start = true;
+        }
         Self {
-            plots: vec![None; usize::try_from(rules.plots).unwrap_or(0)],
+            plots: vec![None; cells],
+            owned,
         }
     }
 
     /// The price of the next parcel; `None` once all are bought.
     #[must_use]
     pub fn parcel_price(&self, rules: &LudusRules) -> Option<u32> {
-        let bought = self
-            .plots
-            .len()
-            .saturating_sub(usize::try_from(rules.plots).unwrap_or(0));
+        let bought = self.owned.iter().filter(|&&o| o).count().saturating_sub(1);
         rules.parcel_prices.get(bought).copied()
+    }
+
+    /// Whether `plot` is a parcel to buy: not owned, next to a plot owned, side by side
+    /// or one above the other.
+    #[must_use]
+    pub fn buyable(&self, plot: usize, rules: &LudusRules) -> bool {
+        let columns = usize::try_from(rules.columns).unwrap_or(1).max(1);
+        let owned = |p: usize| self.owned.get(p).copied().unwrap_or(false);
+        let column = plot % columns;
+        let above = plot.checked_sub(columns);
+        let left = plot.checked_sub(1).filter(|_| column > 0);
+        let right = (column + 1 < columns).then_some(plot + 1);
+        let next = [above, Some(plot + columns), left, right];
+        matches!(self.owned.get(plot), Some(false)) && next.into_iter().flatten().any(owned)
     }
 
     /// Copies of `building`, built or being built.
@@ -156,18 +187,22 @@ impl Ludus {
     }
 
     /// What `m` costs; `None` if it may not be made now: a building on a plot not
-    /// free, past its most copies, a parcel when none is left, a plot to demolish
-    /// with nothing on it.
+    /// owned or not free, past its most copies, a parcel not next to the club's plots
+    /// or when none is left, a plot to demolish with nothing on it.
     #[must_use]
     pub fn cost(&self, m: LudusMove, rules: &LudusRules) -> Option<u32> {
         match m {
             LudusMove::Build { plot, building } => {
                 let data = rules.buildings.get(building)?;
-                let free = matches!(self.plots.get(plot), Some(None));
+                let owned = self.owned.get(plot).copied().unwrap_or(false);
+                let free = owned && matches!(self.plots.get(plot), Some(None));
                 (free && self.copies(building) < rules.copy_percents.len()).then_some(data.price)
             }
             LudusMove::Demolish(plot) => self.plots.get(plot)?.map(|_| 0),
-            LudusMove::BuyParcel => self.parcel_price(rules),
+            LudusMove::BuyParcel(plot) => self
+                .buyable(plot, rules)
+                .then(|| self.parcel_price(rules))
+                .flatten(),
         }
     }
 
@@ -182,7 +217,7 @@ impl Ludus {
                 });
             }
             LudusMove::Demolish(plot) => self.plots[plot] = None,
-            LudusMove::BuyParcel => self.plots.push(None),
+            LudusMove::BuyParcel(plot) => self.owned[plot] = true,
         }
         Some(cost)
     }
@@ -212,6 +247,7 @@ impl Ludus {
 mod tests {
     use super::*;
 
+    /// A plan of two rows of two, starting at the top left.
     fn rules() -> LudusRules {
         let building = |key: &str, price, weeks| BuildingData {
             key: key.to_owned(),
@@ -222,7 +258,9 @@ mod tests {
             effect: Effect::Training(10),
         };
         LudusRules {
-            plots: 2,
+            columns: 2,
+            rows: 2,
+            start: 0,
             parcel_prices: vec![100, 300],
             copy_percents: vec![100, 60],
             families: Vec::new(),
@@ -237,9 +275,10 @@ mod tests {
         let build = |plot| LudusMove::Build { plot, building: 0 };
         assert_eq!(ludus.make(build(0), 49, &rules), None);
         assert_eq!(ludus.make(build(0), 50, &rules), Some(50));
-        // Not on a plot taken, nor one missing.
+        // Not on a plot taken, nor one not owned, nor one missing.
         assert_eq!(ludus.make(build(0), 1000, &rules), None);
-        assert_eq!(ludus.make(build(2), 1000, &rules), None);
+        assert_eq!(ludus.make(build(1), 1000, &rules), None);
+        assert_eq!(ludus.make(build(4), 1000, &rules), None);
         // No upkeep while it is built.
         assert_eq!(ludus.week(&rules), (0, vec![]));
         assert_eq!(ludus.family_standing("entrainement", &rules), 0);
@@ -263,16 +302,32 @@ mod tests {
     }
 
     #[test]
-    fn copies_are_capped_and_parcels_rise_in_price() {
+    fn parcels_next_to_the_plots_owned_are_sold_dearer_each() {
         let rules = rules();
         let mut ludus = Ludus::new(&rules);
-        let build = |plot| LudusMove::Build { plot, building: 0 };
-        assert_eq!(ludus.make(LudusMove::BuyParcel, 99, &rules), None);
-        assert_eq!(ludus.make(LudusMove::BuyParcel, 100, &rules), Some(100));
-        assert_eq!(ludus.parcel_price(&rules), Some(300));
-        ludus.make(LudusMove::BuyParcel, 300, &rules).unwrap();
+        let buy = LudusMove::BuyParcel;
+        // Not the plot owned, nor the corner facing it.
+        assert!(!ludus.buyable(0, &rules) && !ludus.buyable(3, &rules));
+        assert!(ludus.buyable(1, &rules) && ludus.buyable(2, &rules));
+        assert_eq!(ludus.make(buy(3), 1000, &rules), None);
+        assert_eq!(ludus.make(buy(1), 99, &rules), None);
+        assert_eq!(ludus.make(buy(1), 100, &rules), Some(100));
+        assert!(ludus.buyable(3, &rules));
+        assert_eq!(ludus.make(buy(3), 300, &rules), Some(300));
+        // No price left.
         assert_eq!(ludus.parcel_price(&rules), None);
-        assert_eq!(ludus.plots.len(), 4);
+        assert_eq!(ludus.make(buy(2), 1000, &rules), None);
+    }
+
+    #[test]
+    fn copies_are_capped_and_ranked_in_plan_order() {
+        let mut rules = rules();
+        rules.parcel_prices = vec![0, 0, 0];
+        let mut ludus = Ludus::new(&rules);
+        for plot in 1..4 {
+            ludus.make(LudusMove::BuyParcel(plot), 0, &rules).unwrap();
+        }
+        let build = |plot| LudusMove::Build { plot, building: 0 };
         ludus.make(build(0), 1000, &rules).unwrap();
         ludus.make(build(1), 1000, &rules).unwrap();
         assert_eq!(ludus.make(build(2), 1000, &rules), None);

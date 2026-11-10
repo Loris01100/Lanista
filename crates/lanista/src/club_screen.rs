@@ -175,8 +175,8 @@ pub struct ClubScreen {
     market_tab: MarketTab,
     /// The post the staff view shows.
     shown_role: Role,
-    /// The plot the ludus view shows.
-    shown_plot: usize,
+    /// The plot the ludus view shows; `None`, the club's starting one.
+    shown_plot: Option<usize>,
     /// What the encyclopedia's search looks for; empty, the pages of the category shown.
     wiki_search: String,
     /// The week of the newspaper's issue shown; `None` shows the last one.
@@ -232,7 +232,7 @@ impl ClubScreen {
             market_sort: MarketSort::default(),
             market_tab: MarketTab::FreeAgents,
             shown_role: Role::Trainer,
-            shown_plot: 0,
+            shown_plot: None,
             wiki_search: String::new(),
             shown_issue: None,
             options_open: false,
@@ -3657,11 +3657,12 @@ mod tests {
             building: 0,
             weeks_left: 1,
         };
-        screen.state.ludus.plots[1] = Some(site);
+        let start = usize::try_from(screen.data.ludus.start).unwrap();
+        screen.state.ludus.plots[start] = Some(site);
         screen.next_week();
         let name = building_name(0, &screen.data);
         let built = (
-            format!("Fin des travaux sur le terrain 2 : {name}"),
+            format!("Fin des travaux sur le terrain {} : {name}", start + 1),
             View::Ludus,
         );
         assert!(screen.alerts().contains(&built), "{:?}", screen.alerts());
@@ -3722,13 +3723,13 @@ mod tests {
         screen.state.money = 100_000;
         screen.decisions.ludus = vec![
             lanista_core::ludus::LudusMove::Build {
-                plot: 0,
+                plot: 4,
                 building: 0,
             },
-            lanista_core::ludus::LudusMove::BuyParcel,
+            lanista_core::ludus::LudusMove::BuyParcel(3),
         ];
         for plot in [0, 99] {
-            screen.shown_plot = plot;
+            screen.shown_plot = Some(plot);
             draw(&mut screen);
         }
         assert!(

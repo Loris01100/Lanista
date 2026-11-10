@@ -16,8 +16,6 @@ const TILE: Color32 = Color32::from_rgb(0xDC, 0xC9, 0xA6);
 const DASH: Color32 = Color32::from_rgb(0xA8, 0x91, 0x6C);
 /// The text of the button demolishing, on the wood.
 const DEMOLISH: Color32 = Color32::from_rgb(0xE8, 0x83, 0x6F);
-/// Plots in a row of the plan.
-const COLUMNS: u8 = 3;
 const TILE_HEIGHT: f32 = 120.0;
 const GAP: f32 = 10.0;
 
@@ -27,8 +25,10 @@ enum Tile {
     /// A building, and which copy of it it is, from 0.
     Built(Site, usize),
     Free,
-    /// A neighboring parcel, still to buy.
+    /// A parcel next to the club's plots, to buy.
     Parcel,
+    /// A parcel not yet next to them.
+    Far,
 }
 
 impl ClubScreen {
@@ -40,9 +40,12 @@ impl ClubScreen {
         let rules = &data.ludus;
         let chosen = &mut self.decisions.ludus;
         let (planned, costs, money) = planned(&self.state.ludus, chosen, self.state.money, data);
-        let start = usize::try_from(rules.plots).unwrap_or(0);
-        let tiles = (start + rules.parcel_prices.len()).max(planned.plots.len());
-        let mut shown = self.shown_plot.min(tiles.saturating_sub(1));
+        let tiles = rules.plot_count();
+        let start = usize::try_from(rules.start).unwrap_or(0);
+        let mut shown = self
+            .shown_plot
+            .unwrap_or(start)
+            .min(tiles.saturating_sub(1));
         let mut cancel = None;
         ui.horizontal_top(|ui| {
             let left = ui.available_width() * 0.6;
@@ -57,18 +60,21 @@ impl ClubScreen {
                     .inner_margin(Margin::same(16));
                 board.show(ui, |ui| {
                     ui.spacing_mut().item_spacing = vec2(GAP, GAP);
-                    let gaps = GAP * f32::from(COLUMNS - 1);
-                    let width = (ui.available_width() - gaps) / f32::from(COLUMNS);
+                    let columns = usize::try_from(rules.columns).unwrap_or(1).max(1);
+                    #[expect(clippy::cast_precision_loss, reason = "a few columns")]
+                    let (gaps, count) = (GAP * (columns - 1) as f32, columns as f32);
+                    let width = (ui.available_width() - gaps) / count;
                     let all: Vec<usize> = (0..tiles).collect();
-                    for row in all.chunks(usize::from(COLUMNS)) {
+                    for row in all.chunks(columns) {
                         ui.horizontal(|ui| {
                             for &i in row {
                                 let tile = match planned.plots.get(i) {
                                     Some(Some(site)) => {
                                         Tile::Built(*site, planned.copy_rank(i).unwrap_or(0))
                                     }
-                                    Some(None) => Tile::Free,
-                                    None => Tile::Parcel,
+                                    _ if planned.owned.get(i) == Some(&true) => Tile::Free,
+                                    _ if planned.buyable(i, rules) => Tile::Parcel,
+                                    _ => Tile::Far,
                                 };
                                 let size = vec2(width, TILE_HEIGHT);
                                 if tile_button(ui, size, tile, i == shown, data).clicked() {
@@ -93,8 +99,10 @@ impl ClubScreen {
                                 Some(Some(site)) => {
                                     site_card(ui, (&planned, shown, *site), chosen, data);
                                 }
-                                Some(None) => catalog(ui, (&planned, shown, money), chosen, data),
-                                None => parcel_card(ui, (&planned, money), chosen, rules),
+                                _ if planned.owned.get(shown) == Some(&true) => {
+                                    catalog(ui, (&planned, shown, money), chosen, data);
+                                }
+                                _ => parcel_card(ui, (&planned, shown, money), chosen, rules),
                             }
                         });
                     specialties(ui, &planned, data);
@@ -103,7 +111,7 @@ impl ClubScreen {
                 });
             });
         });
-        self.shown_plot = shown;
+        self.shown_plot = Some(shown);
         if let Some(n) = cancel {
             self.decisions.ludus.remove(n);
         }
@@ -174,10 +182,10 @@ fn tile_button(
 ) -> egui::Response {
     let (rect, response) = ui.allocate_exact_size(area, egui::Sense::click());
     let painter = ui.painter().clone();
-    let faded = if matches!(tile, Tile::Parcel) && !chosen {
-        0.6
-    } else {
-        1.0
+    let faded = match tile {
+        Tile::Far if !chosen => 0.3,
+        Tile::Parcel if !chosen => 0.6,
+        _ => 1.0,
     };
     let ink = theme::WOOD_LIGHTER.gamma_multiply(faded);
     let line = Stroke::new(2.0_f32, ink);
@@ -202,6 +210,11 @@ fn tile_button(
             painter.line_segment([c - vec2(0.0, 10.0), c + vec2(0.0, 10.0)], line);
             tile_caption(&painter, rect, tr!("ludus-free-plot"), ink);
         }
+        Tile::Far => dashed(
+            &painter,
+            rect.shrink(1.0),
+            Stroke::new(2.0_f32, DASH.gamma_multiply(faded)),
+        ),
         Tile::Parcel => {
             dashed(
                 &painter,
@@ -413,22 +426,26 @@ fn catalog(
     }
 }
 
-/// The next parcel and the button buying it.
+/// A parcel and the button buying it, if it is next to the club's plots.
 fn parcel_card(
     ui: &mut egui::Ui,
-    (ludus, money): (&Ludus, i64),
+    (ludus, plot, money): (&Ludus, usize, i64),
     chosen: &mut Vec<LudusMove>,
     rules: &LudusRules,
 ) {
     title(ui, tr!("ludus-parcel"));
     ui.label(RichText::new(tr!("ludus-parcel-subtitle")).italics().weak());
     ui.label(tr!("ludus-parcel-text"));
+    if !ludus.buyable(plot, rules) {
+        ui.label(RichText::new(tr!("ludus-parcel-far")).weak());
+        return;
+    }
     match ludus.parcel_price(rules) {
         Some(price) => {
             let buy = bronze_button(tr!("ludus-buy", price = price))
                 .min_size(vec2(ui.available_width(), 44.0));
             if ui.add_enabled(i64::from(price) <= money, buy).clicked() {
-                chosen.push(LudusMove::BuyParcel);
+                chosen.push(LudusMove::BuyParcel(plot));
             }
         }
         None => {

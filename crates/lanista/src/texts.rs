@@ -407,7 +407,7 @@ pub fn ludus_move_text(m: LudusMove, data: &DesignData) -> String {
             plot = plot + 1
         ),
         LudusMove::Demolish(plot) => tr!("ludus-move-demolish", plot = plot + 1),
-        LudusMove::BuyParcel => tr!("ludus-move-parcel"),
+        LudusMove::BuyParcel(_) => tr!("ludus-move-parcel"),
     }
 }
 

@@ -212,7 +212,7 @@ fn ludus_week(
     for &m in moves {
         if let Some(cost) = state.ludus.make(m, state.money, &data.ludus) {
             let flow = match m {
-                LudusMove::BuyParcel => Flow::Parcel,
+                LudusMove::BuyParcel(_) => Flow::Parcel,
                 LudusMove::Build { .. } | LudusMove::Demolish(_) => Flow::Construction,
             };
             pay(state, flow, cost);

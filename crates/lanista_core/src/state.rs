@@ -232,9 +232,9 @@ impl GameState {
     /// for each post. Last, names the fighters in activity who have none, and the
     /// player's club if it has none (`name_the_club`), and gives a contract to the
     /// club's fighters in activity who have none: the first one, those of an older save.
-    /// First of all, the club's ludus gets its starting plots if it has none.
+    /// First of all, the club's ludus gets its starting plot if it has no plan of the rules' size.
     pub fn open_world(&mut self, data: &DesignData) {
-        if self.ludus.plots.is_empty() {
+        if self.ludus.owned.len() != data.ludus.plot_count() {
             self.ludus = Ludus::new(&data.ludus);
         }
         let drawn = self.rivals.len();
@@ -1825,13 +1825,12 @@ mod tests {
         let data = data();
         let mut state = game(7, &data);
         let rules = &data.ludus;
-        assert_eq!(
-            state.ludus.plots.len(),
-            usize::try_from(rules.plots).unwrap()
-        );
+        let owned = |state: &GameState| state.ludus.owned.iter().filter(|&&o| o).count();
+        assert_eq!(owned(&state), 1);
+        let start = usize::try_from(rules.start).unwrap();
         let building = &rules.buildings[0];
         let build = LudusMove::Build {
-            plot: 0,
+            plot: start,
             building: 0,
         };
         // Too poor to build: the move is dropped.
@@ -1844,17 +1843,15 @@ mod tests {
                 .iter()
                 .all(|&(f, _)| f != Flow::Construction)
         );
-        assert_eq!(state.ludus.plots[0], None);
+        assert_eq!(state.ludus.plots[start], None);
         state.money = i64::from(building.price + rules.parcel_prices[0]);
-        week.ludus = vec![build, LudusMove::BuyParcel, LudusMove::BuyParcel];
+        let parcel = LudusMove::BuyParcel(start + 1);
+        week.ludus = vec![build, parcel, LudusMove::BuyParcel(start - 1)];
         let summary = next_week(&mut state, &week, &data);
         let paid = flows(&summary);
         assert!(paid.contains(&(Flow::Construction, -i64::from(building.price))));
         assert!(paid.contains(&(Flow::Parcel, -i64::from(rules.parcel_prices[0]))));
-        assert_eq!(
-            state.ludus.plots.len(),
-            usize::try_from(rules.plots).unwrap() + 1
-        );
+        assert_eq!(owned(&state), 2);
         // Its upkeep once it stands, even into debt.
         for _ in 1..building.weeks {
             next_week(&mut state, &plan(Activity::Rest, false), &data);

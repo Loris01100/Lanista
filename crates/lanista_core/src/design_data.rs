@@ -553,8 +553,8 @@ impl DesignData {
             problem,
         };
         let ludus = &self.ludus;
-        if ludus.plots == 0 {
-            return Err(invalid("plots", "a ludus without a plot"));
+        if ludus.start >= ludus.columns * ludus.rows {
+            return Err(invalid("start", "a starting plot outside the plan"));
         }
         if ludus.copy_percents.iter().any(|&p| p > 100) {
             return Err(invalid("copy_percents", "a share above 100 %"));
@@ -1267,7 +1267,7 @@ mod tests {
             Err(LoadError::Invalid { field, .. }) => field,
             other => panic!("expected an invalid field, got {other:?}"),
         };
-        assert_eq!(field(&LUDUS.replacen("plots: 3", "plots: 0", 1)), "plots");
+        assert_eq!(field(&LUDUS.replacen("start: 4", "start: 12", 1)), "start");
         let generous = LUDUS.replacen("[100, 60, 30]", "[100, 160, 30]", 1);
         assert_eq!(field(&generous), "copy_percents");
         let orphan = LUDUS.replacen(r#"family: "soins""#, r#"family: "forge""#, 1);
