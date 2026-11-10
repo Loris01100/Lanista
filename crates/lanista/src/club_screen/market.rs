@@ -76,14 +76,17 @@ impl MarketFilter {
             ui.add(egui::DragValue::new(&mut self.age.1).range(self.age.0..=99));
         });
         ui.add_space(4.0);
-        ui.label(tr!("filter-fame"));
-        ui.add(egui::Slider::new(&mut self.fame, 0..=100));
+        ui.spacing_mut().slider_width = ui.available_width();
+        ui.label(format!("{} · {}", tr!("filter-fame"), self.fame));
+        ui.add(egui::Slider::new(&mut self.fame, 0..=100).show_value(false));
         ui.add_space(4.0);
-        ui.label(tr!("filter-wins"));
-        ui.add(egui::DragValue::new(&mut self.wins).range(0..=999));
+        ui.horizontal(|ui| {
+            ui.label(tr!("filter-wins"));
+            ui.add(egui::DragValue::new(&mut self.wins).range(0..=999));
+        });
         ui.add_space(4.0);
-        ui.label(tr!("filter-win-rate"));
-        ui.add(egui::Slider::new(&mut self.win_rate, 0..=100).suffix(" %"));
+        ui.label(format!("{} · {} %", tr!("filter-win-rate"), self.win_rate));
+        ui.add(egui::Slider::new(&mut self.win_rate, 0..=100).show_value(false));
     }
 }
 
@@ -149,8 +152,7 @@ impl MarketSort {
     /// A column's title, clicked to sort by it, with an arrow when the lists are.
     fn title(&mut self, ui: &mut egui::Ui, title: &str, by: SortBy) {
         ui.horizontal(|ui| {
-            let label =
-                egui::Label::new(egui::RichText::new(title).strong()).sense(egui::Sense::click());
+            let label = egui::Label::new(header_text(title)).sense(egui::Sense::click());
             let mut clicked = ui
                 .add(label)
                 .on_hover_cursor(egui::CursorIcon::PointingHand)
@@ -432,11 +434,11 @@ impl ClubScreen {
                 ui.add_space(6.0);
                 match target {
                     Target::FreeAgent(_) => {
-                        ui.label(egui::RichText::new(tr!("market-free-agent")).small().weak());
+                        ui.label(header_text(&tr!("market-free-agent")));
                     }
                     Target::Rival(id) => {
-                        let club = egui::RichText::new(club_name(id.club, state)).small();
-                        if ui.link(club).clicked() {
+                        let club = club_name(id.club, state).to_uppercase();
+                        if ui.link(egui::RichText::new(club).small()).clicked() {
                             pick = Some(Pick::Club(id.club));
                         }
                     }
@@ -903,14 +905,29 @@ const SIDE_WIDTH: f32 = 210.0;
 /// Width of the market's card.
 const CARD_WIDTH: f32 = 400.0;
 
-/// Width of a stat's band on the card.
-const BAND_WIDTH: f32 = 150.0;
-
 /// Width of the bar under a record in the lists.
-const RECORD_BAR_WIDTH: f32 = 110.0;
+const RECORD_BAR_WIDTH: f32 = 132.0;
 
-/// Height of a row of the market's lists: a name over its class.
-const ROW_HEIGHT: f32 = 38.0;
+/// Size of a record's figures in the lists, between the small print and the body.
+const RECORD_TEXT_SIZE: f32 = 15.0;
+
+/// A record's wins in figures, lighter than the bar's to read on wood.
+const LIGHT_LAUREL: egui::Color32 = egui::Color32::from_rgb(0x9D, 0xBA, 0x62);
+
+/// A record's losses in figures, lighter than the bar's to read on wood.
+const LIGHT_BLOOD: egui::Color32 = egui::Color32::from_rgb(0xE0, 0x67, 0x5C);
+
+/// Width of a stat's name on the card.
+const BAND_LABEL_WIDTH: f32 = 44.0;
+
+/// Width of a stat's range in figures on the card.
+const BAND_TEXT_WIDTH: f32 = 60.0;
+
+/// The band of a range on the card: a darker bronze, under the pale mark.
+const BAND_FILL: egui::Color32 = egui::Color32::from_rgb(0x8C, 0x6A, 0x33);
+
+/// Room above and below the two lines of a row of the market's lists.
+const ROW_MARGIN: f32 = 5.0;
 
 /// Room at each end of a row of the market's lists.
 const ROW_PADDING: f32 = 8.0;
@@ -962,7 +979,10 @@ fn list_row<const N: usize>(
     sense: egui::Sense,
 ) -> (egui::Response, egui::Ui, [egui::Ui; N]) {
     let width = ui.available_width();
-    let (rect, response) = ui.allocate_exact_size(egui::vec2(width, ROW_HEIGHT), sense);
+    let lines = ui.text_style_height(&egui::TextStyle::Body)
+        + ui.text_style_height(&egui::TextStyle::Small);
+    let height = lines + 2.0 * ROW_MARGIN;
+    let (rect, response) = ui.allocate_exact_size(egui::vec2(width, height), sense);
     let hovered = sense.senses_click() && ui.rect_contains_pointer(rect);
     let fill = if selected {
         theme::WOOD_LIGHT
@@ -983,14 +1003,16 @@ fn list_row<const N: usize>(
     let first = (width - fixed - 2.0 * ROW_PADDING).max(NAME_MIN_WIDTH);
     let mut x = rect.left() + ROW_PADDING;
     let mut cell = |ui: &mut egui::Ui, w: f32, layout: egui::Layout| {
-        let size = egui::vec2(w, ROW_HEIGHT);
+        let size = egui::vec2(w, height);
         let rect = egui::Rect::from_min_size(egui::pos2(x, rect.top()), size);
         x += w;
         let mut child = ui.new_child(
             egui::UiBuilder::new()
-                .max_rect(rect.shrink2(egui::vec2(4.0, 3.0)))
+                .max_rect(rect.shrink2(egui::vec2(4.0, ROW_MARGIN)))
                 .layout(layout),
         );
+        child.set_clip_rect(rect.intersect(ui.clip_rect()));
+        child.spacing_mut().item_spacing.y = 0.0;
         child.style_mut().interaction.selectable_labels = false;
         child.style_mut().wrap_mode = Some(egui::TextWrapMode::Truncate);
         child
@@ -1016,17 +1038,22 @@ fn list_header<const N: usize>(
     sort: &mut MarketSort,
 ) {
     let (_, mut name, mut cells) = list_row(ui, columns, (false, false), egui::Sense::hover());
-    name.add_space(6.0);
-    name.label(egui::RichText::new(tr!("roster-fighter")).strong());
+    name.add_space(12.0);
+    name.label(header_text(&tr!("market-col-fighter")));
     for (cell, (title, by)) in cells.iter_mut().zip(titles) {
         match by {
             Some(by) => sort.title(cell, &title, by),
             None => {
-                cell.label(egui::RichText::new(title).strong());
+                cell.label(header_text(&title));
             }
         }
     }
     ui.separator();
+}
+
+/// A column's title of a market list: small, faded, in capitals.
+fn header_text(title: &str) -> egui::RichText {
+    egui::RichText::new(title.to_uppercase()).small().weak()
 }
 
 /// A fighter's name, in bronze when `picked`, over the line `below` draws in small
@@ -1062,14 +1089,15 @@ fn record_cell(ui: &mut egui::Ui, fighter: &CareerFighter) {
     ui.vertical(|ui| {
         ui.horizontal(|ui| {
             ui.spacing_mut().item_spacing.x = 0.0;
-            let small = |text: String| egui::RichText::new(text).small();
-            ui.label(small(r.wins.to_string()).color(theme::LAUREL));
-            ui.label(small(" – ".into()).weak());
-            ui.label(small(r.losses.to_string()).color(theme::BLOOD));
-            ui.label(small(" – ".into()).weak());
-            ui.label(small(r.draws.to_string()).weak());
-            ui.label(small(format!(" · {rate} %")).weak());
+            let text = |text: String| egui::RichText::new(text).size(RECORD_TEXT_SIZE);
+            ui.label(text(r.wins.to_string()).color(LIGHT_LAUREL));
+            ui.label(text(" – ".into()));
+            ui.label(text(r.losses.to_string()).color(LIGHT_BLOOD));
+            ui.label(text(" – ".into()));
+            ui.label(text(r.draws.to_string()).weak());
+            ui.label(text(format!(" · {rate} %")));
         });
+        ui.add_space(3.0);
         let size = egui::vec2(RECORD_BAR_WIDTH, 4.0);
         let (rect, _) = ui.allocate_exact_size(size, egui::Sense::hover());
         let painter = ui.painter();
@@ -1108,9 +1136,9 @@ fn free_agent_list(
 ) -> Option<Pick> {
     let titles = [
         (tr!("roster-age"), Some(SortBy::Age)),
-        (tr!("roster-fame"), Some(SortBy::Fame)),
+        (tr!("market-col-fame"), Some(SortBy::Fame)),
         (tr!("record-title"), Some(SortBy::Wins)),
-        (tr!("market-asked-wage"), Some(SortBy::Wage)),
+        (tr!("market-col-wage"), Some(SortBy::Wage)),
         (tr!("market-seen"), None),
     ];
     list_header(ui, FREE_COLUMNS, titles, sort);
@@ -1157,10 +1185,10 @@ fn rival_list(
 ) -> Option<Pick> {
     let titles = [
         (tr!("roster-age"), Some(SortBy::Age)),
-        (tr!("roster-fame"), Some(SortBy::Fame)),
+        (tr!("market-col-fame"), Some(SortBy::Fame)),
         (tr!("record-title"), Some(SortBy::Wins)),
-        (tr!("estimated-value"), Some(SortBy::Value)),
-        (tr!("market-asked-wage"), Some(SortBy::Wage)),
+        (tr!("market-col-value"), Some(SortBy::Value)),
+        (tr!("market-col-wage"), Some(SortBy::Wage)),
         (tr!("market-seen"), None),
     ];
     list_header(ui, RIVAL_COLUMNS, titles, sort);
@@ -1215,7 +1243,7 @@ fn sale_list(
     let mut sort = MarketSort::default();
     let titles = [
         (tr!("roster-age"), None),
-        (tr!("roster-fame"), None),
+        (tr!("market-col-fame"), None),
         (tr!("record-title"), None),
         (tr!("market-contract"), None),
         (tr!("market-sale-status"), None),
@@ -1372,34 +1400,45 @@ fn range_bands(
         .zip(range_texts(f, scouting, data))
         .zip(best)
         .enumerate();
-    egui::Grid::new("market ranges")
-        .num_columns(3)
-        .spacing([10.0, 6.0])
-        .show(ui, |ui| {
-            for (k, (((name, range), text), best)) in rows {
-                ui.label(name);
-                let size = egui::vec2(BAND_WIDTH, 10.0);
-                let (rect, _) = ui.allocate_exact_size(size, egui::Sense::hover());
-                let painter = ui.painter();
-                painter.rect_filled(rect, 5.0, theme::INK);
-                let own = mine.and_then(|m| m.get(k).copied());
-                let high = range.map_or(0, |(_, high)| high);
-                let max = best.max(high).max(own.unwrap_or(0)).max(1);
-                let x = |v: u32| rect.left() + rect.width() * super::fraction(v, max);
-                if let Some((low, high)) = range {
-                    let to = x(high).max(x(low) + 4.0);
-                    let band = egui::Rect::from_x_y_ranges(x(low)..=to, rect.y_range());
-                    painter.rect_filled(band, 5.0, theme::BRONZE.gamma_multiply(0.7));
-                }
-                if let Some(own) = own {
-                    let center = egui::pos2(x(own), rect.center().y);
-                    let mark = egui::Rect::from_center_size(center, egui::vec2(3.0, 16.0));
-                    painter.rect_filled(mark, 1.0, theme::PARCHMENT);
-                }
-                ui.label(egui::RichText::new(text).weak());
-                ui.end_row();
+    ui.spacing_mut().item_spacing.y = 9.0;
+    let label = |ui: &mut egui::Ui, w: f32, text: egui::RichText, align: egui::Align| {
+        let size = egui::vec2(w, ui.spacing().interact_size.y);
+        let layout = egui::Layout::left_to_right(egui::Align::Center).with_main_align(align);
+        let (rect, _) = ui.allocate_exact_size(size, egui::Sense::hover());
+        ui.new_child(egui::UiBuilder::new().max_rect(rect).layout(layout))
+            .label(text);
+    };
+    for (k, (((name, range), text), best)) in rows {
+        ui.horizontal(|ui| {
+            label(
+                ui,
+                BAND_LABEL_WIDTH,
+                egui::RichText::new(name),
+                egui::Align::Min,
+            );
+            let width = ui.available_width() - BAND_TEXT_WIDTH - ui.spacing().item_spacing.x;
+            let size = egui::vec2(width, 10.0);
+            let (rect, _) = ui.allocate_exact_size(size, egui::Sense::hover());
+            let painter = ui.painter();
+            painter.rect_filled(rect, 5.0, theme::INK);
+            let own = mine.and_then(|m| m.get(k).copied());
+            let high = range.map_or(0, |(_, high)| high);
+            let max = best.max(high).max(own.unwrap_or(0)).max(1);
+            let x = |v: u32| rect.left() + rect.width() * super::fraction(v, max);
+            if let Some((low, high)) = range {
+                let to = x(high).max(x(low) + 4.0);
+                let band = egui::Rect::from_x_y_ranges(x(low)..=to, rect.y_range());
+                painter.rect_filled(band, 5.0, BAND_FILL);
             }
+            if let Some(own) = own {
+                let center = egui::pos2(x(own), rect.center().y);
+                let mark = egui::Rect::from_center_size(center, egui::vec2(3.0, 18.0));
+                painter.rect_filled(mark, 1.0, theme::PARCHMENT);
+            }
+            let text = egui::RichText::new(text).weak();
+            label(ui, BAND_TEXT_WIDTH, text, egui::Align::Max);
         });
+    }
 }
 
 /// A wide button for the card's main move, in bronze, or shown chosen once it is;
