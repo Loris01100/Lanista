@@ -329,12 +329,21 @@ headline-title-draw = À { $place }, ni vainqueur ni vaincu : { $champion } gard
 headline-title-stripped = { $former } déchu à { $place } faute d'avoir défendu son titre : { $heir }
 headline-heir = la couronne revient à { $holder }
 headline-heir-empty = le trône reste vide
-headline-title-vacated = Le champion de { $place } n'est plus : la couronne revient à { $holder }
-headline-title-vacated-empty = Le champion de { $place } n'est plus, son trône reste vide
+headline-title-vacated = Le champion { $place ->
+    [Arles] d'Arles
+   *[other] de { $place }
+} n'est plus : la couronne revient à { $holder }
+headline-title-vacated-empty = Le champion { $place ->
+    [Arles] d'Arles
+   *[other] de { $place }
+} n'est plus, son trône reste vide
 byline-versus = { $champion } contre { $challenger }
 byline-heir = Nouveau champion : { $holder }
 
-headline-champion-bought = { $club } s'offre { $fighter }, champion de { $place }, pour { $price }
+headline-champion-bought = { $club } s'offre { $fighter }, champion { $place ->
+    [Arles] d'Arles
+   *[other] de { $place }
+}, pour { $price }
 headline-closed = Faillite : { $club } ferme ses portes, ses combattants partent au marché
 headline-rivalry = { $club } se déclare votre rival : vos combats contre lui attireront les foules
 headline-rivalry-ended = { $club } enterre la hache de guerre et met fin à sa rivalité avec vous
@@ -365,7 +374,10 @@ standing-rival = rival
 relation-change = { $points } : { $why } ({ $date })
 reason-killed = { $fighter } a tué { $rival }
 reason-beaten = { $fighter } a battu { $rival }
-reason-title-taken = { $fighter } lui a pris le titre de { $place }
+reason-title-taken = { $fighter } lui a pris le titre { $place ->
+    [Arles] d'Arles
+   *[other] de { $place }
+}
 reason-sold = vous lui avez vendu { $fighter }
 reason-bought = vous lui avez acheté { $fighter }
 reason-pact-kept = { $fighter } a tenu son pacte avec { $rival } en mêlée
@@ -582,8 +594,14 @@ alert-debts = Dettes : { $money }
 alert-injury = { $fighter } : blessure, { $injury }
 alert-tired = { $fighter } : fatigué (forme { $form })
 alert-unpaid = { $fighter } : pas assez d'argent pour sa semaine
-alert-title-defense = { $fighter } : titre de { $place } à défendre d'ici la { $week }
-alert-title-forfeit = { $fighter } renonce au titre de { $place } : il le perdra après la { $week }
+alert-title-defense = { $fighter } : titre { $place ->
+    [Arles] d'Arles
+   *[other] de { $place }
+} à défendre d'ici la { $week }
+alert-title-forfeit = { $fighter } renonce au titre { $place ->
+    [Arles] d'Arles
+   *[other] de { $place }
+} : il le perdra après la { $week }
 alert-sale-offer = { $club } veut acheter { $fighter } pour { $price } (à accepter au marché cette semaine)
 alert-built = Fin des travaux sur le terrain { $plot } : { $building }
 alert-rival = { $club } est votre rival depuis la { $since } : recettes à { $receipts } %, renommée +{ $fame } par combat
@@ -612,7 +630,10 @@ roster-homebound = En route : { $continent }
 roster-homebound-hint = Il vient de rejoindre le club, depuis un autre continent : il voyage cette semaine, comme une semaine de repos.
 roster-exception = exception cette semaine
 roster-exception-hint = Sa semaine ne suit pas sa consigne : elle a été choisie dans sa fiche.
-roster-defend = Défendre le titre de { $place } d'ici la { $week } ({ $left ->
+roster-defend = Défendre le titre { $place ->
+    [Arles] d'Arles
+   *[other] de { $place }
+} d'ici la { $week } ({ $left ->
         [0] cette semaine
         [one] encore { $left } semaine
        *[other] encore { $left } semaines
@@ -738,7 +759,10 @@ clubs-wealth = Richesse
 clubs-fighters = Combattants
 clubs-relation = Relation
 clubs-titles = Titres
-champion-of = Champion de { $place } : { $fighter }
+champion-of = Champion { $place ->
+    [Arles] d'Arles
+   *[other] de { $place }
+} : { $fighter }
 standing-ranked = { $place }, Elo { $elo }
 standing-champion = champion, { $standing }
 prestige-all = Tous
@@ -1113,9 +1137,9 @@ loadout-two-daggers = Double dague
 loadout-heavy-bow = Arc lourd
 loadout-light-bow = Arc léger
 
-colosseum-capoue = Capoue
+colosseum-arles = Arles
 colosseum-rome = Rome
-colosseum-pompei = Pompéi
+colosseum-merida = Mérida
 colosseum-samarcande = Samarcande
 colosseum-chang_an = Chang'an
 colosseum-karakorum = Karakorum

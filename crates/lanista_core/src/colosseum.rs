@@ -60,7 +60,7 @@ impl WorldRules {
         self.colosseums.get(usize::try_from(id.0).ok()?)
     }
 
-    /// The arena kind of colosseum `id`; sand, as in Capoue, for one missing from the
+    /// The arena kind of colosseum `id`; sand, as in Arles, for one missing from the
     /// data, which no plan may enter.
     #[must_use]
     pub fn arena(&self, id: ColosseumId) -> ArenaKind {
@@ -68,7 +68,7 @@ impl WorldRules {
     }
 
     /// The floor of colosseum `id`: its arena kind, and its continent's element; as
-    /// Capoue's for one missing from the data.
+    /// Arles' for one missing from the data.
     #[must_use]
     pub fn floor(&self, id: ColosseumId) -> Floor {
         let continent = self

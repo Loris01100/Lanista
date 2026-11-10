@@ -1247,7 +1247,7 @@ mod tests {
 
     /// The shipped data cut down to the world most tests were written for: three rival
     /// clubs, all in Europe, that never close nor are joined by new ones, and its first
-    /// two colosseums, Capoue and Rome, of fifteen residents each.
+    /// two colosseums, Arles and Rome, of fifteen residents each.
     fn data() -> DesignData {
         let mut data = DesignData::load().unwrap();
         let world = &mut data.world;
@@ -1338,7 +1338,7 @@ mod tests {
         };
         // Many fought in the melees, each a fight of their record.
         assert!(outsiders(&state) >= outsiders(&before) + 2 * 3);
-        // Capua's melees take everyone who would fight; Rome's, with no one left to
+        // Arles' melees take everyone who would fight; Rome's, with no one left to
         // fill it, is called off.
         for (c, colosseum) in state.colosseums.iter().enumerate().take(1) {
             let moved = colosseum
@@ -1368,10 +1368,10 @@ mod tests {
         data.combat.melee.max_fighters = 4;
         let mut state = game(3, &data);
         let plans = state.outsider_plans(&data);
-        let capua = Activity::Melee(ColosseumId(0));
+        let arles = Activity::Melee(ColosseumId(0));
         let entered: Vec<Contender> =
             super::outsiders::outsiders(&state.rivals, &state.free_agents)
-                .filter(|&o| plans.of(o).is_some_and(|p| p.activity == capua))
+                .filter(|&o| plans.of(o).is_some_and(|p| p.activity == arles))
                 .collect();
         assert!(entered.len() > 4);
         let before = state.clone();
@@ -1395,9 +1395,9 @@ mod tests {
         let mut state = game(2, &data);
         let mut rng = ChaCha8Rng::seed_from_u64(11);
         state.fighters.push(CareerFighter::random(&mut rng, &data));
-        let capua = Activity::Melee(ColosseumId(0));
+        let arles = Activity::Melee(ColosseumId(0));
         let entered = WeekPlan {
-            activity: capua,
+            activity: arles,
             care: false,
             refused: Refused::NONE,
             loadout: 0,
@@ -1448,7 +1448,7 @@ mod tests {
             );
             assert!(!money.iter().any(|&(flow, _)| flow == Flow::WinPrize));
             assert!(money.contains(&(Flow::Upkeep, -i64::from(data.economy.upkeep))));
-            // Ranked in Capua from its place, which may leave its Elo where it started,
+            // Ranked in Arles from its place, which may leave its Elo where it started,
             // unless it died there.
             let ranking = &state.colosseums[0].ranking;
             let ranked = ranking.iter().any(|r| r.contender == Contender::Club(i));
@@ -1663,24 +1663,24 @@ mod tests {
             .map(|s| s.suggested_plan(0, &data).activity)
             .find(|&a| a != Activity::Train);
         assert!(matches!(fit, Some(Activity::Fight(id) | Activity::Melee(id)) if id == samarkand));
-        // Capoue, in Europe, at its fee alone: first a week on the way, as a rest, the
+        // Arles, in Europe, at its fee alone: first a week on the way, as a rest, the
         // journey paid.
-        let capua = ColosseumId(0);
-        assert_eq!(state.entry_fee(capua, &data), Some(0));
+        let arles = ColosseumId(0);
+        assert_eq!(state.entry_fee(arles, &data), Some(0));
         let mut state = state;
         assert_eq!(state.fighters[0].location, Some(Continent::Asia));
-        let to_capua = plan(Activity::Fight(capua), false);
-        let summary = next_week(&mut state, &to_capua, &data);
+        let to_arles = plan(Activity::Fight(arles), false);
+        let summary = next_week(&mut state, &to_arles, &data);
         let week = summary.reports[0].as_ref().unwrap();
         assert_eq!(week.plan.activity, Activity::Travel(Continent::Europe));
         assert!(week.fight.is_none());
         assert!(flows(&summary).contains(&(Flow::Travel, -i64::from(world.travel_fee))));
         assert_eq!(state.fighters[0].location, Some(Continent::Europe));
-        // There, it fights in Capoue, but neither trains nor is cared for, far from its
+        // There, it fights in Arles, but neither trains nor is cared for, far from its
         // ludus.
-        let summary = next_week(&mut state, &to_capua, &data);
+        let summary = next_week(&mut state, &to_arles, &data);
         let week = summary.reports[0].as_ref().unwrap();
-        assert_eq!(week.plan.activity, Activity::Fight(capua));
+        assert_eq!(week.plan.activity, Activity::Fight(arles));
         assert!(week.fight.is_some());
         let summary = next_week(&mut state, &plan(Activity::Train, true), &data);
         let week = summary.reports[0].as_ref().unwrap().plan;
@@ -3604,7 +3604,7 @@ mod tests {
         let data = data();
         let mut state = game(7, &data);
         state.fighters[0].status = Status::Retired;
-        // Fit free agents register in Capua, free to enter, never in Rome.
+        // Fit free agents register in Arles, free to enter, never in Rome.
         let plans = state.free_agent_plans(&data);
         assert!(
             plans
@@ -3685,7 +3685,7 @@ mod tests {
         let plans = state.rival_plans(&data);
         assert_eq!(plans[0][0].activity, Activity::Rest);
         assert!(matches!(plans[1][0].activity, Activity::Fight(_)));
-        // Only one registered in Capua and not fought yet: the club meets it.
+        // Only one registered in Arles and not fought yet: the club meets it.
         let mut rng = ChaCha8Rng::seed_from_u64(1);
         let mut only = OutsiderPlans {
             rivals: state
@@ -3695,12 +3695,12 @@ mod tests {
                 .collect(),
             free_agents: vec![REST; state.free_agents.len()],
         };
-        let capua = Activity::Fight(ColosseumId(0));
+        let arles = Activity::Fight(ColosseumId(0));
         let one = Contender::Rival(RivalId {
             club: 1,
             fighter: 0,
         });
-        only.set_activity(one, capua);
+        only.set_activity(one, arles);
         let mut fought = Vec::new();
         let world = (
             &state.colosseums[..],
@@ -3709,9 +3709,9 @@ mod tests {
             &data.world,
         );
         let me = &state.fighters[0];
-        let capua = (capua, 0, me);
+        let arles = (arles, 0, me);
         assert_eq!(
-            opponent(&mut rng, world, capua, &only, &fought),
+            opponent(&mut rng, world, arles, &only, &fought),
             Some((0, one))
         );
         let four = RivalId {
@@ -3725,7 +3725,7 @@ mod tests {
         );
         // A free agent registered there is met too.
         let agent = Contender::FreeAgent(2);
-        only.set_activity(agent, capua.0);
+        only.set_activity(agent, arles.0);
         // The club's fighter meets the closest in Elo of those registered.
         let mut ranked = state.colosseums.clone();
         let elo = data.world.elo_start;
@@ -3739,7 +3739,7 @@ mod tests {
         let near = (&ranked[..], world.1, world.2, world.3);
         for _ in 0..8 {
             assert_eq!(
-                opponent(&mut rng, near, capua, &only, &fought),
+                opponent(&mut rng, near, arles, &only, &fought),
                 Some((0, agent))
             );
         }
@@ -3750,16 +3750,16 @@ mod tests {
         spiteful.grudges = vec![(theirs.id, theirs.name.clone())];
         for _ in 0..8 {
             assert_eq!(
-                opponent(&mut rng, world, (capua.0, 0, &spiteful), &only, &fought),
+                opponent(&mut rng, world, (arles.0, 0, &spiteful), &only, &fought),
                 Some((0, agent))
             );
         }
         fought.push(one);
         assert_eq!(
-            opponent(&mut rng, world, capua, &only, &fought),
+            opponent(&mut rng, world, arles, &only, &fought),
             Some((0, agent))
         );
         fought.push(agent);
-        assert!(opponent(&mut rng, world, capua, &only, &fought).is_some_and(|(_, r)| r != one));
+        assert!(opponent(&mut rng, world, arles, &only, &fought).is_some_and(|(_, r)| r != one));
     }
 }

@@ -123,7 +123,7 @@ pub fn activity_name(activity: Activity, data: &DesignData) -> String {
     }
 }
 
-/// "Alterner, combats à Capoue": a fighter's standing duty (`Orders::activity`).
+/// "Alterner, combats à Arles": a fighter's standing duty (`Orders::activity`).
 pub fn duty_name(duty: Duty, data: &DesignData) -> String {
     match duty {
         Duty::Auto => tr!("duty-auto"),
@@ -486,7 +486,7 @@ pub fn market_news_text(news: MarketNews, state: &GameState, data: &DesignData) 
     }
 }
 
-/// "Chasseur n° 3 (Ludus Magnus) à Capoue": who would receive the challenge, and where.
+/// "Chasseur n° 3 (Ludus Magnus) à Arles": who would receive the challenge, and where.
 pub fn challenger_text(
     colosseum: ColosseumId,
     rival: RivalId,

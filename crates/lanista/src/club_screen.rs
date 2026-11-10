@@ -3202,7 +3202,7 @@ mod tests {
         // A world whose fighter lives to a duel and a challenge.
         const SEED: u64 = 2;
         let mut screen = screen(SEED);
-        // The season opens with Capua's melee, where its fighter would have fought.
+        // The season opens with Arles' melee, where its fighter would have fought.
         assert_eq!(
             screen.decisions.plans[0].activity,
             Activity::Melee(ColosseumId(0))
@@ -3370,7 +3370,7 @@ mod tests {
         let weeks: Vec<u64> = screen.histories[0].iter().map(|(week, _)| *week).collect();
         assert_eq!(weeks, [3, 2, 1]);
         let first = &screen.histories[0][2].1;
-        assert_eq!(first[0], "Mêlée à Capoue");
+        assert_eq!(first[0], "Mêlée à Arles");
         assert!(first[1].starts_with("Mêlée à "), "{first:?}");
         assert!(
             first.iter().any(|l| l.starts_with("Forme 70 (-30)")),
@@ -3688,7 +3688,7 @@ mod tests {
     }
 
     /// Phase 6 milestone: in the season's opening week, the club's three fighters fight
-    /// a melee of 20 in Capua and duels in Capua and Rome; the three fights are watched
+    /// a melee of 20 in Arles and duels in Arles and Rome; the three fights are watched
     /// together, each as the week played it, and the season goes on as without a screen.
     #[test]
     fn three_fights_are_watched_together_one_of_them_a_melee_of_twenty() {
@@ -3724,7 +3724,7 @@ mod tests {
         assert_eq!(screen.state, headless);
         assert_eq!(screen.to_watch.len(), 3);
         let melee = &screen.to_watch[0];
-        // Capua's entrants, past twenty, share melees of even sizes.
+        // Arles' entrants, past twenty, share melees of even sizes.
         assert!((11..=20).contains(&melee.arena.fighters.len()));
         assert_eq!(melee.cast.club, [screen.fights[0].fight.me]);
         let fights = std::mem::take(&mut screen.to_watch);
@@ -4051,13 +4051,13 @@ mod tests {
             screen.standings(first.contender)
         );
         let Some(Contender::Rival(champion)) = screen.state.colosseums[0].champion else {
-            panic!("no rival champion in Capua");
+            panic!("no rival champion in Arles");
         };
         let name = rival_fighter_name(champion, &screen.state, &screen.data);
         assert!(
             screen
                 .titles_of(champion.club)
-                .contains(&format!("Champion de Capoue : {name}"))
+                .contains(&format!("Champion d'Arles : {name}"))
         );
         assert!(screen.standings(Contender::Rival(champion))[0].starts_with("champion, "));
         // Gone fighters are no longer ranked.
@@ -4075,7 +4075,7 @@ mod tests {
         let mut screen = screen(7);
         let reign = screen.state.colosseums[0].reigns[0];
         let Contender::Rival(id) = reign.holder else {
-            panic!("no rival champion in Capua");
+            panic!("no rival champion in Arles");
         };
         let club = rival_club_name(id.club, &screen.state);
         let from = date_in_sentence(reign.from, &screen.data);

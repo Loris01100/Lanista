@@ -210,7 +210,7 @@ impl ClubScreen {
             .collect()
     }
 
-    /// "Champion de Capoue : Chasseur n° 3 (Ludus Magnus)" for each title rival club
+    /// "Champion d'Arles : Chasseur n° 3 (Ludus Magnus)" for each title rival club
     /// `club` holds.
     pub(super) fn titles_of(&self, club: usize) -> Vec<String> {
         (0..)

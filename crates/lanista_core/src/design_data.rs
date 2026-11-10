@@ -1056,7 +1056,7 @@ mod tests {
         assert!(hunter.loadouts[0].speed_percent < hunter.loadouts[1].speed_percent);
         assert_eq!(data.calendar.season_weeks(), 30);
         // Five continents, each with its major colosseum and one or two minor ones, one
-        // of them free to enter: the safety net; Capoue first, where one starts.
+        // of them free to enter: the safety net; Arles first, where one starts.
         let world = &data.world;
         for continent in Continent::ALL {
             let here: Vec<_> = world.colosseums_of(continent).collect();
@@ -1064,7 +1064,7 @@ mod tests {
             let first = world.colosseum(world.first_colosseum(continent)).unwrap();
             assert_eq!((first.continent, first.purses.entry_fee), (continent, 0));
         }
-        assert_eq!(world.colosseums[0].key, "capoue");
+        assert_eq!(world.colosseums[0].key, "arles");
         assert_eq!(world.first_colosseum(Continent::Europe).0, 0);
     }
 

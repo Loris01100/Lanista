@@ -136,10 +136,10 @@
     // Each continent has a major colosseum, of the highest prestige, and one or two
     // minor ones around it, where prestige-2 ones ask a small fee; on each continent
     // where clubs live, at least one must be free to enter: the safety net of a club
-    // without money. Capoue, in Europe, is where one starts by default.
+    // without money. Arles, in Europe, is where one starts by default.
     colosseums: [
         (
-            key: "capoue",
+            key: "arles",
             continent: Europe,
             // Its floor is in data/combat.ron (arenas): sand slows, pillars block shots
             // and the way, narrow is small, so melee closes in fast.
@@ -165,7 +165,7 @@
             // Its place on the world map, in percent of its width from the left and of its
             // height from the top: points spread to be read, placeholders until the
             // drawn map.
-            map: (53, 36),
+            map: (45, 27),
         ),
         (
             key: "rome",
@@ -177,13 +177,13 @@
             map: (50, 29),
         ),
         (
-            key: "pompei",
+            key: "merida",
             continent: Europe,
             arena: Narrow,
             prestige: 2,
             residents: 8,
             purses: (entry_fee: 10, win_prize: 100, receipts_base: 30, receipts_per_fame: 1, champion_bonus: 60, melee_prize: 300),
-            map: (46, 35),
+            map: (40, 33),
         ),
         (
             key: "samarcande",
